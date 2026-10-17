@@ -7,7 +7,20 @@
 #   pgenerator-update apply          — download and apply latest release
 #   pgenerator-update version        — print current version
 #
-# Update stream: https://github.com/BigShoots/PGenerator-Plus/releases
+# Update stream: GitHub Releases of the repository resolved below
+# (resolve_update_repo), first match wins:
+#   1. env GITHUB_REPO
+#   2. update_repo=owner/repo in /etc/PGenerator/PGenerator.conf
+#      (path overridable via PGENERATOR_CONF_FILE)
+#   3. first non-comment line of /usr/share/PGenerator/update-channel
+#      (path overridable via UPDATE_CHANNEL_FILE)
+#   4. BigShoots/PGenerator-Plus
+# Values that are not a plain owner/repo are ignored with a log entry.
+#
+# Each release may carry one OTA tarball per device target; the one matching
+# this device is selected (detect_update_target, override PGEN_UPDATE_TARGET):
+#   pi4-biasi          -> pgenerator-plus-<version>.tar.gz
+#   pi5-bookworm-armhf -> pgenerator-plus-<version>-pi5-bookworm-armhf.tar.gz
 #
 # Release assets are tar.gz archives containing files in FHS layout:
 #   usr/share/PGenerator/*.pm
@@ -21,8 +34,16 @@
 
 set -euo pipefail
 
-GITHUB_REPO="${GITHUB_REPO:-BigShoots/PGenerator-Plus}"
-GITHUB_API="https://api.github.com/repos/${GITHUB_REPO}/releases/latest"
+DEFAULT_GITHUB_REPO="BigShoots/PGenerator-Plus"
+PGENERATOR_CONF_FILE="${PGENERATOR_CONF_FILE:-/etc/PGenerator/PGenerator.conf}"
+UPDATE_CHANNEL_FILE="${UPDATE_CHANNEL_FILE:-/usr/share/PGenerator/update-channel}"
+DEVICE_MODEL_FILE="${DEVICE_MODEL_FILE:-/proc/device-tree/model}"
+DEVICE_COMPATIBLE_FILE="${DEVICE_COMPATIBLE_FILE:-/proc/device-tree/compatible}"
+# Set by resolve_update_repo / detect_update_target below.
+UPDATE_REPO=""
+UPDATE_REPO_SOURCE=""
+UPDATE_TARGET=""
+GITHUB_API=""
 VERSION_FILE="${VERSION_FILE:-/usr/share/PGenerator/version.pm}"
 UPDATE_MIGRATIONS_DIR="${UPDATE_MIGRATIONS_DIR:-/usr/share/PGenerator/update-migrations.d}"
 EXEC_MANIFEST_FILE="${EXEC_MANIFEST_FILE:-/usr/share/PGenerator/release-exec-manifest.txt}"
@@ -44,6 +65,116 @@ log_msg() {
  mkdir -p "$(dirname "$UPDATE_LOG")" 2>/dev/null || true
  echo "[$ts] $*" >> "$UPDATE_LOG" 2>/dev/null || true
  echo "$*"
+}
+
+# ── Log to the update log only (keeps `check` stdout pure JSON) ──
+log_file_only() {
+ local ts
+ ts=$(date '+%Y-%m-%d %H:%M:%S')
+ mkdir -p "$(dirname "$UPDATE_LOG")" 2>/dev/null || true
+ echo "[$ts] $*" >> "$UPDATE_LOG" 2>/dev/null || true
+}
+
+# ── Update source repository ──
+# A repo is accepted only as a plain owner/repo; anything else (URLs, extra
+# path segments, dot-only components) would let a config value steer the API
+# request somewhere other than a releases endpoint.
+valid_repo() {
+ local repo="$1" owner name
+ local re='^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$'
+ [[ "$repo" =~ $re ]] || return 1
+ owner="${repo%%/*}"
+ name="${repo#*/}"
+ case "$owner" in *[!.]*) ;; *) return 1 ;; esac
+ case "$name" in *[!.]*) ;; *) return 1 ;; esac
+ return 0
+}
+
+# Trim surrounding whitespace, a trailing CR and one pair of quotes.
+trim_value() {
+ local v="$1"
+ v="${v%$'\r'}"
+ v="${v#"${v%%[![:space:]]*}"}"
+ v="${v%"${v##*[![:space:]]}"}"
+ case "$v" in
+  \"*\") v="${v#\"}"; v="${v%\"}" ;;
+  \'*\') v="${v#\'}"; v="${v%\'}" ;;
+ esac
+ printf '%s' "$v"
+}
+
+conf_update_repo() {
+ [ -r "$PGENERATOR_CONF_FILE" ] || return 0
+ local line
+ line="$(grep -E '^[[:space:]]*update_repo[[:space:]]*=' "$PGENERATOR_CONF_FILE" 2>/dev/null | tail -n 1 || true)"
+ [ -n "$line" ] || return 0
+ trim_value "${line#*=}"
+}
+
+channel_update_repo() {
+ [ -r "$UPDATE_CHANNEL_FILE" ] || return 0
+ local line
+ while IFS= read -r line || [ -n "$line" ]; do
+  line="$(trim_value "$line")"
+  case "$line" in ''|'#'*) continue ;; esac
+  printf '%s' "$line"
+  return 0
+ done < "$UPDATE_CHANNEL_FILE"
+}
+
+# Sets UPDATE_REPO, UPDATE_REPO_SOURCE and GITHUB_API.
+resolve_update_repo() {
+ local candidate source
+ local env_repo="${GITHUB_REPO:-}"
+ UPDATE_REPO=""
+ for source in env conf channel; do
+  case "$source" in
+   env) candidate="$(trim_value "$env_repo")" ;;
+   conf) candidate="$(conf_update_repo)" ;;
+   channel) candidate="$(channel_update_repo)" ;;
+  esac
+  [ -n "$candidate" ] || continue
+  if valid_repo "$candidate"; then
+   UPDATE_REPO="$candidate"
+   case "$source" in
+    env) UPDATE_REPO_SOURCE="env GITHUB_REPO" ;;
+    conf) UPDATE_REPO_SOURCE="$PGENERATOR_CONF_FILE (update_repo)" ;;
+    channel) UPDATE_REPO_SOURCE="$UPDATE_CHANNEL_FILE" ;;
+   esac
+   break
+  fi
+  log_file_only "WARNING: ignoring invalid update repo '$candidate' from $source (expected owner/repo)"
+ done
+ if [ -z "$UPDATE_REPO" ]; then
+  UPDATE_REPO="$DEFAULT_GITHUB_REPO"
+  UPDATE_REPO_SOURCE="built-in default"
+ fi
+ GITHUB_API="https://api.github.com/repos/${UPDATE_REPO}/releases/latest"
+}
+
+# ── Device target (selects the matching OTA asset) ──
+# Sets UPDATE_TARGET to pi5-bookworm-armhf on a Raspberry Pi 5 / CM5
+# (BCM2712), otherwise pi4-biasi. PGEN_UPDATE_TARGET overrides detection.
+detect_update_target() {
+ local model=""
+ case "${PGEN_UPDATE_TARGET:-}" in
+  pi4-biasi|pi5-bookworm-armhf)
+   UPDATE_TARGET="$PGEN_UPDATE_TARGET"
+   return 0
+   ;;
+  "") ;;
+  *) log_file_only "WARNING: ignoring unknown PGEN_UPDATE_TARGET '$PGEN_UPDATE_TARGET'" ;;
+ esac
+ if [ -r "$DEVICE_MODEL_FILE" ]; then
+  model="$(tr -d '\000' < "$DEVICE_MODEL_FILE" 2>/dev/null || true)"
+ fi
+ if [ -r "$DEVICE_COMPATIBLE_FILE" ]; then
+  model="$model $(tr '\000' ' ' < "$DEVICE_COMPATIBLE_FILE" 2>/dev/null || true)"
+ fi
+ case "$model" in
+  *"Raspberry Pi 5"*|*"Compute Module 5"*|*BCM2712*|*bcm2712*) UPDATE_TARGET="pi5-bookworm-armhf" ;;
+  *) UPDATE_TARGET="pi4-biasi" ;;
+ esac
 }
 
 mount_options_for_path() {
@@ -151,23 +282,35 @@ release_field() {
  printf '%s' "$release_json" | perl -MJSON::PP -e '
   use JSON::PP qw(decode_json);
   my $key = shift;
+  my $target = shift // "pi4-biasi";
   local $/;
   my $json = <STDIN>;
   my $rel = eval { decode_json($json) };
   exit 1 if(!$rel || ref($rel) ne "HASH");
   my $value = "";
   if($key eq "asset_url") {
+   # Pick ONLY the tarball built for this device target; a release may carry
+   # both. No match means no asset (never fall back to another target).
+   #   pi4-biasi:          pgenerator-plus-<ver>.tar.gz (optional -pi4-biasi)
+   #   pi5-bookworm-armhf: pgenerator-plus-<ver>-pi5-bookworm-armhf.tar.gz
    if(ref($rel->{assets}) eq "ARRAY") {
     for my $asset (@{$rel->{assets}}) {
      next if(ref($asset) ne "HASH");
      my $url = $asset->{browser_download_url} // "";
      my $name = $asset->{name} // "";
      next if($url !~ /\.tar\.gz$/i);
-     if($name =~ /pgenerator[-_]?plus.*\.tar\.gz/i) {
+     next if($name !~ /^pgenerator[-_]?plus[-_]v?[0-9]/i);
+     my $match = 0;
+     if($target eq "pi5-bookworm-armhf") {
+      $match = 1 if($name =~ /^pgenerator[-_]?plus[-_]v?[0-9][0-9A-Za-z._]*[-_]pi5[-_]bookworm[-_]armhf\.tar\.gz$/i);
+     } else {
+      $match = 1 if($name =~ /^pgenerator[-_]?plus[-_]v?[0-9][0-9A-Za-z._]*(?:[-_]pi4[-_]biasi)?\.tar\.gz$/i
+       && $name !~ /pi5/i);
+     }
+     if($match) {
       $value = $url;
       last;
      }
-     $value = $url if($value eq "");
     }
    }
   } elsif($key eq "body") {
@@ -179,7 +322,7 @@ release_field() {
    $value = $rel->{$key} // "";
   }
   print $value;
- ' "$key"
+ ' "$key" "${UPDATE_TARGET:-pi4-biasi}"
 }
 
 # ── Compare semver: returns 0 if $1 > $2 ──
@@ -341,10 +484,15 @@ case "$cmd" in
   ;;
 
  check)
+  resolve_update_repo
+  detect_update_target
+  log_file_only "Update check: repo $UPDATE_REPO (from $UPDATE_REPO_SOURCE), target $UPDATE_TARGET"
+  repo_json="$(json_escape "$UPDATE_REPO")"
+  target_json="$(json_escape "$UPDATE_TARGET")"
   current=$(get_current_version)
   release_json=$(get_latest_release)
   if [ -z "$release_json" ]; then
-   printf '{"status":"error","message":%s}\n' "$(json_escape "Cannot reach GitHub")"
+   printf '{"status":"error","repo":%s,"target":%s,"message":%s}\n' "$repo_json" "$target_json" "$(json_escape "Cannot reach GitHub")"
    exit 1
   fi
 
@@ -355,7 +503,8 @@ case "$cmd" in
   asset_url=$(release_field asset_url 2>/dev/null || true)
 
     if is_prerelease_version "$current"; then
-     printf '{"status":"ok","current":%s,"latest":%s,"update_available":false,"published":%s,"changelog":%s,"asset_url":""}\n' \
+     printf '{"status":"ok","repo":%s,"target":%s,"current":%s,"latest":%s,"update_available":false,"published":%s,"changelog":%s,"asset_url":""}\n' \
+      "$repo_json" "$target_json" \
       "$(json_escape "$current")" \
       "$(json_escape "$current")" \
       "$(json_escape "")" \
@@ -364,7 +513,8 @@ case "$cmd" in
     fi
 
   if [ -z "$latest" ] && [ "$message" = "Not Found" ]; then
-   printf '{"status":"ok","current":%s,"latest":%s,"update_available":false,"published":"","changelog":%s,"asset_url":""}\n' \
+   printf '{"status":"ok","repo":%s,"target":%s,"current":%s,"latest":%s,"update_available":false,"published":"","changelog":%s,"asset_url":""}\n' \
+    "$repo_json" "$target_json" \
     "$(json_escape "$current")" \
     "$(json_escape "$current")" \
     "$(json_escape "No releases published yet.")"
@@ -373,7 +523,7 @@ case "$cmd" in
 
   if [ -z "$latest" ]; then
    [ -z "$message" ] && message="Cannot parse release info"
-   printf '{"status":"error","message":%s}\n' "$(json_escape "$message")"
+   printf '{"status":"error","repo":%s,"target":%s,"message":%s}\n' "$repo_json" "$target_json" "$(json_escape "$message")"
    exit 1
   fi
 
@@ -392,7 +542,15 @@ case "$cmd" in
    changelog="A newer image release ($latest) is available, but it is outside the OTA family of your current version ($current). OTA updates only apply within the same major.minor series (e.g. 2.7.x -> 2.7.x). To move to $latest, download the full image and re-flash your SD card."
   fi
 
-  printf '{"status":"ok","current":%s,"latest":%s,"update_available":%s,"published":%s,"changelog":%s,"asset_url":%s}\n' \
+  # A newer release that carries no tarball for this device target is not an
+  # OTA update for this device (never offer another target's package).
+  if [ "$update_available" = true ] && [ -z "$asset_url" ]; then
+   update_available=false
+   changelog="Release $latest has no OTA package for this device ($UPDATE_TARGET) in $UPDATE_REPO."
+  fi
+
+  printf '{"status":"ok","repo":%s,"target":%s,"current":%s,"latest":%s,"update_available":%s,"published":%s,"changelog":%s,"asset_url":%s}\n' \
+   "$repo_json" "$target_json" \
    "$(json_escape "$current")" \
    "$(json_escape "$latest")" \
    "$update_available" \
@@ -402,8 +560,11 @@ case "$cmd" in
   ;;
 
  apply)
+  resolve_update_repo
+  detect_update_target
   current=$(get_current_version)
   log_msg "Update check started (current: $current)"
+  log_msg "Update source: $UPDATE_REPO (from $UPDATE_REPO_SOURCE), device target: $UPDATE_TARGET"
 
   release_json=$(get_latest_release)
   if [ -z "$release_json" ]; then
@@ -447,8 +608,8 @@ case "$cmd" in
   fi
 
   if [ -z "$asset_url" ]; then
-   log_msg "ERROR: No .tar.gz asset found in release $latest"
-   echo "ERROR: No .tar.gz asset found in release"
+   log_msg "ERROR: No $UPDATE_TARGET OTA asset (.tar.gz) found in release $latest of $UPDATE_REPO"
+   echo "ERROR: No .tar.gz asset for target $UPDATE_TARGET found in release"
    exit 1
   fi
 

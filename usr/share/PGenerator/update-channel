@@ -1,0 +1,11 @@
+# OTA update channel for /usr/sbin/pgenerator-update.
+#
+# The first non-comment line is the GitHub repository (owner/repo) whose
+# Releases are checked for OTA tarballs. This is the single place to change
+# the default update source of a build.
+#
+# Precedence (first valid value wins): env GITHUB_REPO, then
+# update_repo=owner/repo in /etc/PGenerator/PGenerator.conf, then this file,
+# then BigShoots/PGenerator-Plus. Values that are not a plain owner/repo are
+# ignored.
+BlackJoker90/PGenerator-Plus

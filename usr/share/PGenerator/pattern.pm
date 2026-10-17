@@ -356,7 +356,12 @@ sub load_new_pattern_file (@) {
  # uses a 3s delay to let any lingering pgsethdr/drm_override
  # DRM-master holder fully release before the renderer tries to
  # acquire master.
- if(!&pattern_generator_is_running()) {
+ if(!&pattern_generator_is_running() && !&hdmi_sink_connected()) {
+  # No display: the start is deferred (see hdmi_sink_connected) and the
+  # retry ladder below would only burn ~10s per request. The daemon's main
+  # loop starts the renderer once a display is plugged in.
+  &pattern_generator_start(1);
+ } elsif(!&pattern_generator_is_running()) {
   &pattern_generator_start(1);
   select(undef,undef,undef,0.6);
   if(!&pattern_generator_is_running()) {

@@ -837,7 +837,10 @@ sub pattern_daemon {
  ############################
  while ($select->count()) {
   my @ready = $select->can_read(5);
-  next if(!@ready);
+  if(!@ready) {
+   &renderer_start_when_hdmi_connected();
+   next;
+  }
   foreach my $connection (@ready) {
    if ($connection == $server || $connection == $server_calman || $connection == $server_rpc) {
     ############################

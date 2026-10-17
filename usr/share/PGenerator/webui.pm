@@ -9839,6 +9839,8 @@ sub webui_apply_config (@) {
    $changes{"dv_metadata"}="0";
    $changes{"eotf"}=($signal_mode eq "hlg") ? "3" : "2";
    $changes{"primaries"}="2";
+   # HDR10/HLG are BT.2020 signals; see normalize_signal_mode_conf().
+   $changes{"colorimetry"}="9";
   } elsif($signal_mode eq "dv") {
    $changes{"is_sdr"}="0";
    $changes{"is_hdr"}="1";

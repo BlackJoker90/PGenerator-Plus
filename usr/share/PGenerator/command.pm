@@ -200,6 +200,11 @@ sub normalize_signal_mode_conf(@) {
  }
  &set_pgenerator_conf_runtime("signal_mode",$signal_mode)
   if(($pgenerator_conf{"signal_mode"} || "") ne $signal_mode);
+ # HDR10/HLG are BT.2020 signals. A BT.709 colorimetry left over from SDR
+ # made the AVI infoframe contradict the HDR metadata, and sinks that trust
+ # the AVI colorimetry then map the patches to the wrong gamut.
+ &set_pgenerator_conf_runtime("colorimetry","9")
+  if($signal_mode ne "sdr" && ($pgenerator_conf{"colorimetry"} || "") ne "9");
 }
 
 ###############################################
@@ -721,6 +726,57 @@ sub apply_hdr_metadata_helper (@) {
 ###############################################
 #       Pattern Generator Start Function      #
 ###############################################
+# True when an HDMI sink is attached. Without one the renderer cannot get a
+# connector and exits at once, and the start/retry ladder then spends a minute
+# waiting for DRM master: at boot that delays the WebUI and mDNS past the
+# watchdog's probe, which restarts PGenerator every minute. Missing sysfs
+# entries (non-KMS) never block a start.
+sub hdmi_sink_connected (@) {
+ return 1 if(!$is_kms);
+ my $seen=0;
+ foreach my $status (glob("/sys/class/drm/card*-HDMI-A-*/status")) {
+  $seen=1;
+  open(my $fh,"<",$status) or next;
+  my $state=<$fh>;
+  close($fh);
+  return 1 if(defined $state && $state=~/^connected/);
+ }
+ return $seen ? 0 : 1;
+}
+
+# Marker for a renderer start that was deferred because no display was
+# attached. It lives outside $var_dir/running (clean_files wipes that) and is
+# shared by the daemon and its WebUI threads/workers, so the main loop can
+# start the renderer once a display is plugged in - but never restarts a
+# renderer that was stopped on purpose (e.g. for video playback).
+sub renderer_waiting_for_hdmi_path (@) {
+ return "/tmp/pgenerator-renderer-waiting-for-hdmi";
+}
+
+sub renderer_waiting_for_hdmi (@) {
+ return -e &renderer_waiting_for_hdmi_path() ? 1 : 0;
+}
+
+# Called from the daemon's idle tick (every 5s without socket traffic).
+sub renderer_start_when_hdmi_connected (@) {
+ if(!&hdmi_sink_connected()) {
+  # The display went away (the renderer exits on its page-flip timeout):
+  # remember it so the renderer comes back when the display does.
+  if(!&renderer_waiting_for_hdmi() && open(my $wfh,">",&renderer_waiting_for_hdmi_path())) {
+   close($wfh);
+   &log("Renderer: HDMI display disconnected; the renderer restarts when one is plugged in");
+  }
+  return;
+ }
+ return if(!&renderer_waiting_for_hdmi());
+ if(&pattern_generator_is_running()) {
+  unlink(&renderer_waiting_for_hdmi_path());
+  return;
+ }
+ &log("Renderer: HDMI display connected; starting the deferred renderer");
+ &load_new_pattern_file("hdmi hotplug");
+}
+
 sub pattern_generator_start(@) {
  my $no_clean_files = shift;
  my $use_drm_override=1;
@@ -735,6 +791,14 @@ sub pattern_generator_start(@) {
   open(OPS,">$command_file");
   close(OPS);
  }
+ if(!&hdmi_sink_connected()) {
+  if(!&renderer_waiting_for_hdmi()) {
+   &log("Renderer: no HDMI display connected; deferring the renderer start until one is plugged in");
+   if(open(my $wfh,">",&renderer_waiting_for_hdmi_path())) { close($wfh); }
+  }
+  return;
+ }
+ unlink(&renderer_waiting_for_hdmi_path());
  # Treat restart as the transaction boundary for classic clients which write
  # mode flags one command at a time. In particular this turns HCFR 4.1's
  # contradictory DV flag bundle into one coherent Standard- or Low-Latency-DV

@@ -65,23 +65,60 @@ public:
 	}
 };
 
+/*
+ * Luma/chroma coefficients for an AVI colorimetry value (DRM "Colorimetry"
+ * connector enum as passed through map_kms_colorspace). d = 2*(1-Kb),
+ * e = 2*(1-Kr).
+ *   9 BT2020_RGB / 10 BT2020_YCC              -> BT.2020
+ *   1 SMPTE_170M_YCC, 3 XVYCC_601, 5 SYCC_601,
+ *   6 OPYCC_601                                -> BT.601
+ *   everything else (0 Default, 2 BT709_YCC)   -> BT.709 (HD/UHD default)
+ */
+struct YCbCrCoeffs
+{
+	float Kr;
+	float Kg;
+	float Kb;
+	float d;
+	float e;
+};
+
+static inline YCbCrCoeffs YCbCrCoeffsForColorimetry(int colorimetry) {
+	if (colorimetry == 9 || colorimetry == 10) {
+		YCbCrCoeffs bt2020 = { 0.2627f, 0.6780f, 0.0593f, 1.8814f, 1.4746f };
+		return bt2020;
+	}
+	if (colorimetry == 1 || colorimetry == 3 || colorimetry == 5 || colorimetry == 6) {
+		YCbCrCoeffs bt601 = { 0.299f, 0.587f, 0.114f, 1.772f, 1.402f };
+		return bt601;
+	}
+	YCbCrCoeffs bt709 = { 0.2126f, 0.7152f, 0.0722f, 1.8556f, 1.5748f };
+	return bt709;
+}
+
+/*
+ * Chroma scale for the YCbCr encode. HDMI YCbCr defaults to limited range,
+ * so rgb_quant_range 0 (Default) behaves like 1 (Limited); only 2 is Full.
+ */
+static inline void YCbCrRangeScalars(int bits, int rgb_quant_range, int &scalar1, int &scalar2) {
+	if (rgb_quant_range == 2) {
+		scalar1 = 256 << (bits - 8);
+		scalar2 = 255 << (bits - 8);
+	} else {
+		scalar1 = 224 << (bits - 8);
+		scalar2 = 219 << (bits - 8);
+	}
+}
+
 static YCbCr RGB2YCbCr(RGB rgb, int bits, int colorimetry, int rgb_quant_range) {
-	float coeffs[2][3] =
-	{
-	{ 0.2126, 0.7152, 0.0722}, 
-	{ 0.2627, 0.6780, 0.0593}, 
-	};
+	YCbCrCoeffs k = YCbCrCoeffsForColorimetry(colorimetry);
 	/* Full range 0-255: 256/255, Studio range: 256/219, Limited range: 224/219 */
 	int scalar1;
 	int scalar2;
-	int scalar_limit1 = 224 << (bits - 8);
-	int scalar_limit2 = 219 << (bits - 8);
-	int scalar_full1 = 256 << (bits - 8);
-	int scalar_full2 = 255 << (bits - 8);
+	YCbCrRangeScalars(bits, rgb_quant_range, scalar1, scalar2);
 	int offset = 128 << (bits - 8);
 	int R, G, B;
-	int idx = 0;
-	float d = 1.8556f, e = 1.5748f;
+	float d = k.d, e = k.e;
 	
 	// Pattern values already arrive in the active draw depth selected by BITS.
 	R = rgb.R;
@@ -97,67 +134,23 @@ static YCbCr RGB2YCbCr(RGB rgb, int bits, int colorimetry, int rgb_quant_range) 
 //		G = G * 0.856305 + 64;
 //		B = B * 0.856305 + 64;
 //	}	
-	if (rgb_quant_range == 1) {
-		scalar1=scalar_limit1;
-		scalar2=scalar_limit2;
-	}
-	if (rgb_quant_range == 2) {
-		scalar1=scalar_full1;
-		scalar2=scalar_full2;
-	}
-	if (colorimetry == 2) {
-		idx = 0;
-		d = 1.8556;
-		e = 1.5748;
-	}	
-	if (colorimetry == 9) {
-		idx = 1;
-		d = 1.8814;
-		e = 1.4746;
-	}
-	int Y = std::round((coeffs[idx][0] * R + coeffs[idx][1]* G + coeffs[idx][2] * B));
-	int Cb = std::round(((-coeffs[idx][0]/d) * R - (coeffs[idx][1]/d) * G + ((d/2)/d) * B)*scalar1/scalar2 + offset); // Chrominance Blue
-	int Cr = std::round((((e/2)/e) * R - (coeffs[idx][1]/e) * G - (coeffs[idx][2]/e) * B)*scalar1/scalar2 + offset); // Chrominance Red
+	int Y = std::round((k.Kr * R + k.Kg* G + k.Kb * B));
+	int Cb = std::round(((-k.Kr/d) * R - (k.Kg/d) * G + ((d/2)/d) * B)*scalar1/scalar2 + offset); // Chrominance Blue
+	int Cr = std::round((((e/2)/e) * R - (k.Kg/e) * G - (k.Kb/e) * B)*scalar1/scalar2 + offset); // Chrominance Red
 
 	return YCbCr(Y, Cb, Cr); 
 }
 
 static RGB YCbCrToRGB(YCbCr ycbcr, int bits, int colorimetry, int rgb_quant_range) {
-	float coeffs[2][3] =
-	{
-	{ 0.2126, 0.7152, 0.0722}, 
-	{ 0.2627, 0.6780, 0.0593}, 
-	};
+	YCbCrCoeffs k = YCbCrCoeffsForColorimetry(colorimetry);
 	/* Full range 0-255: 256/255, Studio range: 256/219, Limited range: 224/219 */
 	int scalar1;
 	int scalar2;
-	int scalar_limit1 = 224 << (bits - 8);
-	int scalar_limit2 = 219 << (bits - 8);
-	int scalar_full1 = 256 << (bits - 8);
-	int scalar_full2 = 255 << (bits - 8);
+	YCbCrRangeScalars(bits, rgb_quant_range, scalar1, scalar2);
 	int offset = 128 << (bits - 8);
-	int idx = 0;
-	float d = 1.8556f, e = 1.5748f;
-	if (rgb_quant_range == 1) {
-		scalar1=scalar_limit1;
-		scalar2=scalar_limit2;
-	}
-	if (rgb_quant_range == 2) {
-		scalar1=scalar_full1;
-		scalar2=scalar_full2;
-	}
-	if (colorimetry == 2) {
-		idx = 0;
-		d = 1.8556;
-		e = 1.5748;
-	}	
-	if (colorimetry == 9) {
-		idx = 1;
-		d = 1.8814;
-		e = 1.4746;
-	}	
+	float d = k.d, e = k.e;
 	float r = ycbcr.Y + (ycbcr.Cr - offset) * scalar2/scalar1 * e;
-	float g = ycbcr.Y + (ycbcr.Cb - offset) * scalar2/scalar1 * -coeffs[idx][2]*d/coeffs[idx][1] + (ycbcr.Cr - offset) * scalar2/scalar1 * -coeffs[idx][0]*e/coeffs[idx][1];
+	float g = ycbcr.Y + (ycbcr.Cb - offset) * scalar2/scalar1 * -k.Kb*d/k.Kg + (ycbcr.Cr - offset) * scalar2/scalar1 * -k.Kr*e/k.Kg;
 	float b = ycbcr.Y + (ycbcr.Cb - offset) * scalar2/scalar1 * d;
 
 	return RGB((int)r, (int)g, (int)b);

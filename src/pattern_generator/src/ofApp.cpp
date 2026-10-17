@@ -20,6 +20,7 @@
 
 #include "ofApp.h"
 #include <algorithm>
+#include <unistd.h>
 
 /* Start Patch RPI P4 */
 #include "rgb2ycbcr.h"
@@ -62,6 +63,34 @@ inline bool usesDolbyVisionTransport() {
 inline bool usesLowLatencyDoVi422Transport() {
 	return false;
 }
+
+// ofApp::log() is compiled out; keep per-element sprintf work out of draw().
+const bool log_enabled = false;
+
+// Interval at which update() re-checks the running/<pattern>.save marker
+// while the pattern itself is unchanged.
+const uint64_t save_check_interval_ms = 100;
+
+// YCbCr output, or full-range RGB tunnelled through the Dolby Vision path:
+// both need the RGB->YCbCr conversion shader.
+inline bool usesYCbCrConversionShader() {
+ return ofxRPI4Window::avi_info.output_format != 0 ||
+	 (ofxRPI4Window::isDoVi && !ofxRPI4Window::is_std_DoVi &&
+	  ofxRPI4Window::avi_info.output_format == 0 &&
+	  ofxRPI4Window::avi_info.rgb_quant_range == 2);
+}
+
+// Any draw that has to go through ofxRPI4Window::shader (YCbCr conversion
+// or the standard Dolby Vision packer).
+inline bool usesRendererShader() {
+ return usesYCbCrConversionShader() || ofxRPI4Window::is_std_DoVi;
+}
+
+inline void setShaderYCbCrCoeffs(int colorimetry) {
+ YCbCrCoeffs k = YCbCrCoeffsForColorimetry(colorimetry);
+ ofxRPI4Window::shader.setUniform3f("coeffs_num", k.Kr, k.Kg, k.Kb);
+ ofxRPI4Window::shader.setUniform3f("coeffs_div", k.d, k.e, 0.5);
+}
 }
 
 /*
@@ -88,6 +117,7 @@ void ofApp::setup(){
  ##########################################################
 */
 void ofApp::update(){
+ const bool reparsed=open_file;
  std::vector<std::string> dimensions;
  std::vector<std::string> rgb;
  std::vector<std::string> rgbb;
@@ -194,7 +224,7 @@ void ofApp::update(){
    previous_image = ""; 
   }
 #if 1 
-	if (ofxRPI4Window::shader_init && (ofxRPI4Window::avi_info.output_format != 0 || (ofxRPI4Window::isDoVi && !ofxRPI4Window::is_std_DoVi && ofxRPI4Window::avi_info.output_format == 0 && ofxRPI4Window::avi_info.rgb_quant_range == 2))) {
+	if (ofxRPI4Window::shader_init && usesYCbCrConversionShader()) {
  //  ofxRPI4Window::rgb2ycbcr_shader();
    ofxRPI4Window::shader_init=0;
   }
@@ -209,12 +239,17 @@ void ofApp::update(){
 #endif  
   previous_draw_type = draw_type;
   /* End Patch RPI P4 */
- image_save=tmp_dir+ofToString("running/")+ofToString(p_name)+".save";
- const char * save = image_save.c_str();
- ifstream s(save);
- if (s.good()) {
-  save_images=1;
-  s.close();
+ // Only stat the .save marker after a (re)parse, when the pattern name
+ // changed, or every save_check_interval_ms, instead of on every frame.
+ uint64_t now_ms=ofGetElapsedTimeMillis();
+ if(reparsed || !save_checked || p_name != save_checked_name ||
+    now_ms - save_checked_at >= save_check_interval_ms) {
+  save_checked=true;
+  save_checked_name=p_name;
+  save_checked_at=now_ms;
+  image_save=tmp_dir+ofToString("running/")+ofToString(p_name)+".save";
+  if (access(image_save.c_str(), F_OK) == 0)
+   save_images=1;
  }
 }
 
@@ -226,44 +261,46 @@ void ofApp::update(){
 void ofApp::draw(){
  if(entered == 0)
   return;
- for(to_draw=0;to_draw<n_draw[i];to_draw++) {
+ if(n_draw[i] > 0) {
   string return_file=tmp_dir+ofToString("/running/return");
   const char * return_file_char = return_file.c_str();
-  ifstream r(return_file_char);
-  if (r.good()) {
-   r.close();
+  if (access(return_file_char, F_OK) == 0) {
    i=0;
    open_file=1;
    save_images=0;
    unlink(return_file_char);
    return;
   }
-  char buffer[255];
-  sprintf(buffer,"Doing the frame %d and the Draw %d",i,to_draw);
-  ofApp::log(buffer);
-  sprintf(buffer,"RGB: %d %d %d",arr_red[i][to_draw],arr_green[i][to_draw],arr_blue[i][to_draw]);
-  ofApp::log(buffer);
-  sprintf(buffer,"Background: %d %d %d",arr_redbg[i][to_draw],arr_greenbg[i][to_draw],arr_bluebg[i][to_draw]);
-  ofApp::log(buffer);
-  sprintf(buffer,"DrawType: %d",arr_draw[i][to_draw]);
-  ofApp::log(buffer);
-  if(arr_draw[i][to_draw] == 4) {
-   sprintf(buffer,"DrawImage: %s",arr_text[i][to_draw].c_str());
+ }
+ for(to_draw=0;to_draw<n_draw[i];to_draw++) {
+  if(log_enabled) {
+   char buffer[255];
+   sprintf(buffer,"Doing the frame %d and the Draw %d",i,to_draw);
    ofApp::log(buffer);
-  }
-  if(arr_draw[i][to_draw] == 5) {
-   sprintf(buffer,"DrawImage: %s",arr_image[i][to_draw].c_str());
+   sprintf(buffer,"RGB: %d %d %d",arr_red[i][to_draw],arr_green[i][to_draw],arr_blue[i][to_draw]);
    ofApp::log(buffer);
-  }
-  sprintf(buffer,"Dim: %d %d",arr_dim1[i][to_draw],arr_dim2[i][to_draw]);
-  ofApp::log(buffer);
-  sprintf(buffer,"Resolution: %d",arr_resolution[i][to_draw]);
-  ofApp::log(buffer);
-  sprintf(buffer,"Position: %d %d",arr_posx[i][to_draw],arr_posy[i][to_draw]);
-  ofApp::log(buffer);
+   sprintf(buffer,"Background: %d %d %d",arr_redbg[i][to_draw],arr_greenbg[i][to_draw],arr_bluebg[i][to_draw]);
+   ofApp::log(buffer);
+   sprintf(buffer,"DrawType: %d",arr_draw[i][to_draw]);
+   ofApp::log(buffer);
+   if(arr_draw[i][to_draw] == 4) {
+    sprintf(buffer,"DrawImage: %s",arr_text[i][to_draw].c_str());
+    ofApp::log(buffer);
+   }
+   if(arr_draw[i][to_draw] == 5) {
+    sprintf(buffer,"DrawImage: %s",arr_image[i][to_draw].c_str());
+    ofApp::log(buffer);
+   }
+   sprintf(buffer,"Dim: %d %d",arr_dim1[i][to_draw],arr_dim2[i][to_draw]);
+   ofApp::log(buffer);
+   sprintf(buffer,"Resolution: %d",arr_resolution[i][to_draw]);
+   ofApp::log(buffer);
+   sprintf(buffer,"Position: %d %d",arr_posx[i][to_draw],arr_posy[i][to_draw]);
+   ofApp::log(buffer);
 
-  sprintf(buffer,"Bits: %d",arr_bits[i][to_draw]);
-  ofApp::log(buffer);
+   sprintf(buffer,"Bits: %d",arr_bits[i][to_draw]);
+   ofApp::log(buffer);
+  }
 
   if(arr_draw[i][to_draw] == 0) 
    ::exit(0);
@@ -516,7 +553,8 @@ void ofApp::image() {
  ##########################################################
 */
 void ofApp::log(std::string str) {
-  return;
+  if (!log_enabled)
+   return;
   ifstream f(DOLOG);
   if (f.good()) {
    f.close();
@@ -699,51 +737,13 @@ void ofApp::normalizeImageSourcePixels(int source_range_mode) {
   img.update();
  }
 }
-#if 0
 /*
  ##########################################################
  #                       Shader Begin                     #
  ##########################################################
 */
 void ofApp::shader_begin(int is_image) {
- if ((!ofxRPI4Window::shader_init && ofxRPI4Window::avi_info.output_format != 0) || (!ofxRPI4Window::shader_init && ofxRPI4Window::is_std_DoVi) || (!ofxRPI4Window::shader_init && ofxRPI4Window::isDoVi && !ofxRPI4Window::is_std_DoVi && ofxRPI4Window::avi_info.output_format == 0 && ofxRPI4Window::avi_info.rgb_quant_range == 2)) {
-  if (is_image) { 
-	if (ofxRPI4Window::avi_info.max_bpc == 10 && ofxRPI4Window::isHDR) float_img.getTexture().bind();
-	else 															         img.getTexture().bind();
-  }
-  if (ofxRPI4Window::is_std_DoVi && ofxRPI4Window::bit_depth == 10) fbo10.begin();
-  if (ofxRPI4Window::is_std_DoVi && ofxRPI4Window::bit_depth == 8) fbo8.begin();  
-  ofxRPI4Window::shader.begin();
-  if (ofxRPI4Window::is_std_DoVi) {
-	ofxRPI4Window::shader.setUniform2f("resolution", ofGetWindowWidth(), ofGetWindowHeight());
-	if (ofxRPI4Window::dv_profile == 1) {
-      ofxRPI4Window::shader.setUniform3f("coeffs_num",0.2627, 0.6780, 0.0593); //BT2020
-	  ofxRPI4Window::shader.setUniform3f("coeffs_div",1.8556, 1.5748, 0.5); //BT2020
-	}
-	if (ofxRPI4Window::dv_profile == 2) {
-	  ofxRPI4Window::shader.setUniform3f("coeffs_num",0.2126, 0.7152, 0.0722); //BT709
-	  ofxRPI4Window::shader.setUniform3f("coeffs_div", 1.8814, 1.4746, 0.5); //BT709
-	}
-  }	else {
-    ofxRPI4Window::shader.setUniform1i("bits", ofxRPI4Window::bit_depth);
-    ofxRPI4Window::shader.setUniform1i("colorimetry", ofxRPI4Window::avi_info.colorimetry);
-		ofxRPI4Window::shader.setUniform2f("resolution", ofGetWindowWidth(), ofGetWindowHeight());
-    ofxRPI4Window::shader.setUniform1i("color_format", ofxRPI4Window::avi_info.output_format);
-    ofxRPI4Window::shader.setUniform1i("rgb_quant_range", ofxRPI4Window::avi_info.rgb_quant_range);  
-    ofxRPI4Window::shader.setUniform1i("is_image", is_image);
-
-  }
- }
-} 
-#endif
-#if 1
-/*
- ##########################################################
- #                       Shader Begin                     #
- ##########################################################
-*/
-void ofApp::shader_begin(int is_image) {
- if ((!ofxRPI4Window::shader_init && ofxRPI4Window::avi_info.output_format != 0) || (!ofxRPI4Window::shader_init && ofxRPI4Window::is_std_DoVi) || (!ofxRPI4Window::shader_init && ofxRPI4Window::isDoVi && !ofxRPI4Window::is_std_DoVi && ofxRPI4Window::avi_info.output_format == 0 && ofxRPI4Window::avi_info.rgb_quant_range == 2)) {
+ if (!ofxRPI4Window::shader_init && usesRendererShader()) {
   if (is_image) { 
 	if (ofxRPI4Window::avi_info.max_bpc == 10 && ofxRPI4Window::isHDR) float_img.getTexture().bind();
 	else 															         img.getTexture().bind();
@@ -758,38 +758,18 @@ void ofApp::shader_begin(int is_image) {
 		static_cast<float>(dv_source_green),
 		static_cast<float>(dv_source_blue));
 	ofxRPI4Window::shader.setUniform1i("source_max",dv_source_max);
- 	if (ofxRPI4Window::dv_profile == 2) {
-	  ofxRPI4Window::shader.setUniform3f("coeffs_num",0.2126, 0.7152, 0.0722); //BT709
-	  ofxRPI4Window::shader.setUniform3f("coeffs_div",1.8556, 1.5748, 0.5); //BT709
-	}
-	if (ofxRPI4Window::dv_profile == 1) {
-      ofxRPI4Window::shader.setUniform3f("coeffs_num",0.2627, 0.6780, 0.0593); //BT2020
-	  ofxRPI4Window::shader.setUniform3f("coeffs_div", 1.8814, 1.4746, 0.5); //BT2020
-	}
+ 	if (ofxRPI4Window::dv_profile == 2) setShaderYCbCrCoeffs(2); //Profile 8.2: BT709
+	if (ofxRPI4Window::dv_profile == 1) setShaderYCbCrCoeffs(9); //Profile 8.1: BT2020
 
   }	else {
 	int scalar1;
 	int scalar2;
 
-	if (ofxRPI4Window::avi_info.colorimetry == 2) {
-	  ofxRPI4Window::shader.setUniform3f("coeffs_num",0.2126, 0.7152, 0.0722); //BT709
-	  ofxRPI4Window::shader.setUniform3f("coeffs_div",1.8556, 1.5748, 0.5); //BT709
-	}	
-	if (ofxRPI4Window::avi_info.colorimetry == 9) {
-      ofxRPI4Window::shader.setUniform3f("coeffs_num",0.2627, 0.6780, 0.0593); //BT2020
-	  ofxRPI4Window::shader.setUniform3f("coeffs_div", 1.8814, 1.4746, 0.5); //BT2020
-	}
+	// Same colorimetry -> coefficient and range mapping as RGB2YCbCr():
+	// unknown colorimetry falls back to BT.709, Default range to Limited.
+	setShaderYCbCrCoeffs(ofxRPI4Window::avi_info.colorimetry);
 	int shift = ofxRPI4Window::bit_depth - 8;
-	scalar1 = 256 << shift;
-	scalar2 = 255 << shift;
-	if (ofxRPI4Window::avi_info.rgb_quant_range == 1) {
-		scalar1 = 224 << shift;		
-		scalar2 = 219 << shift;
-	}
-	if (ofxRPI4Window::avi_info.rgb_quant_range == 2) {
-		scalar1 = 256 << shift;
-		scalar2 = 255 << shift;
-	}
+	YCbCrRangeScalars(ofxRPI4Window::bit_depth, ofxRPI4Window::avi_info.rgb_quant_range, scalar1, scalar2);
 	int offset = 128 << shift;
 	int normalizer = (256 << shift) - 1;
 	int scale = normalizer;
@@ -808,14 +788,13 @@ void ofApp::shader_begin(int is_image) {
   }
  }
 } 
-#endif
 /*
  ##########################################################
  #                        Shader End                      #
  ##########################################################
 */
 void ofApp::shader_end(int is_image) {
- if ((!ofxRPI4Window::shader_init && ofxRPI4Window::avi_info.output_format != 0) || (!ofxRPI4Window::shader_init && ofxRPI4Window::is_std_DoVi) || (!ofxRPI4Window::shader_init && ofxRPI4Window::isDoVi && !ofxRPI4Window::is_std_DoVi && ofxRPI4Window::avi_info.output_format == 0 && ofxRPI4Window::avi_info.rgb_quant_range == 2)) {
+ if (!ofxRPI4Window::shader_init && usesRendererShader()) {
   ofxRPI4Window::shader.end();
 
   if (is_image) { 
@@ -830,7 +809,7 @@ void ofApp::shader_end(int is_image) {
  
 void ofApp::YCbCr2RGB(){
 	if (ofxRPI4Window::avi_info.output_format != 0) {
-		int Y, Cb, Cr;
+		int Y = 0, Cb = 0, Cr = 0;
 		//Getting pointer to pixel array of image
 		unsigned char *pixels = img.getPixels().getData();
 		//Calculate number of pixel components

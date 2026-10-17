@@ -64,6 +64,9 @@ class ofApp : public ofBaseApp{
   /* End Patch For RPI 4 */
 
   string image_save;
+  bool save_checked=false;
+  std::string save_checked_name;
+  uint64_t save_checked_at=0;
   string movie_name;
   int sleep_time;
   int first_done=0;

@@ -259,8 +259,27 @@ void ofApp::update(){
  ##########################################################
 */
 void ofApp::draw(){
- if(entered == 0)
+ if(entered == 0) {
+  /* Idle (no pattern yet): an RGB (0,0,0) framebuffer is decoded by the
+     sink as Y=0/Cb=0/Cr=0, i.e. green. Clear to encoded YCbCr black every
+     frame; a flip may recreate the renderer, so a one-time background set
+     in setup() does not survive. RGB and Dolby Vision stay unchanged. */
+  if(ofxRPI4Window::avi_info.output_format != 0 &&
+     !ofxRPI4Window::isDoVi && !ofxRPI4Window::is_std_DoVi) {
+   int bits = ofxRPI4Window::bit_depth ? ofxRPI4Window::bit_depth : 8;
+   int shift = bits - 8;
+   int y = (ofxRPI4Window::avi_info.rgb_quant_range == 2 ? 0 : 16) << shift;
+   int c = 128 << shift;
+   if(bits == 10) {
+    if(ofxRPI4Window::avi_info.output_format == 1) ofClear10bit(c,c,y);  //in YCbCr444, luminance is last channel
+    if(ofxRPI4Window::avi_info.output_format == 2) ofClear10bit(y,c,c);  //in YCbCr422
+   } else {
+    if(ofxRPI4Window::avi_info.output_format == 1) ofClear(c,c,y,255);
+    if(ofxRPI4Window::avi_info.output_format == 2) ofClear(y,c,c,255);
+   }
+  }
   return;
+ }
  if(n_draw[i] > 0) {
   string return_file=tmp_dir+ofToString("/running/return");
   const char * return_file_char = return_file.c_str();

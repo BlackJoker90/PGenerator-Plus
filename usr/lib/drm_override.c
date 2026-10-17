@@ -44,6 +44,20 @@
  * PGeneratord handles RGB-to-YCbCr conversion in its OpenGL fragment
  * shader, producing bit-perfect limited-range YCbCr output.
  *
+ * CONF RELOAD:
+ * The renderer applies signal-mode changes in place on SIGHUP, so the conf
+ * is no longer read only once: every intercepted atomic commit (and legacy
+ * SETPROPERTY) checks the conf's mtime/ctime/size/inode via a raw statx
+ * syscall (no stat@GLIBC_2.33 dependency) and re-parses it when anything
+ * changed. Without statx (ENOSYS / unknown syscall number) the file content
+ * is hashed instead. Property IDs are discovered from GETPROPERTY and are
+ * unaffected by a reload.
+ *
+ * SUSPEND:
+ * drm_override_set_suspended(1) (looked up by the renderer via dlsym) lets
+ * the renderer's exit-time connector reset (RGB, 8 bpc, no HDR/DOVI) reach
+ * the kernel unmodified.
+ *
  * Cross-compile:
  *   arm-linux-gnueabihf-gcc -shared -fPIC -o drm_override.so drm_override.c
  */
@@ -52,6 +66,7 @@
 #include <sys/syscall.h>
 #include <unistd.h>
 #include <fcntl.h>
+#include <errno.h>
 #include <string.h>
 
 /* ---- DRM ioctl definitions (from drm.h / drm_mode.h) ---- */
@@ -146,6 +161,7 @@ static int is_ll_dovi = 0;
 static int is_std_dovi = 0;
 static int dv_map_mode = -1;
 static int conf_read = 0;
+static volatile int overrides_suspended = 0;
 
 /* DOVI blob injection state */
 static uint32_t dovi_blob_id = 0;       /* fallback blob created by us */
@@ -196,17 +212,37 @@ static void itoa_simple(uint64_t val, char *buf) {
     buf[j] = 0;
 }
 
-/* Read config values from PGenerator.conf */
-static void read_config(void) {
-    if (conf_read) return;
-    conf_read = 1;
-    int fd = open("/etc/PGenerator/PGenerator.conf", O_RDONLY);
-    if (fd < 0) return;
-    char buf[4096];
-    int n = read(fd, buf, sizeof(buf) - 1);
+#ifndef CONF_PATH
+#define CONF_PATH "/etc/PGenerator/PGenerator.conf"
+#endif
+#define CONF_BUF_SIZE 4096
+
+/* Read the conf into buf (NUL-terminated). Returns bytes read, <= 0 on error. */
+static int load_conf_file(char *buf) {
+    int fd = open(CONF_PATH, O_RDONLY);
+    if (fd < 0) return -1;
+    int n = read(fd, buf, CONF_BUF_SIZE - 1);
     close(fd);
-    if (n <= 0) return;
+    if (n <= 0) return n;
     buf[n] = 0;
+    return n;
+}
+
+/* Parse override values from an already loaded conf buffer. */
+static void parse_config(char *buf) {
+    /* Start from defaults so a key removed from the conf stops overriding. */
+    max_bpc_override = 0;
+    output_fmt_override = 0;
+    output_fmt_found = 0;
+    colorimetry_override = 0;
+    colorimetry_found = 0;
+    rgb_qr_override = 0;
+    rgb_qr_found = 0;
+    dv_status = 0;
+    dv_interface = 0;
+    is_ll_dovi = 0;
+    is_std_dovi = 0;
+    dv_map_mode = -1;
 
     char *p = buf;
     while (*p) {
@@ -358,6 +394,169 @@ static void read_config(void) {
      * output, max_bpc promoted to 10 if conf says so, etc.) regardless
      * of which reference source is in use. See commit 91e43783 (gate
      * was first added) and 63d72a63 (reverted here). */
+}
+
+/* ---- Conf change detection ---- */
+/* statx syscall number: from the headers if they know it, else per arch. */
+#if defined(SYS_statx)
+#define DRMO_NR_STATX SYS_statx
+#elif defined(__arm__)
+#define DRMO_NR_STATX 397
+#elif defined(__aarch64__)
+#define DRMO_NR_STATX 291
+#elif defined(__x86_64__)
+#define DRMO_NR_STATX 332
+#elif defined(__i386__)
+#define DRMO_NR_STATX 383
+#endif
+
+/* Kernel struct statx layout (include/uapi/linux/stat.h), 256 bytes. */
+struct drmo_statx_ts {
+    int64_t tv_sec;
+    uint32_t tv_nsec;
+    int32_t reserved;
+};
+struct drmo_statx {
+    uint32_t mask;
+    uint32_t blksize;
+    uint64_t attributes;
+    uint32_t nlink;
+    uint32_t uid;
+    uint32_t gid;
+    uint16_t mode;
+    uint16_t spare0;
+    uint64_t ino;
+    uint64_t size;
+    uint64_t blocks;
+    uint64_t attributes_mask;
+    struct drmo_statx_ts atime, btime, ctime, mtime;
+    uint32_t rdev_major, rdev_minor, dev_major, dev_minor;
+    uint64_t spare2[14];
+};
+#define DRMO_AT_FDCWD (-100)
+#define DRMO_STATX_MTIME 0x40U
+#define DRMO_STATX_CTIME 0x80U
+#define DRMO_STATX_INO   0x100U
+#define DRMO_STATX_SIZE  0x200U
+
+struct conf_stamp {
+    int valid;
+    int64_t mtime_sec, ctime_sec;
+    uint32_t mtime_nsec, ctime_nsec;
+    uint64_t size, ino;
+};
+static struct conf_stamp conf_stamp;
+static int statx_unavailable = 0;
+static uint32_t conf_hash = 0;   /* content hash, used only without statx */
+
+static uint32_t hash_buf(const char *buf, int n) {
+    uint32_t h = 2166136261u;    /* FNV-1a */
+    for (int i = 0; i < n; i++) {
+        h ^= (uint8_t)buf[i];
+        h *= 16777619u;
+    }
+    return h;
+}
+
+/* Returns 1 and fills *st on success, 0 if the conf cannot be stat'ed. */
+static int stat_conf(struct conf_stamp *st) {
+#ifdef DRMO_NR_STATX
+    struct drmo_statx sx;
+    if (statx_unavailable) return 0;
+    memset(&sx, 0, sizeof(sx));
+    if (syscall(DRMO_NR_STATX, DRMO_AT_FDCWD, CONF_PATH, 0,
+                DRMO_STATX_MTIME | DRMO_STATX_CTIME | DRMO_STATX_INO | DRMO_STATX_SIZE,
+                &sx) != 0) {
+        if (errno == ENOSYS) {
+            statx_unavailable = 1;
+            write_log("DRM_OVERRIDE: statx unavailable, conf reload falls back to content hash\n");
+        }
+        return 0;
+    }
+    st->valid = 1;
+    st->mtime_sec = sx.mtime.tv_sec;
+    st->mtime_nsec = sx.mtime.tv_nsec;
+    st->ctime_sec = sx.ctime.tv_sec;
+    st->ctime_nsec = sx.ctime.tv_nsec;
+    st->size = sx.size;
+    st->ino = sx.ino;
+    return 1;
+#else
+    (void)st;
+    statx_unavailable = 1;
+    return 0;
+#endif
+}
+
+/* Initial load (first intercepted ioctl). */
+static void read_config(void) {
+    char buf[CONF_BUF_SIZE];
+    if (conf_read) return;
+    conf_read = 1;
+    stat_conf(&conf_stamp);
+    int n = load_conf_file(buf);
+    if (n <= 0) return;
+    conf_hash = hash_buf(buf, n);
+    parse_config(buf);
+}
+
+/*
+ * Re-read the conf if it changed since the last load. The stamp is taken
+ * before reading, so a conf caught mid-write is re-read on the next commit
+ * once the writer has finished (its mtime/size moves again).
+ */
+static void reload_config_if_changed(void) {
+    char buf[CONF_BUF_SIZE];
+    struct conf_stamp now;
+    int n;
+
+    memset(&now, 0, sizeof(now));
+    if (stat_conf(&now)) {
+        if (conf_stamp.valid &&
+            now.mtime_sec == conf_stamp.mtime_sec &&
+            now.mtime_nsec == conf_stamp.mtime_nsec &&
+            now.ctime_sec == conf_stamp.ctime_sec &&
+            now.ctime_nsec == conf_stamp.ctime_nsec &&
+            now.size == conf_stamp.size &&
+            now.ino == conf_stamp.ino)
+            return;
+        n = load_conf_file(buf);
+        if (n <= 0) return;   /* keep the stamp: retry next commit */
+        conf_stamp = now;
+        conf_hash = hash_buf(buf, n);
+    } else {
+        if (!statx_unavailable) return;   /* conf missing: keep old values */
+        n = load_conf_file(buf);
+        if (n <= 0) return;
+        uint32_t h = hash_buf(buf, n);
+        if (h == conf_hash) return;
+        conf_hash = h;
+    }
+
+    int old_dv_status = dv_status, old_ll = is_ll_dovi, old_std = is_std_dovi;
+    int old_iface = dv_interface, old_map = dv_map_mode;
+
+    write_log("DRM_OVERRIDE: conf changed, reloading\n");
+    parse_config(buf);
+
+    /* The fallback DOVI blob was built from the old DV transport settings;
+     * let the next DV commit build a fresh one. */
+    if (dv_status != old_dv_status || is_ll_dovi != old_ll ||
+        is_std_dovi != old_std || dv_interface != old_iface ||
+        dv_map_mode != old_map) {
+        dovi_blob_id = 0;
+        dovi_injected = 0;
+    }
+}
+
+/* Exported for the renderer (dlsym(RTLD_DEFAULT, ...)): while suspended,
+ * connector property ioctls pass through unmodified so the exit reset to
+ * RGB / 8 bpc / no HDR+DOVI metadata is not bent back to the conf values. */
+__attribute__((visibility("default")))
+void drm_override_set_suspended(int suspended) {
+    overrides_suspended = suspended ? 1 : 0;
+    write_log(suspended ? "DRM_OVERRIDE: overrides suspended\n"
+                        : "DRM_OVERRIDE: overrides resumed\n");
 }
 
 /* Override helpers -- log only when value actually changes */
@@ -776,6 +975,11 @@ int ioctl(int fd, unsigned long request, ...) {
         return raw_ioctl(fd, request, arg);
     }
 
+    /* Suspended (renderer exit reset): pass everything else through, but
+     * keep discovering property IDs. */
+    if (overrides_suspended && request != DRM_IOCTL_MODE_GETPROPERTY)
+        return raw_ioctl(fd, request, arg);
+
     /* Intercept DRM_IOCTL_MODE_GETPROPERTY to discover property IDs */
     if (request == DRM_IOCTL_MODE_GETPROPERTY) {
         long ret = raw_ioctl(fd, request, arg);
@@ -827,6 +1031,7 @@ int ioctl(int fd, unsigned long request, ...) {
 
     /* Intercept DRM_IOCTL_MODE_ATOMIC -- override and suppress */
     if (request == DRM_IOCTL_MODE_ATOMIC) {
+        reload_config_if_changed();
         struct drm_mode_atomic *atomic = (struct drm_mode_atomic *)arg;
         uint32_t *objs = (uint32_t *)(uintptr_t)atomic->objs_ptr;
         uint32_t *count_props = (uint32_t *)(uintptr_t)atomic->count_props_ptr;
@@ -1003,6 +1208,7 @@ int ioctl(int fd, unsigned long request, ...) {
 
     /* Intercept DRM_IOCTL_MODE_SETPROPERTY (connector-specific, 0xAB) */
     if (request == DRM_IOCTL_MODE_SETPROPERTY) {
+        reload_config_if_changed();
         struct drm_mode_connector_set_property *sp =
             (struct drm_mode_connector_set_property *)arg;
         if (max_bpc_prop_id && sp->prop_id == max_bpc_prop_id)
@@ -1017,6 +1223,7 @@ int ioctl(int fd, unsigned long request, ...) {
 
     /* Intercept DRM_IOCTL_MODE_OBJ_SETPROPERTY (generic object, 0xBA) */
     if (request == DRM_IOCTL_MODE_OBJ_SETPROPERTY) {
+        reload_config_if_changed();
         struct drm_mode_obj_set_property *sp =
             (struct drm_mode_obj_set_property *)arg;
         if (max_bpc_prop_id && sp->prop_id == max_bpc_prop_id)

@@ -1,6 +1,7 @@
 #include "ofxRPI4Window.h"
 #include "igt_edid.h"
 
+#include <dlfcn.h>
 #include <fcntl.h>
 #include <poll.h>
 // O_CLOEXEC
@@ -816,7 +817,11 @@ ofxRPI4Window::drm_mode_atomic_set_property(int drm_fd, drmModeAtomicReq *freq, 
 		ofLogError() << "DRM: Unable to request " << name << " missing property";
 		return;
 	}
-    if (first_req) { req = drmModeAtomicAlloc(); first_req = 0;}
+	if (batch_req) {
+		// batched: keep adding to the one request until it is committed
+		if (!req) req = drmModeAtomicAlloc();
+		first_req = 0;
+	} else if (first_req) { req = drmModeAtomicAlloc(); first_req = 0;}
 //    uint32_t flags = DRM_MODE_ATOMIC_ALLOW_MODESET;	
 	uint64_t tmp_value;
 	
@@ -885,6 +890,12 @@ ofxRPI4Window::drm_mode_atomic_set_property(int drm_fd, drmModeAtomicReq *freq, 
 void
 ofxRPI4Window::drm_mode_atomic_commit(int drm_fd, uint32_t flags)
 {
+	if (batch_req) {
+		// staging only; the caller commits the whole request once
+		first_req = 0;
+		last_req = 0;
+		return;
+	}
 	if (!req) {
 		first_req = 0;
 		last_req = 0;
@@ -1645,6 +1656,73 @@ drm_hdr_output_metadata ofxRPI4Window::hdr_metadata;
 int ofxRPI4Window::colorspace_on = 0;
 int ofxRPI4Window::shader_init = 0;
 ofShader ofxRPI4Window::shader;
+volatile sig_atomic_t ofxRPI4Window::exit_requested = 0;
+volatile sig_atomic_t ofxRPI4Window::reload_requested = 0;
+const char *(*ofxRPI4Window::reloadConf)() = nullptr;
+
+/* Same directory as ofApp's tmp_dir + "running/" and the daemon's
+ * $var_dir/running. */
+#define PG_RUNNING_DIR "/var/lib/PGenerator/running/"
+
+static void pg_signal_handler(int sig)
+{
+	int saved_errno = errno;
+
+	if (sig == SIGHUP) {
+		ofxRPI4Window::reload_requested = 1;
+	} else if (!ofxRPI4Window::exit_requested) {
+		ofxRPI4Window::exit_requested = 1;
+		/* The daemon (pattern_generator_stop) re-sends TERM every 500 ms
+		 * while the process exists, so further TERM/INT are ignored while
+		 * the clean shutdown and connector reset run. If the main loop
+		 * never gets back to update() SIGALRM's default action ends the
+		 * process. */
+		alarm(5);
+	}
+	errno = saved_errno;
+}
+
+void ofxRPI4Window::InstallSignalHandlers()
+{
+	struct sigaction sa;
+
+	memset(&sa, 0, sizeof(sa));
+	sa.sa_handler = pg_signal_handler;
+	sigemptyset(&sa.sa_mask);
+	sa.sa_flags = SA_RESTART;
+	sigaction(SIGTERM, &sa, NULL);
+	sigaction(SIGINT, &sa, NULL);
+	sigaction(SIGHUP, &sa, NULL);
+}
+
+bool ofxRPI4Window::WriteRunningFile(const char *name, const char *content)
+{
+	std::string path = std::string(PG_RUNNING_DIR) + name;
+	std::string tmp_path = path + ".tmp";
+	FILE *fh = fopen(tmp_path.c_str(), "w");
+
+	if (!fh)
+		return false;
+	bool ok = fputs(content, fh) >= 0;
+	ok = (fclose(fh) == 0) && ok;
+	if (!ok || rename(tmp_path.c_str(), path.c_str()) != 0) {
+		unlink(tmp_path.c_str());
+		return false;
+	}
+	return true;
+}
+
+/* ofApp calls ::exit(0) from draw() and swapBuffers() may ofExit(1); in
+ * the first case the window destructor never runs, so the connector reset
+ * is also hooked into atexit(). ResetConnectorOnExit() runs only once. */
+static ofxRPI4Window *pg_exit_window = nullptr;
+static pid_t pg_exit_pid = 0;
+
+static void pg_atexit_reset()
+{
+	if (pg_exit_window && getpid() == pg_exit_pid)
+		pg_exit_window->ResetConnectorOnExit();
+}
 
 void ofxRPI4Window::setup(const ofGLESWindowSettings & settings)
 {
@@ -1656,6 +1734,12 @@ void ofxRPI4Window::setup(const ofGLESWindowSettings & settings)
     windowMode = OF_WINDOW;
     glesVersion = settings.glesVersion;
     InitDRM(); 
+
+	pg_exit_window = this;
+	if (!pg_exit_pid) {
+		pg_exit_pid = getpid();
+		atexit(pg_atexit_reset);
+	}
  
 	initial_bit_depth = bit_depth;
 	switch (bit_depth) {
@@ -3073,6 +3157,16 @@ void ofxRPI4Window::update()
 {
    // ofLog() << "update";
 
+	if (exit_requested && !exit_started) {
+		// TERM/INT: leave the main loop; the destructor/atexit hook resets the connector
+		exit_started = true;
+		fprintf(stderr, "PGEN: termination signal received, exiting\n");
+		ofExit(0);
+	} else if (reload_requested && !exit_started) {
+		reload_requested = 0;
+		ReloadSignalConf();
+	}
+
    if (current_bit_depth != bit_depth)
 		flip = 1;
 	if (colorspace_status != colorspace_on) 
@@ -3192,6 +3286,38 @@ void ofxRPI4Window::update()
 		current_bit_depth = bit_depth;
 		colorspace_status = colorspace_on;
 	} 
+}
+
+/* SIGHUP: apply the signal keys from PGenerator.conf in-process. The
+ * window setup and the single atomic commit are redone by the flip path
+ * (update() sets shader_init there for YCbCr); swapBuffers() acknowledges
+ * with running/reconfigured "ok" after the next completed page flip. */
+void ofxRPI4Window::ReloadSignalConf()
+{
+	const char *reason = nullptr;
+	const char *preload = getenv("LD_PRELOAD");
+
+	/* drm_override.so re-reads the conf on change since it exports
+	 * drm_override_set_suspended; an older build caches the conf at
+	 * startup and would keep forcing the old values. */
+	if (preload && strstr(preload, "drm_override") && !dlsym(RTLD_DEFAULT, "drm_override_set_suspended"))
+		reason = "drm_override";
+	else if (!reloadConf)
+		reason = "unsupported";
+	else
+		reason = reloadConf();
+
+	if (reason) {
+		std::string marker = std::string("reject ") + reason + "\n";
+		fprintf(stderr, "PGEN: SIGHUP reconfigure rejected: %s\n", reason);
+		if (!WriteRunningFile("reconfigured", marker.c_str()))
+			fprintf(stderr, "PGEN: unable to write running/reconfigured: %s\n", strerror(errno));
+		return;
+	}
+	fprintf(stderr, "PGEN: SIGHUP reconfigure: color_format=%d rgb_quant_range=%d colorimetry=%d max_bpc=%d\n",
+		avi_info.output_format, avi_info.rgb_quant_range, avi_info.colorimetry, avi_info.max_bpc);
+	flip = true;
+	reload_pending = true;
 }
 
 int ofxRPI4Window::getWidth()
@@ -3414,9 +3540,21 @@ void ofxRPI4Window::swapBuffers()
 		return;
 	}
 
+	if (reload_pending) {
+		// first completed flip after a SIGHUP reload: acknowledge to the daemon
+		reload_pending = false;
+		if (WriteRunningFile("reconfigured", "ok\n"))
+			fprintf(stderr, "PGEN: SIGHUP reconfigure applied\n");
+		else
+			fprintf(stderr, "PGEN: unable to write running/reconfigured: %s\n", strerror(errno));
+	}
+
+	// previousBo is cleared when a window re-setup destroys its surface,
+	// but its framebuffer stays on screen until this flip replaced it
+	if (previousFb)
+		drmModeRmFB(device, previousFb);
     if (previousBo)
     {
-        drmModeRmFB(device, previousFb);
         gbm_surface_release_buffer(gbmSurface, previousBo);
 
     }
@@ -3449,142 +3587,6 @@ void ofxRPI4Window::finishRender()
 float timedifference_msec(struct timeval t0, struct timeval t1)
 {
     return (t1.tv_sec - t0.tv_sec) * 1000.0f + (t1.tv_usec - t0.tv_usec) / 1000.0f;
-}
-
-int ofxRPI4Window::CreateFB_ID()
-{
-int ret;
-	/* Request a dumb buffer */
-	struct drm_mode_create_dumb create_request = {
-		mode.vdisplay, //height
-		mode.hdisplay, //width
-		16		//bpp
-	};
-	ret = ioctl(device, DRM_IOCTL_MODE_CREATE_DUMB, &create_request);
-
-	/* Bail out if we could not allocate a dumb buffer */
-	if (ret) {
-		printf(
-			"Dumb Buffer Object Allocation request of %ux%u@%u failed : %s\n",
-			create_request.width, create_request.height,
-			create_request.bpp,
-			strerror(ret)
-		);
-	//	goto could_not_allocate_buffer;
-	}
-
-
-ret = drmModeRmFB(device, crtc->buffer_id);
-
-  if (ret) {
-    printf("drmModeRmFB failed for fb_id %d with error %d\n", crtc->buffer_id, ret);
-  }
-	/* create framebuffer object for the dumb-buffer */
-	uint32_t bo_handles[4] = { create_request.handle, create_request.handle  };
-	uint32_t pitches[4] = { create_request.pitch, create_request.pitch };
-	uint32_t offsets[4] = { 0, 276480  };
-	 uint32_t flags = 0;
-uint64_t modifier[4] = { modifiers[1], modifiers[1] };
-	uint32_t frame_buffer_id;
-	
-	if (modifier[0] && modifier[0] != DRM_FORMAT_MOD_INVALID) 
-	{
-		flags = DRM_MODE_FB_MODIFIERS;
-	}
-
-	ret = drmModeAddFB2WithModifiers(
-		device,
-		mode.hdisplay, mode.vdisplay,
-		DRM_FORMAT_P030, bo_handles,
-		pitches, offsets, modifier, &frame_buffer_id, flags
-	);
-
-	/* Without framebuffer, we won't do anything so bail out ! */
-	if (ret) {
-		printf(
-			"Could not add a framebuffer using drmModeAddFB2 : %s\n",
-			strerror(ret)
-		);
-	//	goto could_not_add_frame_buffer;
-	}
-
-	/* We assume that the currently chosen encoder CRTC ID is the current
-	 * one.
-	 */
-	uint32_t current_crtc_id = crtcId;
-
-	if (!current_crtc_id) {
-		printf("The retrieved encoder has no CRTC attached... ?\n");
-		//goto could_not_retrieve_current_crtc;
-	}
-
-	/* Backup the informations of the CRTC to restore when we're done.
-	 * The most important piece seems to currently be the buffer ID.
-	 */
-	drmModeCrtc * __restrict crtc_to_restore =
-		drmModeGetCrtc(device, current_crtc_id);
-
-	if (!crtc_to_restore) {
-		printf("Could not retrieve the current CRTC with a valid ID !\n");
-	//	goto could_not_retrieve_current_crtc;
-	}
-
-	/* Set the CRTC so that it uses our new framebuffer */
-	ret = drmModeSetCrtc(
-		device, current_crtc_id, frame_buffer_id,
-		0, 0,
-		&connectorId,
-		1,
-		&mode);
-
-	/* For this test only : Export our dumb buffer using PRIME */
-	/* This will provide us a PRIME File Descriptor that we'll use to
-	 * map the represented buffer. This could be also be used to reimport
-	 * the GEM buffer into another GPU */
-	struct drm_prime_handle prime_request = {
-		create_request.handle, //handle
-		DRM_CLOEXEC | DRM_RDWR, //flags
-		-1 //fd
-	};
-
-	ret = ioctl(device, DRM_IOCTL_PRIME_HANDLE_TO_FD, &prime_request);
-	int const dma_buf_fd = prime_request.fd;
-
-	/* If we could not export the buffer, bail out since that's the
-	 * purpose of our test */
-	if (ret || dma_buf_fd < 0) {
-		printf(
-			"Could not export buffer : %s (%d) - FD : %d\n",
-			strerror(ret), ret,
-			dma_buf_fd
- 		);
-	//	goto could_not_export_buffer;
-	}
- 
-	/* Map the exported buffer, using the PRIME File descriptor */
-	/* That ONLY works if the DRM driver implements gem_prime_mmap.
-	 * This function is not implemented in most of the DRM drivers for 
-	 * GPU with discrete memory. Meaning that it will surely fail with
-	 * Radeon, AMDGPU and Nouveau drivers for desktop cards ! */
-	uint8_t * primed_framebuffer = static_cast<uint8_t*>(mmap(
-		0, create_request.size,	PROT_READ | PROT_WRITE, MAP_SHARED,
-		dma_buf_fd, 0));
-	ret = errno;
-
-	/* Bail out if we could not map the framebuffer using this method */
-	if (primed_framebuffer == NULL || primed_framebuffer == MAP_FAILED) {
-		printf(
-			"Could not map buffer exported through PRIME : %s (%d)\n"
-			"Buffer : %p\n",
-			strerror(ret), ret,
-			primed_framebuffer
-		);
-		//goto could_not_map_buffer;
-	}
-	
-
-	printf("Buffer mapped !\n");
-return frame_buffer_id;
 }
 
 void ofxRPI4Window::ResetConnectorProperties()
@@ -3671,6 +3673,60 @@ void ofxRPI4Window::ResetConnectorProperties()
 		
 }
 
+/* Put the connector back to plain RGB so the console (or whatever takes
+ * over the display) is not decoded with our YCbCr/HDR signalling. Runs once,
+ * from the destructor or the atexit() hook, as one blocking modeset. */
+void ofxRPI4Window::ResetConnectorOnExit()
+{
+	static const struct {
+		const char *name;
+		uint64_t value;
+	} reset_props[] = {
+		{ "output format", 0 },		// RGB
+		{ "max bpc", 8 },
+		{ "Colorimetry", 0 },		// Default
+		{ "Colorspace", 0 },		// Default
+		{ "rgb quant range", 0 },	// Default
+		{ "Broadcast RGB", 0 },		// Automatic
+		{ "HDR_OUTPUT_METADATA", 0 },
+		{ "DOVI_OUTPUT_METADATA", 0 },
+	};
+	uint64_t value = 0;
+
+	if (exit_reset_done || device <= 0 || !connectorId)
+		return;
+	exit_reset_done = true;
+
+	if (req) {
+		drmModeAtomicFree(req);
+		req = nullptr;
+	}
+	batch_req = true;
+	for (size_t i = 0; i < sizeof(reset_props) / sizeof(reset_props[0]); i++) {
+		if (drm_mode_get_property(device, connectorId, DRM_MODE_OBJECT_CONNECTOR, reset_props[i].name, &prop_id, &value, &prop))
+			drm_mode_atomic_set_property(device, req, reset_props[i].name, connectorId, prop_id, reset_props[i].value, prop, 0);
+	}
+	batch_req = false;
+	first_req = 0;
+	last_req = 0;
+	if (!req)
+		return;
+
+	/* drm_override.so (LD_PRELOAD, Pi 4 kernels) would rewrite these values
+	 * back to the conf ones; it exports a switch to let this commit through. */
+	void (*set_suspended)(int) = (void (*)(int))dlsym(RTLD_DEFAULT, "drm_override_set_suspended");
+	if (set_suspended)
+		set_suspended(1);
+
+	int ret = drmModeAtomicCommit(device, req, DRM_MODE_ATOMIC_ALLOW_MODESET, NULL);
+	drmModeAtomicFree(req);
+	req = nullptr;
+	if (ret < 0)
+		fprintf(stderr, "PGEN: exit connector reset failed: %s\n", strerror(-ret));
+	else
+		fprintf(stderr, "PGEN: exit connector reset to RGB 8 bpc committed\n");
+}
+
 void ofxRPI4Window::DisablePlane(uint32_t plane_id, const char* plane)
 {
 	bool ok;
@@ -3705,6 +3761,57 @@ int ofxRPI4Window::SetPlaneId()
  
 void ofxRPI4Window::FlipPage(bool flip, uint32_t fb_id)
 {
+	if (flip) {
+		/* One atomic commit per format change. Staging every connector
+		 * property, infoframe blob, the mode and the new plane/fb in one
+		 * request means the sink resyncs once and never shows the previous
+		 * (foreign) buffer with the new output format. NONBLOCK together
+		 * with ALLOW_MODESET is valid for atomic commits and PAGE_FLIP_EVENT
+		 * still delivers the event swapBuffers() waits for. Repeated
+		 * properties in one request are fine: libdrm keeps the last value.
+		 * Blobs are created before the commit and only referenced by it, so
+		 * their lifetime does not force separate commits. */
+		batch_req = true;
+		SetModeProperties();
+		SetActivePlane(SetPlaneId(), currentWindowRect, fb_id);
+		batch_req = false;
+		first_req = 0;
+		last_req = 0;
+
+		/* Check first: if the kernel rejects the combined request, nothing
+		 * is shown and swapBuffers() would time out, so fall back to the
+		 * previous sequence of separate commits instead. */
+		int ret = req ? drmModeAtomicCommit(device, req, DRM_MODE_ATOMIC_TEST_ONLY | DRM_MODE_ATOMIC_ALLOW_MODESET, NULL) : -EINVAL;
+		if (ret == 0) {
+			ofLog() << "DRM: committing mode, infoframes and plane in one atomic request";
+			drm_mode_atomic_commit(device, DRM_MODE_ATOMIC_ALLOW_MODESET | DRM_MODE_PAGE_FLIP_EVENT | DRM_MODE_ATOMIC_NONBLOCK);
+			return;
+		}
+		ofLogError() << "DRM: combined atomic request rejected (" << strerror(-ret) << "), falling back to separate commits";
+		if (req) {
+			drmModeAtomicFree(req);
+			req = nullptr;
+		}
+		SetModeProperties();
+	}
+
+	SetActivePlane(SetPlaneId(), currentWindowRect, fb_id); 
+
+/*
+	if (drmModeSetPlane(device, SetPlaneId(), crtcId,
+		    fb_id, DRM_MODE_PAGE_FLIP_ASYNC |DRM_MODE_ATOMIC_NONBLOCK, crtc->x, crtc->y,
+		    crtc->width, crtc->height, 0, 0,
+		    ((int)currentWindowRect.width << 16), ((int)currentWindowRect.height << 16)))
+	{
+		ofLogError() << "DRM: -failed to enable plane " << strerror(errno) << "  " << errno;
+	}
+*/
+}
+
+/* Connector, infoframe and plane color properties for the current mode.
+ * Commits each step separately unless batch_req is set (see FlipPage). */
+void ofxRPI4Window::SetModeProperties()
+{
 	/***************************************************************/
 	/* YQ1 YQ0 YCC Quantization Range 							   */
 	/*	0   0     Limited Range									   */
@@ -3714,7 +3821,7 @@ void ofxRPI4Window::FlipPage(bool flip, uint32_t fb_id)
 	/* Table 16 AVI Info Frame YCC Quantization Range, Data Byte 5 */
 	/***************************************************************/
 
-	if (flip) { 
+	{
 		// disable plane when working layer no longer is active, do this at window change/flip	
 		DisablePlane(SDRplaneId, "SDR");
 		DisablePlane(HDRplaneId, "HDR");
@@ -3724,7 +3831,9 @@ void ofxRPI4Window::FlipPage(bool flip, uint32_t fb_id)
 
 			updateDoVi_Infoframe(dv_status, dv_interface); // Disable DOVI infoframe
  
-			updateHDR_Infoframe(ofxRPI4Window::eotf, hdr_primaries);// Display Gamut P3D65
+			// batched: only the reassert below is staged (an unused blob would leak)
+			if (!batch_req)
+				updateHDR_Infoframe(ofxRPI4Window::eotf, hdr_primaries);// Display Gamut P3D65
 			struct avi_infoframe avi_infoframe;
 //			if (hdr_primaries == 1)
 			avi_infoframe.colorimetry = (avi_info.output_format == 0) ? 9 : 10; //BT2020_RGB / BT2020_YCC
@@ -3738,6 +3847,8 @@ void ofxRPI4Window::FlipPage(bool flip, uint32_t fb_id)
 			updateAVI_Infoframe(HDRplaneId, avi_infoframe);	  
 			// Reassert HDR metadata after the final AVI/range commit so RGB
 			// Limited does not remain latched in SDR on some Pi 5 sinks.
+			// Batched, the HDR blob is staged after the AVI properties and
+			// lands in the same modeset, so the sink gets both together.
 			updateHDR_Infoframe(ofxRPI4Window::eotf, hdr_primaries);
 
 		} else if (isHDR && isDoVi && !is_std_DoVi) {
@@ -3754,7 +3865,9 @@ void ofxRPI4Window::FlipPage(bool flip, uint32_t fb_id)
 
 		} else if (isHDR && isDoVi && is_std_DoVi) {
 
-			updateDoVi_Infoframe(dv_status, dv_interface); // Enable Standard DOVI infoframe
+			// batched: only the final DoVi blob below is staged (an unused blob would leak)
+			if (!batch_req)
+				updateDoVi_Infoframe(dv_status, dv_interface); // Enable Standard DOVI infoframe
 			struct avi_infoframe avi_infoframe;
 			avi_infoframe.colorimetry = 9; // BT.2020 RGB for standard Dolby Vision tunneling
 			avi_infoframe.rgb_quant_range = 2; //Full range [0-255]
@@ -3781,18 +3894,6 @@ void ofxRPI4Window::FlipPage(bool flip, uint32_t fb_id)
 		
 
 	}
-	
-	SetActivePlane(SetPlaneId(), currentWindowRect, fb_id); 
-
-/*
-	if (drmModeSetPlane(device, SetPlaneId(), crtcId,
-		    fb_id, DRM_MODE_PAGE_FLIP_ASYNC |DRM_MODE_ATOMIC_NONBLOCK, crtc->x, crtc->y,
-		    crtc->width, crtc->height, 0, 0,
-		    ((int)currentWindowRect.width << 16), ((int)currentWindowRect.height << 16)))
-	{
-		ofLogError() << "DRM: -failed to enable plane " << strerror(errno) << "  " << errno;
-	}
-*/
 }
 
 void ofxRPI4Window::SetActivePlane(uint32_t plane_id, ofRectangle currentWindowRect, int fb_id)
@@ -4327,6 +4428,7 @@ void ofxRPI4Window::gbmClean()
     { 
     //    drmModeRmFB(device, previousFb);
        gbm_surface_release_buffer(gbmSurface, previousBo);
+       previousBo = nullptr; // belongs to the surface destroyed below
     }
 
   if (gbmSurface != NULL) { 
@@ -4342,6 +4444,9 @@ void ofxRPI4Window::gbmClean()
 
 ofxRPI4Window::~ofxRPI4Window()
 {
+	ResetConnectorOnExit();
+	if (pg_exit_window == this)
+		pg_exit_window = nullptr;
     eglDestroyContext(display, context);
     eglDestroySurface(display, surface);
     eglTerminate(display);

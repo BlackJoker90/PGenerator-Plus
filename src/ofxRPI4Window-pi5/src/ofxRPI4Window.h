@@ -11,6 +11,7 @@
 #include <unistd.h> // read close
 #include <string.h> // strlen
 #include <sys/time.h>
+#include <signal.h> // sig_atomic_t, sigaction
 
 #include <xf86drm.h>
 #include <xf86drmMode.h>
@@ -387,6 +388,9 @@ public:
 	void drm_mode_atomic_commit(int drm_fd, uint32_t flags);
 	int last_req = 0;
 	int first_req = 0;
+	/* While set, drm_mode_atomic_set_property only stages into req and never
+	   commits; FlipPage/ResetConnectorOnExit commit the whole request once. */
+	bool batch_req = false;
 	bool flip = true;
 
 	void get_format_modifiers(int fd, uint32_t blob_id, int format_index);
@@ -422,7 +426,6 @@ public:
 	static void dovi_pattern_shader();
 	static void dovi_image_shader();
 	
-	int CreateFB_ID();
 	/* Parse EDID for HDR and DoVi support report if display supports */
 	int is_panel_hdr_dovi(int fd, int connector_id);
 	void in_formats_info(int fd, uint32_t blob_id);
@@ -431,9 +434,11 @@ public:
 
 	/* Set DRM Plane swap between HDR and SDR planes */
 	void FlipPage(bool flip, uint32_t fb_id);
+	void SetModeProperties();
 	void SetActivePlane(uint32_t plane_id, ofRectangle currentWindowRect, int fb_id);
 	void DisablePlane(uint32_t plane_id, const char* plane); 
 	void ResetConnectorProperties();
+	void ResetConnectorOnExit();
 	int SetPlaneId();
 
 	/* Userspace access to HDR, DoVi , AVI Infoframes */
@@ -477,4 +482,19 @@ public:
     float lastFrameTimeMillis;
     string getInfo();
     void gbmClean();
+
+	/* Signals: the handlers only set these flags, update() does the work. */
+	static volatile sig_atomic_t exit_requested;
+	static volatile sig_atomic_t reload_requested;
+	static void InstallSignalHandlers();
+	/* Write /var/lib/PGenerator/running/<name> via a temp file + rename. */
+	static bool WriteRunningFile(const char *name, const char *content);
+	/* SIGHUP hook set by main(): re-reads PGenerator.conf and applies the
+	   signal keys. Returns nullptr when applied, else a short reject reason
+	   (nothing is changed in that case). */
+	static const char *(*reloadConf)();
+	void ReloadSignalConf();
+	bool exit_started = false;
+	bool reload_pending = false;
+	bool exit_reset_done = false;
 };

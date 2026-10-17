@@ -64,6 +64,81 @@ static bool usesPGeneratorKmsWindow(const std::string &model) {
         model.find("BCM2712") != string::npos;
 }
 
+/* Read PGenerator.conf into the variables above. Keys missing from the
+   file keep their current value. */
+static void readPGeneratorConf() {
+ std::string str;
+ std::ifstream file(PGenerator_conf);
+ while (std::getline(file, str)) {
+  std::vector<std::string> el;
+  boost::split(el, str, boost::is_any_of("="));
+  if(el.size() < 2) continue;
+  if(el[0] == "max_cll")         max_cll=el[1];
+  if(el[0] == "max_fall")        max_fall=el[1];
+  if(el[0] == "max_luma")        max_luma=el[1];
+  if(el[0] == "min_luma")        min_luma=el[1];
+  if(el[0] == "max_bpc")         max_bpc=el[1];
+  if(el[0] == "eotf")            eotf=el[1];
+  if(el[0] == "color_format")    color_format=el[1];
+  if(el[0] == "rgb_quant_range") rgb_quant_range=el[1];
+  if(el[0] == "colorimetry") 	  colorimetry=el[1];
+  if(el[0] == "is_hdr")          is_hdr=el[1];
+  if(el[0] == "is_ll_dovi")      is_ll_dovi=el[1];
+  if(el[0] == "is_std_dovi")     is_std_dovi=el[1];
+  if(el[0] == "primaries")       primaries=el[1];
+  if(el[0] == "mode_idx")        mode_idx=el[1];
+  if(el[0] == "dv_status")       dv_status=el[1];
+  if(el[0] == "dv_interface")    dv_interface=el[1];
+  if(el[0] == "dv_profile")      dv_profile=el[1];
+  if(el[0] == "dv_map_mode")     dv_map_mode=el[1];
+  if(el[0] == "dv_minpq")    	  dv_minpq=el[1];
+  if(el[0] == "dv_maxpq")        dv_maxpq=el[1];
+  if(el[0] == "dv_diagonal")     dv_diagonal=el[1];
+  if(el[0] == "dv_color_space")  dv_color_space=el[1];
+ }
+ file.close();
+}
+
+/* Signal keys that can change without restarting the renderer (startup
+   and SIGHUP reload). */
+static void applySignalConf() {
+ ofxRPI4Window::avi_info.output_format=atoi(color_format.c_str());
+ ofxRPI4Window::avi_info.rgb_quant_range=atoi(rgb_quant_range.c_str());
+ /* C2: Set colorimetry to Default(0) for RGB, use conf value for YCbCr */
+ if(atoi(color_format.c_str()) == 0) {
+  ofxRPI4Window::avi_info.colorimetry=0;  /* RGB: Default colorimetry */
+ } else {
+  ofxRPI4Window::avi_info.colorimetry=atoi(colorimetry.c_str());  /* YCbCr: use configured value */
+ }
+ ofxRPI4Window::eotf=(static_cast<hdmi_eotf>(atoi(eotf.c_str())));
+ ofxRPI4Window::hdr_primaries=atoi(primaries.c_str());
+ ofxRPI4Window::hdr_metadata.hdmi_metadata_type1.max_fall=atof(max_fall.c_str());
+ ofxRPI4Window::hdr_metadata.hdmi_metadata_type1.max_cll=atof(max_cll.c_str());
+ ofxRPI4Window::hdr_metadata.hdmi_metadata_type1.max_display_mastering_luminance=atof(max_luma.c_str());
+ ofxRPI4Window::hdr_metadata.hdmi_metadata_type1.min_display_mastering_luminance=atof(min_luma.c_str());
+ ofxRPI4Window::avi_info.max_bpc=atoi(max_bpc.c_str());
+}
+
+/* is_hdr at startup: the surface type depends on it, so a reload must not
+   change it. */
+static int startup_is_hdr=0;
+
+/* SIGHUP hook, called from ofxRPI4Window::update(). Returns nullptr when
+   the new signal keys were applied, else the reject reason (nothing is
+   applied then and the daemon restarts the renderer). */
+static const char *reloadSignalConf() {
+ readPGeneratorConf();
+ /* Dolby Vision needs the .dv binary and different surfaces */
+ if(atoi(dv_status.c_str()) || atoi(is_ll_dovi.c_str()) || atoi(is_std_dovi.c_str()))
+  return "dovi";
+ if(ofxRPI4Window::isDoVi || ofxRPI4Window::is_std_DoVi || ofxRPI4Window::dv_status)
+  return "dovi_active";
+ if(atoi(is_hdr.c_str()) != startup_is_hdr)
+  return "is_hdr";
+ applySignalConf();
+ return nullptr;
+}
+
 int main(int argc, char **argv){
  int w=1920;
  int h=1080;
@@ -92,6 +167,14 @@ int main(int argc, char **argv){
   printf("\nOnly on Raspberry Device can be executed this program!\n\n");
   exit(1);
  } 
+ if (usesPGeneratorKmsWindow(str)) {
+  /* Catch TERM/INT/HUP before any DRM/EGL init; the window handles the
+     flags in update(). Then advertise SIGHUP support to the daemon, which
+     only signals a renderer whose pid matches this record. */
+  ofxRPI4Window::InstallSignalHandlers();
+  std::string features="pid "+std::to_string(getpid())+"\nsighup-reconfigure\n";
+  ofxRPI4Window::WriteRunningFile("renderer-features", features.c_str());
+ }
   /* Continue. The renderer logs at VERBOSE by default, which emits a DRM
      notice on every page flip (~180 KB/s) and fills the disk if its output
      is captured to a file. Default to OF_LOG_ERROR so only failures are
@@ -109,54 +192,14 @@ int main(int argc, char **argv){
  } else {
 // Start Patch RPI KMS
   /* Get var from PGenerator Conf */
-  std::ifstream file(PGenerator_conf);
-  while (std::getline(file, str)) {
-   std::vector<std::string> el;
-   boost::split(el, str, boost::is_any_of("="));
-   if(el[0] == "max_cll")         max_cll=el[1];
-   if(el[0] == "max_fall")        max_fall=el[1];
-   if(el[0] == "max_luma")        max_luma=el[1];
-   if(el[0] == "min_luma")        min_luma=el[1];
-   if(el[0] == "max_bpc")         max_bpc=el[1];
-   if(el[0] == "eotf")            eotf=el[1];
-   if(el[0] == "color_format")    color_format=el[1];
-   if(el[0] == "rgb_quant_range") rgb_quant_range=el[1];
-   if(el[0] == "colorimetry") 	  colorimetry=el[1];
-   if(el[0] == "is_hdr")          is_hdr=el[1];
-   if(el[0] == "is_ll_dovi")      is_ll_dovi=el[1];
-   if(el[0] == "is_std_dovi")     is_std_dovi=el[1];
-   if(el[0] == "primaries")       primaries=el[1];
-   if(el[0] == "mode_idx")        mode_idx=el[1];
-   if(el[0] == "dv_status")       dv_status=el[1];
-   if(el[0] == "dv_interface")    dv_interface=el[1];
-   if(el[0] == "dv_profile")      dv_profile=el[1];
-   if(el[0] == "dv_map_mode")     dv_map_mode=el[1];
-   if(el[0] == "dv_minpq")    	  dv_minpq=el[1];
-   if(el[0] == "dv_maxpq")        dv_maxpq=el[1];
-   if(el[0] == "dv_diagonal")     dv_diagonal=el[1];
-   if(el[0] == "dv_color_space")  dv_color_space=el[1];
-  }
-  file.close();
+  readPGeneratorConf();
 
   /* Set var from PGenerator Conf */
-  ofxRPI4Window::avi_info.output_format=atoi(color_format.c_str());
-  ofxRPI4Window::avi_info.rgb_quant_range=atoi(rgb_quant_range.c_str());
-  /* C2: Set colorimetry to Default(0) for RGB, use conf value for YCbCr */
-  if(atoi(color_format.c_str()) == 0) {
-   ofxRPI4Window::avi_info.colorimetry=0;  /* RGB: Default colorimetry */
-  } else {
-   ofxRPI4Window::avi_info.colorimetry=atoi(colorimetry.c_str());  /* YCbCr: use configured value */
-  }
+  applySignalConf();
+  startup_is_hdr=atoi(is_hdr.c_str());
   ofxRPI4Window::isHDR=atoi(is_hdr.c_str());
   ofxRPI4Window::isDoVi=(atoi(is_ll_dovi.c_str()) || atoi(is_std_dovi.c_str())) ? 1 : 0;
   ofxRPI4Window::is_std_DoVi=atoi(is_std_dovi.c_str());
-  ofxRPI4Window::eotf=(static_cast<hdmi_eotf>(atoi(eotf.c_str())));
-  ofxRPI4Window::hdr_primaries=atoi(primaries.c_str());
-  ofxRPI4Window::hdr_metadata.hdmi_metadata_type1.max_fall=atof(max_fall.c_str());
-  ofxRPI4Window::hdr_metadata.hdmi_metadata_type1.max_cll=atof(max_cll.c_str());
-  ofxRPI4Window::hdr_metadata.hdmi_metadata_type1.max_display_mastering_luminance=atof(max_luma.c_str());
-  ofxRPI4Window::hdr_metadata.hdmi_metadata_type1.min_display_mastering_luminance=atof(min_luma.c_str());
-  ofxRPI4Window::avi_info.max_bpc=atoi(max_bpc.c_str());
   ofxRPI4Window::mode_idx=atoi(mode_idx.c_str());
   ofxRPI4Window::dv_status=atoi(dv_status.c_str());
   ofxRPI4Window::dv_interface=atoi(dv_interface.c_str());
@@ -167,6 +210,7 @@ int main(int argc, char **argv){
   ofApp::dv_maxpq=atoi(dv_maxpq.c_str());
   ofApp::dv_diagonal=atoi(dv_diagonal.c_str());
   ofApp::dv_color_space=atoi(dv_color_space.c_str());
+  ofxRPI4Window::reloadConf=reloadSignalConf;
 
   /* Raspberry Pi KMS Run App */
   ofGLESWindowSettings settings;

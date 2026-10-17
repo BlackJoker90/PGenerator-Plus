@@ -1026,6 +1026,22 @@ sub webui_wait_for_dovi_wire (@) {
 
 sub webui_complete_renderer_restart (@) {
  my $restart_id=shift;
+ my $apply_hint=shift;
+ # Signal-setting changes the running renderer can apply itself (format,
+ # range, colorimetry, bpc, HDR metadata; DV off before and after) skip the
+ # multi-second stop/start. Anything else, a renderer without SIGHUP support,
+ # a reject or a timeout falls through to the full restart below.
+ if(ref($apply_hint) eq "HASH" && ref($apply_hint->{changed}) eq "HASH" && %{$apply_hint->{changed}}) {
+  &webui_renderer_restart_status_write($restart_id,"starting","Applying the new signal settings to the running renderer.");
+  if(&renderer_reconfigure_in_place($apply_hint->{changed},$apply_hint->{dv_before})) {
+   # Re-push the current pattern so it is redrawn with the new bit depth /
+   # range defaults (the renderer is running, so this does not restart it).
+   &load_new_pattern_file("webui apply");
+   &webui_renderer_restart_status_write($restart_id,"ready","Applied without restarting the renderer.");
+   &log("WebUI: apply $restart_id applied in place (".join(",",sort keys %{$apply_hint->{changed}}).")");
+   return 1;
+  }
+ }
  &webui_renderer_restart_status_write($restart_id,"starting","Restarting the renderer and waiting for DRM readiness.");
  &pattern_generator_stop();
  &load_new_pattern_file("webui apply");
@@ -1496,7 +1512,7 @@ sub webui_handle_request (@) {
     }
      elsif($method eq "POST") {
       # Apply config changes
-      my ($result,$need_restart,$restart_id)=&webui_apply_config($body);
+      my ($result,$need_restart,$restart_id,$apply_hint)=&webui_apply_config($body);
       my $len=length($result);
       print $client "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: $len\r\n$cors\r\n$result";
       if($need_restart) {
@@ -1518,7 +1534,7 @@ sub webui_handle_request (@) {
         # last resort. The HTTP client is already closed below.
         close($client);
         undef $client;
-        &webui_complete_renderer_restart($restart_id);
+        &webui_complete_renderer_restart($restart_id,$apply_hint);
        } elsif($pid == 0) {
         # Intermediate child: double-fork so the actual worker is
         # reparented to init and reaped there. A $SIG{CHLD} reaper
@@ -1564,7 +1580,7 @@ sub webui_handle_request (@) {
          # is NOT already running. Without the stop the worker is a
          # no-op whenever the renderer survived — alive but stuck in
          # the previous mode with a stale/empty HDR blob.
-         &webui_complete_renderer_restart($restart_id);
+         &webui_complete_renderer_restart($restart_id,$apply_hint);
         }
         exit(0);
        } else {
@@ -9789,7 +9805,12 @@ sub webui_config_json (@) {
 sub webui_apply_config (@) {
  my $body=shift;
  my $need_restart=0;
+ my %changed_restart_keys=();
  &webui_reload_pgenerator_conf();
+ # Dolby Vision state before this apply: the in-place renderer reconfigure
+ # (renderer_reconfigure_in_place) is only allowed when DV is off on both
+ # sides of the change.
+ my $dv_before=&renderer_dv_conf_active();
  # Parse simple JSON: {"key":"val","key2":"val2"}
  my %changes;
   while($body=~/"(\w+)"\s*:\s*(?:"([^"]*)"|(-?\d+(?:\.\d+)?))/g) {
@@ -9949,7 +9970,10 @@ sub webui_apply_config (@) {
    # every POST; max_bpc=10 whenever the live color format is YCbCr 422),
    # so a single-knob POST (e.g. the Resolve card's patch-size override)
    # was restarting the renderer and blanking the output for a no-op.
-   $need_restart=1 if($restart_keys{$k} && $value_changed);
+   if($restart_keys{$k} && $value_changed) {
+    $need_restart=1;
+    $changed_restart_keys{$k}=1;
+   }
   }
  # Resolve card knobs: redraw the live Resolve patch immediately so the
  # operator sees the change without waiting for the calibration software's
@@ -9972,7 +9996,11 @@ sub webui_apply_config (@) {
  my $result='{"status":"ok","restart":'.($need_restart ? 'true' : 'false');
  $result.=',"restart_id":"'.$restart_id.'"' if($restart_id ne "");
  $result.='}';
- return wantarray ? ($result,$need_restart,$restart_id) : $result;
+ # The renderer-apply hint travels with the restart token: the apply worker
+ # first tries to reconfigure the running renderer in place and only falls
+ # back to the full restart when that is not possible.
+ my $apply_hint={changed=>{%changed_restart_keys},dv_before=>$dv_before};
+ return wantarray ? ($result,$need_restart,$restart_id,$apply_hint) : $result;
 }
 
 sub webui_hdmi_connected (@) {

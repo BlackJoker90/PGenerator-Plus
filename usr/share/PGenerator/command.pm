@@ -68,13 +68,25 @@ sub apply_source_rgb_quant_range (@) {
   $owner_changed=($rgb_quant_range_source ne $source);
   $rgb_quant_range_source=$source;
   &log("Signal range owner: source=$source rgb_quant_range=$quant_range (no restart)");
-  &apply_drm_properties() if($owner_changed);
+  if($owner_changed) {
+   # The value on the wire is unchanged. A running renderer owns the
+   # connector properties (and DRM master): modetest -w here would steal
+   # master from it. Ask it to re-assert the range in place instead; if it
+   # cannot, nothing needs to change, so no restart either.
+   if(&pattern_generator_is_running()) {
+    &renderer_reconfigure_in_place({rgb_quant_range=>1}) if(&pattern_generator_has_drm_master());
+   } else {
+    &apply_drm_properties();
+   }
+  }
   return 1;
  }
+ my $dv_before=&renderer_dv_conf_active();
  &sudo("SET_PGENERATOR_CONF","rgb_quant_range","$quant_range");
  $pgenerator_conf{"rgb_quant_range"}="$quant_range";
  $rgb_quant_range_source=$source;
  &log("Signal range owner: source=$source rgb_quant_range=$quant_range");
+ return 1 if(&renderer_reconfigure_in_place({rgb_quant_range=>1},$dv_before));
  &pattern_generator_stop();
  &pattern_generator_start();
  return 1;
@@ -301,6 +313,7 @@ sub map_broadcast_rgb(@) {
 #  Apply DRM Connector Properties (KMS only)  #
 ###############################################
 sub apply_drm_properties (@) {
+ my $prelaunch=shift;
  return if(!$is_kms);
  my $is_dv=int($pgenerator_conf{"dv_status"} || 0);
  # Find connected HDMI connector ID
@@ -325,8 +338,16 @@ sub apply_drm_properties (@) {
  # fallback that sticks even after switching back to 8bpc RGB.
  my $color_fmt=$pgenerator_conf{"color_format"};
  $color_fmt=0 if($color_fmt eq "");
+ # Before a spawn the CRTC still scans out a buffer the renderer did not
+ # draw (console/splash, plain RGB). The renderer writes YCbCr code values
+ # straight into its RGB framebuffer and the HDMI path passes them through,
+ # so flagging YCbCr on the wire now makes that RGB black (0,0,0) read as
+ # Y=0/Cb=0/Cr=0, i.e. saturated green, for the whole master-handoff and
+ # init window. Keep the link RGB until the renderer's first commit
+ # switches it together with its own correctly encoded frame.
+ $color_fmt=0 if($prelaunch);
  &modetest_connector_write($connector_id,"output format",$color_fmt);
- &log("DRM: Set output format=$color_fmt on connector $connector_id");
+ &log("DRM: Set output format=$color_fmt on connector $connector_id".($prelaunch ? " (pre-launch, renderer sets the configured format)" : ""));
  # Set quantization range (enums: Default=0 Limited=1 Full=2)
  my $quant_range=$pgenerator_conf{"rgb_quant_range"};
  $quant_range=2 if($is_dv);
@@ -486,6 +507,188 @@ sub wait_for_renderer_drm_master (@) {
  return 0;
 }
 
+###############################################
+#   In-Place Renderer Reconfigure (SIGHUP)    #
+###############################################
+# Signal-setting changes (color format, range, colorimetry, bpc, HDR
+# metadata) used to kill and respawn the renderer: several seconds of TERM
+# polling, modetest writes that each grab DRM master, the master-handoff
+# settle and a wrong picture meanwhile. A renderer that advertises
+# "sighup-reconfigure" re-reads those keys from PGenerator.conf on SIGHUP,
+# applies them in-process and acknowledges in $var_dir/running/reconfigured
+# with "ok" (after its next page flip) or "reject <reason>". The default
+# SIGHUP action terminates a process, so the signal is only ever sent when
+# the running renderer itself wrote running/renderer-features (its pid plus
+# "sighup-reconfigure") at startup.
+#
+# Arguments: hashref of the restart keys whose value changed, and an
+# optional flag saying whether Dolby Vision was active before the change.
+# Returns 1 when the renderer applied the change in place; 0 when it was not
+# attempted, rejected, timed out or the renderer died - the caller then
+# falls back to the full restart path.
+sub renderer_supports_feature (@) {
+ my $feature=shift;
+ my $pid=shift;
+ # The running renderer advertises its own capabilities at startup
+ # ("pid <pid>" followed by one feature per line). A file shipped next to
+ # the binary could outlive a binary swap, and SIGHUP terminates a
+ # renderer that has no handler, so only trust a record written by the
+ # very process we are about to signal.
+ my $features_file=$renderer_features_file || "/var/lib/PGenerator/running/renderer-features";
+ open(my $fh,'<',$features_file) or return 0;
+ my ($owner,$found)=("",0);
+ while(my $line=<$fh>) {
+  $line=~s/^\s+|\s+$//g;
+  $owner=$1 if($line=~/^pid\s+(\d+)$/);
+  $found=1 if($line eq $feature);
+ }
+ close($fh);
+ return 0 if(!$found);
+ return 0 if(defined($pid) && $pid ne "" && $owner ne $pid);
+ return 1;
+}
+
+sub renderer_dv_conf_active (@) {
+ return 1 if(int($pgenerator_conf{"dv_status"} || 0) || int($pgenerator_conf{"is_ll_dovi"} || 0) || int($pgenerator_conf{"is_std_dovi"} || 0));
+ return 0;
+}
+
+# The renderer reads rgb_quant_range only at startup or on an in-place
+# reconfigure. Remember which value the current renderer process runs with
+# ("<pid> <range>") so callers (Calman apply) can tell whether a conf change
+# still has to reach the renderer or was already applied by
+# apply_source_rgb_quant_range(). A file, not a shared variable: WebUI applies
+# run in forked worker processes.
+sub renderer_applied_range_record (@) {
+ my $pid=&process_pid("$pattern_generator","get");
+ $pid=&process_pid("${pattern_generator}.dv","get") if($pid eq "" && -x "${pattern_generator}.dv");
+ my $path="$var_dir/running/renderer-applied-range";
+ if($pid eq "" || $pid=~/\s/) {
+  unlink($path);
+  return;
+ }
+ my $range=$pgenerator_conf{"rgb_quant_range"};
+ $range="" if(!defined $range);
+ if(open(my $fh,'>',"$path.tmp")) {
+  print $fh "$pid $range\n";
+  close($fh);
+  rename("$path.tmp",$path) or unlink("$path.tmp");
+ }
+}
+
+sub renderer_has_applied_range (@) {
+ my $range=$pgenerator_conf{"rgb_quant_range"};
+ $range="" if(!defined $range);
+ open(my $fh,'<',"$var_dir/running/renderer-applied-range") or return 0;
+ my $line=<$fh>;
+ close($fh);
+ return 0 if(!defined $line || $line!~/^(\d+) (\S*)$/);
+ my ($pid,$applied)=($1,$2);
+ my $running=&process_pid("$pattern_generator","get");
+ $running=&process_pid("${pattern_generator}.dv","get") if($running eq "" && -x "${pattern_generator}.dv");
+ return ($running eq $pid && $applied eq $range) ? 1 : 0;
+}
+
+sub renderer_reconfigure_in_place (@) {
+ my ($changed,$dv_before)=@_;
+ my %in_place_keys=map{$_=>1} qw(color_format rgb_quant_range colorimetry max_bpc eotf
+  max_cll max_fall max_luma min_luma primaries);
+ my @keys=sort grep { $changed->{$_} } keys %{$changed || {}};
+ my $what=join(",",@keys);
+ return 0 if(!$is_kms);
+ if(!@keys) {
+  &log("Renderer reconfigure: no changed keys given; using the restart path");
+  return 0;
+ }
+ my @restart_only=grep { !$in_place_keys{$_} } @keys;
+ if(@restart_only) {
+  &log("Renderer reconfigure: ".join(",",@restart_only)." changed and needs a renderer restart");
+  return 0;
+ }
+ if($dv_before || &renderer_dv_conf_active()) {
+  &log("Renderer reconfigure: Dolby Vision is active; using the restart path for $what");
+  return 0;
+ }
+  if(-x "${pattern_generator}.dv" && &process_pid("${pattern_generator}.dv","get") ne "") {
+  &log("Renderer reconfigure: the Dolby Vision renderer is running; restarting for $what");
+  return 0;
+ }
+ my $pid=&process_pid("$pattern_generator","get");
+ if($pid eq "" || $pid=~/\s/) {
+  &log("Renderer reconfigure: ".($pid eq "" ? "renderer is not running" : "several renderer processes ($pid)")."; using the restart path for $what");
+  return 0;
+ }
+ if(!&renderer_supports_feature("sighup-reconfigure",$pid)) {
+  &log("Renderer reconfigure: renderer pid $pid does not advertise sighup-reconfigure; restarting for $what");
+  return 0;
+ }
+ # A renderer that is still initializing may not have installed its SIGHUP
+ # handler yet, and it reprograms the connector from conf on its first
+ # commit anyway. Only signal a renderer that is up and owns DRM master.
+ if(!&pattern_generator_has_drm_master()) {
+  &log("Renderer reconfigure: renderer pid $pid does not hold DRM master yet; using the restart path for $what");
+  return 0;
+ }
+ # Serialize reconfigures (WebUI apply worker vs. calibration threads) so
+ # one caller cannot consume or delete the other's acknowledgement.
+ require Fcntl;
+ my $lock;
+ if(open($lock,'>',"$var_dir/running/renderer-reconfigure.lock")) {
+  flock($lock,Fcntl::LOCK_EX());
+ } else {
+  undef $lock;
+ }
+ my $ack="$var_dir/running/reconfigured";
+ unlink($ack);
+ if(-e $ack) {
+  &log("Renderer reconfigure: cannot remove stale $ack ($!); using the restart path");
+  close($lock) if($lock);
+  return 0;
+ }
+ my $t0=Time::HiRes::time();
+ if(!kill('HUP',$pid)) {
+  &log("Renderer reconfigure: cannot signal renderer pid $pid ($!); using the restart path");
+  close($lock) if($lock);
+  return 0;
+ }
+ my $result=0;
+ my $reason="no acknowledgement within 3s";
+ my $deadline=$t0+3;
+ while(Time::HiRes::time() < $deadline) {
+  select(undef,undef,undef,0.05);
+  if(open(my $fh,'<',$ack)) {
+   my $line=<$fh>;
+   close($fh);
+   if(defined $line && $line=~/\n$/) {
+    $line=~s/\s+$//;
+    if($line eq "ok") {
+     $result=1;
+     $reason="";
+    } elsif($line=~/^reject\s*(.*)$/) {
+     $reason="renderer rejected: ".($1 ne "" ? $1 : "no reason given");
+    } else {
+     $reason="unexpected acknowledgement '$line'";
+    }
+    last;
+   }
+  }
+  if(!kill(0,$pid)) {
+   $reason="renderer pid $pid exited after SIGHUP";
+   last;
+  }
+ }
+ $result=0 if($result && !kill(0,$pid));
+ close($lock) if($lock);
+ my $ms=int((Time::HiRes::time()-$t0)*1000);
+ if($result) {
+  &log("Renderer reconfigure: applied $what in place in ${ms}ms (pid $pid)");
+  &renderer_applied_range_record();
+  return 1;
+ }
+ &log("Renderer reconfigure: $what not applied in place after ${ms}ms ($reason); falling back to a renderer restart");
+ return 0;
+}
+
 sub apply_hdr_metadata_helper (@) {
  my $helper="/usr/bin/pgsethdr";
  return if(!$is_kms || !-x $helper);
@@ -538,7 +741,7 @@ sub pattern_generator_start(@) {
  # configuration before choosing PGeneratord vs PGeneratord.dv.
  &normalize_signal_mode_conf();
  &auto_select_4k_mode();
- &apply_drm_properties();
+ &apply_drm_properties("prelaunch");
  # apply_drm_properties() above issued up to 6 modetest -w writes; wait for
  # the kernel to release DRM master before spawning the renderer (see
  # wait_for_drm_master_unowned() for the full root-cause story). Without
@@ -612,6 +815,7 @@ sub pattern_generator_start(@) {
    }
    my $renderer_is_master=0;
    $renderer_is_master=&wait_for_renderer_drm_master(8) if(&pattern_generator_is_running());
+   &renderer_applied_range_record();
  # Post-spawn connector reprogramming exists for sinks that miss the
  # pre-launch programming. But once the renderer holds DRM master it already
  # sets output format / Colorimetry / rgb quant range / max bpc / COLOR_RANGE

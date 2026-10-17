@@ -291,6 +291,10 @@ $set_conf_command="SETCONF";
 $banner="**** Device Pattern [$version] ****";
 
 $pattern_generator="/usr/sbin/PGeneratord";
+# Capabilities of the installed renderer binary, one per line. Ships together
+# with PGeneratord ("sighup-reconfigure": in-place signal reconfigure on SIGHUP,
+# see renderer_reconfigure_in_place in command.pm).
+$renderer_features_file="/var/lib/PGenerator/running/renderer-features";
 
 $ok_response="OK";
 $error_response="ERR";

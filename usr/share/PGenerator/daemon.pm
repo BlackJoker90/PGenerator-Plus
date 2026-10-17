@@ -1508,6 +1508,12 @@ sub pattern_daemon {
                     dv_map_mode)) {
        $k{$k}="$pgenerator_conf{$k}";
       }
+      # Keys the renderer can take in place (SIGHUP reconfigure) but that
+      # do not count as a mode change: tracked so a non-mode apply knows
+      # what actually changed.
+      for my $k (qw(rgb_quant_range primaries min_luma max_luma max_cll max_fall)) {
+       $k{"meta:$k"}="$pgenerator_conf{$k}";
+      }
       return \%k;
      };
      my $calman_apply = sub {
@@ -1540,14 +1546,39 @@ sub pattern_daemon {
         # just refresh the HDR metadata blob and connector props.
         my $now=$calman_mode_key_snapshot->();
         my $mode_changed=0;
+        my %changed_keys=();
         for my $k (keys %$now) {
          if((defined $calman_applied_mode_keys{$k} && $calman_applied_mode_keys{$k} ne $now->{$k}) ||
             (!defined $calman_applied_mode_keys{$k} && $now->{$k} ne "")) {
-          $mode_changed=1;
-          last;
+          my $conf_key=$k;
+          $mode_changed=1 if($conf_key !~ s/^meta://);
+          # signal_mode is daemon bookkeeping, not a renderer input: the
+          # renderer-visible part of a signal-mode switch shows up as
+          # is_hdr / eotf / dv_* changes, which decide in-place vs restart.
+          $changed_keys{$conf_key}=1 if($conf_key ne "signal_mode");
          }
         }
-        if(!$mode_changed) {
+        # Snapshots persisted before the meta: keys existed would report
+        # every metadata key as changed once; that is harmless (the renderer
+        # simply re-reads them).
+        my $renderer_running=&pattern_generator_is_running();
+        # apply_source_rgb_quant_range() usually already pushed a range
+        # change to the renderer (in place or by restarting it); only a
+        # range the running renderer process has not taken yet needs work.
+        delete $changed_keys{"rgb_quant_range"} if($renderer_running && &renderer_has_applied_range());
+        my $range_changed=$changed_keys{"rgb_quant_range"} ? 1 : 0;
+        my $applied_in_place=0;
+        if($renderer_running && %changed_keys) {
+         # Same-transport changes (format, range, colorimetry, bpc, HDR
+         # metadata; DV off) are applied by the running renderer itself.
+         # renderer_reconfigure_in_place() refuses DV, is_hdr/mode_idx
+         # changes and renderers without SIGHUP support.
+         $applied_in_place=&renderer_reconfigure_in_place(\%changed_keys);
+        }
+        if($applied_in_place) {
+         &log("Calman: applied ".join(",",sort keys %changed_keys)." in place (no renderer restart)");
+         %calman_applied_mode_keys=%$now;
+        } elsif(!$mode_changed && (!$renderer_running || !$range_changed)) {
          # Mode unchanged — only metadata / luminance / range
          # changed. The renderer's updateHDR_Infoframe() reads
          # min_luma / max_luma / max_cll / max_fall / primaries
@@ -1562,8 +1593,18 @@ sub pattern_daemon {
          # the running renderer, which would break the renderer's
          # atomic commits. pgsethdr is only needed when the
          # renderer is being (re)started.
-          &log("Calman: applying non-mode changes (no renderer restart) — refreshing connector properties");
-          &apply_drm_properties();
+          # A running renderer owns the connector properties and DRM
+          # master; modetest -w writes (apply_drm_properties) would steal
+          # master from it. Luminance / primaries are re-read from conf
+          # by updateHDR_Infoframe() on every flip, so nothing else is
+          # needed. Range changes on a running renderer that could not
+          # take them in place go through the restart branch below.
+          if($renderer_running) {
+           &log("Calman: applying non-mode changes (no renderer restart) — renderer re-reads HDR metadata per frame");
+          } else {
+           &log("Calman: applying non-mode changes (no renderer restart) — refreshing connector properties");
+           &apply_drm_properties();
+          }
           %calman_applied_mode_keys=%$now;
          } else {
           &log("Calman: applying pending settings (restarting pattern generator)");

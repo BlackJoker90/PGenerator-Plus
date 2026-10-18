@@ -1671,6 +1671,9 @@ sub webui_handle_request (@) {
    my $config_rev=@conf_stat ? "$conf_stat[1]-$conf_stat[7]-$conf_stat[9]" : "";
    my $stats=$_stats_cache;
    $stats=~s/\}$/,"config_rev":"$config_rev"}/;
+   # HDMI hot-plug state for the Display Settings banner (one sysfs read,
+   # outside the stats cache so a plug-in shows up on the next poll).
+   $stats=~s/\}$/sprintf(',"hdmi":%d}',&hdmi_sink_connected() ? 1 : 0)/e;
    # A daemon notice from the last 10 minutes (e.g. Calman asked for an
    # unsupported format); the page shows each id once.
    my @notice_stat=stat($webui_notice_file);

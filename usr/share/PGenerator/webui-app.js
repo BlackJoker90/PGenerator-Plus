@@ -1605,6 +1605,17 @@ function pgShowDaemonNotice(notice){
  ok.focus();
 }
 
+// "No HDMI display" banner in Display Settings, driven by "hdmi" in
+// /api/stats. On plug-in the mode list is re-read: it was empty without a
+// display.
+let pgHdmiConnected=null;
+function pgUpdateNoHdmiBanner(connected){
+ const banner=document.getElementById('displayNoHdmiBanner');
+ if(banner) banner.style.display=connected?'none':'block';
+ if(connected&&pgHdmiConnected===false&&typeof loadModes==='function') loadModes(true);
+ pgHdmiConnected=connected;
+}
+
 async function loadStats(quiet){
  const stats=await fetchJSON('/api/stats',{_quiet:!!quiet,_timeoutMs:5000});
  if(!stats)return;
@@ -1615,6 +1626,7 @@ async function loadStats(quiet){
   window._configRev=stats.config_rev;
  }
  if(stats.notice&&stats.notice.id) pgShowDaemonNotice(stats.notice);
+ if(stats.hdmi===0||stats.hdmi===1) pgUpdateNoHdmiBanner(stats.hdmi===1);
  const cpuPct=Number(stats.cpu_percent),memPct=Number(stats.memory_percent);
  const cpuVal=document.getElementById('cpuUsageValue');
  const memVal=document.getElementById('memUsageValue');

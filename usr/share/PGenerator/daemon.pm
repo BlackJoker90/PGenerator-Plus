@@ -558,10 +558,174 @@ sub calman_render_rgb_pattern (@) {
  return 1;
 }
 
+###############################################
+#     Portrait Displays G1 specialty patterns  #
+###############################################
+use PGG1Patterns qw(g1_pattern_key g1_pattern_render g1_pattern_level);
+
+# Rendered plates are kept across patterns (clean_pattern_files() empties
+# running/ on every pattern) and dropped when the pattern code changes.
+sub calman_g1_cache_dir (@) {
+ my $dir="$var_dir/g1patterns";
+ mkdir($dir) if(!-d $dir);
+ my $stamp="$dir/VERSION";
+ my $current="";
+ if(open(my $fh,"<",$stamp)) { $current=<$fh> // ""; close($fh); }
+ $current=~s/\s+//g;
+ if($current ne $PGG1Patterns::VERSION) {
+  &remove_files($dir,"\.(png|ppm)\$");
+  if(open(my $fh,">",$stamp)) { print $fh "$PGG1Patterns::VERSION\n"; close($fh); }
+ }
+ return $dir;
+}
+
+# Write an RGB buffer as PNG (scaled to $out_w x $out_h when given).
+sub calman_g1_save_image (@) {
+ my ($img,$file,$out_w,$out_h)=@_;
+ return 0 if(!$img || !$convert || !-x $convert);
+ my @resize=();
+ @resize=("-filter","Triangle","-resize","${out_w}x${out_h}!") if($out_w && ($out_w != $img->{w} || $out_h != $img->{h}));
+ my $tmp="$file.tmp.png";
+ unlink($tmp);
+ return 0 if(!open(my $fh,"|-",$convert,"-size",$img->{w}."x".$img->{h},"-depth","8","rgb:-",@resize,"PNG24:$tmp"));
+ binmode($fh);
+ my $buf=$img->{buf};
+ utf8::downgrade($buf,1);
+ my $ok=&webui_pattern_write_all($fh,$buf);
+ $ok=0 if(!close($fh));
+ return 0 if(!$ok || !-f $tmp);
+ return rename($tmp,$file) ? 1 : 0;
+}
+
+# Convert a picture file to a PNG of $w x $h (Skintones photo, logo).
+sub calman_g1_convert_file (@) {
+ my ($src,$file,@args)=@_;
+ return 0 if(!$convert || !-x $convert || !-f $src);
+ my $tmp="$file.tmp.png";
+ unlink($tmp);
+ system($convert,$src,@args,"PNG24:$tmp");
+ return 0 if(!-f $tmp);
+ return rename($tmp,$file) ? 1 : 0;
+}
+
+sub calman_g1_logo (@) {
+ my ($h,$range)=@_;
+ my $src="$shared_dir/pgen-logo-light.png";
+ return undef if(!$convert || !-x $convert || !-f $src);
+ my $lh=int($h/12+0.5);
+ my $lw=int($lh*751/240+0.5);
+ my $bg=&g1_pattern_level($range,94);
+ return undef if(!open(my $fh,"-|",$convert,$src,"-background","rgb($bg,$bg,$bg)","-flatten","-resize","${lw}x${lh}!","-depth","8","rgb:-"));
+ binmode($fh);
+ my $buf=do { local $/; <$fh> };
+ close($fh);
+ return undef if(!defined $buf || length($buf) != $lw*$lh*3);
+ return {w => $lw, h => $lh, buf => $buf};
+}
+
+sub calman_g1_skintones_photo (@) {
+ for my $ext ("png","jpg","jpeg","bmp") {
+  my $f="$var_dir/g1-images/skintones.$ext";
+  return $f if(-f $f);
+ }
+ return "";
+}
+
+sub calman_g1_ip (@) {
+ for my $if ($eth_interface,$wlan_interface) {
+  next if(($if // "") eq "");
+  my $ip=&get_ip($if);
+  return $ip if($ip ne "" && $ip ne $none);
+ }
+ return "";
+}
+
+# Show a G1 pattern. Returns 0 if it could not be drawn so the caller can
+# fall back.
+sub calman_render_g1_pattern (@) {
+ my $key=shift;
+ my $range=($calman_rgb_quant_range == 1) ? "limited" : "full";
+ my $source_range=&calman_pattern_source_range();
+ my ($w,$h)=(int($w_s),int($h_s));
+ return 0 if($w < 64 || $h < 64);
+ my $dir=&calman_g1_cache_dir();
+ my %opt=(range => $range);
+ my $tag="${key}_${w}x${h}_$range";
+ # Granger is a smooth field: render a quarter of the pixels and let
+ # convert scale it, which keeps the first draw well inside Calman's
+ # 10 s command timeout on a Pi.
+ my $scale=($key eq "granger") ? 4 : 1;
+ # Warm-Up scrolls a strip twice the screen size; keep its texture within
+ # 4096 px by drawing it at half resolution on 4K outputs.
+ $scale=2 if($key eq "warmup" && 2*$w > 4096);
+ if($key eq "warmup") {
+  $opt{ip}=&calman_g1_ip();
+  (my $ip_tag=$opt{ip})=~s/[^0-9A-Za-z]+/-/g;
+  $tag.="_$ip_tag";
+ }
+ if($key eq "screensaver") {
+  my $logo=&calman_g1_logo($h,$range);
+  $opt{logo}=$logo if($logo);
+ }
+ my $photo=($key eq "skintones") ? &calman_g1_skintones_photo() : "";
+ if($photo ne "") {
+  $tag.="_photo".((stat($photo))[9] || 0);
+ }
+ my @frames;
+ my $bg=[0,0,0];
+ my $first="$dir/$tag-0.png";
+ if($photo ne "") {
+  if(!-f $first && !&calman_g1_convert_file($photo,$first,"-resize","${w}x${h}!","-depth","8")) {
+   &log("Calman G1: could not convert $photo");
+   return 0;
+  }
+  @frames=({file => $first, w => $w, h => $h, x => 0, y => 0, ms => $frame_default});
+ } else {
+  my $out=&g1_pattern_render($key,int($w/$scale),int($h/$scale),\%opt);
+  return 0 if(!$out || !@{$out->{frames}});
+  my %files=();
+  my $n=0;
+  my $draw_scale=($key eq "granger") ? 1 : $scale;
+  for my $f (@{$out->{frames}}) {
+   my $img=$f->{img};
+   my $file=$files{"$img"};
+   if(!defined $file) {
+    $file="$dir/$tag-".($n++).".png";
+    my ($ow,$oh)=($key eq "granger") ? ($w,$h) : ($img->{w},$img->{h});
+    if(!-f $file && !&calman_g1_save_image($img,$file,$ow,$oh)) {
+     &log("Calman G1: could not write $file");
+     return 0;
+    }
+    $files{"$img"}=$file;
+   }
+   my ($iw,$ih)=($key eq "granger") ? ($w,$h) : ($img->{w}*$draw_scale,$img->{h}*$draw_scale);
+   my ($x,$y)=(int(($f->{x} // 0)*$draw_scale),int(($f->{y} // 0)*$draw_scale));
+   # POSITION=-1,-1 means "centre" to the renderer.
+   $x=-2 if($x == -1);
+   push(@frames,{file => $file, w => $iw, h => $ih, x => $x, y => $y, ms => ($f->{ms} || $frame_default)});
+  }
+  $bg=$out->{bg} if($out->{bg});
+ }
+ my $bg_str=join(",",@$bg);
+ &clean_pattern_files();
+ my $ps="MOVIE_NAME=TestPattern\nBITS=8\n";
+ for(my $i=0;$i<scalar(@frames);$i++) {
+  my $f=$frames[$i];
+  $ps.="DRAW=IMAGE\nDIM=$f->{w},$f->{h}\nRGB=0,0,0\nBG=$bg_str\nPOSITION=$f->{x},$f->{y}\nIMAGE=$f->{file}\nEND=1\n";
+  $ps.="FRAME_NAME=G1_${key}_$i\nFRAME=$f->{ms}\n";
+ }
+ &create_tmp_file($ps,$source_range);
+ &load_new_pattern_file("calman");
+ &log("Calman G1: $key ${w}x${h} range=$range frames=".scalar(@frames));
+ return 1;
+}
+
 sub calman_render_specialty_pattern (@) {
  my $pattern_cmd=shift;
  my $sp_name=uc($pattern_cmd);
  $sp_name=~s/^\s+|\s+$//g;
+ my $g1_key=&g1_pattern_key($sp_name);
+ return 1 if(defined $g1_key && &calman_render_g1_pattern($g1_key));
  &clean_pattern_files();
  my $source_range=&calman_pattern_source_range();
  my $target_max=&calman_target_max();
@@ -2498,6 +2662,23 @@ sub pattern_daemon {
      #
      if($type eq "UPDATE") {
       &log("Calman: UPDATE=$pattern_cmd (acknowledged)");
+      &send_key_to_client($connection,"");
+      last;
+     }
+     #
+     # IMAGE — stored picture by name. The G1 source asks for its built-in
+     # Skintones and Granger plates as IMAGE800.BMP / IMAGE801.BMP.
+     #
+     if($type eq "IMAGE") {
+      my $g1_key=&g1_pattern_key($pattern_cmd);
+      if(defined $g1_key) {
+       &log("Calman: IMAGE=$pattern_cmd -> G1 $g1_key");
+       $calman_apply->(0);
+       &calman_render_specialty_pattern($pattern_cmd);
+       &calman_remember_pattern("SPECIALTY",$type,$pattern_cmd);
+      } else {
+       &log("Calman: IMAGE=$pattern_cmd not available");
+      }
       &send_key_to_client($connection,"");
       last;
      }

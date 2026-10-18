@@ -1626,8 +1626,14 @@ sub webui_handle_request (@) {
     $_stats_cache=&webui_stats_json();
     $_stats_cache_time=$now;
    }
-   my $len=length($_stats_cache);
-   print $client "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: $len\r\n$cors\r\n$_stats_cache";
+   # config_rev changes whenever PGenerator.conf is rewritten (WebUI,
+   # Calman, ...), so the page can reload its settings at stats rate.
+   my @conf_stat=stat($pattern_conf);
+   my $config_rev=@conf_stat ? "$conf_stat[1]-$conf_stat[7]-$conf_stat[9]" : "";
+   my $stats=$_stats_cache;
+   $stats=~s/\}$/,"config_rev":"$config_rev"}/;
+   my $len=length($stats);
+   print $client "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: $len\r\n$cors\r\n$stats";
   }
    elsif($path eq "/api/restart") {
     my $r='{"status":"ok","message":"Pattern generator restarted"}';

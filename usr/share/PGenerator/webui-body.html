@@ -1807,7 +1807,7 @@ __PG_LOGO_DARK__
    </div>
    <div id="updateChangelog" style="margin-top:8px;font-size:.75rem;color:var(--text2);max-height:80px;overflow-y:auto"></div>
    <div class="btn-row" style="margin-top:10px">
-    <button class="btn btn-sm btn-secondary" onclick="checkUpdate()">Check for Updates</button>
+    <button class="btn btn-sm btn-secondary" id="checkUpdateBtn" onclick="checkUpdate(true)">Check for Updates</button>
     <button class="btn btn-sm btn-success" id="applyUpdateBtn" style="display:none" onclick="applyUpdate()">Install Update</button>
     <button class="btn btn-sm btn-secondary" id="submitLogsBtn" onclick="submitLogs()" title="Download a diagnostic log bundle">&#128230; Submit Logs</button>
     <button class="btn btn-sm btn-secondary" id="exportSystemSettingsBtn" onclick="exportSystemSettings()" title="Download PGenerator+ settings, profiles, calibration history and custom diagnostic media">Export System Settings</button>

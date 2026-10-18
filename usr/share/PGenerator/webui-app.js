@@ -705,6 +705,9 @@ function hasUnsavedSettings(){
 function isSettingsFieldActive(){
  const el=document.activeElement;
  if(!el||!el.id)return false;
+ // A <select> keeps focus after a choice; an unapplied choice already
+ // pauses via hasUnsavedSettings(), so only a field being typed in counts.
+ if(el.tagName==='SELECT')return false;
 	 return ['mode_idx','signal_mode','max_bpc','color_format','colorimetry','rgb_quant_range',
 	  'eotf','primaries','dv_transport','dv_interface','dv_map_mode','max_luma','min_luma','max_cll','max_fall',
 	  'dv_max_luma','dv_min_luma','dv_max_cll','dv_max_fall'].includes(el.id);
@@ -1562,6 +1565,12 @@ function setMeter(id,pct){
 async function loadStats(quiet){
  const stats=await fetchJSON('/api/stats',{_quiet:!!quiet,_timeoutMs:5000});
  if(!stats)return;
+ // The conf file changed (Calman, another browser, ...): reload the
+ // settings now instead of waiting for the 10s config poll.
+ if(stats.config_rev){
+  if(window._configRev&&stats.config_rev!==window._configRev) syncRemoteConfig();
+  window._configRev=stats.config_rev;
+ }
  const cpuPct=Number(stats.cpu_percent),memPct=Number(stats.memory_percent);
  const cpuVal=document.getElementById('cpuUsageValue');
  const memVal=document.getElementById('memUsageValue');
@@ -3533,12 +3542,38 @@ async function loadInfoframes(){
  }catch(e){}
 })();
 
-async function checkUpdate(){
+// Update status line: tone ok/warn/error shows it as a coloured banner so the
+// result of a manual check is obvious; plain text for progress messages.
+function setUpdateStatus(text,tone,busy){
+ const el=document.getElementById('updateStatus');
+ if(!el)return;
+ el.textContent=text;
+ if(busy){
+  const spin=document.createElement('span');
+  spin.className='spinner';
+  el.prepend(spin,' ');
+ }
+ const colour={ok:'var(--green)',warn:'var(--orange)',error:'var(--red)'}[tone];
+ if(colour){
+  el.style.cssText='margin-top:8px;padding:8px 10px;border-radius:8px;font-size:.8rem;font-weight:600;'+
+   'color:'+colour+';border:1px solid '+colour+';background:color-mix(in srgb,'+colour+' 12%,transparent)';
+ } else {
+  el.style.cssText='margin-top:6px;font-size:.7rem;color:var(--text2)';
+ }
+}
+async function checkUpdate(manual){
  _updateChecked=true;
- document.getElementById('updateStatus').textContent='Checking GitHub for updates...';
- const r=await fetchJSON('/api/update/check',{_quiet:true,_timeoutMs:30000});
+ const btn=document.getElementById('checkUpdateBtn');
+ if(btn) btn.disabled=true;
+ setUpdateStatus('Checking GitHub for updates...','',true);
+ let r=null;
+ try{ r=await fetchJSON('/api/update/check',{_quiet:true,_timeoutMs:30000}); }
+ finally{ if(btn) btn.disabled=false; }
+ const checkedAt=new Date().toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'});
  if(!r||r.status==='error'){
-  document.getElementById('updateStatus').textContent=r?r.message:'Check failed — no internet?';
+  const msg=r&&r.message?r.message:'Check failed — no internet?';
+  setUpdateStatus('\u26a0 '+msg,'error');
+  if(manual) toast('Update check failed: '+msg,true);
   return;
  }
  document.getElementById('updateCurrent').textContent='v'+r.current;
@@ -3551,11 +3586,13 @@ async function checkUpdate(){
   document.getElementById('applyUpdateBtn').style.display='';
   document.getElementById('updateBtn').style.display='';
   document.getElementById('updateBtn').classList.add('update-pulse');
-  document.getElementById('updateStatus').textContent='A new version is available.';
+  setUpdateStatus('\u2b07 Version v'+r.latest+' is available — click Install Update.','warn');
+  if(manual) toast('Update available: v'+r.latest);
  } else {
   document.getElementById('applyUpdateBtn').style.display='none';
   document.getElementById('updateBtn').style.display='none';
-  document.getElementById('updateStatus').textContent='You are running the latest version.';
+  setUpdateStatus('\u2713 No update available — v'+r.current+' is the latest version (checked '+checkedAt+').','ok');
+  if(manual) toast('No update available — v'+r.current+' is the latest version.');
  }
 }
 let _updateChecked=false;

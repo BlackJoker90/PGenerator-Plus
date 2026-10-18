@@ -21,6 +21,10 @@ PROBE_STAMP="$WORK_DIR/pgenerator-watchdog-root-ok"
 FAIL_COUNT_FILE="$WORK_DIR/pgenerator-watchdog-failures"
 TICK_COUNT_FILE="$WORK_DIR/pgenerator-watchdog-backoff"
 INSTANCE_PID_FILE="$WORK_DIR/pgenerator-watchdog.pid"
+# pgenerator-update writes this while it stops the daemon to install.
+PAUSE_FILE="$WORK_DIR/pgenerator-watchdog.pause"
+PAUSE_MAX_SECONDS=1800
+STALL_COUNT_FILE="$WORK_DIR/pgenerator-watchdog-stalls"
 TIMEOUT_CMD=$(command -v timeout 2>/dev/null)
 MAX_LOG=50
 WEBUI_MIN_BYTES=65536
@@ -151,10 +155,34 @@ echo $$ >"$INSTANCE_PID_FILE" 2>/dev/null
 if webui_ping 80; then
   # Clear any failure history: the WebUI is healthy now, so a stale count
   # from an earlier incident must not push a future recovery into backoff.
-  rm -f "$FAIL_COUNT_FILE" "$TICK_COUNT_FILE"
+  rm -f "$FAIL_COUNT_FILE" "$TICK_COUNT_FILE" "$STALL_COUNT_FILE"
   probe_webui_root
   exit 0
 fi
+
+# An OTA update stops the daemon on purpose; never restart into it.
+if [ -f "$PAUSE_FILE" ]; then
+  paused_at=$(head -c 16 "$PAUSE_FILE" 2>/dev/null)
+  now=$(date +%s)
+  case "$paused_at" in (''|*[!0-9]*) paused_at=0;; esac
+  if [ $((now - paused_at)) -lt "$PAUSE_MAX_SECONDS" ]; then
+    exit 0
+  fi
+  log "ignoring stale update pause from $paused_at"
+  rm -f "$PAUSE_FILE"
+fi
+
+# One missed ping is not an outage: a heavy request (ICC build, meter read,
+# slow SD card) can stall the HTTP loop for a few seconds. Ask twice more.
+retry=0
+while [ "$retry" -lt 2 ]; do
+  sleep 5
+  if webui_ping 80; then
+    rm -f "$FAIL_COUNT_FILE" "$TICK_COUNT_FILE" "$STALL_COUNT_FILE"
+    exit 0
+  fi
+  retry=$((retry + 1))
+done
 
 # Ping is down: the restart path below is the diagnostic that matters, so do
 # not add a redundant root-probe connect error on every tick of a restart.
@@ -189,6 +217,23 @@ if [ -n "$daemon_pid" ] && [ -r "/proc/$daemon_pid/stat" ]; then
 fi
 
 # Avoid thrash if init is mid-restart
+# The daemon process is alive but not answering while a calibration program
+# (Calman UPGCI 2100, HCFR/RPC 2101, Resolve/ColourSpace 20002) is connected:
+# restarting would drop the session. Give it three ticks (minutes) first.
+if [ -n "$daemon_pid" ] && [ -d "/proc/$daemon_pid" ] && \
+   ss -tn state established 2>/dev/null | awk '{print $3" "$4}' | grep -Eq ':(2100|2101) |:20002$'; then
+  stalls=$(cat "$STALL_COUNT_FILE" 2>/dev/null)
+  case "$stalls" in (''|*[!0-9]*) stalls=0;; esac
+  stalls=$((stalls + 1))
+  if [ "$stalls" -lt 3 ]; then
+    echo "$stalls" >"$STALL_COUNT_FILE" 2>/dev/null
+    log "WebUI not answering but a calibration client is connected — waiting ($stalls/3)"
+    exit 0
+  fi
+  log "WebUI still not answering after 3 minutes with a calibration client connected"
+fi
+rm -f "$STALL_COUNT_FILE"
+
 if [ -f "$LOCK_FILE" ]; then
   # stale lock older than 120s?
   if [ -n "$(find "$LOCK_FILE" -mmin +2 2>/dev/null)" ]; then

@@ -1073,8 +1073,10 @@ sub pattern_daemon {
       last;
      }
      if($clean_key eq "CAP") {
-      # Capabilities — report HDR, DV, window size, bit depth, colorspace, range
-      my $caps="HDR,DOLBYVISION,CONF_FORMAT,CONF_HDR,SIZE,10_SIZE,11_APL,CommandRGB,BITDEPTH,COLORSPACE,RANGE";
+      # Capabilities. Calman stores the tokens as the device's command set
+      # (with no usable CAP reply it falls back to the same UPGCI list), so
+      # report the UPGCI commands first, then the PGenerator+ extensions.
+      my $caps="STATUS,CONF_FORMAT,CONF_HDR,CONF_LEVEL,CONF_DV,HDR_ENABLE,IMAGE,PUSH,RGB_S,RGB_B,RGB_A,SPECIALTY,UPDATE,YCC_A,YCC_B,YCC_S,HDR,DOLBYVISION,SIZE,10_SIZE,11_APL,CommandRGB,BITDEPTH,COLORSPACE,RANGE";
       &log("Calman: CAP request, returning $caps");
       &send_calman_payload_to_client($connection,$caps);
       last;
@@ -1095,9 +1097,12 @@ sub pattern_daemon {
       last;
      }
      if($clean_key eq "STATUS") {
-      my $status_caps="STATUS,CONF_FORMAT,CONF_HDR,CONF_LEVEL,CONF_DV,HDR_ENABLE,IMAGE,PUSH,RGB_S,RGB_B,RGB_A,CommandRGB,10_SIZE,11_APL,SPECIALTY,UPDATE,YCC_A,YCC_B,YCC_S";
-      &log("Calman: STATUS request, returning $status_caps");
-      &send_calman_payload_to_client($connection,$status_caps);
+      # Calman (G1/PatternForge sources) puts this into its
+      # "SN:%s VER:%s STATUS:%s" device string and keeps at most 63 chars;
+      # the command list belongs in CAP.
+      my $status="OK";
+      &log("Calman: STATUS request, returning $status");
+      &send_calman_payload_to_client($connection,$status);
       last;
      }
      if($clean_key eq "SHUTDOWN" || $clean_key eq "QUIT") {
@@ -1122,29 +1127,28 @@ sub pattern_daemon {
       last;
      }
      if($clean_key eq "GET_SETTINGS") {
-      # Return current resolution/format/range/bits settings
-      # The client expects these fields: Resolution, Refresh, 1_FORMAT, Range, Bits, Dolby
+      # Calman splits the reply into "Key Value" pairs at "," and the first
+      # space. It maps Format (RGB, YCC444, YCC422, YCC420 and the _10
+      # variants) to its colour format list, Range (Full/Limited) and Bits
+      # (8/10/12) to its controls and matches "Resolution Refresh" against
+      # the source's mode list. Without a usable reply a G1 source falls
+      # back to Limited range.
       my $cur_res="${w_s}x${h_s}";
       my $cur_refresh="60";
-      my $cur_format="RGB 8-bit";
-      my $cur_range="Full";
+      $cur_refresh=$1 + 0 if($preferred_mode =~/\s([\d.]+)Hz/);
       my $cur_bits=$pgenerator_conf{"max_bpc"} || "8";
-      my $cur_dolby=($pgenerator_conf{"dv_status"} eq "1") ? "On" : "Off";
-      # Parse current mode for refresh rate
-      if($preferred_mode =~/(\d+)\[.*\s([\d.]+)Hz/) {
-       $cur_refresh=int($2);
-      }
-      # Build color format string from config
+      $cur_bits="8" if($cur_bits !~/^(8|10|12)$/);
+      my %ycc_format=("1"=>"YCC444","2"=>"YCC422","3"=>"YCC420");
       my $cf=$pgenerator_conf{"color_format"} || "0";
-      if($cf eq "0")    { $cur_format="RGB $cur_bits-bit"; }
-      elsif($cf eq "1") { $cur_format="YCbCr 444 $cur_bits-bit"; }
-      elsif($cf eq "2") { $cur_format="YCbCr 422 $cur_bits-bit"; }
-      elsif($cf eq "3") { $cur_format="YCbCr 420 $cur_bits-bit"; }
-      # Build range string from config
-      my $rq=$pgenerator_conf{"rgb_quant_range"} || "0";
-      $cur_range="Limited" if($rq eq "1");
-      $cur_range="Full"    if($rq eq "2");
-      my $settings="Resolution=$cur_res,Refresh=$cur_refresh,1_FORMAT=$cur_format,Range=$cur_range,Bits=$cur_bits,Dolby=$cur_dolby";
+      my $cur_format="RGB";
+      if(exists $ycc_format{$cf}) {
+       $cur_format=$ycc_format{$cf};
+       $cur_format.="_10" if($cur_bits ne "8");
+      }
+      my $cur_range=(($pgenerator_conf{"rgb_quant_range"} || "") eq "1") ? "Limited" : "Full";
+      my $cur_hdr=(($pgenerator_conf{"is_hdr"} || "") eq "1") ? "On" : "Off";
+      my $cur_dolby=(($pgenerator_conf{"dv_status"} || "") eq "1") ? "On" : "Off";
+      my $settings="Resolution $cur_res,Refresh $cur_refresh,Format $cur_format,Range $cur_range,Bits $cur_bits,HDR $cur_hdr,Dolby $cur_dolby";
       &log("Calman: GET_SETTINGS returning: $settings");
       &send_calman_payload_to_client($connection,$settings);
       last;
@@ -2339,6 +2343,11 @@ sub pattern_daemon {
 	       }
 	       # Apply immediately — DRM max_bpc must change now
 	       $calman_apply->();
+       } elsif($cl =~/^Range\s+(.*)/i && int($pgenerator_conf{"dv_status"} || 0) == 1) {
+        # The DV transport sets the range (standard: full, LLDV: limited).
+        # The G1 source sends "Range Full" before Dolby Vision and restores
+        # its previous range after leaving it, so nothing is lost here.
+        &log("Calman: CONF_LEVEL=$cl ignored while Dolby Vision is active (range ".($pgenerator_conf{"rgb_quant_range"} || "")." from the DV transport)");
        } elsif($cl =~/^Range\s+(.*)/i) {
         my $rv=lc($1);
         # rgb_quant_range is now in the GCI allow-list (see
@@ -2783,7 +2792,10 @@ sub send_calman_payload_to_client (@) {
  my $connection = shift;
  my $response = shift;
  $response="" if(!defined($response));
- $response.=$end_cmd_string_calman if(!$rpc_client{$connection});
+ # UPGCI replies are ACK + payload + ETX. Calman only reads a payload whose
+ # first byte is ACK, and it reads each reply with a single recv(), so the
+ # whole reply goes out in one write.
+ $response=$ack_cmd_string.$response.$end_cmd_string_calman if(!$rpc_client{$connection});
  eval { $connection->send("$response"); };
  if($@) {
   my $send_error="$@";

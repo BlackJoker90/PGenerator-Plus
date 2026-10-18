@@ -644,7 +644,7 @@ sub calman_g1_ip (@) {
 # Show a G1 pattern. Returns 0 if it could not be drawn so the caller can
 # fall back.
 sub calman_render_g1_pattern (@) {
- my $key=shift;
+ my ($key,$pattern_name)=@_;
  my $range=($calman_rgb_quant_range == 1) ? "limited" : "full";
  my $source_range=&calman_pattern_source_range();
  my ($w,$h)=(int($w_s),int($h_s));
@@ -714,7 +714,9 @@ sub calman_render_g1_pattern (@) {
  }
  my $bg_str=join(",",@$bg);
  &clean_pattern_files();
- my $ps="MOVIE_NAME=TestPattern\nBITS=8\n";
+ # A PATTERN_NAME marks the plate as chosen in the WebUI, so its idle
+ # refresh leaves it on screen.
+ my $ps=(defined $pattern_name ? "PATTERN_NAME=$pattern_name\n" : "")."MOVIE_NAME=TestPattern\nBITS=8\n";
  for(my $i=0;$i<scalar(@frames);$i++) {
   my $f=$frames[$i];
   $ps.="DRAW=IMAGE\nDIM=$f->{w},$f->{h}\nRGB=0,0,0\nBG=$bg_str\nPOSITION=$f->{x},$f->{y}\nIMAGE=$f->{file}\nEND=1\n";

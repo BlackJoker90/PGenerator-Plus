@@ -2149,6 +2149,31 @@ async function showPattern(name,ev){
   toast(e&&e.message?e.message:'Pattern error',true);
  }
 }
+async function diagPlayG1Pattern(){
+ const sel=document.getElementById('diagG1Select');
+ if(!sel) return;
+ const key=sel.value||'';
+ diagBlurElement(sel);
+ if(!key){toast('Choose a G1 pattern first',true);return;}
+ if(getVal('signal_mode')!=='sdr'){toast('G1 patterns are available only in SDR',true);return;}
+ const name='g1_'+key;
+ const label=sel.options[sel.selectedIndex].textContent.trim();
+ meterClearInteractiveSelection(true);
+ clearActive();
+ activePattern=name;
+ diagSetInfoHtml('');
+ try{
+  // Granger and Warm-Up are drawn on the Pi the first time, which can take a while.
+  const r=await fetchJSON('/api/pattern',{method:'POST',headers:{'Content-Type':'application/json'},
+   body:JSON.stringify({name:name,signal_mode:getVal('signal_mode'),
+    max_luma:document.getElementById('max_luma').value}),_timeoutMs:60000});
+  if(r&&r.status==='ok') toast('Pattern: '+label);
+  else {clearActive();toast(r?r.message:'Pattern error',true);}
+ }catch(e){
+  clearActive();
+  toast(e&&e.message?e.message:'Pattern error',true);
+ }
+}
 async function showPatch(id,pr,pg,pb,ev){
  // Greyscale/color/saturation patches are now driven by the Meter & Measurements
  // series readings card. This stub remains only so any legacy handler is a no-op.
@@ -2159,6 +2184,7 @@ async function stopPattern(){
  clearActive();
  diagBlurElement(document.getElementById('diagCustomVideoSelect'));
  diagBlurElement(document.getElementById('diagCustomImageSelect'));
+ diagBlurElement(document.getElementById('diagG1Select'));
  diagSetInfoHtml('');
  const r=await fetchJSON('/api/pattern',{method:'POST',headers:{'Content-Type':'application/json'},
   body:JSON.stringify({name:'stop'})});

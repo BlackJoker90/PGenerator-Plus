@@ -310,6 +310,35 @@ __PG_LOGO_DARK__
        </div>
        <div style="font-size:.64rem;color:var(--text2);margin:4px 0 0 2px">Uploaded images render through the IMAGE pattern path.</div>
       </div>
+      <div class="diag-custom-asset" style="margin-top:10px">
+       <div class="diag-custom-picker">
+        <select id="diagG1Select" class="inline-select" style="width:100%" onchange="diagPlayG1Pattern()">
+         <option value="">Portrait Displays G1 Pattern...</option>
+         <option value="basic_alignment">Basic Alignment</option>
+         <option value="alignment">Alignment</option>
+         <option value="brightness">Brightness</option>
+         <option value="contrast">Contrast</option>
+         <option value="color_bars">Color Bars</option>
+         <option value="tint">Tint</option>
+         <option value="sharpness">Sharpness</option>
+         <option value="smpte">SMPTE Bars</option>
+         <option value="stair21">Grayscale Steps 21</option>
+         <option value="stair51">Grayscale Steps 51</option>
+         <option value="ramp">Horizontal Ramp</option>
+         <option value="checker_5n">ANSI Checkerboard 5x5</option>
+         <option value="checker_5i">ANSI Checkerboard 5x5 Inverted</option>
+         <option value="checker_4n">ANSI Checkerboard 4x4</option>
+         <option value="checker_4i">ANSI Checkerboard 4x4 Inverted</option>
+         <option value="skintones">Skin Tones</option>
+         <option value="granger">Granger Rainbow</option>
+         <option value="warmup">Warm-Up</option>
+         <option value="screensaver">Screen Saver</option>
+        </select>
+        <button class="btn btn-sm btn-secondary diag-asset-icon-btn" type="button" onclick="diagPlayG1Pattern()" title="Show G1 pattern" aria-label="Show G1 pattern"><span class="diag-asset-icon diag-play-icon"></span></button>
+        <button class="btn btn-sm btn-secondary diag-asset-icon-btn" type="button" onclick="stopPattern()" title="Stop G1 pattern" aria-label="Stop G1 pattern"><span class="diag-asset-icon diag-stop-icon"></span></button>
+       </div>
+       <div style="font-size:.64rem;color:var(--text2);margin:4px 0 0 2px">The Calman G1 specialty plates, SDR only.</div>
+      </div>
      </div>
     </div>
     <div style="margin-top:10px">

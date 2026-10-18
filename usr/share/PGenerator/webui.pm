@@ -12754,6 +12754,15 @@ sub webui_pattern (@) {
  my $pattern_source_bits=($signal_mode eq "dv") ? 12 : $pat_bits;
  my $pattern_source_max=&webui_pattern_target_max($pattern_source_bits);
  my $pattern_debug_extra="";
+ # Portrait Displays G1 plates, drawn by the same renderer path as Calman.
+ if($name=~/^g1_([a-z0-9_]+)$/) {
+  my $g1_key=$1;
+  return '{"status":"error","message":"Unknown pattern: '.$name.'"}' if(!grep { $_ eq $g1_key } &PGG1Patterns::g1_pattern_keys());
+  return '{"status":"error","message":"G1 patterns are available only in SDR"}' if($signal_mode ne "sdr");
+  local $calman_rgb_quant_range=(int($transport_signal_range || 0) == 1) ? 1 : 2;
+  return '{"status":"error","message":"Failed to render G1 pattern"}' if(!&calman_render_g1_pattern($g1_key,$name));
+  return '{"status":"ok","pattern":"'.$name.'"}';
+ }
 my $diag_video=&webui_pattern_diag_video_path($name);
  my $diag_video_fallback=&webui_pattern_diag_video_fallback_name($name);
  my $white_rgb=($signal_mode eq "dv") ? "3760,3760,3760" : &webui_pattern_scale_triplet(255,255,255,255,$pat_bits);

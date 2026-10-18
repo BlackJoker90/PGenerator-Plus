@@ -1076,7 +1076,8 @@ sub pattern_daemon {
       # Capabilities. Calman stores the tokens as the device's command set
       # (with no usable CAP reply it falls back to the same UPGCI list), so
       # report the UPGCI commands first, then the PGenerator+ extensions.
-      my $caps="STATUS,CONF_FORMAT,CONF_HDR,CONF_LEVEL,CONF_DV,HDR_ENABLE,IMAGE,PUSH,RGB_S,RGB_B,RGB_A,SPECIALTY,UPDATE,YCC_A,YCC_B,YCC_S,HDR,DOLBYVISION,SIZE,10_SIZE,11_APL,CommandRGB,BITDEPTH,COLORSPACE,RANGE";
+      # Calman only sends GET_SETTINGS when CAP lists it.
+      my $caps="GET_SETTINGS,STATUS,CONF_FORMAT,CONF_HDR,CONF_LEVEL,CONF_DV,HDR_ENABLE,IMAGE,PUSH,RGB_S,RGB_B,RGB_A,SPECIALTY,UPDATE,YCC_A,YCC_B,YCC_S,HDR,DOLBYVISION,SIZE,10_SIZE,11_APL,CommandRGB,BITDEPTH,COLORSPACE,RANGE";
       &log("Calman: CAP request, returning $caps");
       &send_calman_payload_to_client($connection,$caps);
       last;
@@ -1131,9 +1132,11 @@ sub pattern_daemon {
       # space. It maps Format (RGB, YCC444, YCC422, YCC420 and the _10
       # variants) to its colour format list, Range (Full/Limited) and Bits
       # (8/10/12) to its controls and matches "Resolution Refresh" against
-      # the source's mode list. Without a usable reply a G1 source falls
-      # back to Limited range.
-      my $cur_res="${w_s}x${h_s}";
+      # the source's mode list, whose entries look like CONF_FORMAT's
+      # "1920x1080p 60". Without a usable reply a G1 source falls back to
+      # Limited range.
+      my $cur_scan=($preferred_mode =~/\d+x\d+i/) ? "i" : "p";
+      my $cur_res="${w_s}x${h_s}${cur_scan}";
       my $cur_refresh="60";
       $cur_refresh=$1 + 0 if($preferred_mode =~/\s([\d.]+)Hz/);
       my $cur_bits=$pgenerator_conf{"max_bpc"} || "8";

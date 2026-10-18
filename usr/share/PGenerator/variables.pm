@@ -99,6 +99,13 @@ sub pg_dv_transport_color_format(@) {
  return (&pg_dv_transport_mode(@_) eq "lldv") ? "2" : "0";
 }
 
+# Standard DV tunnels full-range RGB. LLDV is YCbCr 4:2:2 and must be signalled
+# as limited range: with full range in the AVI infoframe the LG sink ignored
+# the low-latency Dolby VSIF and showed the picture as (green tinted) SDR.
+sub pg_dv_transport_quant_range(@) {
+ return (&pg_dv_transport_mode(@_) eq "lldv") ? "1" : "2";
+}
+
 sub pg_dv_transport_max_bpc(@) {
  return "12" if(&pg_dv_transport_mode(@_) eq "lldv");
  foreach my $candidate (@_) {

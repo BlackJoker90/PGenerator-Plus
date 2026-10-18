@@ -185,7 +185,7 @@ sub normalize_dv_transport_conf(@) {
   colorimetry=>"9",
   primaries=>"1",
   max_bpc=>&pg_dv_transport_max_bpc($dv_transport),
-  rgb_quant_range=>"2"
+  rgb_quant_range=>&pg_dv_transport_quant_range($dv_transport)
  );
  my @writes=();
  for my $key (sort keys %wanted) {

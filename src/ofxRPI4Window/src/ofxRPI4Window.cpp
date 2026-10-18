@@ -3950,7 +3950,8 @@ void ofxRPI4Window::updateDoVi_Infoframe(int enable, int dv_interface)
 		struct dovi_output_metadata dovi = {};
 		dovi.oui = ofxRPI4Window::is_std_DoVi ? 0x000C03 : 0x00D046;
 		dovi.dv_status = enable; //set to 1 to enable dovi infoframe 
-		dovi.dv_interface = ofxRPI4Window::is_std_DoVi ? 0 : (dv_interface ? 1 : 0);
+		// The kernel packs the low-latency Dolby VSIF for 2 (see drm_override.c).
+		dovi.dv_interface = ofxRPI4Window::is_std_DoVi ? 0 : (dv_interface ? 2 : 0);
 		dovi.backlight_metadata = 0;
 		dovi.backlight_max_luminance = 0;
 		dovi.aux_runmode = (uint8_t)ofClamp(ofxRPI4Window::dv_map_mode, 0, 255);

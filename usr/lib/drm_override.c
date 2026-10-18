@@ -681,8 +681,13 @@ static uint32_t dovi_transport_oui(void) {
     return is_dovi_ll_transport() ? 0x00D046 : 0x000C03;
 }
 
+/* dv_interface as the Pi 4 kernel reads it: 1 packs the 24-byte VSIF and
+ * makes the patched vc4 module also send the HDMI 1.4b VSIF that standard
+ * (RGB tunnelled) DV needs; 2 packs the 27-byte Dolby VSIF with the
+ * low-latency bit (PB4 = 0x03). With 1 for LLDV the TV got the standard-DV
+ * VSIF on a 4:2:2 signal and stayed in SDR. */
 static uint8_t dovi_kernel_interface_byte(void) {
-    return is_dovi_ll_transport() ? 0x01 : 0x01;
+    return is_dovi_ll_transport() ? 0x02 : 0x01;
 }
 
 static int normalize_dovi_metadata(uint8_t *metadata, uint32_t length,

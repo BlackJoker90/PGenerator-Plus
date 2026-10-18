@@ -568,7 +568,7 @@ function applyConfigState(nextConfig){
   setVal('dv_interface',dvTransport.dv_interface);
   setVal('colorimetry','9');
   setVal('primaries','1');
-  setVal('rgb_quant_range','2');
+  setVal('rgb_quant_range',dvTransport.rgb_quant_range);
   applyMeterTargetGammaDefault();
   saveMeterSettings();
  }
@@ -979,7 +979,7 @@ document.getElementById('signal_mode').addEventListener('change',function(){
   setVal('colorimetry',autoColorimetry);
   setVal('primaries','1');
   setVal('max_bpc',dvTransport.max_bpc);
-  setVal('rgb_quant_range','2');
+  setVal('rgb_quant_range',dvTransport.rgb_quant_range);
 	 }
 	 applyMeterTargetGamutDefault(true);
 	 applyMeterTargetGammaDefault(true);
@@ -1224,7 +1224,7 @@ function updateDropdowns(){
   Array.from(bpcSel.options).forEach(function(o){o.disabled=!allowedBpc.includes(o.value);o.style.display=allowedBpc.includes(o.value)?'':'none';});
   if(!allowedBpc.includes(bpcSel.value)) bpcSel.value=dvTransport.max_bpc;
   const rngSel=document.getElementById('rgb_quant_range');
-  const targetRange='2';
+  const targetRange=dvTransport.rgb_quant_range;
   Array.from(rngSel.options).forEach(function(o){o.disabled=o.value!==targetRange;o.style.display=o.value===targetRange?'':'none';});
   rngSel.value=targetRange;
   // The platform DV transport uses its configured TMDS bandwidth.
@@ -2128,10 +2128,10 @@ function dvRgbMaxBpc(value){
 }
 function dvTransportDefaults(mode){
  if(String(mode||'').toLowerCase()==='lldv'){
-  // Low-latency (source-led) DV: PQ YCbCr 4:2:2 12-bit, LL bit in the VSIF.
-  return {dv_transport:'lldv',is_ll_dovi:'1',is_std_dovi:'0',dv_interface:'1',color_format:'2',max_bpc:'12'};
+  // Low-latency (source-led) DV: PQ YCbCr 4:2:2 12-bit limited range, LL bit in the VSIF.
+  return {dv_transport:'lldv',is_ll_dovi:'1',is_std_dovi:'0',dv_interface:'1',color_format:'2',max_bpc:'12',rgb_quant_range:'1'};
  }
- return {dv_transport:'standard',is_ll_dovi:'0',is_std_dovi:'1',dv_interface:'0',color_format:'0',max_bpc:'8'};
+ return {dv_transport:'standard',is_ll_dovi:'0',is_std_dovi:'1',dv_interface:'0',color_format:'0',max_bpc:'8',rgb_quant_range:'2'};
 }
 
 function resetDefaults(){
@@ -2196,7 +2196,7 @@ async function applySettings(){
 	   is_ll_dovi:dvTransport.is_ll_dovi,is_std_dovi:dvTransport.is_std_dovi,
    dv_status:'1',primaries:'1',color_format:dvTransport.color_format,colorimetry:'9',
    max_bpc:(dvTransport.dv_transport==='lldv'?dvTransport.max_bpc:dvRgbMaxBpc(getVal('max_bpc'))),
-   rgb_quant_range:'2',eotf:'2',
+   rgb_quant_range:dvTransport.rgb_quant_range,eotf:'2',
    dv_interface:dvTransport.dv_interface,
    dv_map_mode:getVal('dv_map_mode'),
    max_luma:meterHdrMetadataFieldValue('max_luma','dv'),

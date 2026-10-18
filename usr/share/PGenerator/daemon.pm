@@ -1452,7 +1452,7 @@ sub pattern_daemon {
 	      $calman_save_setting->("colorimetry","9");
 	      $calman_save_setting->("primaries","1");
 	      $calman_save_setting->("max_bpc",$calman_preferred_bpc->(&pg_dv_transport_max_bpc($dv_transport)));
-	      $calman_save_setting->("rgb_quant_range","2");
+	      $calman_save_setting->("rgb_quant_range",&pg_dv_transport_quant_range($dv_transport));
 	      $calman_save_setting->("dv_metadata",$calman_dv_metadata_for_map_mode->($pgenerator_conf{"dv_map_mode"}));
       if(!$calman_gci{$connection}) {
        $calman_rgb_quant_range=2;
@@ -1690,7 +1690,7 @@ sub pattern_daemon {
 	     $calman_save_setting->("colorimetry","9");
 	     $calman_save_setting->("primaries","1");
 	     $calman_save_setting->("max_bpc",$calman_preferred_bpc->(&pg_dv_transport_max_bpc($dv_transport)));
-	     $calman_save_setting->("rgb_quant_range","2");
+	     $calman_save_setting->("rgb_quant_range",&pg_dv_transport_quant_range($dv_transport));
      if(!$calman_gci{$connection}) {
       $calman_rgb_quant_range=2;
       &apply_source_rgb_quant_range("calman",2);

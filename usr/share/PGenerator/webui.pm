@@ -9829,6 +9829,28 @@ sub webui_apply_config (@) {
    $changes{"colorimetry"}=$pgenerator_conf{"sdr_colorimetry"} || "2";
   }
  }
+ # DV forces its transport's range and bpc (LLDV: limited, 12 bpc). Keep the
+ # values from before DV and restore them when leaving it, else SDR RGB
+ # stayed limited and HDR10 asked for a 12 bpc surface after LLDV. The WebUI
+ # posts its form values, so a value still equal to the DV one counts as
+ # "not chosen" too; a value the user changed is kept.
+ if(defined $changes{"signal_mode"}) {
+  my $to_dv=(lc($changes{"signal_mode"}) eq "dv");
+  if(!$dv_before && $to_dv) {
+   $changes{"pre_dv_rgb_quant_range"}=$pgenerator_conf{"rgb_quant_range"} || "2";
+   $changes{"pre_dv_max_bpc"}=$pgenerator_conf{"max_bpc"} || "8";
+  } elsif($dv_before && !$to_dv) {
+   if(!defined $changes{"rgb_quant_range"} || $changes{"rgb_quant_range"} eq ($pgenerator_conf{"rgb_quant_range"} // "")) {
+    $changes{"rgb_quant_range"}=$pgenerator_conf{"pre_dv_rgb_quant_range"} || "2";
+   }
+   # The WebUI sends the target mode's bpc; only a leftover LLDV 12 needs undoing.
+   my $bpc=defined $changes{"max_bpc"} ? $changes{"max_bpc"} : ($pgenerator_conf{"max_bpc"} // "");
+   if($bpc eq "12") {
+    my $pre=$pgenerator_conf{"pre_dv_max_bpc"} || "8";
+    $changes{"max_bpc"}=($pre eq "12") ? "8" : $pre;
+   }
+  }
+ }
  if(defined $changes{"signal_mode"}) {
   my $signal_mode=lc($changes{"signal_mode"});
   if($signal_mode eq "sdr") {
@@ -9866,7 +9888,7 @@ sub webui_apply_config (@) {
    $changes{"max_bpc"}=&pg_dv_transport_max_bpc($requested_dv_transport, $changes{"max_bpc"} || $pgenerator_conf{"max_bpc"});
    $changes{"color_format"}=&pg_dv_transport_color_format($requested_dv_transport);
    $changes{"colorimetry"}="9";
-   $changes{"rgb_quant_range"}="2";
+   $changes{"rgb_quant_range"}=&pg_dv_transport_quant_range($requested_dv_transport);
   }
  }
  my %effective=%pgenerator_conf;
@@ -9917,7 +9939,7 @@ sub webui_apply_config (@) {
   $changes{"colorimetry"}="9";
   $changes{"eotf"}="2";
   $changes{"primaries"}="2";
-  $changes{"rgb_quant_range"}="2";
+  $changes{"rgb_quant_range"}=&pg_dv_transport_quant_range($dv_transport);
  $changes{"dv_profile"}="1";
  $changes{"dv_color_space"}="0";
   $changes{"dv_interface"}=&pg_dv_transport_interface($dv_transport);

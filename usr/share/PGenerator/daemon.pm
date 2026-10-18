@@ -2404,6 +2404,15 @@ sub pattern_daemon {
         $calman_rgb_quant_range=&webui_preferred_rgb_quant_range() + 0;
         &calman_replay_last_pattern("CONF_LEVEL range");
        }
+	      } elsif($cl =~/^Format\s+((?:YCBCR|YCC|YUV)\s*420.*)/i) {
+	       # Not supported (see calman_apply_source_payload, which logs it and
+	       # leaves the WebUI notice). Answer with NAK so Calman itself
+	       # reports the failed format change instead of assuming 4:2:0.
+	       $calman_apply_source_payload->($1,1);
+	       &log("Calman: CONF_LEVEL=$cl answered with NAK");
+	       eval { $connection->send($nak_cmd_string); };
+	       &close_connection($connection,"send error: $@") if($@);
+	       last;
 	      } elsif($cl =~/^Format\s+(.*)/i) {
 	       $calman_apply_source_payload->($1,1);
 	      # Apply immediately — DRM output format must change now

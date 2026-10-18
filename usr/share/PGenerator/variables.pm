@@ -313,6 +313,8 @@ $end_cmd_string="\cB\r";
 $end_cmd_string_calman="\x03";
 $start_cmd_string_calman="\x02";
 $ack_cmd_string="\x06";
+# UPGCI: any first byte other than ACK makes Calman treat the command as failed.
+$nak_cmd_string="\x15";
 
 $calman_special_pattern{$start_cmd_string_calman."RGB_B:0020,0020,0020,0000"}=$pattern_calman1;
 $calman_special_pattern{$start_cmd_string_calman."RGB_B:1000,1000,1000,1020"}=$pattern_calman2;

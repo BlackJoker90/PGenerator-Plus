@@ -35,16 +35,45 @@ inline float normalize10bitComponent(int value) {
  return normalized;
 }
 
+// 10 bit codes go to the GPU as code/1023 through the renderer's exact
+// colour (src/of-patches/of-exact-color.patch), as in PGenerator 1.6.
+// ofSetColor/ofBackground only take 8 bit ofColor: an ofFloatColor was
+// truncated to 8 bit there, so e.g. 64 came out as 60 and 513 as 509.
+#ifdef OF_PGENERATOR_EXACT_COLOR
+inline ofGLProgrammableRenderer *exactColorRenderer() {
+ return dynamic_cast<ofGLProgrammableRenderer *>(ofGetCurrentRenderer().get());
+}
+#else
+#warning "openFrameworks without of-exact-color.patch: 10 bit colours are quantised to 8 bit"
+inline ofGLProgrammableRenderer *exactColorRenderer() {
+ return nullptr;
+}
+#endif
+
 inline void ofSet10bitColor(int red, int green, int blue, int alpha = 1023) {
+ ofGLProgrammableRenderer *renderer = exactColorRenderer();
+#ifdef OF_PGENERATOR_EXACT_COLOR
+ if(renderer) {
+  renderer->setExactColor(normalize10bitComponent(red), normalize10bitComponent(green), normalize10bitComponent(blue), normalize10bitComponent(alpha));
+  return;
+ }
+#endif
  ofSetColor(ofFloatColor(normalize10bitComponent(red), normalize10bitComponent(green), normalize10bitComponent(blue), normalize10bitComponent(alpha)));
 }
 
 inline void of10bitBackground(int red, int green, int blue, int alpha = 1023) {
+ ofGLProgrammableRenderer *renderer = exactColorRenderer();
+#ifdef OF_PGENERATOR_EXACT_COLOR
+ if(renderer) {
+  renderer->backgroundExact(normalize10bitComponent(red), normalize10bitComponent(green), normalize10bitComponent(blue), normalize10bitComponent(alpha));
+  return;
+ }
+#endif
  ofBackground(ofFloatColor(normalize10bitComponent(red), normalize10bitComponent(green), normalize10bitComponent(blue), normalize10bitComponent(alpha)));
 }
 
 inline void ofClear10bit(int red, int green, int blue, int alpha = 1023) {
- ofClear(ofFloatColor(normalize10bitComponent(red), normalize10bitComponent(green), normalize10bitComponent(blue), normalize10bitComponent(alpha)));
+ of10bitBackground(red, green, blue, alpha);
 }
 
 inline bool usesPackedTransportEncoding() {

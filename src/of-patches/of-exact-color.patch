@@ -1,0 +1,79 @@
+diff -ru a/libs/openFrameworks/gl/ofGLProgrammableRenderer.cpp b/libs/openFrameworks/gl/ofGLProgrammableRenderer.cpp
+--- a/libs/openFrameworks/gl/ofGLProgrammableRenderer.cpp	2026-10-18 18:18:56
++++ b/libs/openFrameworks/gl/ofGLProgrammableRenderer.cpp	2026-10-18 18:19:03
+@@ -25,6 +25,12 @@
+ static const string MODELVIEW_PROJECTION_MATRIX_UNIFORM="modelViewProjectionMatrix";
+ static const string TEXTURE_MATRIX_UNIFORM="textureMatrix";
+ static const string COLOR_UNIFORM="globalColor";
++// PGenerator: the draw colour as sent to the shaders. ofStyle stores colours
++// as 8 bit ofColor, so a 10 bit code (513/1023) arrived as 128/255 and the
++// shaders got it back from currentStyle on every bind. One renderer per
++// process, so a file static keeps the class layout of stock 0.11.2.
++static ofFloatColor pgExactColor(1.f,1.f,1.f,1.f);
++static inline float pgClamp01(float v){ return v < 0.f ? 0.f : (v > 1.f ? 1.f : v); }
+ 
+ static const string USE_TEXTURE_UNIFORM="usingTexture";
+ static const string USE_COLORS_UNIFORM="usingColors";
+@@ -847,15 +853,36 @@
+ //----------------------------------------------------------
+ void ofGLProgrammableRenderer::setColor(int _r, int _g, int _b, int _a){
+ 	ofColor newColor(_r,_g,_b,_a);
+-	if(newColor!=currentStyle.color){
++	ofFloatColor newExact(newColor.r/255.f,newColor.g/255.f,newColor.b/255.f,newColor.a/255.f);
++	if(newColor!=currentStyle.color || newExact!=pgExactColor){
+         currentStyle.color = newColor;
++		pgExactColor = newExact;
+ 		if(currentShader){
+-			currentShader->setUniform4f(COLOR_UNIFORM,_r/255.,_g/255.,_b/255.,_a/255.);
++			currentShader->setUniform4f(COLOR_UNIFORM,pgExactColor.r,pgExactColor.g,pgExactColor.b,pgExactColor.a);
+ 		}
+ 	}
+ }
+ 
+ //----------------------------------------------------------
++void ofGLProgrammableRenderer::setExactColor(float r, float g, float b, float a){
++	ofFloatColor newExact(pgClamp01(r),pgClamp01(g),pgClamp01(b),pgClamp01(a));
++	currentStyle.color = newExact; // 8 bit approximation for getStyle()
++	if(newExact!=pgExactColor){
++		pgExactColor = newExact;
++		if(currentShader){
++			currentShader->setUniform4f(COLOR_UNIFORM,pgExactColor.r,pgExactColor.g,pgExactColor.b,pgExactColor.a);
++		}
++	}
++}
++
++//----------------------------------------------------------
++void ofGLProgrammableRenderer::backgroundExact(float r, float g, float b, float a){
++	currentStyle.bgColor = ofFloatColor(pgClamp01(r),pgClamp01(g),pgClamp01(b),pgClamp01(a));
++	glClearColor(pgClamp01(r),pgClamp01(g),pgClamp01(b),pgClamp01(a));
++	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
++}
++
++//----------------------------------------------------------
+ void ofGLProgrammableRenderer::setColor(int gray){
+ 	setColor(gray, gray, gray);
+ }
+@@ -1488,7 +1515,7 @@
+ //----------------------------------------------------------
+ void ofGLProgrammableRenderer::setDefaultUniforms(){
+ 	if(!currentShader) return;
+-	currentShader->setUniform4f(COLOR_UNIFORM, currentStyle.color.r/255.,currentStyle.color.g/255.,currentStyle.color.b/255.,currentStyle.color.a/255.);
++	currentShader->setUniform4f(COLOR_UNIFORM, pgExactColor.r,pgExactColor.g,pgExactColor.b,pgExactColor.a);
+ 	bool usingTexture = texCoordsEnabled & (currentTextureTarget!=OF_NO_TEXTURE);
+ 	currentShader->setUniform1f(USE_TEXTURE_UNIFORM,usingTexture);
+ 	currentShader->setUniform1f(USE_COLORS_UNIFORM,colorsEnabled);
+diff -ru a/libs/openFrameworks/gl/ofGLProgrammableRenderer.h b/libs/openFrameworks/gl/ofGLProgrammableRenderer.h
+--- a/libs/openFrameworks/gl/ofGLProgrammableRenderer.h	2026-10-18 18:18:56
++++ b/libs/openFrameworks/gl/ofGLProgrammableRenderer.h	2026-10-18 19:09:02
+@@ -133,6 +133,11 @@
+ 	// color options
+ 	void setColor(int r, int g, int b); // 0-255
+ 	void setColor(int r, int g, int b, int a); // 0-255
++	// PGenerator: colour in 0..1 kept at full precision (ofStyle only has
++	// 8 bit), so a 10 bit code reaches the shaders and glClearColor exactly.
++	#define OF_PGENERATOR_EXACT_COLOR 1
++	void setExactColor(float r, float g, float b, float a);
++	void backgroundExact(float r, float g, float b, float a);
+ 	void setColor(const ofColor & color);
+ 	void setColor(const ofColor & color, int _a);
+ 	void setColor(int gray); // new set a color as grayscale with one argument

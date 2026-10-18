@@ -1,0 +1,5 @@
+# Show the boot splash as soon as the vc4 fbdev exists (~8 s into the boot)
+# instead of when rcPGenerator runs (~12 s); until then the TV showed a black
+# console. Only during the first minute: a vc4drmfb created by a later HDMI
+# hotplug is blanked by 99-PGenerator_fbcon.rules instead.
+ACTION=="add", SUBSYSTEM=="graphics", KERNEL=="fb0", ATTR{name}=="vc4drmfb", RUN+="/bin/sh -c '[ $$(cut -d. -f1 /proc/uptime) -lt 60 ] || exit 0; [ -f /usr/share/PGenerator/splash.fb ] && cat /usr/share/PGenerator/splash.fb > /dev/fb0'"

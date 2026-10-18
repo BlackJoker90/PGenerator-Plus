@@ -105,9 +105,10 @@ case "$1" in
         # re-execs itself with this set when launched by any other path.
         setsid sudo -u $PGENERATOR_USER_GROUP env MALLOC_ARENA_MAX=1 $PROGRAM_DAEMON_SOCKET
         setcap cap_net_bind_service=-ep $PERL
-        if [ -e "$FB0_BLANK_FILE" ]; then
-         echo 1 > $FB0_BLANK_FILE
-        fi
+        # No fb0 blank here: it switched the HDMI output off (the TV lost
+        # the signal), and the next DRM client close restored the fbdev mode
+        # with a full modeset, so the splash flashed up twice before the
+        # renderer took over. The renderer owns the display as DRM master.
         $PROGRAM_CLIENT_SERIAL &
         # CEC: wake TV and select input on boot
         if [ -x "/usr/sbin/pgenerator-cec" ] && [ -e "/dev/cec0" ]; then

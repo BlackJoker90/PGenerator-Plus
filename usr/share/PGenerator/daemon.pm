@@ -1280,6 +1280,8 @@ sub pattern_daemon {
       last;
      }
      if($clean_key eq "FIRMWARE") {
+      # Only the G1 source asks for FIRMWARE during its handshake.
+      $calman_g1_startup{$connection}=1;
       &log("Calman: FIRMWARE request, returning $version");
       &send_calman_payload_to_client($connection,$version);
       last;
@@ -1315,6 +1317,7 @@ sub pattern_daemon {
       last;
      }
      if($clean_key eq "GET_SETTINGS") {
+      delete $calman_g1_startup{$connection};
       # Calman splits the reply into "Key Value" pairs at "," and the first
       # space. It maps Format (RGB, YCC444, YCC422, YCC420 and the _10
       # variants) to its colour format list, Range (Full/Limited) and Bits
@@ -2024,6 +2027,17 @@ sub pattern_daemon {
      }
      return 0;
     };
+
+    # The G1 source does not send GET_SETTINGS after its handshake. It
+    # starts every connection at RGB 8-bit (its constructor default),
+    # sends only Range Limited and sends CONF_LEVEL:Format only when the
+    # user changes the colour format. Match that default on the first
+    # command so the output agrees with what Calman shows.
+    if($type ne "INIT" && delete $calman_g1_startup{$connection}) {
+     &log("Calman G1: no GET_SETTINGS after the handshake, using Calman's start-up format RGB 8-bit");
+     $calman_apply_source_payload->("RGB",1);
+     $calman_apply->();
+    }
 
     if($calman_handle_rpc_source_alias->($type,$pattern_cmd)) {
      &send_key_to_client($connection,"");
@@ -3074,6 +3088,7 @@ sub close_connection {
  delete $client_ip{$connection};
  delete $hcfr_client_quant_range{$connection};
  delete $rpc_client{$connection};
+ delete $calman_g1_startup{$connection};
  &calman_clear_gci_connection($connection);
  #$connection->send("");
  $select->remove($connection);

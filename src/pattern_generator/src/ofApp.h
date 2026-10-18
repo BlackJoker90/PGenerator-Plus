@@ -137,6 +137,7 @@ class ofApp : public ofBaseApp{
   void setColor(int red, int green, int blue);
   void setBackground(int redbg, int greenbg, int bluebg);
   int normalizeSourceValue(int value, int source_range_mode);
+  int scaleSourceToBitDepth(int value);
   void normalizeImageSourcePixels(int source_range_mode);
   void setDoViBackground(int redbg, int greenbg, int bluebg);
   void shader_begin(int is_image);

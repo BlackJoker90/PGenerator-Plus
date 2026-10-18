@@ -590,9 +590,9 @@ void ofApp::log(std::string str) {
  ##########################################################
 */
 void ofApp::setBackground(int redbg, int greenbg, int bluebg) {
- redbg=normalizeSourceValue(redbg,arr_source_range[i][to_draw]);
- greenbg=normalizeSourceValue(greenbg,arr_source_range[i][to_draw]);
- bluebg=normalizeSourceValue(bluebg,arr_source_range[i][to_draw]);
+ redbg=normalizeSourceValue(scaleSourceToBitDepth(redbg),arr_source_range[i][to_draw]);
+ greenbg=normalizeSourceValue(scaleSourceToBitDepth(greenbg),arr_source_range[i][to_draw]);
+ bluebg=normalizeSourceValue(scaleSourceToBitDepth(bluebg),arr_source_range[i][to_draw]);
  int lldv422=usesLowLatencyDoVi422Transport();
  if (ofxRPI4Window::isHDR && !ofxRPI4Window::isDoVi && !ofxRPI4Window::is_std_DoVi) { 
   if (ofxRPI4Window::bit_depth == 10) {  
@@ -653,9 +653,9 @@ void ofApp::setBackground(int redbg, int greenbg, int bluebg) {
  ##########################################################
 */
 void ofApp::setColor(int red, int green, int blue) {
- red=normalizeSourceValue(red,arr_source_range[i][to_draw]);
- green=normalizeSourceValue(green,arr_source_range[i][to_draw]);
- blue=normalizeSourceValue(blue,arr_source_range[i][to_draw]);
+ red=normalizeSourceValue(scaleSourceToBitDepth(red),arr_source_range[i][to_draw]);
+ green=normalizeSourceValue(scaleSourceToBitDepth(green),arr_source_range[i][to_draw]);
+ blue=normalizeSourceValue(scaleSourceToBitDepth(blue),arr_source_range[i][to_draw]);
  if(ofxRPI4Window::is_std_DoVi && ofxRPI4Window::colorspace_on) {
   dv_source_max=arr_source_max[i][to_draw];
   if(dv_source_max != 255 && dv_source_max != 1023 && dv_source_max != 4095)
@@ -675,6 +675,24 @@ void ofApp::setColor(int red, int green, int blue) {
   if (ofxRPI4Window::bit_depth == 10) ofSet10bitColor(red,green,blue);
   else                                ofSetColor(red,green,blue);
  }
+}
+
+/*
+ * SOURCE_MAX codes deeper than the framebuffer (e.g. the 12-bit codes of a
+ * standard-DV pattern still loaded when the signal switches to SDR/HDR10)
+ * are scaled down instead of being clipped: clipping turned patch and
+ * background into the same white and showed a full field. Shallower codes
+ * are left alone, as before (patterns without SOURCE_MAX default to 255).
+ * Dolby Vision keeps its source codes for the tunnel shader.
+ */
+int ofApp::scaleSourceToBitDepth(int value) {
+ if(ofxRPI4Window::isDoVi || ofxRPI4Window::is_std_DoVi)
+  return value;
+ int source_max=arr_source_max[i][to_draw];
+ int target_max=(ofxRPI4Window::bit_depth == 10) ? 1023 : 255;
+ if(value < 0 || source_max <= target_max)
+  return value;
+ return (value * target_max + source_max / 2) / source_max;
 }
 
 int ofApp::normalizeSourceValue(int value, int source_range_mode) {

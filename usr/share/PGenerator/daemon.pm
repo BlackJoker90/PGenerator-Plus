@@ -1728,6 +1728,8 @@ sub pattern_daemon {
 	     $colorimetry=($eotf_val >= 2) ? "9" : "2" if(!defined $colorimetry || $colorimetry eq "");
 	     $max_bpc=($eotf_val >= 2) ? "10" : "8" if(!defined $max_bpc || $max_bpc eq "");
 	     $max_bpc=$calman_preferred_bpc->($max_bpc,$eotf_val >= 2);
+	     # LLDV forces YCbCr 4:2:2; leaving DV must not keep it for SDR/HDR10.
+	     my $dv_color_format=(int($pgenerator_conf{"dv_status"} || 0) == 1) ? &pg_dv_transport_color_format() : "0";
 	     $calman_save_setting->("signal_mode",$mode);
      $calman_save_setting->("is_sdr",$eotf_val >= 2 ? "0" : "1");
      $calman_save_setting->("is_hdr",$eotf_val >= 2 ? "1" : "0");
@@ -1738,6 +1740,10 @@ sub pattern_daemon {
      $calman_save_setting->("colorimetry","$colorimetry");
      $calman_save_setting->("max_bpc","$max_bpc");
      $calman_save_setting->("primaries",$eotf_val >= 2 ? "1" : "0");
+     if($dv_color_format ne "0" && ($pgenerator_conf{"color_format"} || "0") eq $dv_color_format) {
+      &log("Calman: leaving Dolby Vision, color_format $dv_color_format from the DV transport reset to RGB");
+      $calman_save_setting->("color_format","0");
+     }
     };
 
     my $calman_handle_rpc_source_alias = sub {
@@ -2227,7 +2233,6 @@ sub pattern_daemon {
      #
      # CONF_FORMAT — Resolution/format configuration
      # Parses resolution string (e.g. "1080p60", "720p50") and switches
-    &apply_source_rgb_quant_range("calman",$calman_rgb_quant_range);
      # the HDMI output mode via modetest mode index
      #
 	     if($type eq "CONF_FORMAT") {

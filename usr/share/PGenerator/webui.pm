@@ -1975,13 +1975,25 @@ sub webui_handle_request (@) {
     my $r=sprintf('{"status":"ok","ts":%d,"now":%d,"phase":"%s","message":"%s","version":"%s"}',$ts,time(),$phase,&_webui_json_escape($message),&_webui_json_escape($version));
     print $client "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: ".length($r)."\r\n$cors\r\n$r";
    }
+   elsif($path eq "/api/update/releases") {
+    # Installable releases of this OTA family (pgenerator-update list).
+    my @args_b64=map { encode_base64($_,"") } ("BASH_CMD","PGPLUS_LIST");
+    my $result=`timeout 25 env $pg_cmd_env="@args_b64" $sudo_cmd 2>/dev/null`;
+    chomp($result);
+    $result='{"status":"error","message":"Release list timed out — please try again"}' if($result eq "" || $result!~/^\{/);
+    print $client "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: ".length($result)."\r\n$cors\r\n$result";
+   }
    elsif($path eq "/api/update/apply" && $method eq "POST") {
+    # {"version":"2.12.8"} installs that release (older, or the current one
+    # again); no version means the latest.
+    my ($version)=$body=~/"version"\s*:\s*"(\d+(?:\.\d+)+)"/;
+    $version="" if(!defined($version));
     my $r='{"status":"ok","message":"Update started. PGenerator+ will restart shortly.","now":'.time().'}';
     my $len=length($r);
     print $client "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: $len\r\n$cors\r\n$r";
     close($client);
     undef $client;
-    my $cmd_b64=encode_base64("BASH_CMD","")." ".encode_base64("PGPLUS_APPLY","");
+    my $cmd_b64=encode_base64("BASH_CMD","")." ".encode_base64("PGPLUS_APPLY","").($version ne "" ? " ".encode_base64($version,"") : "");
     system("(sleep 2 && PG_CMD=\"$cmd_b64\" sudo -E /usr/bin/PGenerator_cmd.pl) &");
    }
    elsif($path eq "/api/boot/memory") {

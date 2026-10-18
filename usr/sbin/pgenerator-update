@@ -382,6 +382,56 @@ get_latest_release() {
  curl $CURL_OPTS -H "$GITHUB_ACCEPT" -H "$GITHUB_UA" "$GITHUB_API" 2>/dev/null || true
 }
 
+# One release by version, for installing an older (or the same) release.
+get_release_by_version() {
+ local version="$1" json
+ ensure_valid_clock >/dev/null 2>&1 || true
+ json=$(curl -f $CURL_OPTS -H "$GITHUB_ACCEPT" -H "$GITHUB_UA" "https://api.github.com/repos/${UPDATE_REPO}/releases/tags/v${version}" 2>/dev/null || true)
+ [ -n "$json" ] || json=$(curl -f $CURL_OPTS -H "$GITHUB_ACCEPT" -H "$GITHUB_UA" "https://api.github.com/repos/${UPDATE_REPO}/releases/tags/${version}" 2>/dev/null || true)
+ printf '%s' "$json"
+}
+
+# The newest installable releases as JSON for the WebUI: same OTA family as
+# the running version, an OTA tarball for this target, no drafts or betas.
+list_releases() {
+ local current="$1" limit="${2:-10}" json
+ ensure_valid_clock >/dev/null 2>&1 || true
+ json=$(curl -f $CURL_OPTS -H "$GITHUB_ACCEPT" -H "$GITHUB_UA" "https://api.github.com/repos/${UPDATE_REPO}/releases?per_page=50" 2>/dev/null || true)
+ if [ -z "$json" ]; then
+  echo '{"status":"error","message":"Cannot reach GitHub"}'
+  return 1
+ fi
+ printf '%s' "$json" | perl -MJSON::PP -e '
+  my ($current,$family,$target,$limit)=@ARGV;
+  local $/;
+  my $rels=eval { JSON::PP::decode_json(<STDIN>) };
+  if(ref($rels) ne "ARRAY") { print "{\"status\":\"error\",\"message\":\"Cannot parse the release list\"}"; exit 1; }
+  my @out;
+  for my $rel (@$rels) {
+   next if(ref($rel) ne "HASH" || $rel->{draft} || $rel->{prerelease});
+   my $ver=($rel->{tag_name}//"")=~s/^v//r;
+   next if($ver!~/^\d+(?:\.\d+)+$/);
+   my @p=split(/\./,$ver);
+   next if("$p[0].$p[1]" ne $family);
+   my $has=0;
+   for my $a (@{$rel->{assets}||[]}) {
+    my $n=$a->{name}//"";
+    next if($n!~/\.tar\.gz$/i || $n!~/^pgenerator[-_]?plus[-_]v?[0-9]/i);
+    if($target eq "pi5-bookworm-armhf") { $has=1 if($n=~/pi5[-_]bookworm[-_]armhf\.tar\.gz$/i); }
+    else { $has=1 if($n!~/pi5/i); }
+   }
+   next if(!$has);
+   my $notes=($rel->{body}//"")=~s/\r//gr;
+   $notes=substr($notes,0,400);
+   push @out,{version=>$ver,published=>($rel->{published_at}//""),notes=>$notes,current=>($ver eq $current ? JSON::PP::true : JSON::PP::false)};
+  }
+  my $vk=sub { join(".",map { sprintf("%06d",$_) } split(/\./,$_[0])) };
+  @out=sort { $vk->($b->{version}) cmp $vk->($a->{version}) } @out;
+  splice(@out,$limit) if(@out>$limit);
+  print JSON::PP->new->canonical->encode({status=>"ok",current=>$current,family=>$family,releases=>\@out});
+ ' "$current" "$(major_version "$current")" "${UPDATE_TARGET:-pi4-biasi}" "$limit"
+}
+
 # ── JSON-escape a scalar for Web UI / API responses ──
 json_escape() {
  printf '%s' "$1" | perl -MJSON::PP -e 'local $/; my $s=<>; print JSON::PP->new->allow_nonref->encode($s);'
@@ -670,19 +720,42 @@ case "$cmd" in
    "$(json_escape "$asset_url")"
   ;;
 
+ list)
+  resolve_update_repo
+  detect_update_target
+  list_releases "$(get_current_version)" 10
+  ;;
+
  apply)
   trap apply_cleanup EXIT
-  set_update_state checking "Looking for the update"
+  # Optional: a specific release (older, or the same one to repair the
+  # install). Without it, the latest release.
+  requested=$(normalize_version "${2:-}")
+  [ -n "${2:-}" ] || requested=""
+  if [ -n "$requested" ] && ! printf '%s' "$requested" | grep -Eq '^[0-9]+(\.[0-9]+)+$'; then
+   log_msg "ERROR: Invalid version: ${2:-}"
+   exit 1
+  fi
+  set_update_state checking "Looking for ${requested:-the update}"
   resolve_update_repo
   detect_update_target
   current=$(get_current_version)
-  log_msg "Update check started (current: $current)"
+  log_msg "Update check started (current: $current${requested:+, requested: $requested})"
   log_msg "Update source: $UPDATE_REPO (from $UPDATE_REPO_SOURCE), device target: $UPDATE_TARGET"
 
-  release_json=$(get_latest_release)
+  if [ -n "$requested" ]; then
+   release_json=$(get_release_by_version "$requested")
+  else
+   release_json=$(get_latest_release)
+  fi
   if [ -z "$release_json" ]; then
-   log_msg "ERROR: Cannot reach GitHub"
-   echo "ERROR: Cannot reach GitHub"
+   if [ -n "$requested" ]; then
+    log_msg "ERROR: Release $requested not found (or GitHub unreachable)"
+    echo "ERROR: Release $requested not found (or GitHub unreachable)"
+   else
+    log_msg "ERROR: Cannot reach GitHub"
+    echo "ERROR: Cannot reach GitHub"
+   fi
    exit 1
   fi
 
@@ -703,7 +776,12 @@ case "$cmd" in
    exit 1
   fi
 
-  if ! version_gt "$latest" "$current"; then
+  if [ -n "$requested" ] && [ "$latest" != "$requested" ]; then
+   log_msg "ERROR: Release $requested not found (got ${latest:-nothing})"
+   exit 1
+  fi
+
+  if [ -z "$requested" ] && ! version_gt "$latest" "$current"; then
    log_msg "Already up to date ($current)"
    set_update_state done "Already up to date ($current)"
    echo "Already up to date ($current)"

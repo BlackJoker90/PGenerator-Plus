@@ -3701,6 +3701,7 @@ async function checkUpdate(manual){
   setUpdateStatus('\u2713 No update available — v'+r.current+' is the latest version (checked '+checkedAt+').','ok');
   if(manual) toast('No update available — v'+r.current+' is the latest version.');
  }
+ loadReleaseList();
 }
 let _updateChecked=false;
 function showUpdateCard(){
@@ -3711,9 +3712,68 @@ function showUpdateCard(){
 }
 async function applyUpdate(){
  if(!await pgConfirm({title:'Install update now?',body:'PGenerator+ will restart. Stop any running measurement or session first.',acceptLabel:'Install'}))return;
+ await runUpdate('');
+}
+
+// Release list (pgenerator-update list): the newest installable releases of
+// this OTA family, to go back to an earlier one if a release causes trouble.
+function pgVersionCmp(a,b){
+ const pa=String(a).split('.').map(Number),pb=String(b).split('.').map(Number);
+ for(let i=0;i<Math.max(pa.length,pb.length);i++){
+  const d=(pa[i]||0)-(pb[i]||0);
+  if(d) return d<0?-1:1;
+ }
+ return 0;
+}
+async function loadReleaseList(){
+ const row=document.getElementById('releaseRow');
+ const sel=document.getElementById('releaseSelect');
+ if(!row||!sel) return;
+ const r=await fetchJSON('/api/update/releases',{_quiet:true,_timeoutMs:30000});
+ if(!r||r.status!=='ok'||!Array.isArray(r.releases)||!r.releases.length){row.style.display='none';return;}
+ window._releaseList=r.releases;
+ window._releaseCurrent=r.current;
+ sel.innerHTML='';
+ r.releases.forEach(x=>{
+  const o=document.createElement('option');
+  o.value=x.version;
+  o.textContent='v'+x.version+(x.current?' (installed)':'')+(x.published?' \u2014 '+x.published.split('T')[0]:'');
+  sel.appendChild(o);
+ });
+ // Preselect the release before the installed one: the usual way back.
+ const prev=r.releases.find(x=>pgVersionCmp(x.version,r.current)<0);
+ sel.value=prev?prev.version:r.releases[0].version;
+ row.style.display='';
+ onReleaseSelectChange();
+}
+function onReleaseSelectChange(){
+ const sel=document.getElementById('releaseSelect');
+ const btn=document.getElementById('installReleaseBtn');
+ const rel=(window._releaseList||[]).find(x=>x.version===sel.value);
+ const cmp=pgVersionCmp(sel.value,window._releaseCurrent||'0');
+ if(btn) btn.textContent=cmp<0?'Roll back':(cmp===0?'Reinstall':'Install');
+ const notes=document.getElementById('releaseNotes');
+ if(notes) notes.textContent=rel&&rel.notes?rel.notes.replace(/\n*\u{1F916}.*$/su,'').trim():'';
+}
+async function installSelectedRelease(){
+ const sel=document.getElementById('releaseSelect');
+ const v=sel&&sel.value;
+ if(!v) return;
+ const cmp=pgVersionCmp(v,window._releaseCurrent||'0');
+ const title=cmp<0?'Roll back to v'+v+'?':(cmp===0?'Reinstall v'+v+'?':'Install v'+v+'?');
+ const body='PGenerator+ will restart. Stop any running measurement or session first.\n\n'
+  +'Your settings stay. The current files are saved first and restored automatically if the installation fails.'
+  +(cmp<0?' Files added by newer versions stay on the device. To return, select the newer version here or use Check for Updates.':'');
+ if(!await pgConfirm({title,body,acceptLabel:cmp<0?'Roll back':(cmp===0?'Reinstall':'Install')}))return;
+ await runUpdate(v);
+}
+
+async function runUpdate(version){
  document.getElementById('applyUpdateBtn').disabled=true;
+ const relBtn=document.getElementById('installReleaseBtn');
+ if(relBtn) relBtn.disabled=true;
  document.getElementById('updateStatus').innerHTML='<span class="spinner"></span> Downloading and installing...';
- const r=await fetchJSON('/api/update/apply',{method:'POST'});
+ const r=await fetchJSON('/api/update/apply',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(version?{version}:{})});
  if(r&&r.status==='ok'){
   // Follow pgenerator-update's phases (/api/update/status) across the
   // daemon restart; reload only when it is done, show a failure in place.
@@ -3728,6 +3788,7 @@ async function applyUpdate(){
     if(st.phase==='failed'){
      statusEl.textContent='Update failed: '+(st.message||'see the update log');
      document.getElementById('applyUpdateBtn').disabled=false;
+     if(relBtn) relBtn.disabled=false;
      return;
     }
     if(st.phase==='done'){location.reload();return;}
@@ -3743,6 +3804,7 @@ async function applyUpdate(){
  } else {
   document.getElementById('updateStatus').textContent=r?r.message:'Update failed';
   document.getElementById('applyUpdateBtn').disabled=false;
+  if(relBtn) relBtn.disabled=false;
  }
 }
 async function submitLogs(){

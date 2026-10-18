@@ -1256,8 +1256,16 @@ sub bash_cmd(@) {
   chomp($out);
   print $out;
  }
+ if($cmd eq "PGPLUS_LIST") {
+  my $out=`/usr/sbin/pgenerator-update list 2>/dev/null`;
+  chomp($out);
+  print $out;
+ }
  if($cmd eq "PGPLUS_APPLY") {
-  my $out=`/usr/sbin/pgenerator-update apply 2>/dev/null`;
+  # Optional release version (older release or reinstall); validated again
+  # by pgenerator-update.
+  my $version=(defined($argument) && $argument=~/^\d+(?:\.\d+)+$/) ? $argument : "";
+  my $out=`/usr/sbin/pgenerator-update apply $version 2>/dev/null`;
   chomp($out);
   print $out;
  }

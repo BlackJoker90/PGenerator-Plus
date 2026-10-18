@@ -1560,7 +1560,7 @@ function meterRenderCustomSeriesEditor(){
   +(isColor?th('Tgt x')+th('Tgt y'):'')
   +(isHdr?th('Target Y (cd/m²)'):'')
   +th('');
- const inputStyle='width:72px;background:#0d0d15;border:1px solid #2a3140;border-radius:4px;color:#eee;padding:6px;box-sizing:border-box';
+ const inputStyle='width:72px;background:var(--surface-inset);border:1px solid var(--border);border-radius:4px;color:var(--text-primary);padding:6px;box-sizing:border-box';
  const codeInput=(row,field,value,max)=>'<td style="padding:6px"><input type="number" min="0" max="'+max+'" step="1" data-cs-row="'+row+'" data-cs-field="'+field+'" value="'+value+'" oninput="meterCustomSeriesEditorSync(this)" style="'+inputStyle+'"></td>';
  body.innerHTML=editor.patches.map((p,i)=>{
   let cells='<td style="padding:6px 2px;text-align:center"><button type="button" class="custom-series-patch-drag" data-cs-drag-row="'+i+'" onpointerdown="meterCustomSeriesPatchDragStart(event,'+i+')" title="Drag to reorder patch" aria-label="Drag patch '+(i+1)+' to reorder">&#9776;</button></td>';
@@ -1972,7 +1972,7 @@ function meterImportWizardRenderCsv(text,filename){
  const bits=meterImportDetectBits(filename);
  const md=meterImportDetectMode(filename);
  const rg=meterImportDetectRangeFromCsv(text,filename);
- const inpStyle='background:#0d0d15;border:1px solid #2a3140;border-radius:4px;color:#eee;padding:5px;box-sizing:border-box';
+ const inpStyle='background:var(--surface-inset);border:1px solid var(--border);border-radius:4px;color:var(--text-primary);padding:5px;box-sizing:border-box';
  const body=document.getElementById('meterImportWizardBody');
  body.innerHTML='<div style="display:grid;grid-template-columns:auto 1fr;gap:8px 10px;align-items:center;font-size:.8rem;color:#ddd;max-width:560px">'
   +'<label>Series name</label><input type="text" id="meterImpCsvName" maxlength="96" value="'+esc(base)+'" style="'+inpStyle+';width:100%">'
@@ -1989,7 +1989,7 @@ function meterImportWizardRenderCcfx(text,filename){
  if(!sets.length){ toast('No color sets found in that CCFX file',true); return; }
  meterImportWizardState={mode:'ccfx',sets:sets,filename:filename};
  const esc=(s)=>String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;');
- const inpStyle='background:#0d0d15;border:1px solid #2a3140;border-radius:4px;color:#eee;padding:4px;box-sizing:border-box';
+ const inpStyle='background:var(--surface-inset);border:1px solid var(--border);border-radius:4px;color:var(--text-primary);padding:4px;box-sizing:border-box';
  let rows='';
  sets.forEach((s,i)=>{
   rows+='<tr style="border-bottom:1px solid #1a1a28">'
@@ -18419,7 +18419,7 @@ function meterOpenReportDialog(){
  const items=meterAllSeriesReportOptions();
  const list=document.getElementById('meterReportSeriesList');
  list.innerHTML=items.map(item=>
-  '<label style="display:flex;align-items:center;justify-content:space-between;gap:8px;background:#0d0d15;border:1px solid #262b3b;border-radius:6px;padding:8px 10px;cursor:pointer">'
+  '<label style="display:flex;align-items:center;justify-content:space-between;gap:8px;background:var(--surface-inset);border:1px solid var(--border);border-radius:6px;padding:8px 10px;cursor:pointer">'
   +'<span style="display:flex;align-items:center;gap:8px"><input type="checkbox" value="'+item.key+'" checked> '+item.label+'</span>'
   +'<span style="font-size:.72rem;color:var(--text2)">'+(item.hasData?(item.count+' readings'):'No data yet')+'</span>'
   +'</label>'
@@ -18439,7 +18439,7 @@ function meterReportCanvasImageHTML(cv){
  const img=document.createElement('img');
  try{ img.src=cv.toDataURL('image/png'); }catch(e){ img.src=''; }
  img.alt='Chart image';
- img.style.cssText='width:100%;display:block;background:#0d0d15;border-radius:8px';
+ img.style.cssText='width:100%;display:block;background:var(--surface-inset);border-radius:8px';
  return img.outerHTML;
 }
 

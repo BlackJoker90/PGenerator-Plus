@@ -10,8 +10,8 @@ body.layout-desktop #meter3dLutWorkspaceCard #lutCubeView{max-width:none!importa
 body.layout-desktop #meter3dLutWorkspaceCard #meterSolvedLutList{background:var(--surface-inset)!important}
 .meter-solved-lut-row{display:flex;align-items:center;gap:6px;padding:4px;border-radius:5px}
 .meter-solved-lut-name{flex:1 1 auto;min-width:0;border:0;border-radius:4px;padding:7px 8px;background:transparent;color:var(--text);font:inherit;text-align:left;cursor:pointer;overflow:hidden}
-.meter-solved-lut-name:hover{background:rgba(91,127,255,.12)}
-.meter-solved-lut-name.is-selected{background:rgba(91,127,255,.2);box-shadow:inset 3px 0 0 var(--accent)}
+.meter-solved-lut-name:hover{background:var(--selected-bg)}
+.meter-solved-lut-name.is-selected{background:var(--selected-bg);box-shadow:inset 3px 0 0 var(--accent)}
 .meter-solved-lut-name-main{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:600}
 .meter-solved-lut-name-date{display:block;margin-top:2px;color:var(--text2);font-size:.68rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 [data-theme="light"] .meter-solved-lut-name:hover{background:var(--hover-bg)}
@@ -130,8 +130,8 @@ body.meter-stop-active.layout-desktop .desktop-sidebar{filter:grayscale(.25);opa
 [data-theme="light"] .offline-mask-card{background:var(--surface-modal);color:var(--text-primary);border-color:var(--border);box-shadow:0 12px 30px var(--shadow)}
 [data-theme="light"] .meter-scroll-sync,[data-theme="light"] #meterGreyRgbLegacyWrap,[data-theme="light"] #meterGreyTvWrap,[data-theme="light"] #meterRGBColorWrap,[data-theme="light"] #meterXYYColorWrap,[data-theme="light"] #colorReadingDetail{background:var(--chart-bg)!important}
 [data-theme="light"] #chartRGB,[data-theme="light"] #chartDeltaE,[data-theme="light"] #chartGammaValue,[data-theme="light"] #chartEOTF,[data-theme="light"] #chartGamma,[data-theme="light"] #chartCubeView,[data-theme="light"] #chartCIE,[data-theme="light"] #chartColorDE,[data-theme="light"] #ccssPreviewCanvas,[data-theme="light"] #lutCubeView{background:var(--chart-bg)!important}
-[data-theme="light"] [style*="background:#0d0d15"],[data-theme="light"] [style*="background: #0d0d15"]{background:var(--surface-inset)!important}
-[data-theme="light"] [style*="background:#080a11"],[data-theme="light"] [style*="background: #080a11"]{background:var(--surface-field)!important}
+[data-theme="light"] [style*="background:var(--surface-inset)"],[data-theme="light"] [style*="background: #0d0d15"]{background:var(--surface-inset)!important}
+[data-theme="light"] [style*="background:var(--surface-field)"],[data-theme="light"] [style*="background: #080a11"]{background:var(--surface-field)!important}
 [data-theme="light"] [style*="background:#111723"],[data-theme="light"] [style*="background: #111723"],
 [data-theme="light"] [style*="background:#111522"],[data-theme="light"] [style*="background: #111522"]{background:var(--surface-modal)!important}
 [data-theme="light"] [style*="background:#12121e"],[data-theme="light"] [style*="background: #12121e"]{background:var(--surface-field)!important}
@@ -304,3 +304,4 @@ body.layout-tablet .ui-choice:disabled:hover .ui-choice-description,body.layout-
   max-height:calc(100dvh - 20px)!important;margin:auto!important;overflow:auto
  }
 }
+[data-palette="paper"] .header{background:var(--surface-header)}

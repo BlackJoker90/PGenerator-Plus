@@ -77,13 +77,13 @@
 	   .lg-display-control-row input[type="range"]{flex:1;min-width:0}
 	   .lg-display-control-row input[type="number"]{width:68px}
 	   .lg-display-control-row select,.lg-display-control-row input[type="text"]{width:100%}
-	   #lgDisplayControlPanel .lg-display-control-row select,#lgDisplayControlPanel .lg-display-control-row input[type="number"],#lgDisplayControlPanel .lg-display-control-row input[type="text"]{min-height:32px;background:#0d0d15;border:1px solid var(--border);border-radius:6px;color:var(--text);outline:none;box-sizing:border-box;color-scheme:dark}
+	   #lgDisplayControlPanel .lg-display-control-row select,#lgDisplayControlPanel .lg-display-control-row input[type="number"],#lgDisplayControlPanel .lg-display-control-row input[type="text"]{min-height:32px;background:var(--surface-inset);border:1px solid var(--border);border-radius:6px;color:var(--text);outline:none;box-sizing:border-box;color-scheme:dark}
 	   #lgDisplayControlPanel .lg-display-control-row input[type="number"],#lgDisplayControlPanel .lg-display-control-row input[type="text"]{padding:6px 8px}
-	   #lgDisplayControlPanel .lg-display-control-row select{padding:6px 30px 6px 8px;-webkit-appearance:none;appearance:none;cursor:pointer;background-color:#0d0d15;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' fill='%23888'%3E%3Cpath d='M5 7L0 2h10z'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 10px center}
-	   #lgDisplayControlPanel .lg-display-control-row select option{background:#0d0d15;color:var(--text)}
+	   #lgDisplayControlPanel .lg-display-control-row select{padding:6px 30px 6px 8px;-webkit-appearance:none;appearance:none;cursor:pointer;background-color:var(--surface-inset);background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' fill='%23888'%3E%3Cpath d='M5 7L0 2h10z'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 10px center}
+	   #lgDisplayControlPanel .lg-display-control-row select option{background:var(--surface-inset);color:var(--text)}
 	   #lgDisplayControlPanel .lg-display-control-row select:focus,#lgDisplayControlPanel .lg-display-control-row input[type="number"]:focus,#lgDisplayControlPanel .lg-display-control-row input[type="text"]:focus{border-color:var(--accent)}
 	   #lgDisplayControlPanel .lg-display-control-row select:disabled,#lgDisplayControlPanel .lg-display-control-row input:disabled{opacity:.65;cursor:not-allowed}
-	   .lg-current-input-value{display:flex;align-items:center;padding:6px 10px;box-sizing:border-box;background:#0d0d15;border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:.82rem;line-height:normal}
+	   .lg-current-input-value{display:flex;align-items:center;padding:6px 10px;box-sizing:border-box;background:var(--surface-inset);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:.82rem;line-height:normal}
 	  </style>
 	  <h2 id="lgCardTitle" style="gap:8px"><span class="drag-handle">&#9776;</span><span class="lg-card-title-label">LG Display</span><span id="lgStatusBadge" style="font-size:.7rem;padding:2px 8px;border-radius:4px;background:var(--badge-neutral);color:#000;margin-left:8px">Checking...</span><span class="lg-card-title-actions"><button class="btn btn-sm btn-secondary" id="lgCalHistoryOpenBtn" type="button" onclick="lgOpenCalHistoryModal()">History</button><button class="btn btn-sm btn-secondary" id="lgDisplayControlOpenBtn" type="button" onclick="lgOpenDisplayControl()">Display Control</button></span></h2>
   <button class="btn btn-sm btn-secondary lg-display-control-open-desktop" type="button" onclick="lgOpenDisplayControl()">Display Control</button>
@@ -118,7 +118,7 @@
 	  </div>
 		  <div class="field" style="margin-top:8px;width:min(560px,100%)">
 		   <label>Found LG TVs</label>
-		   <div id="lgDeviceList" role="listbox" aria-label="Found LG TVs" style="width:100%;height:90px;max-height:90px;background:#0d0d15;border:1px solid var(--border);border-radius:6px;overflow:hidden;color:var(--text);font-size:.82rem">
+		   <div id="lgDeviceList" role="listbox" aria-label="Found LG TVs" style="width:100%;height:90px;max-height:90px;background:var(--surface-inset);border:1px solid var(--border);border-radius:6px;overflow:hidden;color:var(--text);font-size:.82rem">
 		    <div style="height:30px;display:flex;align-items:center;padding:0 10px;color:var(--text2)">Scanning...</div>
 		   </div>
 	   <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:6px">

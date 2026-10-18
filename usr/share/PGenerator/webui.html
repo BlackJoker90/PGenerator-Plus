@@ -8,9 +8,10 @@
 <script>
 /* Apply the browser-local appearance before CSS is parsed to avoid a flash. */
 (function(){
- var mode='dark';
- try{var saved=localStorage.getItem('pgen.ui.themeMode');if(saved==='light'||saved==='dark')mode=saved;}catch(e){}
- document.documentElement.setAttribute('data-theme',mode);
+ var themes={dark:'dark',light:'light',oled:'dark',graphite:'dark',nord:'dark',amber:'dark',contrast:'dark',paper:'light'},id='dark';
+ try{var saved=localStorage.getItem('pgen.ui.themeMode');if(themes.hasOwnProperty(saved))id=saved;}catch(e){}
+ document.documentElement.setAttribute('data-theme',themes[id]);
+ if(id!==themes[id])document.documentElement.setAttribute('data-palette',id);
  try{
   if(localStorage.getItem('pgen.ui.desktopSidebarCollapsed')==='1'){
    document.documentElement.setAttribute('data-desktop-sidebar-collapsed','1');

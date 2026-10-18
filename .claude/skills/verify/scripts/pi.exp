@@ -1,0 +1,24 @@
+#!/usr/bin/expect -f
+# Password SSH/scp to the PGenerator+ Pi (key auth is not set up).
+#   PGPASS=... pi.exp ssh 'command'
+#   PGPASS=... pi.exp scp LOCAL... REMOTE_PATH
+# PGPASS: the root password from README.md ("Login" section). Host: $PI_HOST
+# (default 192.168.1.235). Needs the sandbox disabled for LAN access.
+set timeout 600
+set mode [lindex $argv 0]
+set host [expr {[info exists env(PI_HOST)] ? $env(PI_HOST) : "192.168.1.235"}]
+set kh "$env(TMPDIR)/pgen-known_hosts"
+set opts [list -F /dev/null -o UserKnownHostsFile=$kh -o StrictHostKeyChecking=accept-new -o PubkeyAuthentication=no -o PreferredAuthentications=password,keyboard-interactive]
+if {$mode eq "ssh"} {
+  eval spawn -noecho ssh $opts root@$host [list [lindex $argv 1]]
+} else {
+  set dst [lindex $argv end]
+  set srcs [lrange $argv 1 end-1]
+  eval spawn -noecho scp $opts $srcs [list root@$host:$dst]
+}
+expect {
+  -re "assword:" { send "$env(PGPASS)\r"; exp_continue }
+  eof
+}
+catch wait r
+exit [lindex $r 3]

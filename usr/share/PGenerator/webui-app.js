@@ -3230,6 +3230,15 @@ function pgUtilityBitDepthText(){
  if(String(getVal('signal_mode')||'sdr')!=='dv'&&String(getVal('max_bpc'))==='12') return '10-bit (12-bit set)';
  return text;
 }
+function pgUtilityHdmiLinkText(){
+ // Read from the HDMI encoder registers (/api/infoframes "link"), i.e. what
+ // goes out on the wire rather than what is configured.
+ const link=window._hdmiLink;
+ if(!link||!link.bpc) return '-';
+ const mhz=link.tmds_mhz?' · '+Number(link.tmds_mhz).toFixed(2)+' MHz':'';
+ if(window._hdmiAviColor==='YCbCr 4:2:2') return '4:2:2 (12-bit container)'+mhz;
+ return link.bpc+'-bit'+(link.bpc>8&&!link.gcp?' (no GCP)':'')+mhz;
+}
 function pgUtilitySetRows(id,rows){
  const host=document.getElementById(id);
  if(!host) return;
@@ -3265,7 +3274,8 @@ function pgSyncDesktopUtilityDrawer(){
  pgUtilitySetRows('desktopUtilityOutput',[
   ['Resolution',pgUtilityControlText('mode_idx_text')],['Signal Mode',pgUtilityControlText('signal_mode')],
   ['Bit Depth',pgUtilityBitDepthText()],['Color Format',pgUtilityControlText('color_format')],
-  ['Colorimetry',pgUtilityControlText('colorimetry')],['Range',pgUtilityControlText('rgb_quant_range')]
+  ['Colorimetry',pgUtilityControlText('colorimetry')],['Range',pgUtilityControlText('rgb_quant_range')],
+  ['HDMI Link (measured)',pgUtilityHdmiLinkText()]
  ]);
  const signal=String(getVal('signal_mode')||'sdr');
  const metadataTitle=document.getElementById('desktopUtilityMetadataTitle');
@@ -3311,7 +3321,7 @@ function pgSetDesktopUtilityDrawer(open){
  if(toggle){toggle.setAttribute('aria-expanded',next?'true':'false');toggle.setAttribute('aria-label',next?'Close live information sidebar':'Open live information sidebar');}
  if(drawer) drawer.setAttribute('aria-hidden',next?'false':'true');
  if(arrow) arrow.innerHTML=next?'&#8250;':'&#8249;';
- if(next) pgSyncDesktopUtilityDrawer();
+ if(next){ pgSyncDesktopUtilityDrawer(); loadInfoframes(); }
  // The drawer reserves workspace width in Desktop mode. Redraw charts once,
  // after the CSS transition reaches its final size; redrawing both before and
  // after the transition doubled the most expensive calibration work.
@@ -3324,11 +3334,15 @@ function pgDesktopUtilityInit(){
  document.addEventListener('change',()=>{if(document.body.classList.contains('desktop-utility-open')) pgSyncDesktopUtilityDrawer();});
  document.addEventListener('keydown',event=>{if(event.key==='Escape'&&document.body.classList.contains('desktop-utility-open')) pgSetDesktopUtilityDrawer(false);});
  setInterval(()=>{if(!document.hidden&&document.body.classList.contains('desktop-utility-open')) pgSyncDesktopUtilityDrawer();},3000);
+ // The measured HDMI link follows mode changes; dmesg + debugfs are cheap at 10 s.
+ setInterval(()=>{if(!document.hidden&&document.body.classList.contains('desktop-utility-open')) loadInfoframes();},10000);
 }
 
 async function loadInfoframes(){
  const r=await fetchJSON('/api/infoframes',{_quiet:true,_timeoutMs:10000});
  if(!r||r.status!=='ok') return;
+ window._hdmiLink=r.link||null;
+ window._hdmiAviColor='';
  const ae=document.getElementById('aviIF');
  const ad=document.getElementById('aviDecoded');
  const de=document.getElementById('drmIF');
@@ -3339,6 +3353,7 @@ async function loadInfoframes(){
   const b=r.avi.split(':').map(x=>parseInt(x,16));
   if(b.length>=5){
    const y=(b[4]>>5)&3;const yName=['RGB','YCbCr 4:2:2','YCbCr 4:4:4','YCbCr 4:2:0'][y]||'?';
+   window._hdmiAviColor=yName;
    const q=(b[6]>>2)&3;const qName=['Default','Limited','Full','Reserved'][q]||'?';
    const c=(b[5]>>6)&3;const cName=['None','SMPTE 170M','BT.709','Extended'][c]||'?';
    const vic=b[7]&0x7f;
@@ -3374,6 +3389,7 @@ async function loadInfoframes(){
    dd.innerHTML=lines.join('<br>');
   }
  }else{de.textContent='-';dd.innerHTML='';}
+ if(document.body.classList.contains('desktop-utility-open')) pgSyncDesktopUtilityDrawer();
 }
 
 // Widget reorder: POINTER drag on ☰ .drag-handle only (no HTML5 DnD).

@@ -11221,6 +11221,40 @@ sub webui_bluetooth_pan_restart (@) {
  return '{"status":"error","message":"'.$raw.'"}';
 }
 
+sub webui_hdmi_link_json (@) {
+ # What actually goes out on the wire, read from the vc4 HDMI encoder (Pi 4):
+ # the deep colour field holds the bit depth (4/5/6 = 8/10/12 bpc, YCbCr 4:2:2
+ # always reads 4 as it is a fixed 12-bit container), the PHY PLL the TMDS
+ # character rate. Register layout as in vc4_hdmi.c / vc4_hdmi_phy.c.
+ my $port="";
+ foreach my $status (sort glob("/sys/class/drm/card*-HDMI-A-*/status")) {
+  next if(!open(my $fh,"<",$status));
+  my $state=<$fh>;
+  close($fh);
+  next if(!defined($state) || $state!~/^connected/);
+  ($port)=$status=~/HDMI-A-(\d+)\/status$/;
+  last;
+ }
+ return "" if(!defined($port) || $port eq "");
+ my $idx=$port - 1;
+ my ($file)=glob("/sys/kernel/debug/dri/*/hdmi${idx}_regs");
+ return "" if(!$file || !open(my $fh,"<",$file));
+ my %reg;
+ while(my $line=<$fh>) {
+  $reg{$1}=hex($2) if($line=~/^\s*(\w+)\s*=\s*0x([0-9a-fA-F]+)/);
+ }
+ close($fh);
+ return "" if(!defined($reg{"HDMI_DEEP_COLOR_CONFIG_1"}));
+ my %bpc_for_depth=(4=>8,5=>10,6=>12);
+ my $bpc=$bpc_for_depth{$reg{"HDMI_DEEP_COLOR_CONFIG_1"} & 0xf} || 0;
+ my $gcp=($reg{"HDMI_GCP_CONFIG"} || 0) & 0x80000000 ? 1 : 0;
+ my $tmds=0;
+ my $div=(($reg{"HDMI_TX_PHY_CLK_DIV"} || 0) >> 8) & 0xff;
+ # VCO = RM offset (9.22 fixed point) * 54 MHz / 2^21; TMDS = VCO / (div * 10)
+ $tmds=($reg{"HDMI_RM_OFFSET"} & 0x7fffffff) * 54 / 2097152 / ($div * 10) if($div && $reg{"HDMI_RM_OFFSET"});
+ return sprintf(",\"link\":{\"port\":\"HDMI-A-%d\",\"bpc\":%d,\"gcp\":%d,\"tmds_mhz\":%.3f}",$port,$bpc,$gcp,$tmds);
+}
+
 sub webui_infoframes_json (@) {
  my $dmesg=`timeout 3 /bin/dmesg 2>/dev/null`;
  my ($avi_hex,$drm_hex)=("","");
@@ -11232,7 +11266,7 @@ sub webui_infoframes_json (@) {
  $drm_hex=~s/"/\\"/g;
  $avi_hex=~s/\s+$//;
  $drm_hex=~s/\s+$//;
- return "{\"status\":\"ok\",\"avi\":\"$avi_hex\",\"drm\":\"$drm_hex\"}";
+ return "{\"status\":\"ok\",\"avi\":\"$avi_hex\",\"drm\":\"$drm_hex\"".&webui_hdmi_link_json()."}";
 }
 
 sub webui_cec_power_label (@) {

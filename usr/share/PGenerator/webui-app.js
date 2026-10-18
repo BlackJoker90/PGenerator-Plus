@@ -3400,6 +3400,15 @@ function pgSetDesktopUtilityDrawer(open){
  // after the transition doubled the most expensive calibration work.
  setTimeout(()=>window.dispatchEvent(new Event('resize')),240);
 }
+const pgVisiblePolls=[];
+function pgVisiblePoll(fn,ms){
+ pgVisiblePolls.push(fn);
+ setInterval(()=>{if(!document.hidden) fn();},ms);
+}
+document.addEventListener('visibilitychange',()=>{
+ if(document.hidden) return;
+ pgVisiblePolls.forEach(fn=>{try{fn();}catch(e){}});
+});
 function pgToggleDesktopUtilityDrawer(){
  pgSetDesktopUtilityDrawer(!document.body.classList.contains('desktop-utility-open'));
 }
@@ -4080,18 +4089,68 @@ function meterSanitizeExportFilenameBase(value){
  return text;
 }
 
-function meterPromptExportFilename(key,defaultBase,extension,promptLabel){
+// Project-styled replacement for window.prompt(): resolves the entered text,
+// or null on Cancel / Escape / click outside.
+function pgPrompt(opts){
+ const o=opts||{};
+ return new Promise(resolve=>{
+  const old=document.getElementById('pgPromptModal');
+  if(old) old.remove();
+  const root=document.createElement('div');
+  root.id='pgPromptModal';
+  root.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,0.55);z-index:100001;display:flex;align-items:center;justify-content:center;padding:20px;box-sizing:border-box';
+  const card=document.createElement('div');
+  card.style.cssText='background:var(--panel,#0f1320);border:1px solid var(--border,#1d2230);border-radius:10px;max-width:480px;width:100%;padding:20px;color:var(--text,#e3e6ef);box-shadow:0 18px 60px rgba(0,0,0,0.6);font-family:inherit';
+  const title=document.createElement('div');
+  title.style.cssText='font-size:1.0rem;font-weight:700;margin-bottom:12px';
+  title.textContent=String(o.title||'Enter a value');
+  const input=document.createElement('input');
+  input.type='text';
+  input.value=String(o.value||'');
+  input.style.cssText='width:100%;box-sizing:border-box;margin-bottom:6px';
+  const hint=document.createElement('div');
+  hint.style.cssText='font-size:.75rem;color:var(--text2,#a8b0c0);margin-bottom:14px';
+  hint.textContent=String(o.hint||'');
+  const row=document.createElement('div');
+  row.style.cssText='display:flex;gap:10px;justify-content:flex-end';
+  const cancel=document.createElement('button');
+  cancel.className='btn btn-sm btn-secondary';
+  cancel.textContent=String(o.cancelLabel||'Cancel');
+  const ok=document.createElement('button');
+  ok.className='btn btn-sm btn-primary';
+  ok.textContent=String(o.acceptLabel||'OK');
+  row.appendChild(cancel);row.appendChild(ok);
+  card.appendChild(title);card.appendChild(input);
+  if(o.hint) card.appendChild(hint);
+  card.appendChild(row);
+  root.appendChild(card);
+  document.body.appendChild(root);
+  let done=false;
+  const finish=v=>{
+   if(done) return;
+   done=true;
+   document.removeEventListener('keydown',onKey,true);
+   root.remove();
+   resolve(v);
+  };
+  function onKey(ev){
+   if(ev.key==='Escape'){ev.preventDefault();finish(null);}
+   else if(ev.key==='Enter'&&document.activeElement===input){ev.preventDefault();finish(input.value);}
+  }
+  document.addEventListener('keydown',onKey,true);
+  ok.onclick=()=>finish(input.value);
+  cancel.onclick=()=>finish(null);
+  root.onclick=ev=>{if(ev.target===root) finish(null);};
+  input.focus();
+  input.select();
+ });
+}
+
+async function meterPromptExportFilename(key,defaultBase,extension,promptLabel){
  const ext='.'+String(extension||'').replace(/^\./,'');
  const sessionBase=(key&&meterExportFilenameBases[key])?meterExportFilenameBases[key]:defaultBase;
- let entered=null;
- try{
-  if(typeof window.prompt!=='function') return meterDefaultExportFilename(key,defaultBase,extension);
-  entered=window.prompt(promptLabel||'Enter a file name',sessionBase);
- }catch(e){
-  // Embedded browsers such as VS Code's webview expose prompt() but throw
-  // when it is called. Export with a useful timestamped name instead.
-  return meterDefaultExportFilename(key,defaultBase,extension);
- }
+ const entered=await pgPrompt({title:promptLabel||'Enter a file name',value:sessionBase,
+  hint:'Saved as '+ext.slice(1).toUpperCase()+' file.',acceptLabel:'Export'});
  if(entered==null) return null;
  const base=meterSanitizeExportFilenameBase(entered);
  if(!base){
@@ -18799,9 +18858,9 @@ function meterOpenGreyProfileImport(){
  input.click();
 }
 
-function meterExportGreyProfile(){
+async function meterExportGreyProfile(){
  meterGreyNormalizeProfilesState();
- const filename=meterPromptExportFilename('greyscale-profile','pgenerator-greyscale-profile','json','Enter a file name for the custom greyscale export');
+ const filename=await meterPromptExportFilename('greyscale-profile','pgenerator-greyscale-profile','json','Enter a file name for the custom greyscale export');
  if(!filename) return;
  const blob=new Blob([JSON.stringify(meterGreyPatchProfiles,null,2)],{type:'application/json'});
  meterDownloadBlob(blob,filename);

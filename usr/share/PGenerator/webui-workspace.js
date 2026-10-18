@@ -150,14 +150,14 @@ async function meterDeleteCustomSeriesById(id){
  return true;
 }
 
-function meterExportCustomSeriesById(id,format){
+async function meterExportCustomSeriesById(id,format){
  const series=meterCustomSeriesById(id);
  if(!series){ toast('Series not found',true); return; }
  const patches=meterCustomSeriesPatches(series);
  if(!patches.length){ toast('Series has no patches',true); return; }
  const fmt=(format==='colourspace')?'colourspace':'calman';
  const base=(String(series.name||'custom-series').toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,'')||'custom-series')+'-'+fmt;
- const filename=meterPromptExportFilename('custom-series-'+fmt,base,'csv','Enter a file name for the patch list export');
+ const filename=await meterPromptExportFilename('custom-series-'+fmt,base,'csv','Enter a file name for the patch list export');
  if(!filename) return;
  const blob=new Blob([meterCustomSeriesCsv({name:series.name,patches:patches},fmt)],{type:'text/csv'});
  meterDownloadBlob(blob,filename);
@@ -1748,7 +1748,7 @@ function meterCustomSeriesCsv(series,format){
  return rows.map(p=>[p.r8,p.g8,p.b8].map(c=>String(meterCustomSeriesClampCode(c,255))).join(',')).join('\r\n')+'\r\n';
 }
 
-function meterExportCustomSeries(format){
+async function meterExportCustomSeries(format){
  const editor=meterCustomSeriesEditor;
  if(!editor){ toast('Open a custom series first',true); return; }
  const nameInput=document.getElementById('meterCustomSeriesNameInput');
@@ -1759,7 +1759,7 @@ function meterExportCustomSeries(format){
  if(!draft.patches.length){ toast('Add at least one patch before exporting',true); return; }
  const fmt=(format==='colourspace')?'colourspace':'calman';
  const base=(seriesName.toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,'')||'custom-series')+'-'+fmt;
- const filename=meterPromptExportFilename('custom-series-'+fmt,base,'csv','Enter a file name for the patch list export');
+ const filename=await meterPromptExportFilename('custom-series-'+fmt,base,'csv','Enter a file name for the patch list export');
  if(!filename) return;
  const blob=new Blob([meterCustomSeriesCsv(draft,fmt)],{type:'text/csv'});
  meterDownloadBlob(blob,filename);
@@ -18692,7 +18692,7 @@ async function meterGenerateReport(){
  const selected=[...document.querySelectorAll('#meterReportSeriesList input[type="checkbox"]:checked')].map(x=>x.value);
  if(selected.length===0){toast('Select at least one series to include',true);return;}
  const format=(document.querySelector('input[name="meterReportFormat"]:checked')||{}).value||'html';
- const filename=meterPromptExportFilename('report','pgenerator_measurement_report',format==='pdf'?'pdf':'html','Enter a file name for the report export');
+ const filename=await meterPromptExportFilename('report','pgenerator_measurement_report',format==='pdf'?'pdf':'html','Enter a file name for the report export');
  if(!filename) return;
  // Reserve the PDF window while this click still has transient user
  // activation. Report preparation awaits chart redraws; opening the window
@@ -19016,7 +19016,7 @@ async function meterExportHcfrChc(){
   const built=meterBuildHcfrExportModel(),s=built.summary;
   const message='Export '+s.mode.toUpperCase()+' session?\n\nRGB range: '+String(s.rgbRange||'unknown').toUpperCase()+'\nGreyscale: '+s.grayscale+'\nSaturation: '+s.saturations+'\nColorChecker: '+s.colorChecker+'\nFree measurements: '+s.free+(s.warnings.length?'\n\nWarnings:\n'+s.warnings.join('\n'):'');
   if(!await pgConfirm(message)) return;
-  let filename=meterPromptExportFilename('chc','pgenerator_'+s.mode+'_session','chc','Enter a file name for the HCFR session');
+  let filename=await meterPromptExportFilename('chc','pgenerator_'+s.mode+'_session','chc','Enter a file name for the HCFR session');
   if(!filename) filename=meterDefaultExportFilename('chc','pgenerator_'+s.mode+'_session','chc');
   const bytes=chc.serializeHcfrChc(built.model);
   meterDownloadBlob(new Blob([bytes],{type:'application/octet-stream'}),filename);
@@ -19098,10 +19098,10 @@ async function meterImportHcfrChcFile(input){
  }catch(e){toast('HCFR import failed: '+((e&&e.message)||e),true);}finally{if(input)input.value='';}
 }
 
-function meterExportCSV(){
+async function meterExportCSV(){
  try{
  if(!meterReadings||meterReadings.length===0){toast('No data to export',true);return;}
- let filename=meterPromptExportFilename('csv','pgenerator_measurements','csv','Enter a file name for the CSV export');
+ let filename=await meterPromptExportFilename('csv','pgenerator_measurements','csv','Enter a file name for the CSV export');
  if(!filename){
   // window.prompt returned null: either the user cancelled, or the browser
   // suppressed the dialog (kiosk/embedded webviews, or "prevent this page from
@@ -21675,13 +21675,16 @@ function pgInitialRetry(name,fn,delays){
  setTimeout(()=>loadWifiRadio(),1300);
  setTimeout(()=>loadInfoframes(),1500);
  setTimeout(()=>checkUpdate(),60000);
- setInterval(checkPing,10000);
- setInterval(()=>loadStats(true),3000);
- setInterval(syncRemoteConfig,10000);
- setInterval(()=>loadInfo(true),30000);
- setInterval(()=>loadCecStatus(),5000);
- setInterval(()=>loadBluetooth(),30000);
- setInterval(()=>loadWifiRadio(),30000);
+ // Status polls pause while the tab is hidden (a forgotten tab or a second
+ // device otherwise keeps loading the Pi through a whole session) and run
+ // once right away when it becomes visible again.
+ pgVisiblePoll(checkPing,10000);
+ pgVisiblePoll(()=>loadStats(true),3000);
+ pgVisiblePoll(syncRemoteConfig,10000);
+ pgVisiblePoll(()=>loadInfo(true),30000);
+ pgVisiblePoll(()=>loadCecStatus(),5000);
+ pgVisiblePoll(()=>loadBluetooth(),30000);
+ pgVisiblePoll(()=>loadWifiRadio(),30000);
  // Meter: check immediately on load, then repoll shortly after and every 10s.
  // The retry below covers the case where the first two meter checks race
  // the USB enumeration; the daemon-side meter/status endpoint can take

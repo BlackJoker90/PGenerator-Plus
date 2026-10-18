@@ -2961,7 +2961,7 @@ function pgUpdateLayoutControls(){
 }
 // Theme ids: each one is a palette over one of the two base themes, so the
 // light-mode overrides and data-theme checks keep working for every palette.
-const PG_THEMES={dark:'dark',light:'light',oled:'dark',graphite:'dark',nord:'dark',amber:'dark',contrast:'dark',paper:'light'};
+const PG_THEMES={dark:'dark',light:'light',oled:'dark',graphite:'dark',nord:'dark',amber:'dark',contrast:'dark',paper:'light',natrium:'dark','natrium-light':'light'};
 let pgThemeId='dark';
 function pgReadThemeMode(){
  try{

@@ -49,6 +49,12 @@
 --focus-ring:#6b4423;--shadow:rgba(60,40,20,.2);--selected-bg:rgba(138,90,43,.13);--hover-bg:rgba(43,33,24,.06);--status-calibration:#8a5a2b;
 --chart-bg:#fffdf8;--chart-grid:#e8dfd0;--chart-axis:#a8987f;--chart-label:#5e4e3c;--chart-tooltip:#fffaf1;--meter-bar-track:#f1ebe0;
 --scroll-track:#ebe3d5;--scroll-thumb:#b3a38b;--scroll-thumb-border:#9c8b72;--scroll-thumb-hover:#9c8b72}
+/* Natrium: port of the T3 Code theme of the same name (dark + light variant). */
+[data-palette="natrium"]{--bg:#181613;--card:#1f1d1a;--panel:#1f1d1a;--border:#2e2b27;--divider:#2e2b27;--accent:#f9cd4c;--accent2:#f6a14f;--text:#e8e4dd;--text2:#9f9b95;--red:#ed695e;--orange:#f6a14f;--status-error:#ed695e;--status-warning:#f6a14f;--status-calibration:#f9cd4c;--surface-page:#181613;--surface-header:#13110e;--surface-sidebar:#110f0d;--surface-card:#1f1d1a;--surface-drawer:#13110e;--surface-modal:#1f1d1a;--surface-popover:#272420;--surface-inset:#110f0d;--surface-field:#13110e;--text-primary:#e8e4dd;--text-secondary:#9f9b95;--text-muted:#97938d;--text-disabled:#726e68;--text-inverse:#1f180f;--focus-ring:#f9cd4c;--selected-bg:#382c14;--hover-bg:#1d1b17;--chart-bg:#110f0d;--chart-grid:#25221f;--chart-axis:#393632;--chart-label:#9f9b95;--chart-tooltip:#272420;--chart-empty:#726e68;--meter-bar-track:#201e1a;--scroll-track:#110f0d;--scroll-thumb:#35322e;--scroll-thumb-border:#504c47;--scroll-thumb-hover:#504c47}
+[data-palette="natrium-light"]{--bg:#f5f2ec;--card:#fbfaf6;--panel:#fbfaf6;--border:#dcd9d2;--divider:#dcd9d2;--accent:#9b5f00;--accent2:#9d521a;--text:#231f19;--text2:#66615a;--red:#d33b36;--orange:#ee9138;--status-error:#d33b36;--status-warning:#ee9138;--status-calibration:#9b5f00;--surface-page:#f5f2ec;--surface-header:#fbfaf6;--surface-sidebar:#f2efe8;--surface-card:#fbfaf6;--surface-drawer:#fbfaf6;--surface-modal:#fbfaf6;--surface-popover:#efebe4;--surface-inset:#f1eee8;--surface-field:#f9f7f2;--text-primary:#231f19;--text-secondary:#66615a;--text-muted:#66615a;--text-disabled:#7c7670;--text-inverse:#fdfaf4;--focus-ring:#9b5f00;--selected-bg:#f8ebbe;--hover-bg:#ebe7dd;--chart-bg:#f3f0ea;--chart-grid:#e1ded7;--chart-axis:#cecac2;--chart-label:#66615a;--chart-tooltip:#efebe4;--chart-empty:#7c7670;--meter-bar-track:#f1eee8;--scroll-track:#f2efe8;--scroll-thumb:#cdcac3;--scroll-thumb-border:#b4b1a9;--scroll-thumb-hover:#b4b1a9}
+/* Natrium accents are light, so text on them uses the theme foreground. */
+[data-palette^="natrium"] .btn-primary,[data-palette^="natrium"] .layout-switch-btn[aria-pressed="true"]{color:var(--text-inverse)}
+[data-palette^="natrium"] .desktop-nav-btn[aria-current="page"]{color:var(--text-primary)}
 body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
 background:var(--bg);color:var(--text);min-height:100vh;padding:0}
 body.modal-open{position:fixed;left:0;right:0;width:100%;overflow:hidden;overscroll-behavior:none}
@@ -869,7 +875,7 @@ transition:transform .28s cubic-bezier(.2,.9,.3,1.5);transition-delay:calc(var(-
 .pg-dd-menu.is-open .pg-dd-mark{transform:scale(1)}
 .pg-dd-item.is-active .pg-dd-mark{border-color:var(--accent)}
 .pg-dd-item[aria-selected="true"] .pg-dd-mark{border-color:transparent;background:linear-gradient(135deg,var(--accent),var(--accent2))}
-.pg-dd-item[aria-selected="true"] .pg-dd-mark::after{content:'';position:absolute;left:5px;top:2.5px;width:3px;height:6px;border:solid #fff;border-width:0 2px 2px 0;transform:rotate(45deg)}
+.pg-dd-item[aria-selected="true"] .pg-dd-mark::after{content:'';position:absolute;left:5px;top:2.5px;width:3px;height:6px;border:solid var(--text-inverse);border-width:0 2px 2px 0;transform:rotate(45deg)}
 .pg-dd-group{padding:8px 10px 4px;font-size:.66rem;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--text-muted)}
 .pg-dd-menu.no-motion,.pg-dd-menu.no-motion *{transition:none!important}
 .pg-dd-menu.no-motion .pg-dd-item,.pg-dd-menu.no-motion .pg-dd-group{opacity:1;transform:none}

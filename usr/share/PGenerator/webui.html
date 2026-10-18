@@ -8,7 +8,7 @@
 <script>
 /* Apply the browser-local appearance before CSS is parsed to avoid a flash. */
 (function(){
- var themes={dark:'dark',light:'light',oled:'dark',graphite:'dark',nord:'dark',amber:'dark',contrast:'dark',paper:'light'},id='dark';
+ var themes={dark:'dark',light:'light',oled:'dark',graphite:'dark',nord:'dark',amber:'dark',contrast:'dark',paper:'light',natrium:'dark','natrium-light':'light'},id='dark';
  try{var saved=localStorage.getItem('pgen.ui.themeMode');if(themes.hasOwnProperty(saved))id=saved;}catch(e){}
  document.documentElement.setAttribute('data-theme',themes[id]);
  if(id!==themes[id])document.documentElement.setAttribute('data-palette',id);

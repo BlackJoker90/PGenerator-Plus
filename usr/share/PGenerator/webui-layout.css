@@ -304,4 +304,4 @@ body.layout-tablet .ui-choice:disabled:hover .ui-choice-description,body.layout-
   max-height:calc(100dvh - 20px)!important;margin:auto!important;overflow:auto
  }
 }
-[data-palette="paper"] .header{background:var(--surface-header)}
+[data-theme="light"][data-palette] .header{background:var(--surface-header)}

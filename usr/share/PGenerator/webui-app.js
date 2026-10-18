@@ -563,7 +563,8 @@ function applyConfigState(nextConfig){
 	  syncDvOutputEotfState();
 	  const dvTransport=dvTransportDefaults(getVal('dv_transport'));
 	  setVal('dv_transport',dvTransport.dv_transport);
-	  setVal('max_bpc',dvRgbMaxBpc(config.max_bpc||dvTransport.max_bpc));
+	  // LLDV always goes out at 12 bpc; standard DV carries 8 or 10.
+	  setVal('max_bpc',dvTransport.dv_transport==='lldv'?dvTransport.max_bpc:dvRgbMaxBpc(config.max_bpc||dvTransport.max_bpc));
 	  setVal('color_format',dvTransport.color_format);
   setVal('dv_interface',dvTransport.dv_interface);
   setVal('colorimetry','9');
@@ -1214,13 +1215,13 @@ function updateDropdowns(){
  const modeSel=document.getElementById('mode_idx');
 	 if(sm==='dv'){
 	  const transportSel=document.getElementById('dv_transport');
-	  const modes=['standard'];
+	  const modes=['standard','lldv'];
 	  Array.from(transportSel.options).forEach(function(o){const ok=modes.includes(String(o.value).toLowerCase());o.disabled=!ok;o.style.display=ok?'':'none';});
-	  transportSel.disabled=true;
+	  transportSel.disabled=false;
 	  const dvTransport=dvTransportDefaults(getVal('dv_transport'));
 	  setVal('dv_transport',dvTransport.dv_transport);
 	  setVal('dv_interface',dvTransport.dv_interface);
-  const allowedBpc=['8','10'];
+  const allowedBpc=dvTransport.dv_transport==='lldv'?['12']:['8','10'];
   const targetFmt=dvTransport.color_format;
   Array.from(fmtSel.options).forEach(function(o){o.disabled=o.value!==targetFmt;o.style.display=o.value===targetFmt?'':'none';});
   fmtSel.value=targetFmt;
@@ -3222,6 +3223,13 @@ function pgUtilityControlText(id){
  }
  return String(el.value!=null?el.value:(el.textContent||'-')).trim()||'-';
 }
+function pgUtilityBitDepthText(){
+ // Outside Dolby Vision the renderer sends 12 bpc out as 10 bpc (10-bit
+ // surface, bit-exact codes); show what reaches the display.
+ const text=pgUtilityControlText('max_bpc');
+ if(String(getVal('signal_mode')||'sdr')!=='dv'&&String(getVal('max_bpc'))==='12') return '10-bit (12-bit set)';
+ return text;
+}
 function pgUtilitySetRows(id,rows){
  const host=document.getElementById(id);
  if(!host) return;
@@ -3256,7 +3264,7 @@ function pgUtilitySetText(el,value){
 function pgSyncDesktopUtilityDrawer(){
  pgUtilitySetRows('desktopUtilityOutput',[
   ['Resolution',pgUtilityControlText('mode_idx_text')],['Signal Mode',pgUtilityControlText('signal_mode')],
-  ['Bit Depth',pgUtilityControlText('max_bpc')],['Color Format',pgUtilityControlText('color_format')],
+  ['Bit Depth',pgUtilityBitDepthText()],['Color Format',pgUtilityControlText('color_format')],
   ['Colorimetry',pgUtilityControlText('colorimetry')],['Range',pgUtilityControlText('rgb_quant_range')]
  ]);
  const signal=String(getVal('signal_mode')||'sdr');

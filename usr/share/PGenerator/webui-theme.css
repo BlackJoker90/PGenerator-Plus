@@ -695,14 +695,13 @@ cursor:pointer;user-select:none;display:flex;align-items:center;gap:4px}
 .custom-series-patch-drag:active{cursor:grabbing}
 body.is-custom-series-patch-dragging{cursor:grabbing!important;user-select:none!important}
 #meterCustomSeriesEditorBody tr.is-patch-dragging{outline:2px solid var(--accent);outline-offset:-2px;background:var(--selected-bg)}
-.update-btn{display:inline-flex;align-items:center;gap:6px;background:var(--status-warning);color:#14100a;font-weight:700;letter-spacing:.01em;
-box-shadow:0 0 0 0 color-mix(in srgb,var(--status-warning) 60%,transparent)}
-.update-btn:hover{background:color-mix(in srgb,var(--status-warning) 85%,#fff)}
-[data-theme="light"] .update-btn{color:#fff}
-[data-theme="light"] .update-btn:hover{background:color-mix(in srgb,var(--status-warning) 85%,#000)}
+.update-btn{display:inline-flex;align-items:center;gap:5px;padding:6px 10px;border:1px solid var(--accent);border-radius:7px;
+background:var(--accent);color:#fff;font-size:.7rem;font-weight:600;line-height:1.2}
+.update-btn:hover{background:color-mix(in srgb,var(--accent) 85%,#fff)}
+[data-palette^="natrium"] .update-btn{color:var(--text-inverse)}
 .update-pulse{animation:updatePulse 2s ease-out infinite}
 @media (prefers-reduced-motion:reduce){.update-pulse{animation:none}}
-@keyframes updatePulse{0%{box-shadow:0 0 0 0 color-mix(in srgb,var(--status-warning) 65%,transparent)}70%{box-shadow:0 0 0 9px color-mix(in srgb,var(--status-warning) 0%,transparent)}100%{box-shadow:0 0 0 0 color-mix(in srgb,var(--status-warning) 0%,transparent)}}
+@keyframes updatePulse{0%{box-shadow:0 0 0 0 color-mix(in srgb,var(--accent) 65%,transparent)}70%{box-shadow:0 0 0 7px color-mix(in srgb,var(--accent) 0%,transparent)}100%{box-shadow:0 0 0 0 color-mix(in srgb,var(--accent) 0%,transparent)}}
 @keyframes thumbPulse{0%,100%{box-shadow:inset 0 0 0 3px #5b7fff}50%{box-shadow:inset 0 0 0 3px color-mix(in srgb,var(--accent) 25%,transparent)}}
 @keyframes meterProgressShimmer{0%{transform:translateX(-115%)}100%{transform:translateX(115%)}}
 #meterCard.meter-patterns-only #meterLiveReading,

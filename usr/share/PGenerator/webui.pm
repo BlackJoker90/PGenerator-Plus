@@ -9817,6 +9817,18 @@ sub webui_apply_config (@) {
    $changes{$1}=defined $2 ? $2 : $3;
   }
   my $requested_dv_transport=&pg_dv_transport_mode($changes{"dv_transport"} || $pgenerator_conf{"dv_transport"});
+ # HDR10/HLG and DV force BT.2020 colorimetry below. Remember the SDR choice
+ # when leaving SDR and give it back on the way in, else SDR kept signalling
+ # BT.2020 after any HDR or DV session.
+ if(defined $changes{"signal_mode"} && !defined $changes{"colorimetry"}) {
+  my $sdr_before=!$dv_before && int($pgenerator_conf{"is_hdr"} || 0) != 1;
+  my $to_sdr=(lc($changes{"signal_mode"}) eq "sdr");
+  if($sdr_before && !$to_sdr) {
+   $changes{"sdr_colorimetry"}=$pgenerator_conf{"colorimetry"} || "2";
+  } elsif(!$sdr_before && $to_sdr) {
+   $changes{"colorimetry"}=$pgenerator_conf{"sdr_colorimetry"} || "2";
+  }
+ }
  if(defined $changes{"signal_mode"}) {
   my $signal_mode=lc($changes{"signal_mode"});
   if($signal_mode eq "sdr") {

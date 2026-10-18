@@ -283,36 +283,47 @@ sub calman_reset_pattern_state (@) {
  &log("Calman: reset pattern state ($source)") if($source ne "");
 }
 
+# Modes of the connected HDMI connector as modetest lists them.
+sub calman_connected_modes (@) {
+ my @modes=();
+ open(my $mt_fh,"$modetest 2>/dev/null|");
+ my $mt_connected=0;
+ while(my $ml=<$mt_fh>) {
+  $mt_connected=1 if($ml =~/\s+connected/);
+  next if(!$mt_connected);
+  # Mode line: #idx WxH[i] rate ... flags ...; type: ...
+  next if($ml !~/^\s*#(\d+)\s+(\d+)x(\d+)(i?)\s+([\d.]+)\s+.*type:\s*(.*)/);
+  push(@modes,{idx=>$1,w=>int($2),h=>int($3),ip=>($4 eq "i") ? "i" : "p",rate=>$5 + 0,type=>$6});
+ }
+ close($mt_fh);
+ return @modes;
+}
+
 sub calman_find_mode_idx (@) {
  my ($req_w,$req_h,$req_ip,$req_rate)=@_;
  return -1 if(!$req_h || !$req_rate);
  $req_ip=defined($req_ip) && $req_ip ne "" ? lc($req_ip) : "p";
  my $best_idx=-1;
  my $best_score=0;
- open(my $mt_fh,"$modetest 2>/dev/null|");
- my $mt_connected=0;
- while(my $ml=<$mt_fh>) {
-  $mt_connected=1 if($ml =~/\s+connected/);
-  next if(!$mt_connected);
-  next if($ml !~/^\s*#(\d+)\s+(\d+)x(\d+)(i?)\s+([\d.]+)\s+.*type:\s*(.*)/);
-  my ($m_idx,$m_w,$m_h,$m_i,$m_rate,$m_type)=($1,int($2),int($3),$4,$5,$6);
-  next if($m_h != $req_h);
-  my $m_ip=($m_i eq "i") ? "i" : "p";
-  next if($m_ip ne $req_ip);
-  my $m_rate_num=$m_rate + 0;
-  my $rate_match=(int($m_rate_num) == int($req_rate)) || (abs($m_rate_num - ($req_rate + 0)) < 0.25);
+ foreach my $m (&calman_connected_modes()) {
+  next if($m->{h} != $req_h || $m->{ip} ne $req_ip);
+  # Tolerate reference integer labels for fractional HDMI modes.
+  my $rate_match=(int($m->{rate}) == int($req_rate)) || (abs($m->{rate} - ($req_rate + 0)) < 0.25);
   next if(!$rate_match);
-  my $score=0;
-  $score+=100 if($req_w && $m_w == $req_w);
-  $score+=10  if($m_type =~/userdef/);
-  $score+=5   if($m_type =~/preferred/);
-  $score+=1;
+  # Score: exact width > exact rate > EDID timing > preferred. The userdef
+  # mode from the video= boot argument has no CTA sync polarity, so the
+  # kernel sends it with VIC 0 and a full-range AVI infoframe; the EDID
+  # copy of the same timing carries the VIC and the limited range.
+  my $score=1;
+  $score+=100 if($req_w && $m->{w} == $req_w);
+  $score+=20  if(abs($m->{rate} - ($req_rate + 0)) < 0.01);
+  $score+=10  if($m->{type} !~/userdef/);
+  $score+=5   if($m->{type} =~/preferred/);
   if($score > $best_score) {
-   $best_idx=$m_idx;
+   $best_idx=$m->{idx};
    $best_score=$score;
   }
  }
- close($mt_fh);
  return $best_idx;
 }
 
@@ -328,6 +339,18 @@ sub calman_apply_init_mode (@) {
   }
  }
  return if($init_mode_idx eq "" || $init_mode_idx !~/^\d+$/);
+ # Remembered before the EDID timing was preferred: move to the same mode
+ # from the EDID so the infoframe carries the VIC and the range.
+ my ($remembered)=grep { $_->{idx} == $init_mode_idx } &calman_connected_modes();
+ if($remembered && $remembered->{type} =~/userdef/) {
+  my $edid_idx=&calman_find_mode_idx($remembered->{w},$remembered->{h},$remembered->{ip},$remembered->{rate});
+  if($edid_idx >= 0 && $edid_idx != $init_mode_idx) {
+   &log("Calman: remembered mode_idx=$init_mode_idx is the userdef boot mode, using mode_idx=$edid_idx");
+   $init_mode_idx=$edid_idx;
+   &sudo("SET_PGENERATOR_CONF","calman_mode_idx","$init_mode_idx");
+   $pgenerator_conf{"calman_mode_idx"}="$init_mode_idx";
+  }
+ }
  if(($pgenerator_conf{"mode_idx"} || "") ne $init_mode_idx) {
   &log("Calman: INIT applying remembered mode_idx=$init_mode_idx");
   &pgenerator_cmd("SET_MODE:$init_mode_idx");
@@ -2538,38 +2561,7 @@ sub pattern_daemon {
       }
       &log("Calman: CONF_FORMAT parsed width=".($req_w||"")." height=".($req_h||"")." scan=".($req_ip||"")." rate=".($req_rate||"")) if($req_h);
       if($req_h && $req_rate) {
-       # Scan modetest for matching mode
-       my $best_idx=-1;
-       my $best_score=0;
-       open(my $mt_fh,"$modetest 2>/dev/null|");
-       my $mt_connected=0;
-       while(my $ml=<$mt_fh>) {
-        $mt_connected=1 if($ml =~/\s+connected/);
-        next if(!$mt_connected);
-        # Mode line: #idx WxH[i] rate ... flags ...; type: ...
-        next if($ml !~/^\s*#(\d+)\s+(\d+)x(\d+)(i?)\s+([\d.]+)\s+.*type:\s*(.*)/);
-        my ($m_idx,$m_w,$m_h,$m_i,$m_rate,$m_type)=($1,int($2),int($3),$4,$5,$6);
-        # Match height
-        next if($m_h != $req_h);
-        # Match interlaced/progressive
-        my $m_ip=($m_i eq "i") ? "i" : "p";
-        next if($m_ip ne $req_ip);
-        # Match refresh rate; tolerate reference integer labels for fractional HDMI modes.
-        my $m_rate_num=$m_rate + 0;
-        my $rate_match=(int($m_rate_num) == int($req_rate)) || (abs($m_rate_num - ($req_rate + 0)) < 0.25);
-        next if(!$rate_match);
-        # Score: exact width match > standard width > any width; userdef > preferred > driver
-        my $score=0;
-        $score+=100 if($req_w && $m_w == $req_w);
-        $score+=10  if($m_type =~/userdef/);
-        $score+=5   if($m_type =~/preferred/);
-        $score+=1;
-        if($score > $best_score) {
-         $best_idx=$m_idx;
-         $best_score=$score;
-        }
-       }
-       close($mt_fh);
+       my $best_idx=&calman_find_mode_idx($req_w,$req_h,$req_ip,$req_rate);
       if($best_idx >= 0) {
        &log("Calman: CONF_FORMAT matched mode_idx=$best_idx for ${req_h}${req_ip}${req_rate}");
        &pgenerator_cmd("SET_MODE:$best_idx");

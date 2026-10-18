@@ -369,6 +369,10 @@ sub apply_drm_properties (@) {
  # Outside Dolby Vision the renderer sends 12 bpc out as 10 (10 bit surface);
  # pre-set the same value so the first commit needs no extra modeset.
  $max_bpc=10 if($max_bpc eq "12" && int($pgenerator_conf{"dv_status"} || 0) != 1);
+ # vc4 only drives YCbCr 4:2:2 with max bpc >= 10 and falls back to RGB at 8
+ # (4:2:2 is a 12 bit container at the 8 bit clock either way); the renderer
+ # gets the same value from drm_override.so.
+ $max_bpc=10 if(!$prelaunch && $pgenerator_conf{"color_format"} eq "2" && $max_bpc ne "" && $max_bpc < 10);
  if($max_bpc ne "" && $max_bpc > 0 && !$skip_unchanged->("max bpc",$max_bpc)) {
   &modetest_connector_write($connector_id,"max bpc",$max_bpc);
   &log("DRM: Set max bpc=$max_bpc on connector $connector_id");

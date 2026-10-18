@@ -325,6 +325,12 @@ static void parse_config(char *buf) {
      * let the HDMI encoder widen the codes instead of sending them as drawn. */
     if (dv_status != 1 && max_bpc_override == 12)
         max_bpc_override = 10;
+    /* The vc4 kernel only picks YCbCr 4:2:2 with max bpc >= 10 and falls
+     * back to RGB at 8, while the renderer keeps drawing 4:2:2 code values
+     * (black turns cyan). HDMI carries 4:2:2 in a 12 bit container at the
+     * 8 bit TMDS clock either way, so asking for 10 changes nothing else. */
+    if (output_fmt_found && output_fmt_override == 2 && max_bpc_override < 10)
+        max_bpc_override = 10;
 
     if (max_bpc_override > 0) {
         char num[24];

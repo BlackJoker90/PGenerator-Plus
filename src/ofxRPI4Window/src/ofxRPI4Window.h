@@ -463,6 +463,7 @@ public:
 	void HDRWindowSetup();
 	void UploadImage(GLenum textureTarget);
 	void Bit10_16WindowSetup();
+	void LimitHDROutputTo10bpc();
     void SDRWindowSetup();   
 	
 

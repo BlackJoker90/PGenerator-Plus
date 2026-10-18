@@ -366,6 +366,9 @@ sub apply_drm_properties (@) {
  };
  # Set max bpc — the binary fails to apply this property
  my $max_bpc=$pgenerator_conf{"max_bpc"};
+ # Outside Dolby Vision the renderer sends 12 bpc out as 10 (10 bit surface);
+ # pre-set the same value so the first commit needs no extra modeset.
+ $max_bpc=10 if($max_bpc eq "12" && int($pgenerator_conf{"dv_status"} || 0) != 1);
  if($max_bpc ne "" && $max_bpc > 0 && !$skip_unchanged->("max bpc",$max_bpc)) {
   &modetest_connector_write($connector_id,"max bpc",$max_bpc);
   &log("DRM: Set max bpc=$max_bpc on connector $connector_id");

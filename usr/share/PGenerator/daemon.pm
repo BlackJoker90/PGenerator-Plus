@@ -1141,6 +1141,8 @@ sub pattern_daemon {
       $cur_refresh=$1 + 0 if($preferred_mode =~/\s([\d.]+)Hz/);
       my $cur_bits=$pgenerator_conf{"max_bpc"} || "8";
       $cur_bits="8" if($cur_bits !~/^(8|10|12)$/);
+      # Outside Dolby Vision 12 bpc goes out as 10 bpc (see sync_pattern_bits_default).
+      $cur_bits="10" if($cur_bits eq "12" && int($pgenerator_conf{"dv_status"} || 0) != 1);
       my %ycc_format=("1"=>"YCC444","2"=>"YCC422","3"=>"YCC420");
       my $cf=$pgenerator_conf{"color_format"} || "0";
       my $cur_format="RGB";

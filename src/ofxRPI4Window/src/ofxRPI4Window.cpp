@@ -1677,6 +1677,7 @@ void ofxRPI4Window::setup(const ofGLESWindowSettings & settings)
     if (is_panel_hdr_dovi(device, connectorId) == HDR_TYPE_HDR10) {
 		ofLog() << "DRM: panel is HDR capable";
 		if (isHDR && !isDoVi && !is_std_DoVi) {
+			LimitHDROutputTo10bpc();
 			if ((bit_depth >= 8) && (bit_depth <= 10) && (avi_info.max_bpc == 10)) {
 				ofLog() << "DRM: setting up HDR(10 bit) window/surface"; 
 				FindModifiers(DRM_FORMAT_ABGR2101010, HDRplaneId);
@@ -1728,6 +1729,7 @@ void ofxRPI4Window::setup(const ofGLESWindowSettings & settings)
 				SDRWindowSetup();
 			}
 		} else if (isHDR && !isDoVi && !is_std_DoVi) {
+			LimitHDROutputTo10bpc();
 
 
 			if ((bit_depth >= 8) && (bit_depth <= 10) && (avi_info.max_bpc == 10)) {
@@ -1781,6 +1783,18 @@ void ofxRPI4Window::setup(const ofGLESWindowSettings & settings)
         starting_bpc = avi_info.max_bpc;
 		colorspace_status = colorspace_on;
     
+}
+
+void ofxRPI4Window::LimitHDROutputTo10bpc()
+{
+	// HDR10/HLG at 12 bpc asked for an ABGR16161616F surface: the Pi 4 Mesa has
+	// no EGL config for it (the renderer exited with "No EGL configs"), and
+	// half floats could not hold 12-bit codes exactly anyway. Output 10 bpc
+	// from the 10 bit surface, so the wire carries the drawn codes unchanged.
+	if (avi_info.max_bpc != 12)
+		return;
+	ofLog() << "DRM: HDR output at 10 bpc instead of 12 (10 bit surface, bit-exact codes)";
+	avi_info.max_bpc = 10;
 }
 
 void ofxRPI4Window::EGL_create_surface(EGLint attribs[], EGLConfig config)
@@ -3079,6 +3093,7 @@ void ofxRPI4Window::update()
 		}  
 
 		if (isHDR && !isDoVi && !is_std_DoVi) { 
+			LimitHDROutputTo10bpc();
 			if ((bit_depth >= 8) && (bit_depth <= 10) && (avi_info.max_bpc == 10)) {
 				ofLog() << "DRM: updating HDR(10 bit) window/surface"; 
 				FindModifiers(DRM_FORMAT_ABGR2101010, HDRplaneId);

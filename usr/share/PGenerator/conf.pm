@@ -94,7 +94,11 @@ sub sync_pattern_bits_default (@) {
   $bits_default=8;
   return;
  }
- $bits_default=$conf_bits if($conf_bits == 8 || $conf_bits == 10 || $conf_bits == 12);
+ # The renderer only draws 8- or 10-bit codes (12-bit ones went through the
+ # 8-bit path), and on the Pi 4 HDR10/HLG at 12 bpc go out as 10 bpc. Keep
+ # pattern codes 10-bit so they reach the wire unchanged.
+ $bits_default=$conf_bits if($conf_bits == 8 || $conf_bits == 10);
+ $bits_default=10 if($conf_bits == 12);
 }
 
 ###############################################

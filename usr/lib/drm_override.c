@@ -320,6 +320,12 @@ static void parse_config(char *buf) {
         if (*p == '\n') p++;
     }
 
+    /* Outside Dolby Vision the renderer draws into a 10 bit surface and
+     * limits 12 bpc to 10 (LimitHDROutputTo10bpc). Forcing 12 here would
+     * let the HDMI encoder widen the codes instead of sending them as drawn. */
+    if (dv_status != 1 && max_bpc_override == 12)
+        max_bpc_override = 10;
+
     if (max_bpc_override > 0) {
         char num[24];
         itoa_simple(max_bpc_override, num);

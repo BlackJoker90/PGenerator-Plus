@@ -1710,12 +1710,15 @@ void ofxRPI4Window::setup(const ofGLESWindowSettings & settings)
 					shader_init = 1;
 				HDRWindowSetup();
 			} else if ((bit_depth >=8) && (bit_depth <= 12)  && (avi_info.max_bpc == 12)) {
-				ofLog() << "DRM: setting up Low Latency DoVi(12 bit) window/surface"; 
+				// The Pi 4 Mesa offers no EGL config for the 16F surface and the
+				// renderer died with "No EGL configs". Render into the 10 bit
+				// surface and let the HDMI output carry 12 bpc (as on the Pi 5).
+				ofLog() << "DRM: setting up Low Latency DoVi(12 bpc output, 10 bit surface)"; 
 
-				FindModifiers(DRM_FORMAT_ABGR16161616F, HDRplaneId);
+				FindModifiers(DRM_FORMAT_ABGR2101010, HDRplaneId);
 				if (!shader_init && (avi_info.output_format != 0 || (avi_info.output_format == 0 && avi_info.rgb_quant_range == 2)))
 					shader_init = 1;
-				Bit10_16WindowSetup();
+				HDRWindowSetup();
 			} else {
 				ofLog() << "DRM: setting up Low Latency DoVi(8 bit) window/surface"; 
 
@@ -3103,11 +3106,12 @@ void ofxRPI4Window::update()
 						shader_init = 1;
 					HDRWindowSetup();
 				} else if ((bit_depth >=8) && (bit_depth <= 12)  && (avi_info.max_bpc == 12)) {
-					ofLog() << "DRM: updating Low Latency DoVi(12 bit) window/surface";
-					FindModifiers(DRM_FORMAT_ABGR16161616F, HDRplaneId);
+					// 10 bit surface for 12 bpc output, see setup().
+					ofLog() << "DRM: updating Low Latency DoVi(12 bpc output, 10 bit surface)";
+					FindModifiers(DRM_FORMAT_ABGR2101010, HDRplaneId);
 					if (!ofxRPI4Window::shader_init && (avi_info.output_format != 0 || (avi_info.output_format == 0 && avi_info.rgb_quant_range == 2)))
 						shader_init = 1;
-					Bit10_16WindowSetup();
+					HDRWindowSetup();
 				} else {
 					ofLog() << "DRM: updating Low Latency Dovi(8 bit) window/surface";
 					FindModifiers(DRM_FORMAT_ARGB8888, SDRplaneId);

@@ -875,7 +875,8 @@ transition:transform .28s cubic-bezier(.2,.9,.3,1.5);transition-delay:calc(var(-
 .pg-dd-menu.is-open .pg-dd-mark{transform:scale(1)}
 .pg-dd-item.is-active .pg-dd-mark{border-color:var(--accent)}
 .pg-dd-item[aria-selected="true"] .pg-dd-mark{border-color:transparent;background:linear-gradient(135deg,var(--accent),var(--accent2))}
-.pg-dd-item[aria-selected="true"] .pg-dd-mark::after{content:'';position:absolute;left:5px;top:2.5px;width:3px;height:6px;border:solid var(--text-inverse);border-width:0 2px 2px 0;transform:rotate(45deg)}
+.pg-dd-item[aria-selected="true"] .pg-dd-mark::after{content:'';position:absolute;inset:0;background:var(--text-inverse);
+-webkit-mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpolyline points='1.75,6.25 4.75,9.25 10.25,2.75' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") center/9px 9px no-repeat;mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpolyline points='1.75,6.25 4.75,9.25 10.25,2.75' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") center/9px 9px no-repeat}
 .pg-dd-item.is-flagged{background:color-mix(in srgb,var(--accent) 12%,transparent);box-shadow:inset 3px 0 0 var(--accent);font-weight:600}
 .pg-dd-item.is-flagged.is-active{background:var(--selected-bg)}
 .pg-dd-badge{margin-left:auto;padding:2px 7px;border-radius:999px;background:var(--accent);color:var(--text-inverse);font-size:.62rem;font-weight:700;letter-spacing:.04em;text-transform:uppercase;flex:0 0 auto}

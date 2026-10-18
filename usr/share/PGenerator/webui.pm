@@ -150,7 +150,7 @@ sub webui_mdns_build_a_response (@) {
  return "" if($mdns_hostname eq "" || $best_ip eq "");
  my $resp=pack("n",0);           # ID=0 for mDNS
  $resp.=pack("n",0x8400);        # flags: QR=1, AA=1
- $resp.=pack("nnnn",0,1,0,0);
+ $resp.=pack("nnnn",0,1,0,1);
  foreach my $label (split(/\./,"$mdns_hostname.local")) {
   $resp.=pack("C",length($label)).$label;
  }
@@ -159,6 +159,19 @@ sub webui_mdns_build_a_response (@) {
  $resp.=pack("N",120);
  $resp.=pack("n",4);
  $resp.=Socket::inet_aton($best_ip);
+ # NSEC (RFC 6762 6.1): the name has an A record and nothing else. Without
+ # it Apple resolvers wait 5 s for an AAAA answer before using the IPv4
+ # address, on every lookup of pgenerator.local.
+ my $name="";
+ foreach my $label (split(/\./,"$mdns_hostname.local")) {
+  $name.=pack("C",length($label)).$label;
+ }
+ $name.=pack("C",0);
+ my $rdata=$name.pack("CCC",0,1,0x40); # next name: itself; window 0, type 1 (A)
+ $resp.=pack("n",0xC00C);        # owner: pointer to the answer name
+ $resp.=pack("nn",47,0x8001);    # NSEC, IN + cache flush
+ $resp.=pack("N",120);
+ $resp.=pack("n",length($rdata)).$rdata;
  return $resp;
 }
 
@@ -299,14 +312,14 @@ sub webui_mdns (@) {
    last if($offset + 4 > length($buf));
    my ($qtype,$qclass)=unpack("nn",substr($buf,$offset,4));
    $offset+=4;
-   if(lc($qname) eq "$mdns_hostname.local" && ($qclass & 0x7FFF) == 1 && ($qtype == 1 || $qtype == 255)) {
+   if(lc($qname) eq "$mdns_hostname.local" && ($qclass & 0x7FFF) == 1 && ($qtype == 1 || $qtype == 28 || $qtype == 255)) {
     $matched=1;
     last;
    }
   }
 
-  # Respond to A record queries for pgenerator.local, even when bundled with
-  # compressed AAAA questions in the same packet.
+  # Respond to A, AAAA and ANY queries for pgenerator.local. An AAAA query
+  # gets the A record plus the NSEC saying there is no AAAA record.
   next if(!$matched);
 
   my $querier_ip=Socket::inet_ntoa($qaddr);

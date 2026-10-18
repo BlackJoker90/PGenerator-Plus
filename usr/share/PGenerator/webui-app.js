@@ -1771,7 +1771,7 @@ async function diagDeleteSelectedAsset(kind){
  if(!filename || filename===DIAG_UPLOAD_SENTINEL) return;
  const files=Array.isArray(diagCustomAssets[kind])?diagCustomAssets[kind]:[];
  if(!files.includes(filename)) return;
- if(!confirm('Delete custom diagnostic '+kind+' "'+diagAssetDisplayLabel(filename)+'"?')) return;
+ if(!await pgConfirm({title:'Delete custom diagnostic '+kind+'?',body:'"'+diagAssetDisplayLabel(filename)+'" is removed from the generator.',acceptLabel:'Delete'})) return;
  const btn=document.getElementById(kind==='video'?'diagCustomVideoDelete':'diagCustomImageDelete');
  if(btn) btn.disabled=true;
  try{
@@ -2315,8 +2315,22 @@ async function applySettings(){
  }
 }
 
-function confirmReboot(){
- if(!confirm('Reboot device?')) return;
+// Project-styled replacement for window.confirm(). Takes an options object
+// ({title,body,acceptLabel,cancelLabel}) or a message string, whose first
+// paragraph becomes the title. Resolves true when accepted.
+async function pgConfirm(opts){
+ if(typeof opts!=='object'||!opts){
+  const text=String(opts||'');
+  const cut=text.indexOf('\n\n');
+  opts=cut>0?{title:text.slice(0,cut),body:text.slice(cut+2)}:{title:text};
+ }
+ const choice=await meterShowChoiceModal({title:opts.title,body:opts.body||'',
+  acceptLabel:opts.acceptLabel||'OK',cancelLabel:opts.cancelLabel||'Cancel'});
+ return !!choice;
+}
+
+async function confirmReboot(){
+ if(!await pgConfirm({title:'Reboot device?',body:'PGenerator+ restarts and the WebUI is unreachable for about a minute.',acceptLabel:'Reboot'})) return;
  rebootDevice();
 }
 async function rebootDevice(){
@@ -2326,7 +2340,7 @@ async function rebootDevice(){
 }
 let _powerOffRequested=false;
 async function shutdownDevice(){
- if(!confirm('Power off the Pi?\n\nThe WebUI will become unreachable until you power-cycle the device.')) return;
+ if(!await pgConfirm({title:'Power off the Pi?',body:'The WebUI will become unreachable until you power-cycle the device.',acceptLabel:'Power off'})) return;
  _powerOffRequested=true;
  setPowerButtonState(false);
  toast('Shutting down...');
@@ -2396,7 +2410,7 @@ async function applyMemory(){
   prompt='Set GPU memory to '+gpu+'MB and reboot?';
   body={gpu_mem:gpu};
  }
- if(!confirm(prompt))return;
+ if(!await pgConfirm({title:prompt,acceptLabel:'Reboot'}))return;
  const r=await fetchJSON('/api/boot/memory',{method:'POST',
   headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
  if(r&&r.status==='ok') toast(r.message);
@@ -2469,7 +2483,7 @@ async function connectWifi(){
 async function disconnectWifi(){
  const btn=document.getElementById('wifiDisconnectBtn');
  if(btn) btn.disabled=true;
- if(!window.confirm('Disconnect the current WiFi client connection?')){
+ if(!await pgConfirm({title:'Disconnect WiFi?',body:'The current WiFi client connection is closed.',acceptLabel:'Disconnect'})){
   if(btn) btn.disabled=false;
   return;
  }
@@ -2486,7 +2500,7 @@ async function disconnectWifi(){
 async function forgetWifi(){
  const btn=document.getElementById('wifiForgetBtn');
  if(btn) btn.disabled=true;
- if(!window.confirm('Forget WiFi network? Stored credentials will be deleted and WiFi will not reconnect on reboot.')){
+ if(!await pgConfirm({title:'Forget WiFi network?',body:'Stored credentials will be deleted and WiFi will not reconnect on reboot.',acceptLabel:'Forget'})){
   if(btn) btn.disabled=false;
   return;
  }
@@ -2668,7 +2682,7 @@ async function onWifiRadioToggle(el){
  if(!enable){
   const aps=await fetchJSON('/api/wifi/ap/status',{_quiet:true,_timeoutMs:8000});
   if(aps&&aps.status==='ok'&&aps.active){
-   if(!window.confirm('Disabling the WiFi radio will also stop the WiFi Access Point (they share one radio). Continue?')){
+   if(!await pgConfirm({title:'Disable the WiFi radio?',body:'This also stops the WiFi Access Point (they share one radio).',acceptLabel:'Disable'})){
     el.checked=true;
     return;
    }
@@ -3687,7 +3701,7 @@ function showUpdateCard(){
  if(!_updateChecked) checkUpdate();
 }
 async function applyUpdate(){
- if(!confirm('Install update now? PGenerator+ will restart.'))return;
+ if(!await pgConfirm({title:'Install update now?',body:'PGenerator+ will restart. Stop any running measurement or Calman session first.',acceptLabel:'Install'}))return;
  document.getElementById('applyUpdateBtn').disabled=true;
  document.getElementById('updateStatus').innerHTML='<span class="spinner"></span> Downloading and installing...';
  const r=await fetchJSON('/api/update/apply',{method:'POST'});
@@ -3803,7 +3817,7 @@ async function importSystemSettingsFile(file){
   if(input)input.value='';
   return;
  }
- const accepted=confirm('Import this PGenerator+ system backup?\n\nMatching system settings, profiles and custom diagnostic media will be replaced. Existing history and media with different names will be preserved. A local rollback backup will be created first. Stop all measurements and calibration work before continuing.');
+ const accepted=await pgConfirm({acceptLabel:'Import',title:'Import this PGenerator+ system backup?',body:'Matching system settings, profiles and custom diagnostic media will be replaced. Existing history and media with different names will be preserved. A local rollback backup will be created first. Stop all measurements and calibration work before continuing.'});
  if(!accepted){if(input)input.value='';return;}
  const btn=document.getElementById('importSystemSettingsBtn');
  if(btn){btn.disabled=true;btn.textContent='Importing...';}
@@ -3827,7 +3841,7 @@ async function importSystemSettingsFile(file){
     const count=Number(result.restored_files)||0;
     systemBackupSetStatus('Import complete. Restored '+count+' files. Reboot to apply all settings.',false);
     toast('System backup imported');
-    if(confirm('System backup imported successfully. Reboot PGenerator+ now to apply all restored settings?')){
+    if(await pgConfirm({title:'System backup imported',body:'Reboot PGenerator+ now to apply all restored settings?',acceptLabel:'Reboot',cancelLabel:'Later'})){
      const reboot=await fetchJSON('/api/reboot',{method:'POST'});
      if(!reboot||reboot.status!=='ok')throw new Error(reboot&&reboot.message?reboot.message:'Could not start reboot');
      systemBackupSetStatus('Rebooting PGenerator+...',false);
@@ -14746,7 +14760,7 @@ function meterConfirmReferenceWhiteRead(requestedStep,whiteStep){
  if(!requestedStep||!whiteStep) return false;
  const targetLabel=meterReadingPatchLabel(requestedStep);
  const whiteLabel=meterReadingPatchLabel(whiteStep);
- return window.confirm('No measured 100% white reference is available for this greyscale chart.\n\nRead '+whiteLabel+' first, then return to '+targetLabel+'?\n\nCancel will read '+targetLabel+' without a reference white.');
+ return pgConfirm({title:'No 100% white reference',body:'No measured 100% white reference is available for this greyscale chart.\n\nRead '+whiteLabel+' first, then return to '+targetLabel+'?',acceptLabel:'Read white first',cancelLabel:'Read without reference'});
 }
 
 // Resolve the current step's expected target luminance through the same target
@@ -15875,7 +15889,7 @@ async function meterReadOnce(){
  if(!meterEnsureAppliedGeneratorSettings()) return;
  const requestedStep=meterClonePatchStep(meterCurrentPatchStep);
  const referenceWhiteStep=meterReferenceWhitePromptStep(requestedStep);
- const readReferenceWhiteFirst=referenceWhiteStep?meterConfirmReferenceWhiteRead(requestedStep,referenceWhiteStep):false;
+ const readReferenceWhiteFirst=referenceWhiteStep?await meterConfirmReferenceWhiteRead(requestedStep,referenceWhiteStep):false;
  // Enter manual mode: clear any leftover series poller/state so stale series
  // snapshots cannot repaint the charts after this manual read.
  const _priorRunActive=meterContinuousActive||meterSeriesRunning;

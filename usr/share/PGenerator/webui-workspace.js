@@ -11296,7 +11296,7 @@ async function meterStartLg3dAutoCal(options){
    : (signalMode==='hdr10'?'HDR10':'LG')+' 3D LUT AutoCal '
      +(meterLg3dIsVolumeMethod(method)?'profiles '+latticePatches.length+' patches ('+String(latticeSeries&&latticeSeries.name||method)+') and ':'')
      +'assumes the greyscale AutoCal has already been completed. Continue with color-only 3D LUT calibration from the current TV state?';
-  const accepted=window.confirm(message);
+  const accepted=await pgConfirm(message);
   if(!accepted) return false;
  }
  // Save the preview .cube on the generator now (post-confirm) and resolve
@@ -19015,7 +19015,7 @@ async function meterExportHcfrChc(){
   const chc=await meterEnsureHcfrChcModule();
   const built=meterBuildHcfrExportModel(),s=built.summary;
   const message='Export '+s.mode.toUpperCase()+' session?\n\nRGB range: '+String(s.rgbRange||'unknown').toUpperCase()+'\nGreyscale: '+s.grayscale+'\nSaturation: '+s.saturations+'\nColorChecker: '+s.colorChecker+'\nFree measurements: '+s.free+(s.warnings.length?'\n\nWarnings:\n'+s.warnings.join('\n'):'');
-  if(!window.confirm(message)) return;
+  if(!await pgConfirm(message)) return;
   let filename=meterPromptExportFilename('chc','pgenerator_'+s.mode+'_session','chc','Enter a file name for the HCFR session');
   if(!filename) filename=meterDefaultExportFilename('chc','pgenerator_'+s.mode+'_session','chc');
   const bytes=chc.serializeHcfrChc(built.model);
@@ -19063,7 +19063,7 @@ async function meterImportHcfrChcFile(input){
   const sourceRange=(parsed.generator&&parsed.generator.rgbRange)||'unknown';
   const groupLines=Object.entries(sum.groups).filter(([,g])=>g.valid).map(([name,g])=>name+': '+g.valid);
   const warning=mode!==String(meterChartSignalMode()||'sdr').toLowerCase()?'\n\nThe imported analysis mode is '+mode.toUpperCase()+'; output settings will NOT be changed or restarted.':'';
-  if(!window.confirm('Import '+file.name+'?\n\nFormat v'+parsed.fileVersion+', measurements v'+parsed.measurementVersion+'\nGenerator RGB range: '+sourceRange.toUpperCase()+'\n'+groupLines.join('\n')+'\nFixed readings: '+Object.values(sum.fixed).filter(Boolean).length+warning+'\n\nAnalysis preferences will be applied. Output range will NOT be changed. Existing sessions will be preserved.'))return;
+  if(!await pgConfirm('Import '+file.name+'?\n\nFormat v'+parsed.fileVersion+', measurements v'+parsed.measurementVersion+'\nGenerator RGB range: '+sourceRange.toUpperCase()+'\n'+groupLines.join('\n')+'\nFixed readings: '+Object.values(sum.fixed).filter(Boolean).length+warning+'\n\nAnalysis preferences will be applied. Output range will NOT be changed. Existing sessions will be preserved.'))return;
   meterApplyHcfrAnalysisPreferences(parsed.preferences);
   // Activate the imported analysis context before constructing saturation and
   // ColorChecker steps. Their PQ encoding, target luminance and gamut helpers
@@ -19418,12 +19418,12 @@ meterLgGreyState={status:'idle',picture:null,message:'',needsRepair:false};
  if(showToastMsg) toast('Chart data cleared');
 }
 
-function meterNewSession(){
+async function meterNewSession(){
  if(meterAutoCalRunning||meterLg3dAutoCalRunning||meterFullAutoCalRunning||meterSeriesRunning){
   toast('Stop the active measurement first','err');
   return;
  }
- if(!window.confirm('Start a new session? This clears all chart data and series.')) return;
+ if(!await pgConfirm({title:'Start a new session?',body:'This clears all chart data and series.',acceptLabel:'New session'})) return;
  try{ meterClearResults(); }catch(e){}
  try{ if(typeof meterClearWorkflowProgress==='function') meterClearWorkflowProgress(); }catch(e){}
  toast('New session — charts cleared');
@@ -20833,7 +20833,7 @@ function meterDelayLoadValue(raw,explicit){
 }
 
 async function deleteCustomCcss(filename){
- if(!confirm('Delete '+filename+'?')) return false;
+ if(!await pgConfirm({title:'Delete '+filename+'?',acceptLabel:'Delete'})) return false;
  try{
   const r=await fetchJSON('/api/ccss/delete/'+encodeURIComponent(filename),{method:'POST',_timeoutMs:5000});
   if(r&&r.status==='ok'){

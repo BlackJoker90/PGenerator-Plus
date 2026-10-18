@@ -1808,7 +1808,7 @@ async function lgResetPictureMode(){
 	  return;
  }
  const label=mode?lgPictureModeLabel(mode):'the active mode';
- if(!confirm('Reset '+label+' picture settings?\n\nThis restores core picture defaults (brightness, contrast, backlight, etc.) for the mode. Greyscale DDC calibration is NOT wiped (use Auto Cal preflight for that).')) return;
+ if(!await pgConfirm('Reset '+label+' picture settings?\n\nThis restores core picture defaults (brightness, contrast, backlight, etc.) for the mode. Greyscale DDC calibration is NOT wiped (use Auto Cal preflight for that).')) return;
  lgSetPictureResetButtonsDisabled(true);
  const commandHandle=lgBeginCommand('Resetting LG picture mode');
  try{
@@ -2026,7 +2026,7 @@ async function lgCalHistoryReupload(id){
  const item=lgCalHistoryCache.find(x=>x&&x.id===id);
  if(!item){ toast('History item not found','err'); return; }
  if(item.type==='dv'&&item.reuploadable===0){ toast(item.note||'Cannot reupload this DV config','err'); return; }
- if(!window.confirm('Reupload this '+lgCalHistoryTypeLabel(item.type)+' to the TV?\n\nCalibration mode will be enabled, the payload uploaded, then calibration mode disabled.')) return;
+ if(!await pgConfirm('Reupload this '+lgCalHistoryTypeLabel(item.type)+' to the TV?\n\nCalibration mode will be enabled, the payload uploaded, then calibration mode disabled.')) return;
  lgCalHistoryBusy=true;
  try{
   if(typeof lgBeginCommand==='function') lgBeginCommand('Reuploading '+lgCalHistoryTypeLabel(item.type));

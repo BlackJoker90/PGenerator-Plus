@@ -3701,7 +3701,7 @@ function showUpdateCard(){
  if(!_updateChecked) checkUpdate();
 }
 async function applyUpdate(){
- if(!await pgConfirm({title:'Install update now?',body:'PGenerator+ will restart. Stop any running measurement or Calman session first.',acceptLabel:'Install'}))return;
+ if(!await pgConfirm({title:'Install update now?',body:'PGenerator+ will restart. Stop any running measurement or session first.',acceptLabel:'Install'}))return;
  document.getElementById('applyUpdateBtn').disabled=true;
  document.getElementById('updateStatus').innerHTML='<span class="spinner"></span> Downloading and installing...';
  const r=await fetchJSON('/api/update/apply',{method:'POST'});

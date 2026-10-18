@@ -984,7 +984,10 @@ sub webui_renderer_restart_begin (@) {
  foreach my $old (glob("/tmp/pgenerator-renderer-restart-*.status")) {
   unlink($old) if(-f $old && -M $old > (1/24));
  }
- my $restart_id=sprintf("%x-%x-%x-%x",int(Time::HiRes::time()*1000),$$,threads->tid(),int(rand(0x7fffffff)));
+ # Seconds and milliseconds separately: time()*1000 overflows "%x" on the
+ # Pi's 32-bit Perl and printed "ffffffff" for every restart.
+ my $now=Time::HiRes::time();
+ my $restart_id=sprintf("%x%03x-%x-%x-%x",int($now),int(($now-int($now))*1000),$$,threads->tid(),int(rand(0x7fffffff)));
  &webui_renderer_restart_status_write($restart_id,"pending","Waiting for the renderer restart worker.");
  return $restart_id;
 }
@@ -7881,6 +7884,17 @@ sub webui_meter_settings_load (@) {
 #         Custom CCSS API Functions           #
 ###############################################
 
+# Read a small file without forking `cat` (the HTTP workers are threads, and
+# forks from them can deadlock against malloc arena creation, see above).
+sub _webui_slurp (@) {
+ my $path=shift;
+ open(my $fh,"<",$path) or return "";
+ local $/;
+ my $content=<$fh>;
+ close($fh);
+ return defined($content) ? $content : "";
+}
+
 sub _webui_json_escape (@) {
  my $s="".shift;
  $s=~s/\\/\\\\/g;
@@ -10166,7 +10180,7 @@ sub webui_hdmi_connected (@) {
   foreach my $card (0..3) {
    my $p="/sys/class/drm/card${card}-${port}";
    if(-d $p) {
-    my $st=`cat $p/status 2>/dev/null`; chomp $st;
+    my $st=&_webui_slurp("$p/status"); chomp $st;
     return 1 if($st eq "connected");
    }
   }
@@ -10180,7 +10194,7 @@ sub webui_hdmi_port_status (@) {
   foreach my $card (0..3) {
    my $p="/sys/class/drm/card${card}-${port}";
    if(-d $p) {
-    my $st=`cat $p/status 2>/dev/null`; chomp $st;
+    my $st=&_webui_slurp("$p/status"); chomp $st;
     $ports{$port}=$st if($st ne "");
     last;
    }
@@ -10447,8 +10461,8 @@ sub webui_create_logs_bundle (@) {
  # System info
  push @out, "", "--- System Info ---";
  push @out, `uptime 2>/dev/null`; chomp($out[$#out]);
- push @out, `cat /proc/version 2>/dev/null`; chomp($out[$#out]);
- my $model=`cat /proc/device-tree/model 2>/dev/null`; chomp($model);
+ push @out, &_webui_slurp("/proc/version"); chomp($out[$#out]);
+ my $model=&_webui_slurp("/proc/device-tree/model"); chomp($model);
  push @out, "Model: $model" if($model);
  my $mem=`grep -E 'MemTotal|MemAvailable' /proc/meminfo 2>/dev/null`; chomp($mem);
  push @out, $mem;
@@ -10457,7 +10471,7 @@ sub webui_create_logs_bundle (@) {
 
  # PGenerator config
  push @out, "", "--- PGenerator.conf ---";
- push @out, `cat /etc/PGenerator/PGenerator.conf 2>/dev/null`;
+ push @out, &_webui_slurp("/etc/PGenerator/PGenerator.conf");
  chomp($out[$#out]);
 
  # Network
@@ -10466,7 +10480,7 @@ sub webui_create_logs_bundle (@) {
  push @out, "", "--- Routes ---";
  push @out, `ip route show 2>/dev/null`; chomp($out[$#out]);
  push @out, "", "--- DNS (resolv.conf) ---";
- push @out, `cat /etc/resolv.conf 2>/dev/null`; chomp($out[$#out]);
+ push @out, &_webui_slurp("/etc/resolv.conf"); chomp($out[$#out]);
  push @out, "", "--- WiFi Status ---";
  my $diag_wifi_status=`timeout 3 wpa_cli -i wlan0 status 2>/dev/null`;
  chomp($diag_wifi_status);
@@ -10528,7 +10542,7 @@ sub webui_create_logs_bundle (@) {
 
 	 # Operations file
 	 push @out, "", "--- operations.txt ---";
-	 push @out, `cat /var/lib/PGenerator/operations.txt 2>/dev/null`; chomp($out[$#out]);
+	 push @out, &_webui_slurp("/var/lib/PGenerator/operations.txt"); chomp($out[$#out]);
 
 	 # LG display endpoint capabilities
 	 push @out, "", "--- LG Display Status API ---";
@@ -10573,7 +10587,7 @@ sub webui_create_logs_bundle (@) {
  my @infos=glob("/var/lib/PGenerator/running/*.info");
  foreach my $f (@infos) {
   my $name=$f; $name=~s|.*/||;
-  my $content=`cat $f 2>/dev/null`; chomp($content);
+  my $content=&_webui_slurp($f); chomp($content);
   push @out, "$name: $content";
  }
  if(!@infos) {
@@ -10585,14 +10599,14 @@ sub webui_create_logs_bundle (@) {
  my $meter_log=`tail -n 500 /tmp/meter_session.log 2>/dev/null`; chomp($meter_log);
  push @out, ($meter_log ne "") ? $meter_log : "(none found)";
  push @out, "", "--- Meter Session Config ---";
- my $meter_cfg=`cat /tmp/meter_session.config 2>/dev/null`; chomp($meter_cfg);
+ my $meter_cfg=&_webui_slurp("/tmp/meter_session.config"); chomp($meter_cfg);
  push @out, ($meter_cfg ne "") ? $meter_cfg : "(none found)";
  push @out, "", "--- Meter Session PID ---";
- my $meter_pid=`cat /tmp/meter_session.pid 2>/dev/null`; chomp($meter_pid);
+ my $meter_pid=&_webui_slurp("/tmp/meter_session.pid"); chomp($meter_pid);
  push @out, ($meter_pid ne "") ? $meter_pid : "(none found)";
  foreach my $f (qw(/tmp/meter_read.json /tmp/meter_read_steps.json /tmp/meter_series.json /tmp/meter_series_steps.json /tmp/meter_settings.json)) {
   push @out, "", "--- $f ---";
-  my $content=`cat $f 2>/dev/null`; chomp($content);
+  my $content=&_webui_slurp($f); chomp($content);
   push @out, ($content ne "") ? $content : "(none found)";
  }
  push @out, "", "--- Meter Series API Status (/api/meter/series/status) ---";
@@ -10609,19 +10623,19 @@ sub webui_create_logs_bundle (@) {
  # per-iteration dE lines. The full-autocal report state is the saved
  # pre/post-cal series reads of the most recent run.
  push @out, "", "--- LG Greyscale AutoCal State (/tmp/meter_lg_autocal.json) ---";
- my $ac1_state=`cat /tmp/meter_lg_autocal.json 2>/dev/null`; chomp($ac1_state);
+ my $ac1_state=&_webui_slurp("/tmp/meter_lg_autocal.json"); chomp($ac1_state);
  push @out, ($ac1_state ne "") ? $ac1_state : "(none found)";
  push @out, "", "--- LG Greyscale AutoCal Log (/tmp/meter_lg_autocal.log, last 2000 lines) ---";
  my $ac1_log=`tail -n 2000 /tmp/meter_lg_autocal.log 2>/dev/null`; chomp($ac1_log);
  push @out, ($ac1_log ne "") ? $ac1_log : "(none found)";
  push @out, "", "--- LG 3D LUT AutoCal State (/tmp/meter_lg_3d_autocal.json) ---";
- my $ac3_state=`cat /tmp/meter_lg_3d_autocal.json 2>/dev/null`; chomp($ac3_state);
+ my $ac3_state=&_webui_slurp("/tmp/meter_lg_3d_autocal.json"); chomp($ac3_state);
  push @out, ($ac3_state ne "") ? $ac3_state : "(none found)";
  push @out, "", "--- LG 3D LUT AutoCal Log (/tmp/meter_lg_3d_autocal.log, last 1000 lines) ---";
  my $ac3_log=`tail -n 1000 /tmp/meter_lg_3d_autocal.log 2>/dev/null`; chomp($ac3_log);
  push @out, ($ac3_log ne "") ? $ac3_log : "(none found)";
  push @out, "", "--- Standalone 3D LUT Solve State (/tmp/lut_solve_state.json) ---";
- my $lut_solve_state=`cat /tmp/lut_solve_state.json 2>/dev/null`; chomp($lut_solve_state);
+ my $lut_solve_state=&_webui_slurp("/tmp/lut_solve_state.json"); chomp($lut_solve_state);
  push @out, ($lut_solve_state ne "") ? $lut_solve_state : "(none found)";
  push @out, "", "--- Standalone 3D LUT Solve Log (/tmp/lut_solve.log, last 1000 lines) ---";
  my $lut_solve_log=`tail -n 1000 /tmp/lut_solve.log 2>/dev/null`; chomp($lut_solve_log);
@@ -10646,7 +10660,7 @@ sub webui_create_logs_bundle (@) {
    for my $f (qw(manifest.json summary.json stages.ndjson grey-state.json 3d-state.json dv-profile-measurements.json colour-series.json grey-log.txt 3d-log.txt)) {
     my $path = "$rundir/$f";
     next if(!-f $path);
-    my $content = `cat '$path' 2>/dev/null`;
+    my $content = &_webui_slurp($path);
     chomp($content);
     push @out, "", "[$f]";
     push @out, ($content ne "") ? $content : "(empty)";
@@ -10660,7 +10674,7 @@ sub webui_create_logs_bundle (@) {
   (glob("/var/lib/PGenerator/reports/full-autocal/*.json"),glob("/tmp/PGenerator_full_autocal_reports/*.json"));
  if(scalar(@report_files)) {
   push @out, "File: ".$report_files[0];
-  my $report=`cat "$report_files[0]" 2>/dev/null`; chomp($report);
+  my $report=&_webui_slurp($report_files[0]); chomp($report);
   push @out, ($report ne "") ? $report : "(unreadable)";
  } else {
   push @out, "(no full-autocal report state found)";
@@ -10884,7 +10898,7 @@ sub webui_capabilities_json (@) {
   foreach my $card (0..3) {
    my $p="/sys/class/drm/card${card}-${port}";
    if(-d $p) {
-    my $st=`cat $p/status 2>/dev/null`; chomp $st;
+    my $st=&_webui_slurp("$p/status"); chomp $st;
     if($st eq "connected") {
      $edid_path="$p/edid";
      last;

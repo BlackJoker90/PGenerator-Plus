@@ -50,6 +50,21 @@ sub webui_preferred_rgb_quant_range (@) {
  return $quant_range;
 }
 
+# Range on the wire: 1 Limited, 2 Full. Default (0) is Limited for YCbCr
+# (the renderer's YCbCr scaling); for RGB the kernel picks it per mode and
+# the renderer, which resolves it the same way, records the result.
+sub effective_rgb_quant_range (@) {
+ my $quant_range=$pgenerator_conf{"rgb_quant_range"} || "0";
+ return $quant_range + 0 if($quant_range =~/^[12]$/);
+ return 1 if(($pgenerator_conf{"color_format"} || "0") ne "0");
+ if(open(my $fh,"<",$renderer_default_range_file)) {
+  my $line=<$fh> || "";
+  close($fh);
+  return $1 + 0 if($line =~/^([12])/);
+ }
+ return 2;
+}
+
 sub apply_source_rgb_quant_range (@) {
  my $source=lc(shift || "webui");
  my $quant_range=shift;

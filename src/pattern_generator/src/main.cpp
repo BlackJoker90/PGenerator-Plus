@@ -103,7 +103,7 @@ static void readPGeneratorConf() {
    and SIGHUP reload). */
 static void applySignalConf() {
  ofxRPI4Window::avi_info.output_format=atoi(color_format.c_str());
- ofxRPI4Window::avi_info.rgb_quant_range=atoi(rgb_quant_range.c_str());
+ ofxRPI4Window::avi_info.rgb_quant_range=ofxRPI4Window::effectiveRgbQuantRange(atoi(rgb_quant_range.c_str()),atoi(color_format.c_str()));
  /* C2: Set colorimetry to Default(0) for RGB, use conf value for YCbCr */
  if(atoi(color_format.c_str()) == 0) {
   ofxRPI4Window::avi_info.colorimetry=0;  /* RGB: Default colorimetry */
@@ -138,7 +138,8 @@ static const char *reloadSignalConf() {
  /* vc4 programs the CSC and the AVI quantisation range only on a modeset,
     and its connector check does not count "rgb quant range" as a reason
     for one: in place, the old CSC and infoframe would stay. */
- if(ofxRPI4Window::wireRgbQuantRange(atoi(rgb_quant_range.c_str()),atoi(color_format.c_str())) !=
+ int rq=ofxRPI4Window::effectiveRgbQuantRange(atoi(rgb_quant_range.c_str()),atoi(color_format.c_str()));
+ if(ofxRPI4Window::wireRgbQuantRange(rq,atoi(color_format.c_str())) !=
     ofxRPI4Window::wireRgbQuantRange(ofxRPI4Window::avi_info.rgb_quant_range,ofxRPI4Window::avi_info.output_format))
   return "rgb_quant_range";
  applySignalConf();

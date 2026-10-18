@@ -622,6 +622,10 @@ static void override_rgb_qr(uint64_t *value, const char *source) {
      * for RGB Limited); it satisfies a Limited conf. */
     if (*value == 3 && rgb_qr_override == 1)
         return;
+    /* Default (0): PGeneratord sets the range the kernel would pick for
+     * the mode (Limited for CEA VICs, Full otherwise), so keep it. */
+    if (rgb_qr_override == 0)
+        return;
     if (rgb_qr_prop_id && rgb_qr_found && *value != rgb_qr_override) {
         char old_val[24], new_val[24];
         itoa_simple(*value, old_val);

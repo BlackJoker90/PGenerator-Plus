@@ -1,5 +1,6 @@
 #include "ofxRPI4Window.h"
 #include "igt_edid.h"
+#include "cea_vic.h"
 
 #include <dlfcn.h>
 #include <fcntl.h>
@@ -1327,6 +1328,14 @@ bool ofxRPI4Window::InitDRM()
 		}
 	}
 	if(ofxRPI4Window::mode_idx!= -1) mode = connector->modes[ofxRPI4Window::mode_idx];
+	/* Default (0) is resolved here, so the CSC, the infoframe and the codes
+	   the renderer draws all follow the range the kernel would pick. */
+	default_rgb_quant_range = cea_default_rgb_quant_range(&mode);
+	WriteRunningFile("default-rgb-quant-range", default_rgb_quant_range == 1 ? "1\n" : "2\n");
+	if (avi_info.rgb_quant_range == 0 && avi_info.output_format == 0) {
+		avi_info.rgb_quant_range = default_rgb_quant_range;
+		ofLog() << "DRM: rgb quant range Default -> " << default_rgb_quant_range << " (VIC " << cea_vic_for_mode(&mode) << ")";
+	}
 
 	//End BiasiLinux patch for compatiblity with old version
 //    ofLog() << "DRM: Current Mode Index " << ofxRPI4Window::mode_idx;
@@ -1599,6 +1608,16 @@ uint64_t ofxRPI4Window::wireRgbQuantRange(int rgb_quant_range, int output_format
 	    rgbLimitedPassthroughSupported())
 		return 3;
 	return (uint64_t)rgb_quant_range;
+}
+
+int ofxRPI4Window::default_rgb_quant_range = 0;
+
+/* YCbCr keeps 0: the kernel's YCbCr path ignores the RGB range. */
+int ofxRPI4Window::effectiveRgbQuantRange(int rgb_quant_range, int output_format)
+{
+	if (rgb_quant_range == 0 && output_format == 0 && default_rgb_quant_range != 0)
+		return default_rgb_quant_range;
+	return rgb_quant_range;
 }
 
 ofShader ofxRPI4Window::shader;

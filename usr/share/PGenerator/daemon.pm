@@ -281,7 +281,8 @@ sub calman_reset_pattern_state (@) {
  $calman_bg="";
  $calman_win_size=10;
  $calman_explicit_max_bpc=0;
- $calman_rgb_quant_range=($pgenerator_conf{"rgb_quant_range"}||"2") + 0;
+ # 0: the client has not asked for a range; the WebUI setting applies.
+ $calman_rgb_quant_range=0;
  &calman_clear_last_pattern();
  &log("Calman: reset pattern state ($source)") if($source ne "");
 }
@@ -403,8 +404,10 @@ sub calman_clear_gci_connection (@) {
  }
 }
 
+# Every range the client sets is applied to the conf, and the WebUI can
+# change it during or between sessions: read the conf, not a session copy.
 sub calman_pattern_source_range (@) {
- return "LIMITED" if($calman_rgb_quant_range == 1);
+ return "LIMITED" if(&effective_rgb_quant_range() == 1);
  return "";
 }
 
@@ -471,7 +474,7 @@ sub calman_render_commandrgb_pattern (@) {
  my $cr_b=&calman_scale_value($cr_b_in,$input_max);
  my ($cr_size_effective,$cr_bg)=&calman_commandrgb_window("$cr_r,$cr_g,$cr_b",$cr_size,"CommandRGB");
  my $cr_rgb="$cr_r,$cr_g,$cr_b";
- &apply_source_rgb_quant_range("calman",$calman_rgb_quant_range);
+ &apply_source_rgb_quant_range("calman",$calman_rgb_quant_range) if($calman_rgb_quant_range =~/^[12]$/);
  my $cr_source_range=&calman_pattern_source_range();
  &log_calman_patch(type=>"CommandRGB",
                    raw=>"$cr_r_in,$cr_g_in,$cr_b_in",
@@ -687,8 +690,8 @@ sub calman_g1_ip (@) {
 # fall back.
 sub calman_render_g1_pattern (@) {
  my ($key,$pattern_name)=@_;
- my $range=($calman_rgb_quant_range == 1) ? "limited" : "full";
  my $source_range=&calman_pattern_source_range();
+ my $range=($source_range eq "LIMITED") ? "limited" : "full";
  my ($w,$h)=(int($w_s),int($h_s));
  return 0 if($w < 64 || $h < 64);
  my $dir=&calman_g1_cache_dir();
@@ -774,7 +777,6 @@ sub calman_render_g1_pattern (@) {
 # black, drawn in the range the WebUI has set.
 sub show_boot_pattern (@) {
  return if(!&hdmi_sink_connected());
- local $calman_rgb_quant_range=($pgenerator_conf{"rgb_quant_range"} || "2") + 0;
  &log("Boot: showing Basic Alignment") if(&calman_render_g1_pattern("basic_alignment"));
 }
 
@@ -1446,7 +1448,7 @@ sub pattern_daemon {
 	     my $calman_release_source_range = sub {
 	      return 0 if($calman_gci{$connection});
 	      &release_source_rgb_quant_range("calman");
-	      $calman_rgb_quant_range=&webui_preferred_rgb_quant_range() + 0;
+	      $calman_rgb_quant_range=0;
 	      return 1;
 	     };
 	     #
@@ -1683,7 +1685,7 @@ sub pattern_daemon {
 	        } else {
 	         &log("Calman: releasing external range via source settings");
 	         &release_source_rgb_quant_range("calman");
-	         $calman_rgb_quant_range=&webui_preferred_rgb_quant_range() + 0;
+	         $calman_rgb_quant_range=0;
 	        }
 	       }
 	      }
@@ -2043,7 +2045,7 @@ sub pattern_daemon {
       } else {
        &log("Calman: releasing external range via RPC RANGE=$rpc_payload");
        &release_source_rgb_quant_range("calman");
-       $calman_rgb_quant_range=&webui_preferred_rgb_quant_range() + 0;
+       $calman_rgb_quant_range=0;
       }
       &calman_replay_last_pattern("RPC RANGE");
       return 1;
@@ -2074,7 +2076,7 @@ sub pattern_daemon {
        } else {
         &log("Calman: releasing external range via RPC CMD");
         &release_source_rgb_quant_range("calman");
-        $calman_rgb_quant_range=&webui_preferred_rgb_quant_range() + 0;
+        $calman_rgb_quant_range=0;
        }
        &calman_replay_last_pattern("RPC CMD range");
        return 1;
@@ -2117,8 +2119,8 @@ sub pattern_daemon {
         &apply_source_rgb_quant_range("calman",$calman_rgb_quant_range);
        } else {
         &release_source_rgb_quant_range("calman");
-        $calman_rgb_quant_range=&webui_preferred_rgb_quant_range() + 0;
-        $calman_save_setting->("rgb_quant_range","$calman_rgb_quant_range");
+        $calman_rgb_quant_range=0;
+        $calman_save_setting->("rgb_quant_range",&webui_preferred_rgb_quant_range());
        }
        $calman_apply->(0) if(!$calman_gci{$connection});
        &calman_render_specialty_pattern($specialty);
@@ -2380,8 +2382,8 @@ sub pattern_daemon {
        } else {
         &log("Calman: releasing external range via QRNG=$pattern_cmd");
         &release_source_rgb_quant_range("calman");
-        $calman_rgb_quant_range=&webui_preferred_rgb_quant_range() + 0;
-        $calman_save_setting->("rgb_quant_range","$calman_rgb_quant_range");
+        $calman_rgb_quant_range=0;
+        $calman_save_setting->("rgb_quant_range",&webui_preferred_rgb_quant_range());
        }
       &calman_replay_last_pattern("QRNG");
       &send_key_to_client($connection,"");
@@ -2626,7 +2628,7 @@ sub pattern_daemon {
         } else {
         &log("Calman: releasing external range via CONF_LEVEL=$cl");
         &release_source_rgb_quant_range("calman");
-        $calman_rgb_quant_range=&webui_preferred_rgb_quant_range() + 0;
+        $calman_rgb_quant_range=0;
         &calman_replay_last_pattern("CONF_LEVEL range");
        }
 	      } elsif($cl =~/^Format\s+((?:YCBCR|YCC|YUV)\s*420.*)/i) {

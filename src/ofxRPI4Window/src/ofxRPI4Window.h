@@ -425,6 +425,11 @@ public:
 	static bool rgbLimitedPassthroughSupported();
 	static bool rgbLimitedPassthrough();
 	static uint64_t wireRgbQuantRange(int rgb_quant_range, int output_format);
+	/* Range "rgb quant range" Default (0) ends up as for the mode in use
+	   (1 Limited for a CEA VIC > 1, else 2 Full); 0 until InitDRM picked
+	   the mode. */
+	static int default_rgb_quant_range;
+	static int effectiveRgbQuantRange(int rgb_quant_range, int output_format);
 
 	void EGL_create_surface(EGLint attribs[], EGLConfig config);
 	

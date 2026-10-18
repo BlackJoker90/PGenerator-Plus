@@ -317,7 +317,7 @@ public:
 		EGL_CTA861_3_MAX_CONTENT_LIGHT_LEVEL_EXT,
 		EGL_CTA861_3_MAX_FRAME_AVERAGE_LEVEL_EXT
 	};   
-    int device;
+    int device = -1; // may legitimately be fd 0: the daemon spawns us without stdin
  
     drmModeModeInfo mode;
     struct gbm_device* gbmDevice = nullptr;

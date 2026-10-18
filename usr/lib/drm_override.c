@@ -752,6 +752,29 @@ static int normalize_dovi_metadata(uint8_t *metadata, uint32_t length,
  *   bytes 5-10: reserved (zeroes)
  *   byte 11:  DV param (0xb6)
  */
+/* DOVI blobs with dv_status=0 ("Dolby Vision off") created by the renderer.
+ * The vc4 kernel never clears the vendor infoframe for a 0 blob, so leaving
+ * DV attaches one of these; they must be neither normalized to "active" nor
+ * blocked while dv_status=0. */
+#define DOVI_OFF_BLOBS 8
+static uint32_t dovi_off_blob_ids[DOVI_OFF_BLOBS];
+static int dovi_off_blob_next = 0;
+
+static void remember_dovi_off_blob(uint32_t blob_id) {
+    if (!blob_id) return;
+    dovi_off_blob_ids[dovi_off_blob_next] = blob_id;
+    dovi_off_blob_next = (dovi_off_blob_next + 1) % DOVI_OFF_BLOBS;
+    write_log("DRM_OVERRIDE: renderer created DOVI off blob\n");
+}
+
+static int is_dovi_off_blob(uint64_t blob_id) {
+    int i;
+    if (!blob_id) return 0;
+    for (i = 0; i < DOVI_OFF_BLOBS; i++)
+        if (dovi_off_blob_ids[i] == blob_id) return 1;
+    return 0;
+}
+
 static uint32_t create_dovi_blob(int fd) {
     if (dovi_blob_id) return dovi_blob_id;
 
@@ -963,6 +986,12 @@ int ioctl(int fd, unsigned long request, ...) {
         if (cb && cb->data && cb->length == 12) {
             uint8_t metadata[12];
             memcpy(metadata, (uint8_t *)(uintptr_t)cb->data, sizeof(metadata));
+            if (metadata[4] == 0x00) {
+                long ret = raw_ioctl(fd, request, arg);
+                if (ret == 0)
+                    remember_dovi_off_blob(cb->blob_id);
+                return ret;
+            }
             if (normalize_dovi_metadata(metadata, cb->length, "createblob")) {
                 uint64_t original_data = cb->data;
                 long ret;
@@ -1078,7 +1107,8 @@ int ioctl(int fd, unsigned long request, ...) {
             if (rgb_qr_prop_id && props[i] == rgb_qr_prop_id)
                 override_rgb_qr(&values[i], "atomic");
             if (dovi_meta_prop_id && props[i] == dovi_meta_prop_id
-                && dv_status == 0 && values[i] != 0) {
+                && dv_status == 0 && values[i] != 0
+                && !is_dovi_off_blob(values[i])) {
                 char old_val[24];
                 itoa_simple(values[i], old_val);
                 write_log("DRM_OVERRIDE: blocking DOVI blob_id=");
@@ -1235,7 +1265,7 @@ int ioctl(int fd, unsigned long request, ...) {
         if (rgb_qr_prop_id && sp->prop_id == rgb_qr_prop_id)
             override_rgb_qr(&sp->value, "setprop_obj");
         if (dovi_meta_prop_id && sp->prop_id == dovi_meta_prop_id && dv_status == 0) {
-            if (sp->value != 0) {
+            if (sp->value != 0 && !is_dovi_off_blob(sp->value)) {
                 write_log("DRM_OVERRIDE: blocking DOVI blob (dv_status=0, setprop_obj)\n");
                 sp->value = 0;
             }

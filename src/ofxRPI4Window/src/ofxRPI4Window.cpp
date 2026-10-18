@@ -3417,6 +3417,23 @@ float timedifference_msec(struct timeval t0, struct timeval t1)
     return (t1.tv_sec - t0.tv_sec) * 1000.0f + (t1.tv_usec - t0.tv_usec) / 1000.0f;
 }
 
+/* The vc4 kernel only (re)writes the vendor infoframe packet when a DOVI blob
+ * is attached; a 0 blob leaves the last DV VSIF in the packet RAM, so the
+ * sink keeps seeing Dolby Vision on every resync until something overwrites
+ * it. Leaving DV therefore attaches a Dolby VSIF with dv_status=0 (the
+ * signalled "Dolby Vision off") instead. drm_override.so lets these blobs
+ * through unchanged. Returns 0 if the blob could not be created. */
+static uint32_t create_dovi_off_blob(int fd)
+{
+	struct dovi_output_metadata dovi = {};
+	uint32_t blob_id = 0;
+	dovi.oui = 0x00D046; // Dolby OUI: the IEEE OUI packet has no off state
+	dovi.dv_status = 0;
+	if (drmModeCreatePropertyBlob(fd, &dovi, sizeof(dovi), &blob_id) != 0)
+		return 0;
+	return blob_id;
+}
+
 void ofxRPI4Window::ResetConnectorProperties()
 {
 	bool ok;
@@ -3478,7 +3495,8 @@ void ofxRPI4Window::ResetConnectorProperties()
 
 		if (blob_id) {
 			drmModeDestroyPropertyBlob(device, blob_id);
-			blob_id = 0;
+			// see create_dovi_off_blob(): a 0 blob keeps the last DV VSIF
+			blob_id = create_dovi_off_blob(device);
 		}
 		drm_mode_atomic_set_property(device, req, "DOVI_OUTPUT_METADATA", connectorId,	prop_id, blob_id, prop, DRM_MODE_ATOMIC_ALLOW_MODESET);
 	}
@@ -3506,8 +3524,11 @@ void ofxRPI4Window::ResetConnectorOnExit()
 	};
 	uint64_t value = 0;
 
-	if (exit_reset_done || device <= 0 || !connectorId)
+	if (exit_reset_done || device < 0 || !connectorId) {
+		if (!exit_reset_done)
+			fprintf(stderr, "PGEN: exit connector reset skipped (device=%d connector=%u)\n", device, (unsigned)connectorId);
 		return;
+	}
 	exit_reset_done = true;
 
 	if (req) {
@@ -3516,8 +3537,13 @@ void ofxRPI4Window::ResetConnectorOnExit()
 	}
 	batch_req = true;
 	for (size_t i = 0; i < sizeof(reset_props) / sizeof(reset_props[0]); i++) {
-		if (drm_mode_get_property(device, connectorId, DRM_MODE_OBJECT_CONNECTOR, reset_props[i].name, &prop_id, &value, &prop))
-			drm_mode_atomic_set_property(device, req, reset_props[i].name, connectorId, prop_id, reset_props[i].value, prop, 0);
+		if (drm_mode_get_property(device, connectorId, DRM_MODE_OBJECT_CONNECTOR, reset_props[i].name, &prop_id, &value, &prop)) {
+			uint64_t reset_value = reset_props[i].value;
+			// A DV blob that is merely cleared keeps its VSIF on the wire.
+			if (value && strcmp(reset_props[i].name, "DOVI_OUTPUT_METADATA") == 0)
+				reset_value = create_dovi_off_blob(device);
+			drm_mode_atomic_set_property(device, req, reset_props[i].name, connectorId, prop_id, reset_value, prop, 0);
+		}
 	}
 	batch_req = false;
 	first_req = 0;
@@ -3873,10 +3899,13 @@ void ofxRPI4Window::updateDoVi_Infoframe(int enable, int dv_interface)
 	if (!ok) {
 		ofLogError() << "Unable to find DOVI_OUTPUT_METADATA";
 	} else {
+		bool had_blob = blob_id != 0;
 		if (blob_id)
 			drmModeDestroyPropertyBlob(device, blob_id);
 		blob_id = 0;	
 		if (!enable) {
+			if (had_blob)
+				blob_id = create_dovi_off_blob(device);
 			first_req = 1; // allocate for atomic requests
 			last_req = 1; // commit previous atomic requests	
 			drm_mode_atomic_set_property(device, req, "DOVI_OUTPUT_METADATA", connectorId, prop_id, blob_id, prop, DRM_MODE_ATOMIC_ALLOW_MODESET);

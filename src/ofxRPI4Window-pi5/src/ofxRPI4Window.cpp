@@ -3693,7 +3693,7 @@ void ofxRPI4Window::ResetConnectorOnExit()
 	};
 	uint64_t value = 0;
 
-	if (exit_reset_done || device <= 0 || !connectorId)
+	if (exit_reset_done || device < 0 || !connectorId)
 		return;
 	exit_reset_done = true;
 

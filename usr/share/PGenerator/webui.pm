@@ -11252,7 +11252,15 @@ sub webui_hdmi_link_json (@) {
  my $div=(($reg{"HDMI_TX_PHY_CLK_DIV"} || 0) >> 8) & 0xff;
  # VCO = RM offset (9.22 fixed point) * 54 MHz / 2^21; TMDS = VCO / (div * 10)
  $tmds=($reg{"HDMI_RM_OFFSET"} & 0x7fffffff) * 54 / 2097152 / ($div * 10) if($div && $reg{"HDMI_RM_OFFSET"});
- return sprintf(",\"link\":{\"port\":\"HDMI-A-%d\",\"bpc\":%d,\"gcp\":%d,\"tmds_mhz\":%.3f}",$port,$bpc,$gcp,$tmds);
+ # Without a renderer the link carries the console/splash mode, not the
+ # configured signal.
+ my $renderer=0;
+ if(open(my $pf,"<","/run/PGenerator/PGeneratord.pid")) {
+  my $pid=<$pf>;
+  close($pf);
+  $renderer=1 if(defined($pid) && $pid=~/^\s*(\d+)/ && -e "/proc/$1");
+ }
+ return sprintf(",\"link\":{\"port\":\"HDMI-A-%d\",\"bpc\":%d,\"gcp\":%d,\"tmds_mhz\":%.3f,\"renderer\":%d}",$port,$bpc,$gcp,$tmds,$renderer);
 }
 
 sub webui_infoframes_json (@) {

@@ -3236,6 +3236,7 @@ function pgUtilityHdmiLinkText(){
  const link=window._hdmiLink;
  if(!link||!link.bpc) return '-';
  const mhz=link.tmds_mhz?' · '+Number(link.tmds_mhz).toFixed(2)+' MHz':'';
+ if(link.renderer===0) return 'Renderer idle (console mode)'+mhz;
  if(window._hdmiAviColor==='YCbCr 4:2:2') return '4:2:2 (12-bit container)'+mhz;
  return link.bpc+'-bit'+(link.bpc>8&&!link.gcp?' (no GCP)':'')+mhz;
 }

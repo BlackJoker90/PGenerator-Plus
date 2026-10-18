@@ -68,6 +68,9 @@ sub calman_dv_source_max (@) {
 sub calman_target_max (@) {
  my $dv_source_max=&calman_dv_source_max();
  return $dv_source_max if($dv_source_max > 0);
+ # $bits_default is per thread but %pgenerator_conf is shared: a bit depth
+ # the WebUI set while Calman was connected left this thread at the old one.
+ &sync_pattern_bits_default();
  my $bits=int($bits_default || 8);
  return 1023 if($bits == 10);
  return 4095 if($bits == 12);

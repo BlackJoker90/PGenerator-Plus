@@ -2130,7 +2130,8 @@ function dvTransportDefault(configKey,capsKey,fallback){
  return fallback;
 }
 function dvTransportMode(value){
- return 'standard';
+ // Same rule as pg_dv_transport_mode() in variables.pm.
+ return String(value||'').toLowerCase()==='lldv' ? 'lldv' : 'standard';
 }
 function dvRgbMaxBpc(value){
  return String(value||'').trim()==='10' ? '10' : '8';

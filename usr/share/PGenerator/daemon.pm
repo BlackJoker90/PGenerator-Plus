@@ -1627,7 +1627,9 @@ sub pattern_daemon {
           # leaving it dead and relying on the next pattern
           # request to trigger a recovery. This is the same
           # retry ladder as load_new_pattern_file in pattern.pm.
-          if(!&pattern_generator_is_running()) {
+          # Without a display the start is deferred, so the ladder
+          # would only block the daemon for ~6s.
+          if(!&pattern_generator_is_running() && &hdmi_sink_connected()) {
            select(undef,undef,undef,0.6);
            if(!&pattern_generator_is_running()) {
             &log("Calman: apply — renderer not running after first start, retrying (DRM master race)");

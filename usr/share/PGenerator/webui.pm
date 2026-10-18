@@ -1037,6 +1037,32 @@ sub webui_wait_for_dovi_wire (@) {
  return 0;
 }
 
+# The renderer can take DRM master and still die a moment later in its
+# EGL/GBM setup (e.g. no EGL config for the requested surface). Hold
+# "ready" until it has stayed up for a short settle window.
+sub webui_renderer_stays_up (@) {
+ my $seconds=shift || 3;
+ my $deadline=Time::HiRes::time()+$seconds;
+ while(Time::HiRes::time() < $deadline) {
+  return 0 if(!&pattern_generator_is_running());
+  Time::HiRes::sleep(0.2);
+ }
+ return &pattern_generator_is_running() ? 1 : 0;
+}
+
+# Last error-looking line the renderer printed (see pattern_generator_start).
+sub webui_renderer_last_error (@) {
+ my $last="";
+ if(open(my $fh,"<","/tmp/renderer-spawn.log")) {
+  while(my $line=<$fh>) {
+   $last=$line if($line=~/error|fail|abort|cannot|unable|denied|busy/i);
+  }
+  close($fh);
+ }
+ $last=~s/^\s+|\s+$//g;
+ return substr($last,0,160);
+}
+
 sub webui_complete_renderer_restart (@) {
  my $restart_id=shift;
  my $apply_hint=shift;
@@ -1058,7 +1084,18 @@ sub webui_complete_renderer_restart (@) {
  &webui_renderer_restart_status_write($restart_id,"starting","Restarting the renderer and waiting for DRM readiness.");
  &pattern_generator_stop();
  &load_new_pattern_file("webui apply");
- if(&webui_wait_for_renderer_ready(12)) {
+ if(!&pattern_generator_is_running() && !&hdmi_sink_connected()) {
+  &webui_renderer_restart_status_write($restart_id,"ready","Settings saved. No HDMI display is connected; the renderer starts when one is plugged in.");
+  &log("WebUI: renderer restart $restart_id deferred (no HDMI display connected)");
+  return 1;
+ }
+ if(&webui_wait_for_renderer_ready(12) && !&webui_renderer_stays_up(3)) {
+  my $why=&webui_renderer_last_error();
+  &webui_renderer_restart_status_write($restart_id,"error","The renderer started but exited again".($why ne "" ? ": $why" : "."));
+  &log("WebUI: renderer restart $restart_id failed: renderer exited after taking DRM master".($why ne "" ? " ($why)" : ""));
+  return 0;
+ }
+ if(&webui_wait_for_renderer_ready(2)) {
   # DRM-master handoff completes several seconds before the renderer's
   # first page flip, and in Dolby Vision mode only that flip commits the
   # DOVI_OUTPUT_METADATA blob (the Dolby VSIF) to the connector: the DV

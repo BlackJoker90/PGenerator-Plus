@@ -29,6 +29,7 @@ sub fork_pattern_daemon (@) {
   $SIG{PIPE}='IGNORE';
   open(STDERR,">>/tmp/pg_stderr.log");
   &pattern_generator_start();
+  &show_boot_pattern();
   threads->create(\&device_info)->detach();
   threads->create(\&discovery_devicecontrol)->detach();
   threads->create(\&discovery_lightspace)->detach();
@@ -650,6 +651,8 @@ sub calman_render_g1_pattern (@) {
  return 0 if($w < 64 || $h < 64);
  my $dir=&calman_g1_cache_dir();
  my %opt=(range => $range);
+ # Animations step once per refresh, so they need the output rate.
+ $opt{hz}=$1 + 0 if($preferred_mode =~/\s([\d.]+)Hz/);
  my $tag="${key}_${w}x${h}_$range";
  # Granger is a smooth field: render a quarter of the pixels and let
  # convert scale it, which keeps the first draw well inside Calman's
@@ -719,8 +722,16 @@ sub calman_render_g1_pattern (@) {
  }
  &create_tmp_file($ps,$source_range);
  &load_new_pattern_file("calman");
- &log("Calman G1: $key ${w}x${h} range=$range frames=".scalar(@frames));
+ &log("Calman G1: $key ${w}x${h} range=$range frames=".scalar(@frames).(scalar(@frames) > 1 ? " hz=".($opt{hz} || "default") : ""));
  return 1;
+}
+
+# After the daemon starts, show the G1 Basic Alignment plate instead of
+# black, drawn in the range the WebUI has set.
+sub show_boot_pattern (@) {
+ return if(!&hdmi_sink_connected());
+ local $calman_rgb_quant_range=($pgenerator_conf{"rgb_quant_range"} || "2") + 0;
+ &log("Boot: showing Basic Alignment") if(&calman_render_g1_pattern("basic_alignment"));
 }
 
 sub calman_render_specialty_pattern (@) {

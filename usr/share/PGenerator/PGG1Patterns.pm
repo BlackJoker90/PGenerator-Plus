@@ -651,7 +651,27 @@ sub _ss_logo {
  return $im;
 }
 
-# A logo drifting over mid grey, bouncing off the edges.
+# The renderer draws one frame per refresh and holds at most 2048 frames
+# per pattern. It moves to the next frame on the first flip after the
+# frame's time has passed, so a time just under k refreshes holds every
+# frame for exactly k refreshes. Animations step every refresh, or every
+# k-th one when a loop of $seconds would not fit into $max frames.
+# Returns (frames, ms per frame).
+use constant ANIM_MAX_FRAMES => 2000;
+sub _anim_timing {
+ my ($o,$seconds,$max)=@_;
+ my $hz=($o->{hz} && $o->{hz} >= 10) ? $o->{hz} : 60;
+ $max=ANIM_MAX_FRAMES if(!$max);
+ my $k=1;
+ $k++ while($seconds*$hz/$k > $max);
+ my $n=int($seconds*$hz/$k+0.5);
+ my $ms=($k == 1) ? 1 : int(($k-0.5)*1000/$hz);
+ return ($n,$ms);
+}
+
+# A logo drifting over mid grey, bouncing off the edges. Per one-minute
+# loop it crosses the screen four times horizontally and twice vertically,
+# so the last frame runs straight into the first.
 sub _screensaver {
  my ($w,$h,$o)=@_;
  my $logo=_ss_logo($w,$h,$o);
@@ -659,12 +679,12 @@ sub _screensaver {
  my ($mx,$my)=($w-$lw,$h-$lh);
  $mx=1 if($mx < 1); $my=1 if($my < 1);
  my @frames;
- my ($n,$ms)=(600,100);
- my ($vx,$vy)=($w/200,$h/260);
+ my ($n,$ms)=_anim_timing($o,60);
+ my ($vx,$vy)=(2*2*$mx/$n,2*$my/$n);
  for my $i (0..$n-1) {
   my $x=_bounce($w/2-$lw/2+$vx*$i,$mx);
   my $y=_bounce($h/2-$lh/2+$vy*$i,$my);
-  push(@frames,{img => $logo, ms => $ms, x => int($x), y => int($y)});
+  push(@frames,{img => $logo, ms => $ms, x => int($x+0.5), y => int($y+0.5)});
  }
  return {frames => \@frames, bg => _lc($o,94,94,94)};
 }
@@ -759,12 +779,12 @@ sub _warmup {
   _paste($vs,$box,int($w/10),int($k*$strip_h/2+$h*0.35));
  }
  my @frames;
- my ($n,$ms)=(160,40);
+ my ($n,$ms)=_anim_timing($o,6.4,ANIM_MAX_FRAMES/2);
  for my $i (0..$n-1) {
-  push(@frames,{img => $hs, ms => $ms, x => -int(($strip_w-$w)*$i/$n), y => 0});
+  push(@frames,{img => $hs, ms => $ms, x => -int(($strip_w-$w)*$i/$n+0.5), y => 0});
  }
  for my $i (0..$n-1) {
-  push(@frames,{img => $vs, ms => $ms, x => 0, y => -int(($strip_h-$h)*($n-1-$i)/$n)});
+  push(@frames,{img => $vs, ms => $ms, x => 0, y => -int(($strip_h-$h)*($n-1-$i)/$n+0.5)});
  }
  return {frames => \@frames, bg => [0,0,0]};
 }

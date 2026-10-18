@@ -853,6 +853,8 @@ sub renderer_start_when_hdmi_connected (@) {
  # renderer. The retry ladder takes over if that start loses the DRM race.
  &pattern_generator_start();
  &load_new_pattern_file("hdmi hotplug") if(!&pattern_generator_is_running());
+ # The boot start was deferred until now, so show the boot pattern here.
+ &show_boot_pattern() if(defined &show_boot_pattern);
 }
 
 sub pattern_generator_start(@) {

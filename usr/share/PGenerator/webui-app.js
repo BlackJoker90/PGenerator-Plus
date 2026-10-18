@@ -18471,7 +18471,21 @@ function meterGreyModeSignatureLabel(){
  return parts.join(' \u00b7 ');
 }
 
+// Normalising walks every saved profile (a few hundred KB once a history has
+// built up), and drawing the greyscale target curves reads the active profile
+// for every curve point: >1000 full walks, ~0.5 s on a desktop and seconds on
+// a phone. Reuse the result until the state object is replaced or the current
+// task ends; edits arrive in their own event handlers and get a fresh pass.
+let meterGreyNormalizedState=null;
 function meterGreyNormalizeProfilesState(){
+ if(meterGreyNormalizedState&&meterGreyNormalizedState===meterGreyPatchProfiles) return meterGreyPatchProfiles;
+ const state=meterGreyNormalizeProfilesStateNow();
+ meterGreyNormalizedState=state;
+ setTimeout(()=>{ meterGreyNormalizedState=null; },0);
+ return state;
+}
+
+function meterGreyNormalizeProfilesStateNow(){
  if(!meterGreyPatchProfiles||typeof meterGreyPatchProfiles!=='object') meterGreyPatchProfiles={};
  meterGreyPatchProfiles.format='pgenerator-greyscale-profile-v2';
  meterGreyPatchProfiles.apply_to_all_modes=!!meterGreyPatchProfiles.apply_to_all_modes;

@@ -9960,13 +9960,24 @@ sub webui_apply_config (@) {
   min_luma max_luma max_cll max_fall color_format max_bpc rgb_quant_range
     dv_status is_ll_dovi is_std_dovi dv_interface dv_profile dv_metadata dv_color_space dv_map_mode dv_transport);
 
+  my @conf_writes=();
   foreach my $k (sort keys %changes) {
    next if($k eq "ip_pattern" || $k eq "port_pattern"); # read-only
    my $cur=defined($pgenerator_conf{$k}) ? "$pgenerator_conf{$k}" : "";
    my $value_changed=("$changes{$k}" ne $cur);
-   &sudo("SET_PGENERATOR_CONF",$k,$changes{$k});
-   $pgenerator_conf{$k}=$changes{$k};
+   # A sudo + perl helper spawn costs ~0.35s and a signal-mode switch
+   # backfills ~20 keys, most unchanged: written one by one that delayed the
+   # reply and the renderer restart by ~4s. %pgenerator_conf was reloaded
+   # above, so an unchanged key is already on disk; the rest go out in one
+   # SET_PGENERATOR_CONF_MULTI below. dv_metadata/dv_map_mode stay
+   # unconditional: the helper rewrites each as the other's pair.
    $webui_rgb_quant_range_preferred=$changes{$k} if($k eq "rgb_quant_range");
+   next if(!$value_changed && $k ne "dv_metadata" && $k ne "dv_map_mode");
+   # sudo() joins base64 args with spaces, so an empty value (delete the
+   # key) would vanish and shift every later pair: write those singly.
+   if("$changes{$k}" eq "") { &sudo("SET_PGENERATOR_CONF",$k,""); }
+   else { push(@conf_writes,$k,$changes{$k}); }
+   $pgenerator_conf{$k}=$changes{$k};
    # Only a restart-key whose value actually CHANGED bounces the renderer.
    # The derivation above backfills keys unconditionally (signal_mode on
    # every POST; max_bpc=10 whenever the live color format is YCbCr 422),
@@ -9977,6 +9988,7 @@ sub webui_apply_config (@) {
     $changed_restart_keys{$k}=1;
    }
   }
+  &sudo("SET_PGENERATOR_CONF_MULTI",@conf_writes) if(@conf_writes);
  # Resolve card knobs: redraw the live Resolve patch immediately so the
  # operator sees the change without waiting for the calibration software's
  # next pattern message.

@@ -105,6 +105,21 @@ sub set_pgenerator_conf_runtime(@) {
  $pgenerator_conf{$key}="$value";
 }
 
+# Several keys in one root-helper call (each sudo spawn costs ~0.35s). Empty
+# values are written singly: sudo() joins base64 args with spaces, so an
+# empty one would vanish and shift every later pair.
+sub set_pgenerator_conf_runtime_multi(@) {
+ my @pairs=@_;
+ my @batch=();
+ for(my $i=0; $i+1 <= $#pairs; $i+=2) {
+  my ($key,$value)=($pairs[$i],$pairs[$i+1]);
+  if("$value" eq "") { &sudo("SET_PGENERATOR_CONF",$key,""); }
+  else { push(@batch,$key,$value); }
+  $pgenerator_conf{$key}="$value";
+ }
+ &sudo("SET_PGENERATOR_CONF_MULTI",@batch) if(@batch);
+}
+
 # Classic CMD protocol (DeviceControl / custom clients) uses 1.6 wire units for
 # MIN_LUMA: integer steps of 0.0001 nits (e.g. 5 = 0.0005 nits). Plus stores
 # conf min_luma as nits for the WebUI/renderer, so convert at the CMD boundary.
@@ -172,10 +187,12 @@ sub normalize_dv_transport_conf(@) {
   max_bpc=>&pg_dv_transport_max_bpc($dv_transport),
   rgb_quant_range=>"2"
  );
+ my @writes=();
  for my $key (sort keys %wanted) {
   next if(($pgenerator_conf{$key} || "") eq $wanted{$key});
-  &set_pgenerator_conf_runtime($key,$wanted{$key});
+  push(@writes,$key,$wanted{$key});
  }
+ &set_pgenerator_conf_runtime_multi(@writes) if(@writes);
 }
 
 # Reconcile the legacy, independently-written signal flags at the renderer
@@ -446,8 +463,10 @@ sub wait_for_drm_master_unowned (@) {
     # kernel's master release is visibly not synchronous with the
     # next open() on a hot Pi4 vc4 boot. The renderer's
     # drmSetMaster was returning EBUSY (Device or resource busy)
-    # even 500ms after the drop; 2s is empirically enough.
-    select(undef,undef,undef,2);
+    # even 500ms after the drop. This used to sleep 2s on every
+    # renderer start; the renderer now retries drmSetMaster for 2s
+    # itself (InitDRM), so only a short settle is left here.
+    select(undef,undef,undef,0.1);
     last;
    }
    if($waited_ms == 0) {
@@ -731,6 +750,34 @@ sub apply_hdr_metadata_helper (@) {
 # waiting for DRM master: at boot that delays the WebUI and mDNS past the
 # watchdog's probe, which restarts PGenerator every minute. Missing sysfs
 # entries (non-KMS) never block a start.
+# The kernel shows the fbdev buffer whenever the renderer releases DRM (every
+# signal-mode switch). rcPGenerator unbinds the text console and leaves the
+# boot splash in it; once a renderer has run, paint it black so switches show
+# black instead of the splash. Done once per daemon (nothing else draws on it).
+my $console_framebuffer_blanked=0;
+sub blank_console_framebuffer (@) {
+ return if($console_framebuffer_blanked || !$is_kms);
+ my $fb="/dev/fb0";
+ return if(! -c $fb);
+ my ($w,$h,$bpp)=(0,0,0);
+ if(open(my $sfh,"<","/sys/class/graphics/fb0/virtual_size")) {
+  (($w,$h)=split(/,/,scalar(<$sfh>) || "")); close($sfh);
+ }
+ if(open(my $bfh,"<","/sys/class/graphics/fb0/bits_per_pixel")) {
+  $bpp=int(scalar(<$bfh>) || 0); close($bfh);
+ }
+ my $size=int($w || 0)*int($h || 0)*int($bpp/8);
+ return if($size <= 0);
+ if(open(my $fh,">",$fb)) {
+  binmode($fh);
+  print $fh ("\0" x $size);
+  close($fh);
+  $console_framebuffer_blanked=1;
+ } else {
+  &log("Renderer: cannot blank $fb: $!");
+ }
+}
+
 sub hdmi_sink_connected (@) {
  return 1 if(!$is_kms);
  my $seen=0;
@@ -879,6 +926,7 @@ sub pattern_generator_start(@) {
    }
    my $renderer_is_master=0;
    $renderer_is_master=&wait_for_renderer_drm_master(8) if(&pattern_generator_is_running());
+   &blank_console_framebuffer() if($renderer_is_master);
    &renderer_applied_range_record();
  # Post-spawn connector reprogramming exists for sinks that miss the
  # pre-launch programming. But once the renderer holds DRM master it already
@@ -919,15 +967,15 @@ sub pattern_generator_stop {
  &process_pid("$pattern_generator","kill");
  # Also kill the .dv variant in case we're switching modes
  &process_pid("${pattern_generator}.dv","kill") if(-x "${pattern_generator}.dv");
- usleep(500000);
- while(($pid=&process_pid("$pattern_generator","get"))) {
+ # Poll every 50ms (the renderer usually exits within ~0.3s, after its exit
+ # connector reset) and repeat TERM every 0.5s as before.
+ my $polls=0;
+ while(($pid=&process_pid("$pattern_generator","get"))
+       || (-x "${pattern_generator}.dv" && ($pid=&process_pid("${pattern_generator}.dv","get")))) {
+  usleep(50000);
+  next if(++$polls % 10);
   &process_pid("$pattern_generator","kill");
-  usleep(500000);
- }
- # Ensure .dv variant is also gone
- while(-x "${pattern_generator}.dv" && ($pid=&process_pid("${pattern_generator}.dv","get"))) {
-  &process_pid("${pattern_generator}.dv","kill");
-  usleep(500000);
+  &process_pid("${pattern_generator}.dv","kill") if(-x "${pattern_generator}.dv");
  }
  &clean_files();
 }

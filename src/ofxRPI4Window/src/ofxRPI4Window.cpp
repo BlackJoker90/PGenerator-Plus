@@ -1404,7 +1404,39 @@ int foundHDR=0;
 	ofLog() << "DRM: Using HDR PLANE_ID: " << HDRplaneId;
 	ofLog() << "DRM: Using SDR PLANE_ID: " << SDRplaneId;	
 
+    /* The daemon spawns us right after its root modetest/probe helpers have
+     * held DRM master. A helper still holding it gives EBUSY (wait and
+     * retry); a helper that held it while we opened the device left this fd
+     * without was_master, so an unprivileged SET_MASTER is EACCES for good:
+     * reopen the device (with the same client caps) and try again. Up to
+     * 2s, so the daemon no longer has to sleep before every spawn. */
     ret = drmSetMaster(device);
+    for (int attempt = 1; ret < 0 && (errno == EBUSY || errno == EACCES) && attempt <= 40; attempt++) {
+      if (errno == EACCES) {
+        // Reopen the same node (find_device() closes fd 0 blindly).
+        char link[64], node[256];
+        snprintf(link, sizeof(link), "/proc/self/fd/%d", device);
+        ssize_t len = readlink(link, node, sizeof(node) - 1);
+        int reopened = -1;
+        if (len > 0) {
+          node[len] = '\0';
+          reopened = open(node, O_RDWR | O_CLOEXEC);
+        }
+        if (reopened >= 0) {
+          ::close(device);
+          device = reopened;
+          drmDropMaster(device);
+          drmSetClientCap(device, DRM_CLIENT_CAP_UNIVERSAL_PLANES, 1);
+          drmSetClientCap(device, DRM_CLIENT_CAP_ATOMIC, 1);
+          drmSetClientCap(device, DRM_CLIENT_CAP_STEREO_3D, 0);
+          drmSetClientCap(device, DRM_CLIENT_CAP_ASPECT_RATIO, 0);
+        }
+      }
+      usleep(50000);
+      ret = drmSetMaster(device);
+      if (ret == 0)
+        fprintf(stderr, "PGEN: drm master acquired after %d retries\n", attempt);
+    }
     if (ret < 0)
     {
       ofLogError() << "DRM: - failed to set drm master, will try to authorize instead: " << strerror(errno);

@@ -100,6 +100,7 @@ $root_video_pid_file="/tmp/PGenerator_video.pid";
 &wifi_radio_status()      if($action eq "WIFI_RADIO_STATUS");
 &open_iptables_for_ls()   if($action eq "OPEN_IPTABLES_FOR_LS");
 &set_pgenerator_conf()    if($action eq "SET_PGENERATOR_CONF");
+&set_pgenerator_conf_multi() if($action eq "SET_PGENERATOR_CONF_MULTI");
 &set_plugin()             if($action eq "SET_PLUGIN");
 &bash_cmd()               if($action eq "BASH_CMD");
 &play_video_root()        if($action eq "PLAY_VIDEO");
@@ -1135,13 +1136,13 @@ sub open_iptables_for_ls(@) {
 ###############################################
 #       Set PGenerator Conf Function          #
 ###############################################
-sub set_pgenerator_conf (@) {
- my $var_to_set = $ARGV[1];
- my $value = $ARGV[2];
- my $content = "";
+# Apply one key=value to the conf text (lines without trailing newline).
+# dv_metadata and dv_map_mode are written as a pair.
+sub pgenerator_conf_set_pair (@) {
+ my ($content,$var_to_set,$value)=@_;
  my $paired_var = "";
  my $paired_value = "";
- return print $error_response if($var_to_set =~/^(ip_pattern|^port_pattern)$/);
+ return $content if($var_to_set =~/^(ip_pattern|^port_pattern)$/ || $var_to_set !~/^\w+$/);
  if($var_to_set eq "dv_metadata") {
   $paired_var = "dv_map_mode";
   $paired_value = "0" if($value eq "2");
@@ -1153,15 +1154,41 @@ sub set_pgenerator_conf (@) {
   $paired_value = "4" if($value eq "2");
   $paired_value = "2" if($paired_value eq "");
  }
- open(CONF,"$pattern_conf");
- while(<CONF>) {
+ my $out = "";
+ for(split(/\n/,$content)) {
   next if(/^$var_to_set=/);
   next if($paired_var ne "" && /^$paired_var=/);
-  $content.=$_;
+  $out.="$_\n";
  }
+ chomp($out);
+ $out.="\n$var_to_set=$value" if($value ne "");
+ $out.="\n$paired_var=$paired_value" if($paired_var ne "" && $paired_value ne "");
+ return $out;
+}
+
+sub read_pgenerator_conf_text (@) {
+ my $content = "";
+ open(CONF,"$pattern_conf");
+ while(<CONF>) { $content.=$_; }
+ close(CONF);
  chomp($content);
- $content.="\n$var_to_set=$value" if($value ne "");
- $content.="\n$paired_var=$paired_value" if($paired_var ne "" && $paired_value ne "");
+ return $content;
+}
+
+sub set_pgenerator_conf (@) {
+ return print $error_response if($ARGV[1] =~/^(ip_pattern|^port_pattern)$/);
+ my $content = &pgenerator_conf_set_pair(&read_pgenerator_conf_text(),$ARGV[1],$ARGV[2]);
+ &write_file("$pattern_conf.tmp","$pattern_conf","$content\n");
+ print $ok_response;
+}
+
+# SET_PGENERATOR_CONF_MULTI key1 value1 key2 value2 ...: one read and one
+# atomic write for a whole WebUI apply instead of a sudo spawn per key.
+sub set_pgenerator_conf_multi (@) {
+ my $content = &read_pgenerator_conf_text();
+ for(my $i=1; $i+1 <= $#ARGV; $i+=2) {
+  $content = &pgenerator_conf_set_pair($content,$ARGV[$i],$ARGV[$i+1]);
+ }
  &write_file("$pattern_conf.tmp","$pattern_conf","$content\n");
  print $ok_response;
 }

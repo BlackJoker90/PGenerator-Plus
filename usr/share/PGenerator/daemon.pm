@@ -87,7 +87,16 @@ sub calman_scale_value (@) {
   my $dst_bits=$bit_depth_for_max{$target_max};
   return $target_max if($value >= $input_max);
   return $value << ($dst_bits - $src_bits) if($dst_bits > $src_bits);
-  return $value >> ($src_bits - $dst_bits) if($dst_bits < $src_bits);
+  if($dst_bits < $src_bits) {
+   # Round to the nearest code instead of dropping the low bits (283 at
+   # 10 bit is 70.75 at 8 bit: 71, not 70). Codes that are exact multiples
+   # (an 8 bit Calman sends 4*v) are unchanged. A code that cannot be
+   # represented is flagged so the caller can tell the user once.
+   my $shift=$src_bits - $dst_bits;
+   $calman_precision_lost=1 if($value & ((1 << $shift) - 1));
+   my $rounded=($value + (1 << ($shift - 1))) >> $shift;
+   return $rounded > $target_max ? $target_max : $rounded;
+  }
  }
  return int($value/$input_max*$target_max + 0.5);
 }
@@ -453,9 +462,19 @@ sub calman_render_rgb_pattern (@) {
  my $source_max=&calman_dv_source_max();
  my $rgb_raw="$el_cmd[0],$el_cmd[1],$el_cmd[2]";
  &log("Calman PATTERN: type=$type raw=$rgb_raw bits_default=$bits_default target_max=$target_max");
+ $calman_precision_lost=0;
  my $r=&calman_scale_value($el_cmd[0],$calman_max);
  my $g=&calman_scale_value($el_cmd[1],$calman_max);
  my $b=&calman_scale_value($el_cmd[2],$calman_max);
+ if($calman_precision_lost) {
+  &log("Calman PATTERN: $rgb_raw at 10 bit has no exact code at ".($target_max == 255 ? 8 : 10)." bit output; rounded to $r,$g,$b");
+  # Once per 10 minutes: Calman works at a finer bit depth than the output.
+  if(time() - ($calman_precision_notice_time || 0) > 600) {
+   $calman_precision_notice_time=time();
+   my $out_bits=$target_max == 255 ? 8 : 10;
+   &webui_notice("Calman sends finer codes than the output carries","Calman sent $rgb_raw (10 bit), but PGenerator+ outputs $out_bits bit, so the patch was rounded to $r,$g,$b. For bit-exact patches set the same bit depth in Calman and in PGenerator+.");
+  }
+ }
  my $patch_context=&calman_patch_context();
  &log("Calman PATTERN: scaled=$r,$g,$b bg=$calman_bg max_bpc=$pgenerator_conf{'max_bpc'} $patch_context");
  &log_calman_patch(type=>$type,

@@ -1529,7 +1529,7 @@ async function hdmiRecheck(){
     if(!info.hdmi_port.wrong_port){
      btn.textContent='Restarting display\u2026';
      // Restart pattern generator so it re-targets the correct connector
-     await fetchJSON('/api/restart',{_timeoutMs:10000}).catch(function(){});
+     await fetchJSON('/api/restart',{method:'POST',_timeoutMs:10000}).catch(function(){});
      _hdmiIgnored=false;
      document.getElementById('hdmiOverlay').classList.remove('active');
     uiSyncBodyScrollLock();
@@ -3706,14 +3706,31 @@ async function applyUpdate(){
  document.getElementById('updateStatus').innerHTML='<span class="spinner"></span> Downloading and installing...';
  const r=await fetchJSON('/api/update/apply',{method:'POST'});
  if(r&&r.status==='ok'){
-  document.getElementById('updateStatus').textContent='Update started. The page will reload when PGenerator+ restarts...';
-  setTimeout(()=>location.reload(),30000);
-  let checks=0;
-  const poll=setInterval(async()=>{
-   checks++;
-   try{const p=await fetch(API+'/api/ping',{signal:AbortSignal.timeout(3000)});if(p.ok){clearInterval(poll);location.reload();}}catch(e){}
-   if(checks>60)clearInterval(poll);
-  },5000);
+  // Follow pgenerator-update's phases (/api/update/status) across the
+  // daemon restart; reload only when it is done, show a failure in place.
+  const statusEl=document.getElementById('updateStatus');
+  const startedAt=Number(r.now)||0;
+  const deadline=Date.now()+15*60*1000;
+  statusEl.innerHTML='<span class="spinner"></span> Starting the update...';
+  const poll=async()=>{
+   let st=null;
+   try{const p=await fetch(API+'/api/update/status',{signal:AbortSignal.timeout(3000)});if(p.ok) st=await p.json();}catch(e){}
+   if(st&&st.ts>=startedAt&&st.phase){
+    if(st.phase==='failed'){
+     statusEl.textContent='Update failed: '+(st.message||'see the update log');
+     document.getElementById('applyUpdateBtn').disabled=false;
+     return;
+    }
+    if(st.phase==='done'){location.reload();return;}
+    statusEl.innerHTML='<span class="spinner"></span> ';
+    statusEl.appendChild(document.createTextNode((st.message||st.phase)+'...'));
+   }else if(!st){
+    statusEl.innerHTML='<span class="spinner"></span> PGenerator+ is restarting...';
+   }
+   if(Date.now()>deadline){location.reload();return;}
+   setTimeout(poll,3000);
+  };
+  setTimeout(poll,3000);
  } else {
   document.getElementById('updateStatus').textContent=r?r.message:'Update failed';
   document.getElementById('applyUpdateBtn').disabled=false;

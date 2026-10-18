@@ -50,6 +50,17 @@ EXEC_MANIFEST_FILE="${EXEC_MANIFEST_FILE:-/usr/share/PGenerator/release-exec-man
 UPDATE_DIR="${UPDATE_DIR:-/var/lib/PGenerator/updates}"
 UPDATE_LOG="${UPDATE_LOG:-/var/log/PGenerator/update.log}"
 CURL_OPTS="-s -L --connect-timeout 10 --max-time 60"
+# The tarball is ~70 MB: a fixed 60 s ceiling failed every download below
+# ~1.1 MB/s. Abort only when the transfer stalls (under 20 KB/s for 60 s).
+CURL_DOWNLOAD_OPTS="-s -L --connect-timeout 10 --max-time 1800 --speed-limit 20480 --speed-time 60 --retry 2"
+# While this file is fresh the WebUI watchdog does not restart PGenerator
+# (it stops the daemon on purpose while extracting).
+WATCHDOG_PAUSE_FILE="${WATCHDOG_PAUSE_FILE:-/tmp/pgenerator-watchdog.pause}"
+# "<epoch>\n<phase>\n<message>" for the WebUI (/api/update/status), which
+# keeps polling it across the daemon restart.
+UPDATE_STATE_FILE="${UPDATE_STATE_FILE:-/tmp/pgenerator-update.state}"
+LAST_ERROR=""
+UPDATE_PHASE=""
 GITHUB_ACCEPT="Accept: application/vnd.github.v3+json"
 GITHUB_UA="User-Agent: PGenerator-Plus-Updater"
 
@@ -59,8 +70,16 @@ get_current_version() {
 }
 
 # ── Log with timestamp ──
+set_update_state() {
+ UPDATE_PHASE="$1"
+ printf '%s\n%s\n%s\n' "$(date +%s)" "$1" "${2:-}" > "$UPDATE_STATE_FILE.tmp" 2>/dev/null \
+  && chmod 644 "$UPDATE_STATE_FILE.tmp" 2>/dev/null \
+  && mv -f "$UPDATE_STATE_FILE.tmp" "$UPDATE_STATE_FILE" 2>/dev/null || true
+}
+
 log_msg() {
  local ts
+ case "$*" in ERROR:*) LAST_ERROR="${*#ERROR: }";; esac
  ts=$(date '+%Y-%m-%d %H:%M:%S')
  mkdir -p "$(dirname "$UPDATE_LOG")" 2>/dev/null || true
  echo "[$ts] $*" >> "$UPDATE_LOG" 2>/dev/null || true
@@ -212,6 +231,98 @@ require_writable_path() {
   return 1
  fi
  rm -f "$probe" 2>/dev/null || true
+}
+
+# ── Apply safety net ──
+# Files the update overwrites are saved first; if anything fails after
+# PGenerator was stopped, they are restored and PGenerator is started again
+# instead of leaving a half-updated, stopped device.
+ROLLBACK_TARBALL=""
+APPLY_STOPPED=0
+APPLY_DONE=0
+
+apply_cleanup() {
+ local rc=$?
+ if [ "$rc" != "0" ]; then
+  local why="${LAST_ERROR:-Update failed while ${UPDATE_PHASE:-starting} (exit $rc)}"
+  if [ "$APPLY_STOPPED" = "1" ] && [ "$APPLY_DONE" != "1" ]; then
+   set_update_state failed "$why. The previous version was restored."
+  else
+   set_update_state failed "$why"
+  fi
+ fi
+ if [ "$APPLY_STOPPED" = "1" ] && [ "$APPLY_DONE" != "1" ]; then
+  log_msg "ERROR: Update failed after PGenerator was stopped (exit $rc)"
+  if [ -n "$ROLLBACK_TARBALL" ] && [ -s "$ROLLBACK_TARBALL" ]; then
+   log_msg "Restoring the previous files from $ROLLBACK_TARBALL"
+   if (cd / && tar xzf "$ROLLBACK_TARBALL") >>"$UPDATE_LOG" 2>&1; then
+    log_msg "Previous files restored"
+   else
+    log_msg "ERROR: Restoring the previous files failed"
+    set_update_state failed "Update failed while installing, and restoring the previous files failed too. Run the update again or re-flash the image."
+   fi
+  fi
+  log_msg "Starting PGenerator again"
+  /etc/init.d/PGenerator start >/dev/null 2>&1 || log_msg "ERROR: PGenerator start failed"
+ fi
+ [ -n "$ROLLBACK_TARBALL" ] && rm -f "$ROLLBACK_TARBALL"
+ [ -n "${tarball:-}" ] && rm -f "$tarball"
+ rm -f "$WATCHDOG_PAUSE_FILE"
+ return $rc
+}
+
+# The published "<tarball>.sha256" ("<hash>  <name>"). Releases from before
+# it was published have none: that is logged and the update goes on.
+verify_tarball_checksum() {
+ local tarball="$1" url="$2" sum_file expected actual
+ sum_file="$tarball.sha256"
+ if ! curl -f $CURL_OPTS -H "$GITHUB_UA" -o "$sum_file" "$url.sha256" 2>/dev/null || [ ! -s "$sum_file" ]; then
+  rm -f "$sum_file"
+  log_msg "No published SHA-256 for this release; relying on the archive check"
+  return 0
+ fi
+ expected=$(awk 'NR==1{print $1}' "$sum_file" | tr 'A-F' 'a-f')
+ rm -f "$sum_file"
+ actual=$(sha256sum "$tarball" | awk '{print $1}')
+ if [ "${#expected}" != "64" ] || [ "$expected" != "$actual" ]; then
+  log_msg "ERROR: SHA-256 mismatch (expected ${expected:-none}, got $actual)"
+  return 1
+ fi
+ log_msg "SHA-256 verified: $actual"
+}
+
+# Free space for the extracted files plus the rollback copy (both about the
+# uncompressed size at worst) and a margin.
+check_free_space() {
+ local tarball="$1" need_kb avail_kb unpacked
+ unpacked=$(gzip -l "$tarball" 2>/dev/null | awk 'NR==2{print $2}')
+ case "$unpacked" in (''|*[!0-9]*) unpacked=0;; esac
+ need_kb=$(( unpacked / 1024 * 2 + 51200 ))
+ avail_kb=$(df -Pk / | awk 'NR==2{print $4}')
+ case "$avail_kb" in (''|*[!0-9]*) return 0;; esac
+ if [ "$avail_kb" -lt "$need_kb" ]; then
+  log_msg "ERROR: Not enough free space: ${avail_kb} KB free, ${need_kb} KB needed"
+  return 1
+ fi
+}
+
+# Save the files the update will overwrite (only those that exist now).
+create_rollback() {
+ local tarball="$1" list
+ list="$UPDATE_DIR/rollback-files.$$"
+ tar tzf "$tarball" | sed 's#^\./##' | while IFS= read -r f; do
+  [ -n "$f" ] || continue
+  if [ -f "/$f" ] || [ -L "/$f" ]; then printf '%s\n' "$f"; fi
+ done > "$list"
+ ROLLBACK_TARBALL="$UPDATE_DIR/rollback-$(get_current_version).tar.gz"
+ if ! (cd / && tar czf "$ROLLBACK_TARBALL" -T "$list") 2>>"$UPDATE_LOG"; then
+  rm -f "$list" "$ROLLBACK_TARBALL"
+  ROLLBACK_TARBALL=""
+  log_msg "ERROR: Could not save the current files for rollback"
+  return 1
+ fi
+ log_msg "Saved $(wc -l < "$list") current files for rollback"
+ rm -f "$list"
 }
 
 wait_for_local_api() {
@@ -560,6 +671,8 @@ case "$cmd" in
   ;;
 
  apply)
+  trap apply_cleanup EXIT
+  set_update_state checking "Looking for the update"
   resolve_update_repo
   detect_update_target
   current=$(get_current_version)
@@ -592,6 +705,7 @@ case "$cmd" in
 
   if ! version_gt "$latest" "$current"; then
    log_msg "Already up to date ($current)"
+   set_update_state done "Already up to date ($current)"
    echo "Already up to date ($current)"
    exit 0
   fi
@@ -619,7 +733,8 @@ case "$cmd" in
   log_msg "Downloading $latest from $asset_url"
   mkdir -p "$UPDATE_DIR"
   tarball="$UPDATE_DIR/pgenerator-plus-${latest}.tar.gz"
-  if ! curl -f $CURL_OPTS -H "$GITHUB_UA" -o "$tarball" "$asset_url" 2>/dev/null; then
+  set_update_state downloading "Downloading $latest"
+  if ! curl -f $CURL_DOWNLOAD_OPTS -H "$GITHUB_UA" -o "$tarball" "$asset_url" 2>/dev/null; then
    log_msg "ERROR: Download failed"
    echo "ERROR: Download failed"
    exit 1
@@ -631,6 +746,13 @@ case "$cmd" in
    exit 1
   fi
 
+  set_update_state verifying "Verifying the download"
+  if ! verify_tarball_checksum "$tarball" "$asset_url"; then
+   echo "ERROR: Update archive checksum mismatch"
+   rm -f "$tarball"
+   exit 1
+  fi
+
   if ! tar tzf "$tarball" >/dev/null 2>&1; then
    log_msg "ERROR: Downloaded asset is not a valid tar.gz archive"
    echo "ERROR: Invalid update archive"
@@ -638,12 +760,28 @@ case "$cmd" in
    exit 1
   fi
 
+  if ! check_free_space "$tarball"; then
+   echo "ERROR: Not enough free space for the update"
+   rm -f "$tarball"
+   exit 1
+  fi
+
+  set_update_state backup "Saving the current files"
+  if ! create_rollback "$tarball"; then
+   echo "ERROR: Could not save the current files for rollback"
+   rm -f "$tarball"
+   exit 1
+  fi
+
+  date +%s > "$WATCHDOG_PAUSE_FILE" 2>/dev/null || true
   log_msg "Stopping PGenerator..."
+  APPLY_STOPPED=1
   /etc/init.d/PGenerator stop 2>/dev/null || true
   sleep 2
 
   require_writable_path "/" "root filesystem"
 
+  set_update_state installing "Installing $latest"
   log_msg "Extracting update..."
   cd /
   tar xzf "$tarball" 2>&1 | tee -a "$UPDATE_LOG"
@@ -678,6 +816,9 @@ case "$cmd" in
   sync
 
   log_msg "Update to $latest extracted — restarting PGenerator..."
+  # From here the new files stay: a failed start is reported, not rolled back.
+  APPLY_DONE=1
+  set_update_state restarting "Starting PGenerator+ $latest"
   if ! /etc/init.d/PGenerator start 2>/dev/null; then
    log_msg "ERROR: PGenerator restart command failed after update"
    echo "ERROR: PGenerator restart failed after update"
@@ -690,6 +831,7 @@ case "$cmd" in
    exit 1
   fi
 
+  set_update_state done "Updated to $latest"
   echo "OK: Updated to $latest"
   ;;
 

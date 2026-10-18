@@ -1483,11 +1483,36 @@ sub webui_handle_request (@) {
     my $request_peer_ip=eval { $client->peerhost() } || "";
     &log("WebUI: $method $path");
 
-   # CORS headers for API
-   my $cors="Access-Control-Allow-Origin: *\r\nAccess-Control-Allow-Methods: GET, POST, OPTIONS\r\nAccess-Control-Allow-Headers: Content-Type\r\nConnection: close\r\n";
+   # No CORS grant: the WebUI is served from this host, so its own calls
+   # are same-origin. "Access-Control-Allow-Origin: *" let any web page open
+   # on the calibration PC read every response (e.g. the AP passphrase).
+   my $cors="Connection: close\r\n";
+   # A browser sends Origin with cross-site POSTs. One from another site
+   # (e.g. a page posting to /api/reboot) is refused; curl, the device's own
+   # scripts and the ICC Companion send no Origin and are unaffected.
+   my $request_origin="";
+   $request_origin=$1 if($req=~/^Origin:\s*(\S+)\s*$/mi);
+   my $origin_foreign=0;
+   if($request_origin ne "" && $method ne "GET" && $method ne "HEAD" && $method ne "OPTIONS") {
+    my $origin_host=($request_origin=~m{^https?://([^/]+)$}i) ? lc($1) : "";
+    my $host=lc($request_host);
+    $origin_host=~s/:80$//; $host=~s/:80$//;
+    $origin_foreign=1 if($origin_host eq "" || $origin_host ne $host);
+   }
 
    if($method eq "OPTIONS") {
     print $client "HTTP/1.1 204 No Content\r\n$cors\r\n";
+   }
+   elsif($origin_foreign) {
+    &log("WebUI: refused $method $path from foreign origin $request_origin");
+    my $r='{"status":"error","message":"Cross-site request refused"}';
+    print $client "HTTP/1.1 403 Forbidden\r\nContent-Type: application/json\r\nContent-Length: ".length($r)."\r\n$cors\r\n$r";
+   }
+   elsif(($path eq "/api/restart" || $path eq "/api/reboot" || $path eq "/api/power") && $method ne "POST") {
+    # A plain GET (an <img> tag on any page) must not restart or power off
+    # the device in the middle of a calibration session.
+    my $r='{"status":"error","message":"Use POST"}';
+    print $client "HTTP/1.1 405 Method Not Allowed\r\nAllow: POST\r\nContent-Type: application/json\r\nContent-Length: ".length($r)."\r\n$cors\r\n$r";
    }
    elsif(($path eq "/" || $path eq "/index.html") && $request_host=~/^pgenerator\.local(?::\d+)?$/i && $request_local_ip=~/^\d{1,3}(?:\.\d{1,3}){3}$/ && $request_local_ip ne "0.0.0.0") {
     my $redirect_path=$path;
@@ -1935,8 +1960,20 @@ sub webui_handle_request (@) {
     my $len=length($result);
     print $client "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: $len\r\n$cors\r\n$result";
    }
+   elsif($path eq "/api/update/status") {
+    # Phase written by pgenerator-update ("<epoch>\n<phase>\n<message>").
+    my ($ts,$phase,$message)=(0,"","");
+    if(open(my $fh,"<","/tmp/pgenerator-update.state")) {
+     ($ts,$phase,$message)=map { defined($_) ? s/\r?\n$//r : "" } (scalar(<$fh>),scalar(<$fh>),scalar(<$fh>));
+     close($fh);
+    }
+    $ts=0 if($ts!~/^\d+$/);
+    $phase="" if($phase!~/^[a-z]+$/);
+    my $r=sprintf('{"status":"ok","ts":%d,"now":%d,"phase":"%s","message":"%s","version":"%s"}',$ts,time(),$phase,&_webui_json_escape($message),&_webui_json_escape($version));
+    print $client "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: ".length($r)."\r\n$cors\r\n$r";
+   }
    elsif($path eq "/api/update/apply" && $method eq "POST") {
-    my $r='{"status":"ok","message":"Update started. PGenerator+ will restart shortly."}';
+    my $r='{"status":"ok","message":"Update started. PGenerator+ will restart shortly.","now":'.time().'}';
     my $len=length($r);
     print $client "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: $len\r\n$cors\r\n$r";
     close($client);

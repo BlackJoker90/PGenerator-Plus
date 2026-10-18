@@ -765,7 +765,7 @@ printf '%s\\n' "$backup"
 
 def restart_renderer(connection: dict[str, str]) -> dict[str, Any]:
     command = r"""
-response=$(wget -q -O - http://127.0.0.1/api/restart 2>/dev/null || true)
+response=$(wget -q -O - --post-data= http://127.0.0.1/api/restart 2>/dev/null || true)
 i=0
 while [ "$i" -lt 20 ]; do
   if ps -e w 2>/dev/null | grep -Eq '[P]Generatord(\.dv)?([[:space:]]|$)'; then

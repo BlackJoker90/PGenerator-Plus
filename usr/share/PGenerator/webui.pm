@@ -1461,12 +1461,11 @@ sub webui_handle_request (@) {
    }
    elsif($path eq "/" || $path eq "/index.html") {
     my $html=&webui_html();
-    my $len=length($html);
     # The UI is one server-assembled page with every fragment inlined; with no
     # cache validators the browser heuristically caches it and operators keep
     # running a stale UI after an update until a hard refresh. no-cache forces
-    # revalidation on every load while conditional requests stay cheap.
-    print $client "HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\nCache-Control: no-cache\r\nContent-Length: $len\r\n$cors\r\n$html";
+    # revalidation on every load, and the ETag keeps that a cheap 304.
+    &webui_send_text($client,$req,"text/html; charset=utf-8",$html,"Cache-Control: no-cache\r\n$cors",1);
    }
    elsif($path eq "/favicon.ico") {
     my $ico_path="/usr/share/PGenerator/favicon.ico";
@@ -1485,9 +1484,7 @@ sub webui_handle_request (@) {
     if(-f $asset_path) {
      open(my $fh, "<:raw", $asset_path);
      my $asset_data; { local $/; $asset_data=<$fh>; } close($fh);
-     my $len=length($asset_data);
-     print $client "HTTP/1.1 200 OK\r\nContent-Type: application/javascript; charset=utf-8\r\nContent-Length: $len\r\nCache-Control: no-cache\r\n\r\n";
-     print $client $asset_data;
+     &webui_send_text($client,$req,"application/javascript; charset=utf-8",$asset_data,"Cache-Control: no-cache\r\n",1);
     } else {
      print $client "HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\n\r\n";
     }
@@ -1496,10 +1493,8 @@ sub webui_handle_request (@) {
     my $asset_name=($path eq "/assets/icc_profile.css")?"icc_profile.css":"icc_profile.js";
     my $asset_data=&webui_icc_asset($asset_name);
     if($asset_data ne "") {
-     my $len=length($asset_data);
      my $content_type=($asset_name=~/\.css\z/)?"text/css":"application/javascript";
-     print $client "HTTP/1.1 200 OK\r\nContent-Type: $content_type; charset=utf-8\r\nContent-Length: $len\r\nCache-Control: no-cache\r\n\r\n";
-     print $client $asset_data;
+     &webui_send_text($client,$req,"$content_type; charset=utf-8",$asset_data,"Cache-Control: no-cache\r\n",1);
     } else {
      print $client "HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\n\r\n";
     }
@@ -2215,9 +2210,9 @@ sub webui_handle_request (@) {
      my $len=length($result);
      print $client "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: $len\r\n$cors\r\n$result";
     } else {
+     # Saved measurement history makes this a few hundred KB of JSON.
      my $result=&webui_meter_settings_load($request_query);
-     my $len=length($result);
-     print $client "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: $len\r\n$cors\r\n$result";
+     &webui_send_text($client,$req,"application/json",$result,$cors,0);
     }
    }
    elsif($path eq "/api/3d-lut/luts") {
@@ -12975,6 +12970,49 @@ sub webui_check_assets (@) {
  # 2.6 MB each). Each worker re-reads and re-caches on its first request.
  %_webui_asset_cache=();
  return 1;
+}
+
+# Compressed bodies by ETag, shared by all workers: gzip of the 2.7 MB page
+# takes ~0.6 s on a Pi 4, so it runs once per page version, not per worker.
+my %_webui_gzip_cache :shared;
+
+# Send a text body (page, asset or large JSON) gzip-compressed when the client
+# accepts it. With $etag set, a matching If-None-Match gets a 304 and no body,
+# so a reload of the unchanged page transfers nothing.
+sub webui_send_text (@) {
+ my ($client,$req,$type,$data,$headers,$etag)=@_;
+ $headers="" if(!defined $headers);
+ if($etag) {
+  my $tag="";
+  eval { require Digest::MD5; $tag='"'.Digest::MD5::md5_hex($data).'"'; };
+  if($tag ne "") {
+   if($req=~/^If-None-Match:[^\r\n]*\Q$tag\E/mi) {
+    print $client "HTTP/1.1 304 Not Modified\r\nETag: $tag\r\nVary: Accept-Encoding\r\n$headers\r\n";
+    return;
+   }
+   $headers="ETag: $tag\r\n$headers";
+  }
+ }
+ my $body=$data;
+ if(length($data) >= 1024 && $req=~/^Accept-Encoding:[^\r\n]*\bgzip\b/mi) {
+  my $key=($headers=~/^ETag: (\S+)/m) ? $1 : "";
+  my $gz=($key ne "") ? $_webui_gzip_cache{$key} : undef;
+  if(!defined $gz) {
+   eval { require Compress::Zlib; $gz=Compress::Zlib::memGzip($data); };
+   if(defined $gz && $key ne "") {
+    lock(%_webui_gzip_cache);
+    %_webui_gzip_cache=() if(keys(%_webui_gzip_cache) >= 16);
+    $_webui_gzip_cache{$key}=$gz;
+   }
+  }
+  if(defined $gz) {
+   $body=$gz;
+   $headers="Content-Encoding: gzip\r\n$headers";
+  }
+ }
+ $headers="Vary: Accept-Encoding\r\n$headers";
+ print $client "HTTP/1.1 200 OK\r\nContent-Type: $type\r\nContent-Length: ".length($body)."\r\n$headers\r\n";
+ print $client $body;
 }
 
 sub webui_html (@) {

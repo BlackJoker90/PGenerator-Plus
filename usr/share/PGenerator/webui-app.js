@@ -1612,8 +1612,13 @@ let pgHdmiConnected=null;
 function pgUpdateNoHdmiBanner(connected){
  const banner=document.getElementById('displayNoHdmiBanner');
  if(banner) banner.style.display=connected?'none':'block';
+ const drawerAlert=document.getElementById('desktopUtilityNoHdmi');
+ if(drawerAlert) drawerAlert.hidden=!!connected;
+ const changed=pgHdmiConnected!==null&&pgHdmiConnected!==connected;
  if(connected&&pgHdmiConnected===false&&typeof loadModes==='function') loadModes(true);
  pgHdmiConnected=connected;
+ // Plugging or unplugging changes what is on the wire: re-read the infoframes.
+ if(changed&&typeof loadInfoframes==='function') loadInfoframes();
 }
 
 async function loadStats(quiet){
@@ -3313,6 +3318,7 @@ function pgUtilityBitDepthText(){
 function pgUtilityHdmiLinkText(){
  // Read from the HDMI encoder registers (/api/infoframes "link"), i.e. what
  // goes out on the wire rather than what is configured.
+ if(pgHdmiConnected===false) return 'No display connected';
  const link=window._hdmiLink;
  if(!link||!link.bpc) return '-';
  const mhz=link.tmds_mhz?' · '+Number(link.tmds_mhz).toFixed(2)+' MHz':'';
@@ -3437,6 +3443,15 @@ async function loadInfoframes(){
  const ad=document.getElementById('aviDecoded');
  const de=document.getElementById('drmIF');
  const dd=document.getElementById('drmDecoded');
+ // Without a display nothing is sent; say so instead of leaving old frames.
+ if(r.connected===false){
+  window._hdmiLink=null;
+  ae.textContent='-';ad.textContent='No signal: no HDMI display connected';
+  de.textContent='-';dd.textContent='No signal: no HDMI display connected';
+  pgUpdateNoHdmiBanner(false);
+  if(document.body.classList.contains('desktop-utility-open')) pgSyncDesktopUtilityDrawer();
+  return;
+ }
  /* AVI InfoFrame */
  if(r.avi){
   ae.textContent=r.avi;
@@ -3478,7 +3493,7 @@ async function loadInfoframes(){
    }
    dd.innerHTML=lines.join('<br>');
   }
- }else{de.textContent='-';dd.innerHTML='';}
+ }else{de.textContent='-';dd.textContent=r.avi?'Not sent (SDR signal)':'';}
  if(document.body.classList.contains('desktop-utility-open')) pgSyncDesktopUtilityDrawer();
 }
 

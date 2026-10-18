@@ -11349,17 +11349,24 @@ sub webui_hdmi_link_json (@) {
 }
 
 sub webui_infoframes_json (@) {
- my $dmesg=`timeout 3 /bin/dmesg 2>/dev/null`;
+ # The kernel log keeps the infoframes of every earlier modeset. Without a
+ # display nothing is sent, so none of them is current. With a display only
+ # the last burst counts: vc4 logs AVI, SPD, DRM, HVS per modeset and logs no
+ # DRM frame for SDR, so a DRM frame before the last AVI frame is stale.
+ my $connected=&webui_hdmi_connected();
  my ($avi_hex,$drm_hex)=("","");
- foreach my $line (split(/\n/,$dmesg)) {
-  if($line=~/AVI IF:\s*(.+)/) { $avi_hex=$1; }
-  if($line=~/DRM IF:\s*(.+)/) { $drm_hex=$1; }
+ if($connected) {
+  my $dmesg=`timeout 3 /bin/dmesg 2>/dev/null`;
+  foreach my $line (split(/\n/,$dmesg)) {
+   if($line=~/AVI IF:\s*(.+)/) { $avi_hex=$1; $drm_hex=""; }
+   if($line=~/DRM IF:\s*(.+)/) { $drm_hex=$1; }
+  }
  }
  $avi_hex=~s/"/\\"/g;
  $drm_hex=~s/"/\\"/g;
  $avi_hex=~s/\s+$//;
  $drm_hex=~s/\s+$//;
- return "{\"status\":\"ok\",\"avi\":\"$avi_hex\",\"drm\":\"$drm_hex\"".&webui_hdmi_link_json()."}";
+ return "{\"status\":\"ok\",\"connected\":".($connected ? "true" : "false").",\"avi\":\"$avi_hex\",\"drm\":\"$drm_hex\"".&webui_hdmi_link_json()."}";
 }
 
 sub webui_cec_power_label (@) {

@@ -159,6 +159,27 @@ fi
 # Ping is down: the restart path below is the diagnostic that matters, so do
 # not add a redundant root-probe connect error on every tick of a restart.
 
+# Startup grace: the daemon starts the renderer before its HTTP server, so a
+# tick that lands in the first seconds after boot (or after any restart) saw
+# "WebUI down" and restarted a daemon that was still starting -- one more
+# HDMI resync on the TV for nothing. Leave a live daemon younger than
+# STARTUP_GRACE seconds alone. Age comes from /proc (monotonic): the wall
+# clock jumps by minutes when NTP syncs during boot.
+STARTUP_GRACE=${PG_WATCHDOG_STARTUP_GRACE:-120}
+daemon_pid=$(cat "$PID_FILE" 2>/dev/null | head -c 16)
+case "$daemon_pid" in (''|*[!0-9]*) daemon_pid="";; esac
+if [ -n "$daemon_pid" ] && [ -r "/proc/$daemon_pid/stat" ]; then
+  start_ticks=$(sed 's/.*) //' "/proc/$daemon_pid/stat" 2>/dev/null | awk '{print $20}')
+  hz=$(getconf CLK_TCK 2>/dev/null || echo 100)
+  up=$(cut -d. -f1 /proc/uptime 2>/dev/null)
+  case "$start_ticks$hz$up" in (''|*[!0-9]*) ;; (*)
+    age=$((up - start_ticks / hz))
+    if [ "$age" -lt "$STARTUP_GRACE" ]; then
+      exit 0
+    fi
+  ;; esac
+fi
+
 # Avoid thrash if init is mid-restart
 if [ -f "$LOCK_FILE" ]; then
   # stale lock older than 120s?

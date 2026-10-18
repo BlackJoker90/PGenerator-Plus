@@ -1,0 +1,9 @@
+# Keep the text console off the HDMI framebuffer. rcPGenerator unbinds fbcon
+# at boot, but without a display attached at boot the vc4 fbdev (and with it
+# the fbcon vtconsole) only appears when HDMI is plugged in, and the console
+# then briefly showed the login prompt on the TV. Unbind it as soon as it
+# registers and blank the framebuffer it drew on.
+# Only after the first minute of uptime: during boot the coldplug event lands
+# while the kernel hands fb0 from simplefb to vc4drmfb, and unbinding fbcon in
+# that window is a race; rcPGenerator covers the boot itself.
+ACTION=="add", SUBSYSTEM=="vtconsole", ATTR{name}=="*frame buffer*", RUN+="/bin/sh -c '[ $$(cut -d. -f1 /proc/uptime) -ge 60 ] || exit 0; echo 0 > /sys%p/bind; dd if=/dev/zero of=/dev/fb0 bs=65536 2>/dev/null'"

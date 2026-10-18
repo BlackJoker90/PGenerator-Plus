@@ -675,7 +675,10 @@ sub calman_render_g1_pattern (@) {
  my $bg=[0,0,0];
  my $first="$dir/$tag-0.png";
  if($photo ne "") {
-  if(!-f $first && !&calman_g1_convert_file($photo,$first,"-resize","${w}x${h}!","-depth","8")) {
+  # Photos are full range pictures; pattern codes are video levels on
+  # limited links, so squeeze 0-255 into 16-235 there.
+  my @levels=($range eq "limited") ? ("+level",(16/255*100)."%,".(235/255*100)."%") : ();
+  if(!-f $first && !&calman_g1_convert_file($photo,$first,"-resize","${w}x${h}!",@levels,"-depth","8")) {
    &log("Calman G1: could not convert $photo");
    return 0;
   }

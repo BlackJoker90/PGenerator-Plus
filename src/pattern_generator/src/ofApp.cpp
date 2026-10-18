@@ -263,7 +263,9 @@ void ofApp::draw(){
   /* Idle (no pattern yet): an RGB (0,0,0) framebuffer is decoded by the
      sink as Y=0/Cb=0/Cr=0, i.e. green. Clear to encoded YCbCr black every
      frame; a flip may recreate the renderer, so a one-time background set
-     in setup() does not survive. RGB and Dolby Vision stay unchanged. */
+     in setup() does not survive. RGB clears to black as well: otherwise the
+     openFrameworks default background (light grey) fills the screen, e.g.
+     after an HDMI hotplug start. Dolby Vision stays unchanged. */
   if(ofxRPI4Window::avi_info.output_format != 0 &&
      !ofxRPI4Window::isDoVi && !ofxRPI4Window::is_std_DoVi) {
    int bits = ofxRPI4Window::bit_depth ? ofxRPI4Window::bit_depth : 8;
@@ -277,6 +279,8 @@ void ofApp::draw(){
     if(ofxRPI4Window::avi_info.output_format == 1) ofClear(c,c,y,255);
     if(ofxRPI4Window::avi_info.output_format == 2) ofClear(y,c,c,255);
    }
+  } else if(!ofxRPI4Window::isDoVi && !ofxRPI4Window::is_std_DoVi) {
+   ofClear(0,0,0,255);
   }
   return;
  }

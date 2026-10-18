@@ -821,7 +821,10 @@ sub renderer_start_when_hdmi_connected (@) {
   return;
  }
  &log("Renderer: HDMI display connected; starting the deferred renderer");
- &load_new_pattern_file("hdmi hotplug");
+ # Same start as at boot: shows PatternStart (black) instead of an empty
+ # renderer. The retry ladder takes over if that start loses the DRM race.
+ &pattern_generator_start();
+ &load_new_pattern_file("hdmi hotplug") if(!&pattern_generator_is_running());
 }
 
 sub pattern_generator_start(@) {

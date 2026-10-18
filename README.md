@@ -215,7 +215,7 @@ make
 | **SDR**                        | Standard Dynamic Range (Rec.709), 8-bit                                |
 | **HDR10**                      | Static HDR with PQ (ST.2084) EOTF, 10-bit, full DRM InfoFrame metadata |
 | **HLG**                        | Hybrid Log-Gamma for broadcast HDR, 10-bit                             |
-| **Dolby Vision (Low Latency)** | LLDV with RPU metadata, 12-bit — recommended for DV calibration       |
+| **Dolby Vision**               | Standard (TV-led, 8-bit RGB tunnel; used for Calman DV) or Low Latency (LLDV, YCbCr 4:2:2 12-bit) |
 
 The Raspberry Pi 4's KMS driver is used to set HDMI InfoFrames directly:
 

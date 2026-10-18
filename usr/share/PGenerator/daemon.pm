@@ -1276,6 +1276,13 @@ sub pattern_daemon {
 	       # suppressed calman_set_dv_rgb's saves of these, so the
 	       # conf would otherwise stay at dv_status=0 (HDR10) even
 	       # though the reference asked for DV.
+	       # Calman requests the standard (TV-led) RGB tunnel: it sends
+	       # 8 bpc, RGB and Full range before CONF_DV. Switch the saved
+	       # transport too, first, so normalize_dv_transport_conf()
+	       # (run by every SET_PGENERATOR_CONF below) agrees instead of
+	       # pulling an LLDV WebUI preference back in between writes.
+	       push @coherence_writes,["dv_transport","standard"];
+	       push @coherence_writes,["dv_interface",&pg_dv_transport_interface("standard")];
 	       push @coherence_writes,["dv_status","1"];
 	       push @coherence_writes,["is_ll_dovi","0"];
 	       push @coherence_writes,["is_std_dovi","1"];

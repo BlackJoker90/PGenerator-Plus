@@ -309,6 +309,10 @@ void ofApp::draw(){
     if(ofxRPI4Window::avi_info.output_format == 1) ofClear(c,c,y,255);
     if(ofxRPI4Window::avi_info.output_format == 2) ofClear(y,c,c,255);
    }
+  } else if(ofxRPI4Window::rgbLimitedPassthrough()) {
+   /* No CSC after the framebuffer: clear to Limited black. */
+   if(ofxRPI4Window::bit_depth == 10) ofClear10bit(64,64,64);
+   else                               ofClear(16,16,16,255);
   } else if(!ofxRPI4Window::isDoVi && !ofxRPI4Window::is_std_DoVi) {
    ofClear(0,0,0,255);
   }
@@ -730,8 +734,6 @@ int ofApp::scaleSourceToBitDepth(int value) {
 }
 
 int ofApp::normalizeSourceValue(int value, int source_range_mode) {
- if(source_range_mode != 1)
-  return value;
  if(ofxRPI4Window::avi_info.output_format != 0)
   return value;
  // Standard DV source codes are already the 12-bit values consumed by
@@ -740,6 +742,27 @@ int ofApp::normalizeSourceValue(int value, int source_range_mode) {
   return value;
  if(ofxRPI4Window::avi_info.rgb_quant_range != 1)
   return value;
+ int bit_depth=ofxRPI4Window::bit_depth ? ofxRPI4Window::bit_depth : 8;
+ int shift=bit_depth - 8;
+ int limited_min=16 << shift;
+ int limited_span=219 << shift;
+ int max_value=(1 << bit_depth) - 1;
+ /*
+  * Passthrough (patched vc4, see ofxRPI4Window::rgbLimitedPassthrough):
+  * no CSC after the framebuffer, so SOURCE_RANGE=LIMITED wire codes go out
+  * as drawn and full-range sources are compressed here, exactly.
+  */
+ if(ofxRPI4Window::rgbLimitedPassthrough()) {
+  if(source_range_mode == 1)
+   return value;
+  if(value < 0)
+   value=0;
+  if(value > max_value)
+   value=max_value;
+  return limited_min + (int)(((long long)value * limited_span + max_value / 2) / max_value);
+ }
+ if(source_range_mode != 1)
+  return value;
  /*
   * The vc4 HDMI CSC compresses the full-range RGB framebuffer to the
   * configured Limited wire range. SOURCE_RANGE=LIMITED values are wire
@@ -747,11 +770,6 @@ int ofApp::normalizeSourceValue(int value, int source_range_mode) {
   * code 16 through unchanged would make the CSC output about code 30 and
   * visibly lift black.
   */
- int bit_depth=ofxRPI4Window::bit_depth;
- int shift=bit_depth - 8;
- int limited_min=16 << shift;
- int limited_span=219 << shift;
- int max_value=(1 << bit_depth) - 1;
  int normalized=(int)(((long long)(value - limited_min) * max_value +
                        limited_span / 2) / limited_span);
  if(normalized < 0)
@@ -762,13 +780,47 @@ int ofApp::normalizeSourceValue(int value, int source_range_mode) {
 }
 
 void ofApp::normalizeImageSourcePixels(int source_range_mode) {
- if(source_range_mode != 1)
-  return;
  if(ofxRPI4Window::avi_info.output_format != 0)
   return;
  if(ofxRPI4Window::isDoVi || ofxRPI4Window::is_std_DoVi)
   return;
  if(ofxRPI4Window::avi_info.rgb_quant_range != 1)
+  return;
+ /* Passthrough: studio-range texels are already wire codes; full-range
+    texels are compressed here as vc4 no longer does it. */
+ if(ofxRPI4Window::rgbLimitedPassthrough()) {
+  if(source_range_mode == 1)
+   return;
+  if(ofxRPI4Window::avi_info.max_bpc == 10 && ofxRPI4Window::isHDR) {
+   ofFloatPixels &pixels=float_img.getPixels();
+   int channels=pixels.getNumChannels();
+   int color_channels=(channels == 2) ? 1 : std::min(3,channels);
+   float *data=pixels.getData();
+   size_t pixel_count=(size_t)pixels.getWidth() * pixels.getHeight();
+   for(size_t pixel=0;pixel<pixel_count;pixel++) {
+    for(int channel=0;channel<color_channels;channel++) {
+     float value=ofClamp(data[pixel*channels+channel],0.0f,1.0f);
+     data[pixel*channels+channel]=(16.0f + value * 219.0f) / 255.0f;
+    }
+   }
+   float_img.update();
+  } else {
+   ofPixels &pixels=img.getPixels();
+   int channels=pixels.getNumChannels();
+   int color_channels=(channels == 2) ? 1 : std::min(3,channels);
+   unsigned char *data=pixels.getData();
+   size_t pixel_count=(size_t)pixels.getWidth() * pixels.getHeight();
+   for(size_t pixel=0;pixel<pixel_count;pixel++) {
+    for(int channel=0;channel<color_channels;channel++) {
+     int value=data[pixel*channels+channel];
+     data[pixel*channels+channel]=(unsigned char)(16 + (value * 219 + 127) / 255);
+    }
+   }
+   img.update();
+  }
+  return;
+ }
+ if(source_range_mode != 1)
   return;
 
  /*

@@ -135,6 +135,12 @@ static const char *reloadSignalConf() {
   return "dovi_active";
  if(atoi(is_hdr.c_str()) != startup_is_hdr)
   return "is_hdr";
+ /* vc4 programs the CSC and the AVI quantisation range only on a modeset,
+    and its connector check does not count "rgb quant range" as a reason
+    for one: in place, the old CSC and infoframe would stay. */
+ if(ofxRPI4Window::wireRgbQuantRange(atoi(rgb_quant_range.c_str()),atoi(color_format.c_str())) !=
+    ofxRPI4Window::wireRgbQuantRange(ofxRPI4Window::avi_info.rgb_quant_range,ofxRPI4Window::avi_info.output_format))
+  return "rgb_quant_range";
  applySignalConf();
  return nullptr;
 }

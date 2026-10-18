@@ -1568,6 +1568,39 @@ avi_infoframe ofxRPI4Window::avi_info;
 drm_hdr_output_metadata ofxRPI4Window::hdr_metadata;
 int ofxRPI4Window::colorspace_on = 0;
 int ofxRPI4Window::shader_init = 0;
+
+bool ofxRPI4Window::rgbLimitedPassthroughSupported()
+{
+	static int supported = -1;
+	if (supported < 0) {
+		char version[64] = {0};
+		FILE *f = fopen("/sys/module/vc4/srcversion", "r");
+		if (f) {
+			if (!fgets(version, sizeof(version), f))
+				version[0] = 0;
+			fclose(f);
+		}
+		supported = strstr(version, "RQ3V1") ? 1 : 0;
+		fprintf(stderr, "PGEN: vc4 RGB Limited passthrough %s\n", supported ? "available" : "not available");
+	}
+	return supported == 1;
+}
+
+/* Dolby Vision keeps its own transport ranges and the kernel CSC. */
+bool ofxRPI4Window::rgbLimitedPassthrough()
+{
+	return avi_info.output_format == 0 && avi_info.rgb_quant_range == 1 &&
+		!isDoVi && !is_std_DoVi && rgbLimitedPassthroughSupported();
+}
+
+uint64_t ofxRPI4Window::wireRgbQuantRange(int rgb_quant_range, int output_format)
+{
+	if (rgb_quant_range == 1 && output_format == 0 && !isDoVi && !is_std_DoVi &&
+	    rgbLimitedPassthroughSupported())
+		return 3;
+	return (uint64_t)rgb_quant_range;
+}
+
 ofShader ofxRPI4Window::shader;
 volatile sig_atomic_t ofxRPI4Window::exit_requested = 0;
 volatile sig_atomic_t ofxRPI4Window::reload_requested = 0;
@@ -3513,7 +3546,7 @@ void ofxRPI4Window::ResetConnectorProperties()
 		ofLogError() << "DRM: Unable to find RGB Quant Range";
 	} else {
 		rgb_quant_range = (avi_info.rgb_quant_range == 1 || avi_info.rgb_quant_range == 2)
-			? (uint64_t)avi_info.rgb_quant_range : 2;
+			? wireRgbQuantRange(avi_info.rgb_quant_range, avi_info.output_format) : 2;
 		drm_mode_atomic_set_property(device, req, "rgb quant range" , connectorId, prop_id, rgb_quant_range, prop, 0);
 	}		
 
@@ -4025,7 +4058,7 @@ void ofxRPI4Window::updateAVI_Infoframe(uint32_t plane_id, struct avi_infoframe 
 	if (!ok || !(rgb_quant_range >=0)) { 
 		ofLogError() << "DRM: Unable to find RGB Quant Range";
 	} else {	
-		rgb_quant_range = avi_infoframe.rgb_quant_range;
+		rgb_quant_range = wireRgbQuantRange(avi_infoframe.rgb_quant_range, avi_infoframe.output_format);
 		drm_mode_atomic_set_property(device, req, "rgb quant range", connectorId, prop_id, rgb_quant_range, prop, 0);
 	}	
 

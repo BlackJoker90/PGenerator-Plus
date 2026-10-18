@@ -265,9 +265,10 @@ void ofApp::draw(){
      frame; a flip may recreate the renderer, so a one-time background set
      in setup() does not survive. RGB clears to black as well: otherwise the
      openFrameworks default background (light grey) fills the screen, e.g.
-     after an HDMI hotplug start. Dolby Vision stays unchanged. */
-  if(ofxRPI4Window::avi_info.output_format != 0 &&
-     !ofxRPI4Window::isDoVi && !ofxRPI4Window::is_std_DoVi) {
+     after an HDMI hotplug start. Low-latency Dolby Vision is plain YCbCr
+     (metadata in the infoframe) and clears the same way; standard Dolby
+     Vision carries metadata in the pixels and stays unchanged. */
+  if(ofxRPI4Window::avi_info.output_format != 0 && !ofxRPI4Window::is_std_DoVi) {
    int bits = ofxRPI4Window::bit_depth ? ofxRPI4Window::bit_depth : 8;
    int shift = bits - 8;
    int y = (ofxRPI4Window::avi_info.rgb_quant_range == 2 ? 0 : 16) << shift;

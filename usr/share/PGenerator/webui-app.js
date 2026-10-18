@@ -3745,7 +3745,13 @@ async function loadReleaseList(){
  r.releases.forEach(x=>{
   const o=document.createElement('option');
   o.value=x.version;
-  o.textContent='v'+x.version+(x.current?' (installed)':'')+(x.published?' \u2014 '+x.published.split('T')[0]:'');
+  const date=x.published?' \u2014 '+x.published.split('T')[0]:'';
+  o.textContent='v'+x.version+(x.current?' (installed)':'')+date;
+  if(x.current){
+   // The dropdown menu shows this as a highlighted entry with a badge.
+   o.dataset.pgLabel='v'+x.version+date;
+   o.dataset.pgBadge='Installed';
+  }
   sel.appendChild(o);
  });
  // Preselect the release before the installed one: the usual way back.
@@ -20277,7 +20283,7 @@ function meterCloseLutTools(){
   const add=(opt,inGroup)=>{
    if(opt.hidden) return;
    const li=document.createElement('li');
-   li.className='pg-dd-item'+(inGroup?' in-group':'');
+   li.className='pg-dd-item'+(inGroup?' in-group':'')+(opt.dataset.pgBadge?' is-flagged':'');
    li.setAttribute('role','option');
    li.setAttribute('aria-selected',opt.selected?'true':'false');
    if(optionDisabled(opt)) li.setAttribute('aria-disabled','true');
@@ -20287,8 +20293,14 @@ function meterCloseLutTools(){
    mark.setAttribute('aria-hidden','true');
    const label=document.createElement('span');
    label.className='pg-dd-label';
-   label.textContent=opt.label||opt.text;
+   label.textContent=opt.dataset.pgLabel||opt.label||opt.text;
    li.append(mark,label);
+   if(opt.dataset.pgBadge){
+    const badge=document.createElement('span');
+    badge.className='pg-dd-badge';
+    badge.textContent=opt.dataset.pgBadge;
+    li.appendChild(badge);
+   }
    li.pgOption=opt;
    ul.appendChild(li);
    items.push(li);

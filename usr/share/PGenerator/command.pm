@@ -1071,8 +1071,19 @@ sub clean_files(@) {
  if(open(my $ms,"<","$var_dir/meter_settings.json")) { local $/; $keep_meter_settings=<$ms>; close($ms); }
  &remove_files("$var_dir",".*");
  &remove_files("$var_dir/frames/",".*");
+ # A pending WebUI notice (daemon.pm webui_notice) is often written just
+ # before the renderer restarts, e.g. Calman's next CONF_LEVEL; keep it.
+ my $keep_notice="";
+ my $keep_notice_mtime=(stat($webui_notice_file))[9];
+ if(open(my $nf,"<",$webui_notice_file)) { local $/; $keep_notice=<$nf>; close($nf); }
  &remove_files("$var_dir/running/",".*");
  if($keep_meter_settings ne "" && open(my $ms,">","$var_dir/meter_settings.json")) { print $ms $keep_meter_settings; close($ms); }
+ if(defined($keep_notice) && $keep_notice ne "" && open(my $nf,">",$webui_notice_file)) {
+  print $nf $keep_notice;
+  close($nf);
+  # Keep its age: /api/stats shows a notice for 10 minutes after it was written.
+  utime($keep_notice_mtime,$keep_notice_mtime,$webui_notice_file) if($keep_notice_mtime);
+ }
  opendir(TMP,"$var_dir/tmp");
  @dir=readdir(TMP);
  closedir(TMP);

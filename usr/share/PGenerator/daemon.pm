@@ -472,7 +472,8 @@ sub calman_render_rgb_pattern (@) {
   if(time() - ($calman_precision_notice_time || 0) > 600) {
    $calman_precision_notice_time=time();
    my $out_bits=$target_max == 255 ? 8 : 10;
-   &webui_notice("Calman sends finer codes than the output carries","Calman sent $rgb_raw (10 bit), but PGenerator+ outputs $out_bits bit, so the patch was rounded to $r,$g,$b. For bit-exact patches set the same bit depth in Calman and in PGenerator+.");
+   my $sent=join(",",map { int($_) } @el_cmd[0..2]);
+   &webui_notice("Calman sends finer codes than the output carries","Calman sent $sent (10 bit), but PGenerator+ outputs $out_bits bit, so the patch was rounded to $r,$g,$b. For bit-exact patches set the same bit depth in Calman and in PGenerator+.");
   }
  }
  my $patch_context=&calman_patch_context();

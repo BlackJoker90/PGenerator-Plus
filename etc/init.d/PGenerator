@@ -86,7 +86,13 @@ case "$1" in
         # is the initial DRM master; subsequent pgsethdr calls from the
         # WebUI HDR update path run while the renderer holds the master
         # and steal/release it.
+        # With an HDR conf the metadata switches the TV to PQ/HLG while the
+        # SDR boot splash is still on the framebuffer, which then flashes up
+        # overbright until the renderer takes over. Show black instead.
         if [ -x "/usr/bin/pgsethdr" ]; then
+         if grep -q '^is_hdr=1$' /etc/PGenerator/PGenerator.conf 2>/dev/null && ! grep -q '^dv_status=1$' /etc/PGenerator/PGenerator.conf 2>/dev/null && grep -Eq '^eotf=([2-9]|[1-9][0-9])$' /etc/PGenerator/PGenerator.conf 2>/dev/null && [ -c /dev/fb0 ]; then
+          dd if=/dev/zero of=/dev/fb0 bs=65536 2>/dev/null
+         fi
          /usr/bin/pgsethdr 2>/dev/null || echo "pgsethdr pre-set failed"
         fi
         setcap cap_net_bind_service=+ep $PERL

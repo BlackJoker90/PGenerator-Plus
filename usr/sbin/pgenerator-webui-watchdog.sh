@@ -166,6 +166,14 @@ fi
 # STARTUP_GRACE seconds alone. Age comes from /proc (monotonic): the wall
 # clock jumps by minutes when NTP syncs during boot.
 STARTUP_GRACE=${PG_WATCHDOG_STARTUP_GRACE:-120}
+# The same applies to the boot itself: cron already runs while rcPGenerator
+# is still bringing up hostapd/wpa_supplicant/dhcpd before it starts the
+# daemon, and a restart from here then raced that start.
+BOOT_GRACE=${PG_WATCHDOG_BOOT_GRACE:-180}
+boot_up=$(cut -d. -f1 /proc/uptime 2>/dev/null)
+case "$boot_up" in (''|*[!0-9]*) ;; (*)
+  [ "$boot_up" -lt "$BOOT_GRACE" ] && exit 0
+;; esac
 daemon_pid=$(cat "$PID_FILE" 2>/dev/null | head -c 16)
 case "$daemon_pid" in (''|*[!0-9]*) daemon_pid="";; esac
 if [ -n "$daemon_pid" ] && [ -r "/proc/$daemon_pid/stat" ]; then

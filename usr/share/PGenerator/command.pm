@@ -338,20 +338,35 @@ sub apply_drm_properties (@) {
  my $prelaunch=shift;
  return if(!$is_kms);
  my $is_dv=int($pgenerator_conf{"dv_status"} || 0);
- # Find connected HDMI connector ID
+ # Find connected HDMI connector ID (and its current property values)
  my $connector_id="";
+ my %current=();
+ my $current_prop="";
  open(MT,"timeout 3 $modetest -c 2>/dev/null|");
  while(<MT>) {
-  if(/^(\d+)\s+\d+\s+connected\s+HDMI/) {
-   $connector_id=$1;
-   last;
+  if($connector_id eq "") {
+   $connector_id=$1 if(/^(\d+)\s+\d+\s+connected\s+HDMI/);
+   next;
   }
+  last if(/^\d+\s+\d+\s+(connected|disconnected)/);
+  if(/^\s+\d+\s+(.+):\s*$/) { $current_prop=$1; next; }
+  $current{$current_prop}=$1 if($current_prop ne "" && /^\s+value:\s*(\d+)\s*$/);
  }
  close(MT);
  return if($connector_id eq "");
+ # Pre-launch: every changed connector property is a separate modeset, i.e.
+ # one more HDMI resync (the TV showed the boot splash again for each). The
+ # renderer's first atomic commit sets max bpc, output format, quant range
+ # and colorimetry together with its mode, so before a spawn only write what
+ # actually differs from the current state: max bpc and the RGB guard below.
+ # Quant range and colorimetry are left to the renderer.
+ my $skip_unchanged=sub {
+  my ($prop,$value)=@_;
+  return $prelaunch && defined($current{$prop}) && "$current{$prop}" eq "$value";
+ };
  # Set max bpc — the binary fails to apply this property
  my $max_bpc=$pgenerator_conf{"max_bpc"};
- if($max_bpc ne "" && $max_bpc > 0) {
+ if($max_bpc ne "" && $max_bpc > 0 && !$skip_unchanged->("max bpc",$max_bpc)) {
   &modetest_connector_write($connector_id,"max bpc",$max_bpc);
   &log("DRM: Set max bpc=$max_bpc on connector $connector_id");
  }
@@ -368,8 +383,14 @@ sub apply_drm_properties (@) {
  # init window. Keep the link RGB until the renderer's first commit
  # switches it together with its own correctly encoded frame.
  $color_fmt=0 if($prelaunch);
- &modetest_connector_write($connector_id,"output format",$color_fmt);
- &log("DRM: Set output format=$color_fmt on connector $connector_id".($prelaunch ? " (pre-launch, renderer sets the configured format)" : ""));
+ if(!$skip_unchanged->("output format",$color_fmt)) {
+  &modetest_connector_write($connector_id,"output format",$color_fmt);
+  &log("DRM: Set output format=$color_fmt on connector $connector_id".($prelaunch ? " (pre-launch, renderer sets the configured format)" : ""));
+ }
+ if($prelaunch) {
+  &log("DRM: pre-launch connector check done (max bpc=".($current{"max bpc"} // "?").", output format=".($current{"output format"} // "?")."); quant range and colorimetry are set by the renderer");
+  return;
+ }
  # Set quantization range (enums: Default=0 Limited=1 Full=2)
  my $quant_range=$pgenerator_conf{"rgb_quant_range"};
  $quant_range=2 if($is_dv);

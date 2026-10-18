@@ -20516,7 +20516,14 @@ function meterCloseLutTools(){
   }
  },true);
  window.addEventListener('scroll',e=>{ if(menu&&!menu.contains(e.target)) close(); },true);
- window.addEventListener('resize',()=>close(true));
+ // Chart code dispatches synthetic resize events after redraws; only a real
+ // viewport change matters, and then the menu follows its select.
+ let viewW=window.innerWidth,viewH=window.innerHeight;
+ window.addEventListener('resize',()=>{
+  if(window.innerWidth===viewW&&window.innerHeight===viewH) return;
+  viewW=window.innerWidth; viewH=window.innerHeight;
+  if(menu) refresh();
+ });
  window.addEventListener('blur',()=>close(true));
  document.addEventListener('pgen:themechange',()=>close(true));
 })();

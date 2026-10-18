@@ -1401,6 +1401,14 @@ sub pattern_daemon {
 	      my ($payload,$default_format_bpc)=@_;
 	      my %parsed=&calman_parse_source_format_payload($payload,$default_format_bpc);
 	      my $changed=0;
+	      # The renderer has no YCbCr 4:2:0 encode path and the link stays
+	      # RGB, so the drawn codes would not match the signal. Keep the
+	      # current format and its bit depth instead.
+	      if($parsed{color_format} eq "3") {
+	       &log("Calman: YCbCr 4:2:0 is not supported, keeping color_format=".($pgenerator_conf{"color_format"} // "0")." max_bpc=".($pgenerator_conf{"max_bpc"} // "8"));
+	       $parsed{color_format}="";
+	       $parsed{max_bpc}="";
+	      }
 	      if($parsed{color_format} ne "") {
 	       $calman_save_setting->("color_format",$parsed{color_format});
 	       $changed=1;

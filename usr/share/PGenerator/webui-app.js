@@ -945,7 +945,8 @@ function applyMeterTargetGammaDefault(force){
 // Recommended output per signal mode, loaded when the operator picks a mode.
 // YCbCr 4:4:4 Limited is the bit-exact path (unity CSC in vc4, same transport
 // as LG AutoCal); RGB Limited would go through the inexact vc4 range CSC.
-// DV uses its transport defaults (dvTransportDefaults). Colorimetry comes from
+// DV starts on the standard transport (8-bit RGB Full, see dvTransportDefaults);
+// LLDV stays selectable in the DV card. Colorimetry comes from
 // webuiAutoColorimetryForSignalMode. HDR metadata is display specific and kept.
 const PG_SIGNAL_MODE_PRESETS={
  sdr:{color_format:'1',max_bpc:'8',rgb_quant_range:'1',eotf:'0',primaries:'0'},
@@ -969,7 +970,7 @@ document.getElementById('signal_mode').addEventListener('change',function(){
   ['color_format','max_bpc','rgb_quant_range','eotf','primaries'].forEach(k=>setVal(k,preset[k]));
   setVal('colorimetry',autoColorimetry);
  }else if(sm==='dv'){
-  const dvTransport=dvTransportDefaults(getVal('dv_transport'));
+  const dvTransport=dvTransportDefaults('standard');
   setVal('dv_transport',dvTransport.dv_transport);
   setVal('dv_interface',dvTransport.dv_interface);
   setVal('eotf','2');
@@ -996,6 +997,20 @@ document.getElementById('signal_mode').addEventListener('change',function(){
  // updateDropdowns() may have adjusted the preset to what the resolution
  // allows, so report the values that are actually selected now.
  toast('Recommended '+meterSelectLabel('signal_mode')+' settings loaded: '+pgSignalModePresetSummary()+'. Click Apply to output them.');
+});
+
+// Switching the DV transport loads that transport's wire format. Done here as
+// well as in updateDropdowns(), which returns early while no display (and so
+// no mode list) is known.
+document.getElementById('dv_transport').addEventListener('change',function(){
+ if(getVal('signal_mode')!=='dv') return;
+ const dvTransport=dvTransportDefaults(this.value);
+ setVal('dv_interface',dvTransport.dv_interface);
+ setVal('color_format',dvTransport.color_format);
+ setVal('max_bpc',dvTransport.max_bpc);
+ setVal('rgb_quant_range',dvTransport.rgb_quant_range);
+ uiEnforceQuantRangeForColorFormat();
+ checkSettingsChanged();
 });
 
 document.getElementById('dv_map_mode').addEventListener('change',function(){

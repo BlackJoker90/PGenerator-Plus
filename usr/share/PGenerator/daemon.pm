@@ -192,8 +192,9 @@ sub calman_apl_bg (@) {
  my $rgb=shift;
  my $win_pct=shift;
  my $source=shift;
- return $calman_bg if(!$calman_apl_enabled);
- return &calman_apl_bg_value($rgb,$win_pct,$calman_apl,$source,$calman_bg);
+ my $bg=&calman_current_bg();
+ return $bg if(!$calman_apl_enabled);
+ return &calman_apl_bg_value($rgb,$win_pct,$calman_apl,$source,$bg);
 }
 
 sub calman_apl_bg_value (@) {
@@ -241,7 +242,7 @@ sub calman_commandrgb_window (@) {
  my $source=shift;
  my $win_pct=10;
  my $apl_pct=18;
- my $bg_str="0,0,0";
+ my $bg_str=&calman_black_bg();
  if($size_token >= 1 && $size_token <= 100) {
   $win_pct=$size_token;
   &log("Calman: $source direct window token=$size_token -> size=$win_pct apl=0");
@@ -250,7 +251,7 @@ sub calman_commandrgb_window (@) {
  if($size_token >= 101 && $size_token <= 998) {
   $win_pct=10;
   $apl_pct=$size_token - 100;
-  $bg_str=&calman_apl_bg_value($rgb,$win_pct,$apl_pct,"$source preset","0,0,0");
+  $bg_str=&calman_apl_bg_value($rgb,$win_pct,$apl_pct,"$source preset",&calman_black_bg());
   &log("Calman: $source preset APL token=$size_token -> size=$win_pct apl=$apl_pct");
   return ($win_pct,$bg_str);
  }
@@ -259,7 +260,7 @@ sub calman_commandrgb_window (@) {
   $win_pct=10 if($win_pct < 1);
   $win_pct=100 if($win_pct > 100);
   $apl_pct=$calman_apl + 0;
-  $bg_str=&calman_apl_bg_value($rgb,$win_pct,$apl_pct,"$source custom","0,0,0");
+  $bg_str=&calman_apl_bg_value($rgb,$win_pct,$apl_pct,"$source custom",&calman_black_bg());
   &log("Calman: $source custom token=999 -> size=$win_pct apl=$apl_pct");
   return ($win_pct,$bg_str);
  }
@@ -274,7 +275,7 @@ sub calman_reset_pattern_state (@) {
  my $source=shift;
  $calman_apl=18;
  $calman_apl_enabled=0;
- $calman_bg="0,0,0";
+ $calman_bg="";
  $calman_win_size=10;
  $calman_explicit_max_bpc=0;
  $calman_rgb_quant_range=($pgenerator_conf{"rgb_quant_range"}||"2") + 0;
@@ -381,6 +382,20 @@ sub calman_pattern_source_range (@) {
  return "";
 }
 
+# Black in the codes the renderer gets. SOURCE_RANGE=LIMITED codes are
+# video levels, so code 0 would sit below black: YCbCr links carry it as
+# Y=0 instead of 16/64/256.
+sub calman_black_bg (@) {
+ return "0,0,0" if(&calman_pattern_source_range() ne "LIMITED");
+ my $black=16*(&calman_target_max()+1)/256;
+ return "$black,$black,$black";
+}
+
+# Background Calman set with RGB_B, or black when it has not set one.
+sub calman_current_bg (@) {
+ return ($calman_bg ne "") ? $calman_bg : &calman_black_bg();
+}
+
 sub calman_patch_context (@) {
  return "mode_idx=".($pgenerator_conf{"mode_idx"}||"").
         " renderer=${w_s}x${h_s}".
@@ -478,12 +493,13 @@ sub calman_render_rgb_pattern (@) {
   }
  }
  my $patch_context=&calman_patch_context();
- &log("Calman PATTERN: scaled=$r,$g,$b bg=$calman_bg max_bpc=$pgenerator_conf{'max_bpc'} $patch_context");
+ my $current_bg=&calman_current_bg();
+ &log("Calman PATTERN: scaled=$r,$g,$b bg=$current_bg max_bpc=$pgenerator_conf{'max_bpc'} $patch_context");
  &log_calman_patch(type=>$type,
                    raw=>$rgb_raw,
                    scaled=>"$r,$g,$b",
                    win=>$calman_win_size,
-                   bg=>$calman_bg,
+                   bg=>$current_bg,
                    range=>&calman_pattern_source_range(),
                    peer=>$connection ? $client_ip{$connection} : "",
                    extra=>"raw_extra=".join(",",@el_cmd[3..$#el_cmd])." target_max=$target_max calman_max=$calman_max $patch_context");
@@ -509,7 +525,7 @@ sub calman_render_rgb_pattern (@) {
   $win_pct=$calman_win_size if($win_pct < 1);
   $win_pct=100 if($win_pct > 100);
   $calman_win_size=$win_pct if($win_pct > 0);
-  my $effective_bg=$calman_bg;
+  my $effective_bg=$current_bg;
   &log("Calman: RGB_S direct window size=$win_pct% bg=$effective_bg");
   if($win_pct >= 100) {
    $pname_file="FullField";
@@ -526,7 +542,7 @@ sub calman_render_rgb_pattern (@) {
  }
  if($type =~/RGB_A/) {
   my $win_pct=$calman_win_size;
-  my $effective_bg=$calman_bg;
+  my $effective_bg=$current_bg;
   if(scalar(@el_cmd) >= 7) {
    my $bg_r=&calman_scale_value($el_cmd[3],$calman_max);
    my $bg_g=&calman_scale_value($el_cmd[4],$calman_max);
@@ -761,7 +777,7 @@ sub calman_render_specialty_pattern (@) {
    &load_new_pattern_file("calman");
   } else {
    &log("Calman: BRIGHTNESS image render failed, falling back to flat patch");
-   &create_pattern_file("RECTANGLE","$w_s,$h_s",100,"$black_rgb","$calman_bg","","","",1,"calman",$source_range,$source_max);
+   &create_pattern_file("RECTANGLE","$w_s,$h_s",100,"$black_rgb",&calman_current_bg(),"","","",1,"calman",$source_range,$source_max);
   }
  } elsif($sp_name eq "CONTRAST") {
   my $img=&webui_pattern_diag_image_file("calman_contrast");
@@ -773,7 +789,7 @@ sub calman_render_specialty_pattern (@) {
    &load_new_pattern_file("calman");
   } else {
    &log("Calman: CONTRAST image render failed, falling back to flat patch");
-   &create_pattern_file("RECTANGLE","$w_s,$h_s",100,"$white_rgb","$calman_bg","","","",1,"calman",$source_range,$source_max);
+   &create_pattern_file("RECTANGLE","$w_s,$h_s",100,"$white_rgb",&calman_current_bg(),"","","",1,"calman",$source_range,$source_max);
   }
  } elsif($sp_name eq "ALIGNMENT" || $sp_name eq "OVERSCAN") {
   my $img=&webui_pattern_diag_image_file("calman_alignment");
@@ -785,11 +801,11 @@ sub calman_render_specialty_pattern (@) {
    &load_new_pattern_file("calman");
   } else {
    &log("Calman: ALIGNMENT image render failed, falling back to flat patch");
-   &create_pattern_file("RECTANGLE","$w_s,$h_s",100,"$gray128_rgb","$calman_bg","","","",1,"calman",$source_range,$source_max);
+   &create_pattern_file("RECTANGLE","$w_s,$h_s",100,"$gray128_rgb",&calman_current_bg(),"","","",1,"calman",$source_range,$source_max);
   }
  } else {
   &log("Calman: unknown specialty pattern: $sp_name");
-  &create_pattern_file("RECTANGLE","$w_s,$h_s",100,"$gray128_rgb","$calman_bg","","","",1,"calman",$source_range,$source_max);
+  &create_pattern_file("RECTANGLE","$w_s,$h_s",100,"$gray128_rgb",&calman_current_bg(),"","","",1,"calman",$source_range,$source_max);
  }
  return 1;
 }

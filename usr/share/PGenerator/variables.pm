@@ -323,7 +323,7 @@ $calman_special_pattern{$start_cmd_string_calman."RGB_S:0064,0064,0064,018"}=$pa
 
 $calman_apl=18;
 $calman_apl_enabled=0;
-$calman_bg="0,0,0";
+$calman_bg="";
 $calman_settings_dirty=0;
 $calman_win_size=10;
 $calman_explicit_max_bpc=0;

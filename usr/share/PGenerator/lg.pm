@@ -9,6 +9,7 @@ use IO::Select ();
 use IO::Socket::INET ();
 use MIME::Base64 ();
 use Socket qw(inet_aton sockaddr_in);
+use Time::HiRes ();
 # threads::shared degrades to no-ops when the loading process never loaded
 # threads, so this is safe for any single-threaded consumer of this file.
 use threads::shared;
@@ -607,9 +608,10 @@ sub lg_mdns_lookup_host (@) {
  }
  send($socket,$packet,0,sockaddr_in(5353,$target));
  my $select=IO::Select->new($socket);
- my $deadline=time() + $timeout;
- while(time() < $deadline) {
-  my $remaining=$deadline - time();
+ # Sub-second clock: with time() the 1.2 s wait ran up to 2.2 s.
+ my $deadline=Time::HiRes::time() + $timeout;
+ while(Time::HiRes::time() < $deadline) {
+  my $remaining=$deadline - Time::HiRes::time();
   last if($remaining <= 0);
   my @ready=$select->can_read($remaining);
   next if(!@ready);
@@ -640,8 +642,19 @@ sub lg_autodetect_info (@) {
  if(!$force_refresh && &lg_valid_ipv4($rejected_ip) && $rejected_at > 0 && (time() - $rejected_at) < 120) {
   return {};
  }
- foreach my $host (&lg_discovery_hosts()) {
+ # Nothing answered recently: /api/lg/status runs this on every poll and each
+ # lookup waits out its full timeout, so do not ask again for a minute (an
+ # explicit scan passes force_refresh).
+ my $missed_at=int($clients->{"auto_missed_at"}||0);
+ if(!$force_refresh && $missed_at > 0 && (time() - $missed_at) < 60) {
+  return &lg_valid_ipv4($cached_ip) ? { ip => $cached_ip, host => $cached_host, source => "mdns-cache" } : {};
+ }
+ # mDNS names are case-insensitive; ask once per name.
+ my %asked;
+ my $answered=0;
+ foreach my $host (grep { !$asked{lc($_)}++ } &lg_discovery_hosts()) {
   my $ip=&lg_mdns_lookup_host($host,1.2);
+  $answered=1 if(&lg_valid_ipv4($ip));
   next if(!&lg_valid_ipv4($ip));
   if(!$force_refresh && $ip eq $rejected_ip && $rejected_at > 0 && (time() - $rejected_at) < 120) {
    next;
@@ -663,8 +676,13 @@ sub lg_autodetect_info (@) {
   delete($clients->{"auto_rejected_ip"});
   delete($clients->{"auto_rejected_host"});
   delete($clients->{"auto_rejected_at"});
+  delete($clients->{"auto_missed_at"});
   &lg_save_clients($clients);
   return { ip => $ip, host => lc($host), source => "mdns-hostname" };
+ }
+ if(!$answered && !$force_refresh) {
+  $clients->{"auto_missed_at"}=time();
+  &lg_save_clients($clients);
  }
  if(&lg_valid_ipv4($cached_ip)) {
   return { ip => $cached_ip, host => $cached_host, source => "mdns-cache" };

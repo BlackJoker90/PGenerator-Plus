@@ -302,6 +302,9 @@ $pattern_generator="/usr/sbin/PGeneratord";
 # with PGeneratord ("sighup-reconfigure": in-place signal reconfigure on SIGHUP,
 # see renderer_reconfigure_in_place in command.pm).
 $renderer_features_file="/var/lib/PGenerator/running/renderer-features";
+# Notice for the WebUI (id, title, text lines), shown once per browser as a
+# popup; written by the daemon, read by /api/stats.
+$webui_notice_file="/var/lib/PGenerator/running/webui-notice";
 
 $ok_response="OK";
 $error_response="ERR";

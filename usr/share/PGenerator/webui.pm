@@ -1669,6 +1669,17 @@ sub webui_handle_request (@) {
    my $config_rev=@conf_stat ? "$conf_stat[1]-$conf_stat[7]-$conf_stat[9]" : "";
    my $stats=$_stats_cache;
    $stats=~s/\}$/,"config_rev":"$config_rev"}/;
+   # A daemon notice from the last 10 minutes (e.g. Calman asked for an
+   # unsupported format); the page shows each id once.
+   my @notice_stat=stat($webui_notice_file);
+   if(@notice_stat && time() - $notice_stat[9] < 600 && open(my $nfh,"<",$webui_notice_file)) {
+    my ($nid,$ntitle,@ntext)=map { s/\r?\n$//r } <$nfh>;
+    close($nfh);
+    if(defined($ntitle) && $nid ne "") {
+     my $ntext=join("\n",@ntext);
+     $stats=~s/\}$/sprintf(',"notice":{"id":"%s","title":"%s","text":"%s"}}',&_webui_json_escape($nid),&_webui_json_escape($ntitle),&_webui_json_escape($ntext))/e;
+    }
+   }
    my $len=length($stats);
    print $client "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: $len\r\n$cors\r\n$stats";
   }

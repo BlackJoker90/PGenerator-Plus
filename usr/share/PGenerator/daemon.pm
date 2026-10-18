@@ -1406,6 +1406,9 @@ sub pattern_daemon {
 	      # current format and its bit depth instead.
 	      if($parsed{color_format} eq "3") {
 	       &log("Calman: YCbCr 4:2:0 is not supported, keeping color_format=".($pgenerator_conf{"color_format"} // "0")." max_bpc=".($pgenerator_conf{"max_bpc"} // "8"));
+	       my %fmt_name=("0"=>"RGB","1"=>"YCbCr 4:4:4","2"=>"YCbCr 4:2:2");
+	       my $kept=($fmt_name{$pgenerator_conf{"color_format"} // "0"} || "RGB")." ".($pgenerator_conf{"max_bpc"} || 8)."-bit";
+	       &webui_notice("YCbCr 4:2:0 is not supported","Calman requested YCbCr 4:2:0. PGenerator+ has no YCbCr 4:2:0 output, so the output stays $kept.\nChoose RGB or YCbCr 4:4:4 in Calman for bit-exact measurements.");
 	       $parsed{color_format}="";
 	       $parsed{max_bpc}="";
 	      }
@@ -2874,4 +2877,18 @@ sub error(@) {
  &stats("errors",1);
  return $error_message;
 }
+# Leave a notice for the WebUI (see $webui_notice_file). Written to a temp
+# file and renamed so /api/stats never reads half a notice.
+sub webui_notice (@) {
+ my ($title,$text)=@_;
+ my $tmp="$webui_notice_file.tmp";
+ if(open(my $fh,">",$tmp)) {
+  print $fh time()."-$$-".int(rand(1000000))."\n$title\n$text\n";
+  close($fh);
+  rename($tmp,$webui_notice_file) or &log("WebUI notice: rename failed: $!");
+ } else {
+  &log("WebUI notice: cannot write $tmp: $!");
+ }
+}
+
 return 1;

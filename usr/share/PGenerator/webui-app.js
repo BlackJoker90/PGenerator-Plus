@@ -1563,6 +1563,48 @@ function setMeter(id,pct){
  const el=document.getElementById(id);
  if(el)el.style.width=Math.max(0,Math.min(100,Number(pct)||0))+'%';
 }
+// Daemon notice (e.g. Calman asked for a format PGenerator+ cannot output):
+// a modal info card that stays until dismissed, once per notice id.
+function pgShowDaemonNotice(notice){
+ let seen='';
+ try{ seen=localStorage.getItem('pgDaemonNoticeSeen')||''; }catch(e){}
+ if(seen===notice.id||document.getElementById('pgDaemonNotice')) return;
+ const root=document.createElement('div');
+ root.id='pgDaemonNotice';
+ root.setAttribute('role','alertdialog');
+ root.setAttribute('aria-modal','true');
+ root.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:100002;display:flex;align-items:center;justify-content:center;padding:20px;box-sizing:border-box';
+ const card=document.createElement('div');
+ card.style.cssText='background:var(--panel,#0f1320);border:1px solid var(--orange,#ffa726);border-left:6px solid var(--orange,#ffa726);border-radius:10px;max-width:520px;width:100%;padding:22px;color:var(--text,#e3e6ef);box-shadow:0 18px 60px rgba(0,0,0,0.6);font-family:inherit';
+ const title=document.createElement('div');
+ title.style.cssText='display:flex;align-items:center;gap:10px;font-size:1.1rem;font-weight:700;margin-bottom:12px';
+ const icon=document.createElement('span');
+ icon.textContent='i';
+ icon.setAttribute('aria-hidden','true');
+ icon.style.cssText='flex:none;width:26px;height:26px;border-radius:50%;background:var(--orange,#ffa726);color:#111;display:inline-flex;align-items:center;justify-content:center;font-weight:800;font-style:italic;font-family:Georgia,serif';
+ const titleText=document.createElement('span');
+ titleText.textContent=String(notice.title||'Info');
+ title.appendChild(icon);title.appendChild(titleText);
+ const body=document.createElement('div');
+ body.style.cssText='font-size:.9rem;color:var(--text2,#a8b0c0);line-height:1.55;margin-bottom:18px;white-space:pre-line';
+ body.textContent=String(notice.text||'');
+ const actions=document.createElement('div');
+ actions.style.cssText='display:flex;justify-content:flex-end';
+ const ok=document.createElement('button');
+ ok.type='button';
+ ok.className='btn btn-primary';
+ ok.textContent='OK';
+ ok.addEventListener('click',()=>{
+  try{ localStorage.setItem('pgDaemonNoticeSeen',notice.id); }catch(e){}
+  root.remove();
+ });
+ actions.appendChild(ok);
+ card.appendChild(title);card.appendChild(body);card.appendChild(actions);
+ root.appendChild(card);
+ document.body.appendChild(root);
+ ok.focus();
+}
+
 async function loadStats(quiet){
  const stats=await fetchJSON('/api/stats',{_quiet:!!quiet,_timeoutMs:5000});
  if(!stats)return;
@@ -1572,6 +1614,7 @@ async function loadStats(quiet){
   if(window._configRev&&stats.config_rev!==window._configRev) syncRemoteConfig();
   window._configRev=stats.config_rev;
  }
+ if(stats.notice&&stats.notice.id) pgShowDaemonNotice(stats.notice);
  const cpuPct=Number(stats.cpu_percent),memPct=Number(stats.memory_percent);
  const cpuVal=document.getElementById('cpuUsageValue');
  const memVal=document.getElementById('memUsageValue');

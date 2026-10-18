@@ -51,7 +51,7 @@ function applySettingsModalShow(){
  if(hint) hint.style.display='';
  overlay.setAttribute('aria-hidden','false');
 }
-function applySettingsModalSuccess(detail){
+function applySettingsModalSuccess(detail,holdMs){
  const overlay=document.getElementById('applySettingsOverlay');
  if(!overlay) return;
  document.body.classList.add('apply-settings-success');
@@ -59,7 +59,7 @@ function applySettingsModalSuccess(detail){
  const status=document.getElementById('applySettingsStatus');
  if(title) title.textContent='Settings applied';
  if(status) status.textContent=detail||'New signal mode is live on the display.';
- setTimeout(()=>applySettingsModalHide(),1500);
+ setTimeout(()=>applySettingsModalHide(),holdMs||1500);
 }
 function applySettingsModalError(detail){
  const overlay=document.getElementById('applySettingsOverlay');
@@ -2272,7 +2272,7 @@ async function applySettings(){
   headers:{'Content-Type':'application/json'},body:JSON.stringify(changes),_timeoutMs:30000});
  if(r&&r.status==='ok'){
   try{
-   if(r.restart) await waitForRendererRestart(r.restart_id,60000);
+   const restart=r.restart?await waitForRendererRestart(r.restart_id,60000):null;
    await loadConfig();
    updateDropdowns();
    await loadInfo();
@@ -2282,7 +2282,10 @@ async function applySettings(){
    await loadModes(true);
    if(typeof lgRefreshPictureModeAfterOutputApply==='function') lgRefreshPictureModeAfterOutputApply();
    if(typeof meterRefreshStabilizationIdlePattern==='function') await meterRefreshStabilizationIdlePattern(false);
-   applySettingsModalSuccess();
+   // No display connected: the settings are saved but nothing is on the
+   // wire yet, so show the server's message instead of "live on the display".
+   if(restart&&restart.hdmi===0) applySettingsModalSuccess(restart.message,6000);
+   else applySettingsModalSuccess();
   }catch(e){
    applySettingsModalError((e&&e.message)||'Apply failed while reloading config.');
    // Fall through to finally so _configApplyPending clears and the modal

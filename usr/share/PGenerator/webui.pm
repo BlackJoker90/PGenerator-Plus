@@ -962,7 +962,7 @@ sub webui_renderer_restart_status_path (@) {
 }
 
 sub webui_renderer_restart_status_write (@) {
- my ($restart_id,$state,$message)=@_;
+ my ($restart_id,$state,$message,$hdmi)=@_;
  my $path=&webui_renderer_restart_status_path($restart_id);
  return 0 if($path eq "");
  $state="error" if(!defined($state) || $state !~ /^(?:pending|starting|ready|error)$/);
@@ -972,6 +972,7 @@ sub webui_renderer_restart_status_write (@) {
  my $tmp=$path.".".$$ .".".threads->tid().".tmp";
  return 0 if(!open(my $fh,">",$tmp));
  print $fh "state=$state\nmessage=$message\n";
+ print $fh "hdmi=".($hdmi ? 1 : 0)."\n" if(defined($hdmi));
  close($fh);
  if(!rename($tmp,$path)) { unlink($tmp); return 0; }
  return 1;
@@ -995,17 +996,18 @@ sub webui_renderer_restart_status_json (@) {
  my $path=&webui_renderer_restart_status_path($restart_id);
  return '{"status":"error","state":"error","message":"Invalid restart identifier."}' if($path eq "");
  return '{"status":"error","state":"error","message":"Restart status is no longer available."}' if(!-f $path);
- my ($state,$message)=("error","Restart status could not be read.");
+ my ($state,$message,$hdmi)=("error","Restart status could not be read.","");
  if(open(my $fh,"<",$path)) {
   while(<$fh>) {
    s/[\r\n]+$//;
    $state=$1 if(/^state=(pending|starting|ready|error)$/);
    $message=$1 if(/^message=(.*)$/);
+   $hdmi=$1 if(/^hdmi=([01])$/);
   }
   close($fh);
  }
  $message=~s/\\/\\\\/g; $message=~s/"/\\"/g;
- return '{"status":"ok","state":"'.$state.'","message":"'.$message.'"}';
+ return '{"status":"ok","state":"'.$state.'","message":"'.$message.'"'.($hdmi ne "" ? ',"hdmi":'.$hdmi : '').'}';
 }
 
 sub webui_wait_for_renderer_ready (@) {
@@ -1085,7 +1087,7 @@ sub webui_complete_renderer_restart (@) {
  &pattern_generator_stop();
  &load_new_pattern_file("webui apply");
  if(!&pattern_generator_is_running() && !&hdmi_sink_connected()) {
-  &webui_renderer_restart_status_write($restart_id,"ready","Settings saved. No HDMI display is connected; the renderer starts when one is plugged in.");
+  &webui_renderer_restart_status_write($restart_id,"ready","Settings saved. No HDMI display is connected; the renderer starts when one is plugged in.",0);
   &log("WebUI: renderer restart $restart_id deferred (no HDMI display connected)");
   return 1;
  }
@@ -9967,7 +9969,13 @@ sub webui_apply_config (@) {
   }
  }
  my $requested_mode_clock=0;
- if(defined $changes{"mode_idx"} && $changes{"mode_idx"} ne "" && $changes{"mode_idx"} ne "-1") {
+ # Without an HDMI display the mode list is empty and the page sends an
+ # empty mode_idx: keep the saved mode instead of deleting it (an empty
+ # mode_idx makes auto_select_4k_mode pick 4K 30 Hz on the next plug-in).
+ delete $changes{"mode_idx"} if(defined $changes{"mode_idx"} && $changes{"mode_idx"} eq "");
+ # An unchanged mode needs no check against the live mode list, which is
+ # empty while no display is connected.
+ if(defined $changes{"mode_idx"} && $changes{"mode_idx"} ne "-1" && $changes{"mode_idx"} ne ($pgenerator_conf{"mode_idx"} // "")) {
   if($changes{"mode_idx"} !~ /^\d+$/) {
    my $result='{"status":"error","message":"Invalid display mode index."}';
    return wantarray ? ($result,0) : $result;

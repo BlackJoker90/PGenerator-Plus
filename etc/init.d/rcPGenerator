@@ -39,11 +39,19 @@ rc_PGenerator_start () {
   # anything that starts printing after modules finish loading.
   dmesg -n 1 2>/dev/null
 
+  # Clear any residual boot text from tty1, then detach the text console
+  # from the framebuffer. Whenever the renderer releases DRM (every
+  # signal-mode switch) the kernel shows the fbdev buffer again; with the
+  # console still bound that was the getty prompt and udevd messages. Once
+  # unbound, the buffer keeps the splash (or black) and nothing draws on it.
+  printf '\033[2J\033[H\033[?25l' > /dev/tty1 2>/dev/null
+  for VTCON in /sys/class/vtconsole/vtcon*; do
+   grep -q "frame buffer" "$VTCON/name" 2>/dev/null && echo 0 > "$VTCON/bind" 2>/dev/null
+  done
+
   # Show boot splash on framebuffer (replaces GPU rainbow gradient)
   SPLASH_FB="/usr/share/PGenerator/splash.fb"
   if [ -f "$SPLASH_FB" ] && [ -c /dev/fb0 ]; then
-   # Clear any residual boot text from tty1 before writing splash
-   printf '\033[2J\033[H' > /dev/tty1 2>/dev/null
    cat "$SPLASH_FB" > /dev/fb0 2>/dev/null
   fi
 

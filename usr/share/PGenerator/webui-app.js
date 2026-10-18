@@ -942,49 +942,44 @@ function applyMeterTargetGammaDefault(force){
  meterSyncTargetGammaControl();
 }
 
+// Recommended output per signal mode, loaded when the operator picks a mode.
+// YCbCr 4:4:4 Limited is the bit-exact path (unity CSC in vc4, same transport
+// as LG AutoCal); RGB Limited would go through the inexact vc4 range CSC.
+// DV uses its transport defaults (dvTransportDefaults). Colorimetry comes from
+// webuiAutoColorimetryForSignalMode. HDR metadata is display specific and kept.
+const PG_SIGNAL_MODE_PRESETS={
+ sdr:{color_format:'1',max_bpc:'8',rgb_quant_range:'1',eotf:'0',primaries:'0'},
+ hdr10:{color_format:'1',max_bpc:'10',rgb_quant_range:'1',eotf:'2',primaries:'2'},
+ hlg:{color_format:'1',max_bpc:'10',rgb_quant_range:'1',eotf:'3',primaries:'1'}
+};
+function pgSignalModePresetSummary(){
+ return ['color_format','max_bpc','rgb_quant_range','colorimetry'].map(meterSelectLabel)
+  .concat(getVal('signal_mode')==='sdr'?[]:[meterSelectLabel('eotf')]).filter(Boolean).join(' · ');
+}
 document.getElementById('signal_mode').addEventListener('change',function(){
  const sm=this.value;
- // Set sensible defaults per mode. Users can still adjust the fields after
- // switching modes, but picking the mode should land on a working baseline.
+ // Every mode lands on its recommended baseline; the fields stay editable.
  // Target Colourspace follows the signal mode (BT.2020 for HDR10/HLG/DV,
- // BT.709 for SDR) and stays user-editable after the auto-set; the
- // next /api/config poll respects whatever the server has stored.
+ // BT.709 for SDR); the next /api/config poll respects what the server stores.
  const autoColorimetry=webuiAutoColorimetryForSignalMode(sm);
- if(sm==='sdr'){
-  setVal('eotf','0');
+ const preset=PG_SIGNAL_MODE_PRESETS[sm];
+ if(preset){
+  // Format before bit depth: YCbCr 4:2:2 is 10-bit only, and updateDropdowns()
+  // filters bit depths against the current format.
+  ['color_format','max_bpc','rgb_quant_range','eotf','primaries'].forEach(k=>setVal(k,preset[k]));
   setVal('colorimetry',autoColorimetry);
-  // Leave HDR's transport constraints behind before filtering bit depths.
-  // YCbCr 4:2:2 is intentionally 10-bit-only, so setting 8-bit while the
-  // previous 4:2:2 format is still active makes updateDropdowns() restore
-  // 10-bit. Select the normal SDR RGB baseline first so one mode change is
-  // sufficient and the 4:2:2 bit-perfect rule remains intact.
-  setVal('color_format','0');
-  setVal('max_bpc','8');
- }else if(sm==='hdr10'){
+ }else if(sm==='dv'){
+  const dvTransport=dvTransportDefaults(getVal('dv_transport'));
+  setVal('dv_transport',dvTransport.dv_transport);
+  setVal('dv_interface',dvTransport.dv_interface);
   setVal('eotf','2');
-  setVal('colorimetry',autoColorimetry);
-  // HDR10 mastering-display primaries default to DCI-P3/D65: consumer HDR is
-  // mastered to P3 inside the BT.2020 container, so the HDR static metadata
-  // advertises P3 primaries while the AVI colorimetry stays BT.2020. Matches
-  // the LG AutoCal transport setup (meterSetLgAutoCalTransportValues).
-  setVal('primaries','2');
-  setVal('max_bpc','10');
- }else if(sm==='hlg'){
-  setVal('eotf','3');
-  setVal('colorimetry',autoColorimetry);
-  setVal('primaries','1');
-  setVal('max_bpc','10');
-	 }else if(sm==='dv'){
-	  const dvTransport=dvTransportDefaults(getVal('dv_transport'));
-	  setVal('dv_transport',dvTransport.dv_transport);
-	  setVal('dv_interface',dvTransport.dv_interface);
-	  setVal('eotf','2');
   setVal('color_format',dvTransport.color_format);
   setVal('colorimetry',autoColorimetry);
   setVal('primaries','1');
   setVal('max_bpc',dvTransport.max_bpc);
   setVal('rgb_quant_range',dvTransport.rgb_quant_range);
-	 }
+ }
+ uiEnforceQuantRangeForColorFormat();
 	 applyMeterTargetGamutDefault(true);
 	 applyMeterTargetGammaDefault(true);
 	 // Output-mode changes establish a new conditioning profile. Force the
@@ -998,6 +993,9 @@ document.getElementById('signal_mode').addEventListener('change',function(){
  checkSettingsChanged();
  meterUpdateCardMode();
  meterQueueOutputSettingsRefresh(true);
+ // updateDropdowns() may have adjusted the preset to what the resolution
+ // allows, so report the values that are actually selected now.
+ toast('Recommended '+meterSelectLabel('signal_mode')+' settings loaded: '+pgSignalModePresetSummary()+'. Click Apply to output them.');
 });
 
 document.getElementById('dv_map_mode').addEventListener('change',function(){

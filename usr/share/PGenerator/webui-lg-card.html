@@ -46,6 +46,11 @@
 	    .lg-card-title-actions .btn{width:100%;min-width:0;justify-content:center;white-space:normal}
 	    body.layout-tablet .dashboard h2 .lg-card-title-actions .btn{min-height:44px}
 	   }
+	   body.layout-tablet #lgCardTitle{flex-wrap:wrap}
+	   body.layout-tablet #lgCardTitle::after{order:2;margin-left:0}
+	   body.layout-tablet #lgStatusBadge{margin-left:auto!important}
+	   body.layout-tablet .lg-card-title-actions{order:3;display:grid;width:100%;grid-template-columns:repeat(2,minmax(0,1fr));margin-left:0}
+	   body.layout-tablet .lg-card-title-actions .btn{width:100%;min-width:0;justify-content:center;white-space:normal}
 	   #lgCalHistoryDesktop{display:none;margin-top:14px;padding-top:12px;border-top:1px solid var(--border)}
 	   .lg-cal-hist-section{margin-bottom:12px}
 	   .lg-cal-hist-title{font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--text2);margin:0 0 6px}

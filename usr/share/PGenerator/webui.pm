@@ -12597,47 +12597,6 @@ sub webui_pattern_render_overscan (@) {
  return &webui_pattern_image_save($image,$file);
 }
 
-sub webui_pattern_diag_video_path (@) {
- my $name=shift;
- return "Basic Settings/1-Black Clipping.mp4" if($name eq "avs_hd_709_black_clipping");
- return "Basic Settings/2-APL Clipping.mp4" if($name eq "avs_hd_709_apl_clipping");
- return "Basic Settings/3-White Clipping.mp4" if($name eq "avs_hd_709_white_clipping");
- return "Basic Settings/4-Flashing Color Bars.mp4" if($name eq "avs_hd_709_flashing_color_bars");
- return "Basic Settings/5-Sharpness & Overscan.mp4" if($name eq "avs_hd_709_sharpness_overscan");
- return "";
-}
-
-sub webui_pattern_diag_video_sequence_dir (@) {
- my $name=lc("".shift);
- $name=~s/[^a-z0-9_]+/_/g;
- return "" if($name eq "");
- # range_kind:
- #   full    -> diagseq_full/  (full-span black=0 for RGB Full)
- #   limited -> diagseq/       (studio codes for RGB Limited + YCbCr)
- my $range_kind=lc("".(shift // ""));
- $range_kind="" if($range_kind ne "full" && $range_kind ne "limited");
- return "$var_dir/diagseq_full/$name" if($range_kind eq "full");
- return "$var_dir/diagseq/$name";
-}
-
-# Bundled AVS HD 709 frame sets:
-#   diagseq_full/  full-span (field black=0). Used for RGB Full so the
-#                  background is true digital black, not studio ~1/16 grey.
-#   diagseq/       studio-level extract (footroom 2..15 + bars 17..25).
-#                  Used for RGB Limited and YCbCr Limited PLUGE.
-#
-# Do not use studio frames on RGB Full: legal black is 0 there, so codes
-# near 16 read as raised/grey blacks. Do not use full-span frames on
-# Limited/YCbCr if you need real below-black PLUGE footroom.
-sub webui_pattern_diag_video_sequence_range_kind (@) {
- my $color_format=int(shift // 0);
- my $quant_range=int(shift // 2);
- # RGB Full only -> full-span companion (black=0).
- return "full" if($color_format == 0 && $quant_range != 1);
- # RGB Limited + any YCbCr -> studio codes.
- return "limited";
-}
-
 sub webui_pattern_frame_sequence_pattern (@) {
  my $dir=shift;
  my $w=int(shift);
@@ -12663,40 +12622,12 @@ sub webui_pattern_frame_sequence_pattern (@) {
  return $pat;
 }
 
-sub webui_pattern_diag_video_sequence_pattern (@) {
- my $name=shift;
- my $w=int(shift);
- my $h=int(shift);
- my $color_format=int(shift // 0);
- my $quant_range=int(shift // 2);
- my $range_kind=&webui_pattern_diag_video_sequence_range_kind($color_format,$quant_range);
- my $dir=&webui_pattern_diag_video_sequence_dir($name,$range_kind);
- my $pat=&webui_pattern_frame_sequence_pattern($dir,$w,$h);
- # Fall back to limited stock set if the full companion is missing (older
- # installs / partial OTA), so patterns still play.
- if($pat eq "" && $range_kind eq "full") {
-  $dir=&webui_pattern_diag_video_sequence_dir($name,"limited");
-  $pat=&webui_pattern_frame_sequence_pattern($dir,$w,$h);
- }
- return $pat;
-}
-
 sub webui_pattern_uploaded_diag_video_sequence_pattern (@) {
  my $filename=shift;
  my $w=int(shift);
  my $h=int(shift);
  my $dir=&_webui_diag_asset_video_sequence_dir($filename);
  return &webui_pattern_frame_sequence_pattern($dir,$w,$h);
-}
-
-sub webui_pattern_diag_video_fallback_name (@) {
- my $name=shift;
- return "black_clipping" if($name eq "avs_hd_709_black_clipping");
- return "apl_clipping" if($name eq "avs_hd_709_apl_clipping");
- return "white_clipping" if($name eq "avs_hd_709_white_clipping");
- return "color_bars" if($name eq "avs_hd_709_flashing_color_bars");
- return "overscan" if($name eq "avs_hd_709_sharpness_overscan");
- return "";
 }
 
 sub webui_pattern (@) {
@@ -12765,8 +12696,6 @@ sub webui_pattern (@) {
   return '{"status":"error","message":"Failed to render G1 pattern"}' if(!&calman_render_g1_pattern($g1_key,$name));
   return '{"status":"ok","pattern":"'.$name.'"}';
  }
-my $diag_video=&webui_pattern_diag_video_path($name);
- my $diag_video_fallback=&webui_pattern_diag_video_fallback_name($name);
  my $white_rgb=($signal_mode eq "dv") ? "3760,3760,3760" : &webui_pattern_scale_triplet(255,255,255,255,$pat_bits);
  my $black_rgb=($signal_mode eq "dv") ? "256,256,256" : &webui_pattern_scale_triplet(0,0,0,255,$pat_bits);
  my $red_rgb=($signal_mode eq "dv") ? "3760,256,256" : &webui_pattern_scale_triplet(255,0,0,255,$pat_bits);
@@ -12776,33 +12705,6 @@ my $diag_video=&webui_pattern_diag_video_path($name);
  my $magenta_rgb=($signal_mode eq "dv") ? "3760,256,3760" : &webui_pattern_scale_triplet(255,0,255,255,$pat_bits);
  my $yellow_rgb=($signal_mode eq "dv") ? "3760,3760,256" : &webui_pattern_scale_triplet(255,255,0,255,$pat_bits);
  my $gray50_rgb=($signal_mode eq "dv") ? "2008,2008,2008" : &webui_pattern_scale_triplet(128,128,128,255,$pat_bits);
- if($diag_video ne "") {
-  return '{"status":"error","message":"AVS HD 709 videos are available only in SDR"}' if($signal_mode ne "sdr");
-  my $diag_quant_range=int($transport_signal_range || $pattern_signal_range || 2);
-  my $diag_sequence=&webui_pattern_diag_video_sequence_pattern($name,$w,$h,$pattern_color_format,$diag_quant_range);
-  if($diag_sequence ne "") {
-   my $diag_range_kind=&webui_pattern_diag_video_sequence_range_kind($pattern_color_format,$diag_quant_range);
-   &log("WebUI: AVS HD 709 using renderer sequence for $name (frames=$diag_range_kind color_format=$pattern_color_format quant=$diag_quant_range)");
-   $pat=$diag_sequence;
-   $pat_bits=&webui_pattern_effective_bits("IMAGE",$signal_mode);
-   $diag_video="";
-  }
-  elsif(-e "$video_dir/$diag_video") {
-   my $video_result="";
-   &video_program_stop("$program_video_to_kill");
-   $video_result=&play_video("omxplayer.bin",$diag_video,"1h-1");
-   return '{"status":"ok","pattern":"'.$name.'"}' if($video_result eq "OK");
-   &log("WebUI: AVS HD 709 fallback to built-in pattern for $name ($video_result)");
-  } else {
-   &log("WebUI: AVS HD 709 source missing for $name, using built-in pattern fallback");
-  }
-  if($pat eq "") {
-   return '{"status":"error","message":"Missing AVS HD 709 video file on device"}' if($diag_video_fallback eq "");
-   $name=$diag_video_fallback;
-   $img=&webui_pattern_diag_image_file($name);
-   $diag_video="";
-  }
- }
  # Complex patterns are rendered directly into a temporary image (DRAW=IMAGE),
  # because PGeneratord clears the entire frame for each DRAW=RECTANGLE entry.
  # Prefer PNG for renderer compatibility; fall back to raw PPM only if convert
@@ -12963,7 +12865,7 @@ elsif($pat eq "" && $name eq "uploaded_diag_video") {
  # Write the pattern. SOURCE_MAX is independent of BITS: standard DV keeps
  # an 8-bit framebuffer/wire while its tunnel shader consumes 12-bit codes.
  #
- # Multi-frame sequences (AVS diagseq) already end each plate with FRAME=N.
+ # Multi-frame sequences (uploaded video frames) already end each plate with FRAME=N.
  # Appending FRAME=$frame_default after that creates an empty last frame
  # (n_draw=0) which flashes the screen before the loop restarts. Only add
  # the default FRAME for single-shot patterns that have none.

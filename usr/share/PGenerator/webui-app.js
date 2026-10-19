@@ -1012,7 +1012,6 @@ function updateModeVisibility(){
  meterSyncHcfrFixedCodesUi();
  syncDvOutputEotfState();
  meterSyncTargetGammaControl();
- updateDiagAvsHd709Visibility();
  meterSyncHdrMetadata();
 }
 
@@ -1638,8 +1637,9 @@ async function loadInfo(quiet){
  if(info.interfaces){
   Object.entries(info.interfaces).forEach(([iface,ip])=>{
    const name=IFACE_NAMES[iface]||iface;
-   addInfo(g,name,ip);
+   addInfo(g,name,ip,iface==='ap0'?'deviceInfoApAddress':'');
   });
+  pgSyncDeviceInfoAp();
  }
  const wifiDisconnectBtn=document.getElementById('wifiDisconnectBtn');
  if(info.wifi && info.wifi.state==='COMPLETED' && info.wifi.ssid){
@@ -1931,6 +1931,38 @@ function pgSetHeaderPattern(label){
  wrap.hidden=!label;
  text.textContent=label?'On TV: '+label:'';
  wrap.title=label?'Pattern started from this page: '+label+'. Calibration patches replace it.':'';
+ pgSyncDiagNow(label);
+}
+// Diagnostic Patterns has one transport for every source (tiles, G1 plates,
+// own files): the bar names what is on the TV and offers Stop, then Show again
+// for the last pattern. It follows pgSetHeaderPattern, the single "on TV" truth.
+let pgDiagLast=null;
+function pgDiagRemember(label,thumb,run){ pgDiagLast={label:String(label||''),thumb:thumb||'',run:run}; }
+function pgSyncDiagNow(label){
+ const bar=document.getElementById('diagNow');
+ if(!bar) return;
+ const live=!!label;
+ const last=pgDiagLast&&pgDiagLast.label?pgDiagLast:null;
+ const state=live?'live':(last?'stopped':'idle');
+ bar.setAttribute('data-state',state);
+ const screen=document.getElementById('diagNowScreen');
+ const thumb=live&&last&&last.label===label?last.thumb:'';
+ if(screen){ screen.setAttribute('data-thumb',thumb); screen.classList.toggle('pat-thumb',!!thumb); }
+ document.getElementById('diagNowLabel').textContent=live?'On screen':(last?'Stopped':'Nothing on screen');
+ document.getElementById('diagNowName').textContent=live?label:(last?last.label:'Choose a pattern below.');
+ const btn=document.getElementById('diagNowBtn');
+ btn.hidden=state==='idle';
+ btn.classList.toggle('btn-primary',state==='stopped');
+ btn.classList.toggle('btn-secondary',state!=='stopped');
+ btn.innerHTML=live
+  ?'<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><rect x="6" y="6" width="12" height="12" rx="1.5" fill="currentColor"/></svg>Stop'
+  :'<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M8 5.5v13l10.5-6.5z" fill="currentColor"/></svg>Show again';
+ btn.setAttribute('aria-label',live?'Stop '+label:'Show '+(last?last.label:'')+' again');
+}
+function pgDiagNowAction(){
+ const bar=document.getElementById('diagNow');
+ if(bar&&bar.getAttribute('data-state')==='live'){ stopPattern(); return; }
+ if(pgDiagLast&&typeof pgDiagLast.run==='function') pgDiagLast.run();
 }
 
 async function loadStats(quiet){
@@ -2009,18 +2041,6 @@ const DIAG_DESCRIPTIONS={
  color_bars:'<b>Color Bars</b> &mdash; 75% Rec.709 bars with a mid reference strip and a bottom PLUGE/white section for quick color and level checks. Use this pattern with HDMI output set to RGB.',
  gray_ramp:'<b>Gray Ramp</b> &mdash; Smooth black-to-white ramp across the top with 11 stepped gray bars underneath. Use HDMI RGB output and check for smooth transitions, neutral grayscale, and no banding.',
  overscan:'<b>Overscan</b> &mdash; Border lines at 0%, 2.5%, and 5% from screen edges with corner L-brackets and center crosshair. Use HDMI RGB output, and all lines should be visible &mdash; if not, disable overscan in your TV settings.',
- avs_hd_709_black_clipping:'<b>AVS HD 709 - Black Clipping</b> &mdash; SDR-only AVS HD 709 black clipping. RGB Full uses full-span frames (true black=0). RGB Limited / YCbCr Limited use studio codes (footroom 2-15); set TV black level to Limited so only 17+ flash at default Brightness.',
- avs_hd_709_apl_clipping:'<b>AVS HD 709 - APL Clipping</b> &mdash; SDR-only AVS HD 709 APL clipping video for checking level behavior with an average picture level load on screen.',
- avs_hd_709_white_clipping:'<b>AVS HD 709 - White Clipping</b> &mdash; SDR-only AVS HD 709 video version of the white clipping pattern. Use it to set Contrast so near-white detail is not crushed.',
- avs_hd_709_flashing_color_bars:'<b>AVS HD 709 - Flashing Color Bars</b> &mdash; SDR-only AVS HD 709 flashing color bars video for color and tint checks with blue-only or filter workflows.',
- avs_hd_709_sharpness_overscan:'<b>AVS HD 709 - Sharpness &amp; Overscan</b> &mdash; SDR-only AVS HD 709 sharpness and overscan video for checking edge visibility and artificial sharpening.',
-};
-const AVS_HD_709_PATTERNS={
- avs_hd_709_black_clipping:true,
- avs_hd_709_apl_clipping:true,
- avs_hd_709_white_clipping:true,
- avs_hd_709_flashing_color_bars:true,
- avs_hd_709_sharpness_overscan:true,
 };
 const DIAG_UPLOAD_SENTINEL='__upload__';
 const DIAG_UPLOAD_CHUNK_BYTES=192*1024;
@@ -2030,7 +2050,6 @@ const DIAG_VIDEO_SEQUENCE_MAX_SECONDS=3;
 let diagCustomAssets={video:[],image:[]};
 let activePattern=null;
 function clearActive(){document.querySelectorAll('.pat-btn').forEach(b=>b.classList.remove('active'));if(document.activeElement&&document.activeElement.classList&&document.activeElement.classList.contains('pat-btn'))document.activeElement.blur();activePattern=null;pgSetHeaderPattern('');}
-function isAvsHd709Pattern(name){return !!AVS_HD_709_PATTERNS[String(name||'')];}
 function diagSetInfoHtml(html){
  const el=document.getElementById('diagInfo');
  if(!el) return;
@@ -2339,7 +2358,7 @@ async function diagShowUploadedAsset(kind,filename,forcePlay){
  diagSetInfoHtml(diagAssetInfoHtml(kind,filename));
  const body={name:kind==='video'?'uploaded_diag_video':'uploaded_diag_image',filename:filename,signal_mode:getVal('signal_mode'),max_luma:document.getElementById('max_luma').value};
  const r=await fetchJSON('/api/pattern',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
- if(r&&r.status==='ok'){toast('Pattern: '+diagAssetDisplayLabel(filename));pgSetHeaderPattern(diagAssetDisplayLabel(filename));}
+ if(r&&r.status==='ok'){toast('Pattern: '+diagAssetDisplayLabel(filename));pgDiagRemember(diagAssetDisplayLabel(filename),'',()=>diagShowUploadedAsset(kind,filename,true));pgSetHeaderPattern(diagAssetDisplayLabel(filename));}
  else toast(pgFailMsg('Couldn\u2019t show the pattern',r),true);
 }
 async function diagHandleAssetSelect(kind){
@@ -2361,8 +2380,8 @@ async function diagHandleAssetSelect(kind){
  }
   sel.dataset.lastSelected=value;
   diagBlurElement(sel);
-  diagSetInfoHtml(diagAssetInfoHtml(kind,value));
   diagUpdateDeleteButtonState(kind);
+  await diagShowUploadedAsset(kind,value,true);
 }
 async function diagHandleAssetUpload(kind,evt){
  const input=evt&&evt.target?evt.target:null;
@@ -2406,14 +2425,6 @@ async function diagHandleAssetUpload(kind,evt){
  }
  if(input) input.value='';
 }
-function updateDiagAvsHd709Visibility(){
- const el=document.getElementById('diagAvsHd709Section');
- const isSdr=getVal('signal_mode')==='sdr';
- if(el) el.style.display=isSdr?'':'none';
- const vlabel=document.getElementById('diagVideoLabel');
- if(vlabel) vlabel.style.display=isSdr?'none':'';
- if(!isSdr&&activePattern&&isAvsHd709Pattern(activePattern)) stopPattern();
-}
 function updateDiagInfo(name){
  if(DIAG_DESCRIPTIONS[name]) diagSetInfoHtml(DIAG_DESCRIPTIONS[name]);
  else diagSetInfoHtml('');
@@ -2422,10 +2433,6 @@ async function showPattern(name,ev){
  const btn=ev&&ev.currentTarget?ev.currentTarget:null;
  if(btn&&typeof btn.blur==='function') btn.blur();
  if(activePattern===name){await stopPattern();return;}
- if(isAvsHd709Pattern(name)&&getVal('signal_mode')!=='sdr'){
-  toast('AVS HD 709 videos are available only in SDR',true);
-  return;
- }
  meterClearInteractiveSelection(true);
  clearActive();
  if(ev&&ev.currentTarget)ev.currentTarget.classList.add('active');
@@ -2436,7 +2443,12 @@ async function showPattern(name,ev){
   const r=await fetchJSON('/api/pattern',{method:'POST',headers:{'Content-Type':'application/json'},
    body:JSON.stringify({name:name,signal_mode:getVal('signal_mode'),
     max_luma:document.getElementById('max_luma').value})});
-  if(r&&r.status==='ok'){toast('Pattern: '+label);pgSetHeaderPattern(label);}
+  if(r&&r.status==='ok'){
+   toast('Pattern: '+label);
+   const thumb=btn&&btn.querySelector('.pat-thumb');
+   pgDiagRemember(label,thumb?thumb.getAttribute('data-thumb'):'',()=>showPattern(name,btn?{currentTarget:btn}:null));
+   pgSetHeaderPattern(label);
+  }
   else {
    clearActive();
    diagSetInfoHtml('');
@@ -2448,17 +2460,20 @@ async function showPattern(name,ev){
   toast('Couldn\u2019t show the pattern. '+pgErrText(e),true);
  }
 }
-async function diagPlayG1Pattern(){
+async function diagPlayG1Pattern(tileKey,ev){
  const sel=document.getElementById('diagG1Select');
- if(!sel) return;
- const key=sel.value||'';
- diagBlurElement(sel);
+ const btn=ev&&ev.currentTarget?ev.currentTarget:null;
+ if(btn&&typeof btn.blur==='function') btn.blur();
+ const key=tileKey||(sel?sel.value:'')||'';
+ if(sel){ diagBlurElement(sel); if(tileKey) sel.value=''; }
  if(!key){toast('Choose a G1 pattern first',true);return;}
- if(getVal('signal_mode')!=='sdr'){toast('G1 patterns are available only in SDR',true);return;}
  const name='g1_'+key;
- const label=sel.options[sel.selectedIndex].textContent.trim();
+ if(btn&&activePattern===name){await stopPattern();return;}
+ if(getVal('signal_mode')!=='sdr'){toast('G1 patterns are available only in SDR',true);return;}
+ const label=btn?btn.textContent.trim():sel.options[sel.selectedIndex].textContent.trim();
  meterClearInteractiveSelection(true);
  clearActive();
+ if(btn) btn.classList.add('active');
  activePattern=name;
  diagSetInfoHtml('');
  try{
@@ -2466,7 +2481,12 @@ async function diagPlayG1Pattern(){
   const r=await fetchJSON('/api/pattern',{method:'POST',headers:{'Content-Type':'application/json'},
    body:JSON.stringify({name:name,signal_mode:getVal('signal_mode'),
     max_luma:document.getElementById('max_luma').value}),_timeoutMs:60000});
-  if(r&&r.status==='ok'){toast('Pattern: '+label);pgSetHeaderPattern(label);}
+  if(r&&r.status==='ok'){
+   toast('Pattern: '+label);
+   const thumb=btn&&btn.querySelector('.pat-thumb');
+   pgDiagRemember('G1 '+label,thumb?thumb.getAttribute('data-thumb'):'',()=>diagPlayG1Pattern(key,btn?{currentTarget:btn}:null));
+   pgSetHeaderPattern('G1 '+label);
+  }
   else {clearActive();toast(pgFailMsg('Couldn\u2019t show the pattern',r),true);}
  }catch(e){
   clearActive();
@@ -3022,7 +3042,16 @@ async function loadAP(){
   addInfo(el,'Address',s.address||((s.ap_net||'10.10.10')+'.1'));
   const t=document.getElementById('apEnableToggle');
   if(t&&!t.disabled) t.checked=!!s.active;
+  pgApActive=!!s.active;
+  pgSyncDeviceInfoAp();
  }
+}
+// ap0 keeps its address while the Access Point is stopped, so Device Info
+// shows the WiFi AP tile only while the AP actually runs.
+let pgApActive=null;
+function pgSyncDeviceInfoAp(){
+ const v=document.getElementById('deviceInfoApAddress');
+ if(v&&v.parentNode) v.parentNode.hidden=pgApActive===false;
 }
 
 async function onWifiRadioToggle(el){
@@ -3281,7 +3310,8 @@ function meterSyncConfigurationCollapse(){
  try{ collapsed=localStorage.getItem(PG_METER_CONFIG_COLLAPSE_KEY)==='1'; }catch(e){}
  card.classList.toggle('meter-config-collapsed',collapsed);
  button.setAttribute('aria-expanded',collapsed?'false':'true');
- button.title=collapsed?'Expand meter and target settings':'Collapse meter and target settings';
+ const what=pgLayoutEffective==='desktop'?'meter and target settings':'Calibration';
+ button.title=(collapsed?'Expand ':'Collapse ')+what;
  button.setAttribute('aria-label',button.title);
 }
 function meterToggleConfiguration(event){
@@ -3583,6 +3613,7 @@ function pgApplyLayout(options){
   pgRefreshVisibleWorkspace();
  }
  pgSyncTabletNav();
+ try{ meterSyncConfigurationCollapse(); }catch(e){}
 }
 function meterSyncGreyscaleDesktopLayout(){
  const live=document.getElementById('meterLiveReading');
@@ -4076,6 +4107,11 @@ async function loadInfoframes(){
  if(document.body.classList.contains('desktop-utility-open')) pgSyncDesktopUtilityDrawer();
 }
 
+// Device Info opens the page. Topic order: Signal (output, infoframes, patterns) · Measure (calibration,
+// session) · Display (LG, Resolve, CEC) · Device (network, system, UI, update).
+// The key carries a version so the new grouping replaces older saved drags once.
+const PG_DEFAULT_WIDGET_ORDER=['patterns','meter','session','lg','resolve','cec','wifi','ap','bluetooth','gpu_memory','ui_settings','update'];
+const PG_WIDGET_ORDER_KEY='pg_widget_order_v3';
 // Widget reorder: POINTER drag on ☰ .drag-handle only (no HTML5 DnD).
 // Drop target = card under the cursor; insert before/after by midpoint.
 // Avoid setPointerCapture + moving the capture node (that combo was a no-op).
@@ -4093,12 +4129,12 @@ async function loadInfoframes(){
 
  function saveOrder(){
   try{
-   localStorage.setItem('pg_widget_order',JSON.stringify(widgets().map(w=>w.dataset.widget)));
+   localStorage.setItem(PG_WIDGET_ORDER_KEY,JSON.stringify(widgets().map(w=>w.dataset.widget)));
   }catch(e){}
  }
  function restoreOrder(){
   try{
-   const order=JSON.parse(localStorage.getItem('pg_widget_order'));
+   const order=JSON.parse(localStorage.getItem(PG_WIDGET_ORDER_KEY));
    const uiSettings=document.getElementById('uiSettingsCard');
    const session=document.getElementById('sessionCard');
    const update=document.getElementById('updateCard');
@@ -4108,10 +4144,15 @@ async function loadInfoframes(){
     if(session&&session.parentNode===dash) dash.insertBefore(session,anchor);
    };
    if(!order||!Array.isArray(order)){
-    // Session and UI Settings share the final half-width row immediately
-    // above the full-width Software Update card by default. They remain
-    // ordinary draggable widgets after this initial placement.
-    placeBottomPair();
+    // Default order follows the sidebar groups (Signal, Measure, Display,
+    // Device) so the tablet scroll matches the jump bar. Infoframes pair
+    // with Dolby Vision in the Output row. A saved drag order still wins.
+    const map={}; widgets().forEach(w=>{ map[w.dataset.widget]=w; });
+    const dv=document.getElementById('dvCard');
+    if(map.infoframes&&dv&&dv.parentNode===dash) dash.insertBefore(map.infoframes,dv.nextSibling);
+    const end=dash.querySelector('.toast')||null;
+    PG_DEFAULT_WIDGET_ORDER.forEach(id=>{ if(map[id]) dash.insertBefore(map[id],end); });
+    if(map.info) dash.insertBefore(map.info,dash.firstElementChild);
     return;
    }
    const map={}; widgets().forEach(w=>{ map[w.dataset.widget]=w; });
@@ -4378,13 +4419,13 @@ async function applyUpdate(){
   meta.className='release-notes-meta';
   meta.textContent='v'+(r.current||'?')+' \u2192 v'+(r.latest||'?')+(r.published?' \u00b7 published '+r.published.split('T')[0]:'');
   wrap.appendChild(meta);
-  wrap.appendChild(pgReleaseNotesNode(r.changelog));
+  wrap.appendChild(pgReleaseNotesNode(pgReleaseNotesText({notes:r.changelog})));
  }
  const warn=document.createElement('div');
  warn.className='release-notes-warn';
  warn.textContent='PGenerator+ will restart. Stop any running measurement or session first. Your settings stay.';
  wrap.appendChild(warn);
- if(!await pgConfirm({title:r.latest?'Install v'+r.latest+'?':'Install update now?',bodyNode:wrap,wide:true,acceptLabel:r.latest?'Install v'+r.latest:'Install Update',destructive:true,tone:'caution'}))return;
+ if(!await pgConfirm({title:r.latest?'Install v'+r.latest+'?':'Install update now?',bodyNode:wrap,wide:true,acceptLabel:r.latest?'Install v'+r.latest:'Install Update'}))return;
  await runUpdate('',{mode:'install',from:r.current,to:r.latest});
 }
 
@@ -4430,7 +4471,7 @@ function onReleaseSelectChange(){
  const btn=document.getElementById('installReleaseBtn');
  const rel=(window._releaseList||[]).find(x=>x.version===sel.value);
  const cmp=pgVersionCmp(sel.value,window._releaseCurrent||'0');
- if(btn) btn.textContent=cmp<0?'Roll back':(cmp===0?'Reinstall':'Install');
+ if(btn){ btn.textContent=cmp<0?'Roll back':(cmp===0?'Reinstall':'Install'); btn.classList.toggle('btn-warning',cmp<=0); btn.classList.toggle('btn-primary',cmp>0); }
  pgSetReleaseNotes('releaseNotes',pgReleaseNotesText(rel),'Release notes \u00b7 v'+sel.value);
 }
 // Release notes in the update card sit in a closed <details> (summary names the
@@ -4467,7 +4508,7 @@ async function installSelectedRelease(){
  warn.textContent='PGenerator+ will restart. Stop any running measurement or session first. Your settings stay. The current files are saved first and restored automatically if the installation fails.'
   +(cmp<0?' Files added by newer versions stay on the device. To return, select the newer version here or use Check for Updates.':'');
  wrap.appendChild(warn);
- if(!await pgConfirm({title,bodyNode:wrap,wide:!!relNotes,acceptLabel:(cmp<0?'Roll back to v':(cmp===0?'Reinstall v':'Install v'))+v,destructive:true,tone:'caution'}))return;
+ if(!await pgConfirm({title,bodyNode:wrap,wide:!!relNotes,acceptLabel:(cmp<0?'Roll back to v':(cmp===0?'Reinstall v':'Install v'))+v,destructive:cmp<=0,tone:cmp<=0?'caution':''}))return;
  await runUpdate(v,{mode:cmp<0?'rollback':(cmp===0?'reinstall':'install'),from:window._releaseCurrent,to:v});
 }
 
@@ -18498,13 +18539,8 @@ function meterUpdateSeriesTabUi(){
   tab=meterSeriesTabForSeries(meterActiveSeriesType,meterActiveSeriesPoints);
   meterSeriesTab=tab;
  }
- // The 3D LUT series tab is measurement-only (profile a lattice/skeleton/hybrid
- // with the meter), so it is hidden with no meter attached. Fall back to a
- // usable tab if it was active when the meter went away.
- if(tab==='3dlut'&&!meterDetected){
-  tab=(meterSeriesTabForType(meterActiveSeriesType)==='color')?'color':'greyscale';
-  meterSeriesTab=tab;
- }
+ // The 3D LUT tab stays usable with no meter (like the Desktop workspace):
+ // solved LUTs and the cube viewer work, and the read buttons say why they wait.
  const greyGroup=document.getElementById('meterSeriesGroupGreyscale');
  const colorGroup=document.getElementById('meterSeriesGroupColor');
  const lutGroup=document.getElementById('meterSeriesGroup3dLut');

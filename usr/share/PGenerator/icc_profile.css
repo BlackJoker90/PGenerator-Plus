@@ -5,7 +5,12 @@ body.layout-desktop #meterIccWorkspaceCard #meterIccProfileModal>.meter-modal-sc
 body.layout-desktop #meterIccWorkspaceCard .meter-icc-close{display:none!important}
 body.layout-desktop #meterIccWorkspaceCard .meter-icc-dialog-title{display:none}
 .meter-icc-grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:12px;align-items:stretch}
-.meter-icc-profile-panel{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);column-gap:18px;align-content:start}
+/* Form width cap: fields never grow past --icc-form-w, so single-column panels
+   (820-1180px) stay readable and every row still shares both edges. */
+#meterIccProfileModal{--icc-form-w:680px}
+.meter-icc-panel .meter-icc-field,.meter-icc-panel>details{max-width:var(--icc-form-w,680px)}
+#meterIccCicpFields>div[style*="grid"],#meterIccPatchAdvanced>div[style*="grid"]{column-gap:18px!important}
+.meter-icc-profile-panel{display:grid;grid-template-columns:repeat(2,minmax(0,calc((var(--icc-form-w,680px) - 18px) / 2)));column-gap:18px;align-content:start}
 .meter-icc-profile-panel>h3,.meter-icc-profile-panel>.meter-icc-section-intro,.meter-icc-profile-panel>#meterIccTargetTransferField{grid-column:1/-1}
 .meter-icc-profile-name-field,.meter-icc-profile-type-field{grid-column:1/-1}
 .meter-icc-profile-quality-field{margin-top:10px}
@@ -57,6 +62,6 @@ body.layout-desktop #meterIccWorkspaceCard .meter-icc-dialog-title{display:none}
    than the name because it is a qualifier, not the identifier. */
 .meter-icc-profile-date{flex:0 0 auto;white-space:nowrap;color:var(--text-muted,#8b95a5);font-size:.85em}
 .meter-icc-validation-stats{display:grid;grid-template-columns:repeat(5,minmax(100px,1fr));gap:8px;margin-bottom:12px}
-@media(max-width:900px){.meter-icc-grid,.meter-icc-profile-panel{grid-template-columns:1fr}.meter-icc-profile-panel,.meter-icc-profile-panel>h3,.meter-icc-profile-panel>.meter-icc-section-intro,.meter-icc-profile-panel>#meterIccTargetTransferField,.meter-icc-avg-deviation-field,.meter-icc-calibration-field{grid-column:auto}}
+@media(max-width:900px){.meter-icc-grid{grid-template-columns:1fr}.meter-icc-profile-panel{grid-template-columns:minmax(0,var(--icc-form-w,680px))}.meter-icc-profile-panel,.meter-icc-profile-panel>h3,.meter-icc-profile-panel>.meter-icc-section-intro,.meter-icc-profile-panel>#meterIccTargetTransferField,.meter-icc-avg-deviation-field,.meter-icc-calibration-field{grid-column:auto}}
 @media(max-width:700px){.meter-icc-validation-stats{grid-template-columns:repeat(2,minmax(100px,1fr))}}
-@media(max-width:1180px){body.layout-desktop #meterIccWorkspaceCard .meter-icc-grid{grid-template-columns:1fr}body.layout-desktop #meterIccWorkspaceCard .meter-icc-profile-panel{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}body.layout-desktop #meterIccWorkspaceCard .meter-icc-avg-deviation-field{grid-column:1}body.layout-desktop #meterIccWorkspaceCard .meter-icc-calibration-field{grid-column:2}}
+@media(max-width:1180px){body.layout-desktop #meterIccWorkspaceCard .meter-icc-grid{grid-template-columns:1fr}body.layout-desktop #meterIccWorkspaceCard .meter-icc-profile-panel{grid-template-columns:repeat(2,minmax(0,calc((var(--icc-form-w,680px) - 18px) / 2)))}body.layout-desktop #meterIccWorkspaceCard .meter-icc-avg-deviation-field{grid-column:1}body.layout-desktop #meterIccWorkspaceCard .meter-icc-calibration-field{grid-column:2}}

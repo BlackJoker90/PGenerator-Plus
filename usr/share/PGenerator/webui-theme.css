@@ -274,8 +274,9 @@ body.meter-autocal-active .meter-autocal-mask{display:flex}
    edge, which is the ragged hanging indent the hints used to show. */
 .fac-option-hint{display:block;margin:5px 0 0 24px;font-size:.72rem;color:var(--text2);line-height:1.5}
 .fac-option-controls{margin:7px 0 0 24px;display:flex;gap:8px;flex-wrap:wrap;align-items:center}
-.fac-option-controls select{min-width:230px}
-.fac-option-controls select{background:var(--surface-field);border:1px solid var(--border);border-radius:4px;color:var(--text);padding:6px 8px}
+.fac-option-controls select{width:15rem;max-width:100%;min-height:30px;box-sizing:border-box}
+.fac-option-controls select{background:var(--surface-field);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:6px 10px}
+body.layout-tablet .fac-option-controls select{min-height:44px}
 [data-theme="light"] .fac-option-controls select{background:var(--surface-inset);color:var(--text-primary)}
 /* Wizard display-type step: keep panel tech + CCSS selects inside the card. */
 #meterAutoCalDisplayTypeBox .field{width:100%;max-width:100%;min-width:0;box-sizing:border-box}
@@ -315,12 +316,13 @@ transition:background .3s;cursor:default;position:relative}
 .status-dot-accent{background:var(--accent)}
 /* One status order on every layout: connection, display, warnings, software,
    signal, pattern, meter/Companion, temperature. */
-#statusWrap{order:1}#meterDisplayStatusStack > #lgTopStatusWrap{order:2}#hdmiWarnBadge{order:3}#meterUsbWarnBadge{order:4}#calStatusWrap{order:5}#signalStatusWrap{order:6}#patternStatusWrap{order:7}#meterDisplayStatusStack > .status-line{order:8}#tempDisplay{order:9}
+#statusWrap{order:1}#signalStatusWrap{order:2}#meterDisplayStatusStack > #lgTopStatusWrap{order:3}#hdmiWarnBadge{order:4}#meterUsbWarnBadge{order:5}#calStatusWrap{order:6}#patternStatusWrap{order:7}#meterDisplayStatusStack > .status-line{order:8}#tempDisplay{order:9}
 /* The pattern chip shrinks (ellipsis) before it wraps, so starting a pattern
    does not push the header down a line. */
 .status-bar > .status-pattern{flex:1 1 0;min-width:72px;max-width:max-content}
 .status-bar .status-pattern .status-label{display:inline-block;min-width:0;max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .status-bar [hidden]{display:none!important}
+.info-item[hidden]{display:none!important}
 /* Offline: the last signal, pattern and software state can no longer be trusted. */
 body.ui-offline #signalStatusWrap,body.ui-offline #patternStatusWrap,body.ui-offline #calStatusWrap{display:none!important}
 .dashboard{max-width:1200px;margin:0 auto;padding:12px;display:grid;
@@ -329,10 +331,18 @@ grid-template-columns:1fr 1fr;gap:12px}
 .card h2{font-size:.95rem;margin-bottom:10px;color:var(--accent);
 display:flex;align-items:center;gap:6px;cursor:pointer;user-select:none}
 .card h2 .icon{font-size:1rem}
-.card h2::after{content:'\25BE';margin-left:auto;font-size:.8rem;color:var(--text2);transition:transform .2s}
+.card h2::after{content:'';display:block;flex:0 0 30px;width:30px;height:30px;margin-left:auto;background-color:var(--text2);-webkit-mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E") center/20px 20px no-repeat;mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E") center/20px 20px no-repeat;transition:transform .2s}
 .card.collapsed h2{margin-bottom:0}
 .card.collapsed h2::after{transform:rotate(-90deg)}
 .card.collapsed > *:not(h2){display:none !important}
+.card.collapsed h2 .lg-card-title-actions,.card.collapsed h2 .card-h2-action{display:none!important}
+/* Status badges sit right before the chevron so they line up from card to card. */
+body.layout-tablet [data-widget="resolve"] > h2{gap:8px}
+body.layout-tablet #resolveStatusBadge{margin-left:auto!important}
+body.layout-tablet [data-widget="resolve"] > h2::after{margin-left:0}
+body.layout-tablet .dashboard > .card > h2 > .pg-switch{margin-left:auto}
+body.layout-tablet .dashboard > .card > h2:has(> .pg-switch){gap:8px}
+body.layout-tablet .dashboard > .card > h2:has(> .pg-switch)::after{margin-left:0}
 .pg-switch{position:relative;display:inline-flex;align-items:center;cursor:pointer;flex:0 0 auto;user-select:none}
 .pg-switch input{position:absolute;opacity:0;width:0;height:0;margin:0}
 .pg-switch-track{display:inline-block;position:relative;width:34px;height:18px;border-radius:9px;background:var(--text2);transition:background .2s}
@@ -343,12 +353,16 @@ display:flex;align-items:center;gap:6px;cursor:pointer;user-select:none}
 #meterCard > h2{align-items:center;gap:10px 12px}
 #meterCard > h2::after{display:none}
 .meter-card-header-title{display:inline-flex;align-items:center;gap:6px;min-width:0;flex:0 1 auto}
-.meter-config-toggle{display:inline-flex;align-items:center;justify-content:center;width:30px;height:30px;padding:0;border:0;border-radius:6px;background:transparent;color:var(--text2);cursor:pointer;font-size:1.15rem;line-height:1;transition:transform .2s,color .15s,background .15s}
+.meter-config-toggle{display:inline-flex;align-items:center;justify-content:center;width:30px;height:30px;padding:0;border:0;border-radius:6px;background:transparent;color:var(--text2);cursor:pointer;font-size:0;line-height:1;transition:transform .2s,color .15s,background .15s}
+.meter-config-toggle::before{content:'';width:20px;height:20px;background-color:currentColor;-webkit-mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E") center/20px 20px no-repeat;mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E") center/20px 20px no-repeat}
 .meter-config-toggle:hover{color:var(--text);background:var(--hover-bg)}
 .meter-config-toggle:focus-visible{outline:2px solid var(--focus-ring);outline-offset:2px}
 #meterCard.meter-config-collapsed .meter-config-toggle{transform:rotate(-90deg)}
 #meterCard.meter-config-collapsed > .meter-card-header-row,#meterCard.meter-config-collapsed > #meterResetRow,#meterCard.meter-config-collapsed > #meterSettingsGrid{display:none!important}
 #meterCard.meter-patterns-only .meter-config-toggle{display:none}
+#meterCard .meter-config-toggle{margin-left:auto}
+body.layout-tablet #meterCard.meter-config-collapsed > h2{margin-bottom:0}
+body.layout-tablet #meterCard.meter-config-collapsed > *:not(h2){display:none!important}
 #meterNoMeterBanner.meter-banner-sim-active{border-left-color:var(--accent)}
 .meter-card-header-row{display:flex;flex-wrap:wrap;align-items:flex-start;gap:10px 14px;margin:0 0 10px;width:100%;max-width:100%}
 .meter-card-header-col{display:flex;flex-direction:column;gap:2px;min-width:0}
@@ -387,6 +401,9 @@ body.layout-tablet .meter-ccss-profile-control-row > #meterCcssProfile{width:100
 .meter-ccss-profile-row > select,
 #meterCcssProfile,#meterAutoCalCcssProfile{width:100%;max-width:100%;box-sizing:border-box}
 #meterProfileGearPopover{width:280px}
+/* Header gears are a square the select's height, so select + gear fill the
+   column exactly like the gear-less selects (tablet keeps its 44px gear). */
+body.layout-desktop .meter-card-header-row .meter-xyz-gear{width:30px;height:30px;font-size:.95rem}
 .meter-autocal-ccss-row{display:block;width:100%;max-width:100%}
 #meterCard.meter-patterns-only .meter-card-header-row{display:none}
 .meter-header-label{display:block;font-size:.65rem;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;margin:0 0 2px}
@@ -463,6 +480,10 @@ padding:4px 24px 4px 8px;border-radius:6px;font-size:.74rem;outline:none;transit
 /* Phone: the select fields sit on a two-column rhythm, so the rows share edges. */
 @media(max-width:600px){body.layout-tablet #meterSettingsGrid :is(.field-display,.field-gamut,.field-gamma,.field-chromaticity,.field-delay,.field-patch,.field-refresh){width:calc(50% - 6px)}}
 #meterSeriesBtnRow .inline-select{width:15rem;max-width:100%}
+/* Chart-toolbar Delta E pickers: one width for both, height from .inline-select. */
+#meterTwoPointDeltaEForm,#meterColorDeltaEForm{width:9.5rem;max-width:100%;box-sizing:border-box}
+/* LG / Resolve field grids: text inputs match the 30px select next to them. */
+body.layout-desktop [data-widget="lg"] .grid>.field>input:not([type=checkbox]),body.layout-desktop [data-widget="resolve"] .grid>.field>input,body.layout-desktop [data-widget="lg"] .grid>.field>select,body.layout-desktop [data-widget="resolve"] .grid>.field>select{min-height:30px;box-sizing:border-box}
 .ccss-editor-layout{display:grid;grid-template-columns:minmax(260px,320px) minmax(0,1fr);gap:16px;align-items:start}
 @media(max-width:700px){.ccss-editor-layout{grid-template-columns:minmax(0,1fr)}}
 .meter-inline-value{display:inline-flex;align-items:center;gap:6px;padding:0}
@@ -638,7 +659,7 @@ transition:all .3s;z-index:999;pointer-events:none}
 .toast-action:focus-visible{outline:2px solid currentColor;outline-offset:2px}
 @media(pointer:coarse){.toast-action,.toast-close{min-height:44px;min-width:44px}}
 .sr-only{position:absolute;width:1px;height:1px;margin:-1px;padding:0;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;border:0}
-.meter-reset-row{background:color-mix(in srgb,var(--status-error) 10%,var(--surface-inset));border:1px solid color-mix(in srgb,var(--status-error) 40%,var(--border));border-radius:6px;padding:8px 12px;margin-bottom:10px;align-items:center;gap:10px}
+.meter-reset-row{background:color-mix(in srgb,var(--status-warning) 10%,var(--surface-inset));border:1px solid color-mix(in srgb,var(--status-warning) 40%,var(--border));border-radius:6px;padding:8px 12px;margin-bottom:10px;align-items:center;gap:10px}
 .meter-reset-row-text{color:var(--warning-text);font-size:.85rem;line-height:1.4}
 /* Help tips (.meter-help-tip): click/tap/Enter/Space opens one shared popover;
    hover previews it on fine pointers. Text comes from the tip's title. */
@@ -820,7 +841,38 @@ background:var(--surface-inset);padding:8px;border-radius:6px;word-break:break-a
 .diag-pattern-layout{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:12px;align-items:start}
 .diag-pattern-column{min-width:0}
 .diag-pattern-title{font-size:.62rem;color:var(--text2);margin:0 0 6px 2px;letter-spacing:.04em;text-transform:uppercase}
-.diag-pattern-layout .pat-btn{height:44px;display:flex;align-items:center;justify-content:center}
+.diag-pattern-title-gap{margin-top:16px}
+.diag-pattern-title label{font:inherit;color:inherit;letter-spacing:inherit;text-transform:inherit}
+.diag-pattern-layout .pat-btn{min-height:44px;display:flex;flex-direction:column;align-items:stretch;justify-content:flex-start;gap:7px;padding:6px 6px 8px}
+.pat-label{display:block;text-align:center}
+/* Pattern thumbnails: a miniature of what the TV shows, so tiles read at a glance. */
+.pat-thumb{display:block;height:30px;border-radius:3px;box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--text) 14%,transparent);background:#808080}
+.pat-thumb[data-thumb="white"]{background:linear-gradient(90deg,#d9d9d9 0 20%,#e4e4e4 20% 40%,#eeeeee 40% 60%,#f7f7f7 60% 80%,#fff 80%)}
+.pat-thumb[data-thumb="black"]{background:linear-gradient(90deg,#000 0 20%,#0a0a0a 20% 40%,#151515 40% 60%,#202020 60% 80%,#2b2b2b 80%)}
+.pat-thumb[data-thumb="bars"]{background:linear-gradient(90deg,#bfbfbf 0 14.3%,#bfbf00 14.3% 28.6%,#00bfbf 28.6% 42.9%,#00bf00 42.9% 57.1%,#bf00bf 57.1% 71.4%,#bf0000 71.4% 85.7%,#0000bf 85.7%)}
+.pat-thumb[data-thumb="ramp"]{background:linear-gradient(90deg,#000,#fff)}
+.pat-thumb[data-thumb="overscan"]{background:#111;box-shadow:inset 0 0 0 2px #e6e6e6,inset 0 0 0 5px #111,inset 0 0 0 6px #777}
+.pat-grid-g1{grid-template-columns:repeat(3,minmax(0,1fr))}
+.pat-grid-g1 .pat-thumb{height:auto;aspect-ratio:16 / 9}
+.diag-g1-more{margin-top:8px}
+.pat-thumb[data-thumb="g1_basic_alignment"]{background:#404040 url("data:image/webp;base64,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") center/cover no-repeat}
+.pat-thumb[data-thumb="g1_brightness"]{background:#000 url("data:image/webp;base64,UklGRmYDAABXRUJQVlA4IFoDAACQKwCdASpAAbQAPmEukkakIqIhJbGMqIAMCWluy+nRL3x5c1XJAmrugXaMwBkHjjMs00QO8oRET2TD1laYzGjrVY4gEesB/Q8I6cvW8cPxR71CYcaCTUAYc4qqROOHLMW2RIttHPxCgfgYHO2QGZMNCTgm0/HfzHDyEz+pZEg/fQHjqZSaq3EB/xUn6lnb0uSfU2QAg/YD+e1IEkW2BryUNRVllewgcOplSRbMChNSW52/IPskR/6LQMAZHPjEfCnfAIoaU6u0CjNmD4fB6FktfK0C/28ICC1HmTq+nNz8YJ8z90kbw8a1YSfFFs8PJ8TDa0yCOgKJb7xpods9KLZG7PjuWUbL2jT6lmSYFfv/heqQfaV4Q5qu9KCqMw9kGjsc48WISMDBsrWtrK4bAvd50Rfyt2u4f4ZEgRykwmi94c8T/zJrBy3X8OHL9Q/HWErdi58+fPnz58+fPnz58+fPjZudcQAA/v8EBECBY6S/d/B5l144slU7UrZ703gKKdfTjphws+8jvqC8xhHygUSolQxrsHmA6vFN4RQJu9+4jeiPjnmjC6Wh1LXt/0s9YoiFe1mPxt5h2aiJa/y3pW+WNG3A5HCvuG+t7cvMgyRKKCyA/m7q5ovOe8TO3eymVE+tN0R3AtEVhMKk53NJ1SSZwBLRfwjHToIz+tj9+7d6lr3IyyPyTY+OlS9NAu5Ba1/bCojyjG36427fHSp8HYA/hN+JN+ntMmy6W00xGGS+D5luWL0Co8ggjQ8fHvUYav/1mKhdmUrvKpTH/LVud9RIBfsCXZ3aKSSoo19VQKrfqNLHJtecw6P6ZVUU948rBefYGQCHTORChjDZ8khrcrTv7PIGbA7SdO320i6QTKyyrZ1uW+GbKlIl8S6DeldnZerDRvHIot7AEiiAZlyfpjj8SnlqAPXFavptr+j+vUHPWn/iU8tS0DyhQuVW5vJt/BT7uLo3X4u1fs1k3ozg4ubPaaCFC8bQXta3dZ2/k/2zaLyTSudBQqAnvIIfr5tiecb3sgOrBTUq+/LxAsX6rTUHXArxwScBFKx0dGVDwsbQqy8ELU0i3KjWkxGn3f1nfXHgBeaNI0XAx7F3M8Io+tP00WpAfV+e0a7ywAA5JV0mZ78VUB4P75gAAAA=") center/cover no-repeat}
+.pat-thumb[data-thumb="g1_warmup"]{background:#808080 url("data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAUAAAAC0CAIAAABqhmJGAAACtklEQVR4nO3TMYrjQABFwdYKSYF1DoOP4vufYzAKnFrLTuB4JljDg6qg6Q46+MGbzm+v1+v8iNfrNc/z19fX/X5/Pp+Xy2VZlnVdt217nz98/urXsiz7vh/Hcbtej8djn6blPNcxtjHe5w+fv/q1jLGPcYxxm+djXfdt+7f2g3uvt+vjeEz7dC7n+ODg+Tavx7rt27p8du/19ngc07Sf5zI+OHieb+t6bNu+fg/+33vflz8DyBIwhAkYwgQMYQKGMAFDmIAhTMAQJmAIEzCECRjCBAxhAoYwAUOYgCFMwBAmYAgTMIQJGMIEDGEChjABQ5iAIUzAECZgCBMwhAkYwgQMYQKGMAFDmIAhTMAQJmAIEzCECRjCBAxhAoYwAUOYgCFMwBAmYAgTMIQJGMIEDGEChjABQ5iAIUzAECZgCBMwhAkYwgQMYQKGMAFDmIAhTMAQJmAIEzCECRjCBAxhAoYwAUOYgCFMwBAmYAgTMIQJGMIEDGEChjABQ5iAIUzAECZgCBMwhAkYwgQMYQKGMAFDmIAhTMAQJmAIEzCECRjCBAxhAoYwAUOYgCFMwBAmYAgTMIQJGMIEDGEChjABQ5iAIUzAECZgCBMwhAkYwgQMYQKGMAFDmIAhTMAQJmAIEzCECRjCBAxhAoYwAUOYgCFMwBAmYAgTMIQJGMIEDGEChjABQ5iAIUzAECZgCBMwhAkYwgQMYQKGMAFDmIAhTMAQJmAIEzCECRjCBAxhAoYwAUOYgCFMwBAmYAgTMIQJGMIEDGEChjABQ5iAIUzAECZgCBMwhAkYwgQMYQKGMAFDmIAhTMAQJmAIEzCECRjCBAxhAoYwAUOYgCFMwBAmYAgTMIQJGMIEDGEChjABQ5iAIUzAECZgCBMwhAkYwgQMYQKGMAFDmIAhTMAQJmAIEzCECRhG11//u6ZcI92nmAAAAABJRU5ErkJggg==") center/cover no-repeat}
+.pat-btn.active .pat-thumb{box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--text) 14%,transparent),0 0 0 2px var(--accent)}
+/* The single transport for the card. */
+.diag-now{display:flex;align-items:center;gap:12px;margin:4px 0 14px;padding:10px 12px;border:1px solid var(--border);border-radius:10px;background:var(--surface-inset);transition:border-color .2s,background .2s}
+.diag-now[data-state="live"]{border-color:var(--accent);background:color-mix(in srgb,var(--accent) 9%,var(--surface-inset))}
+.diag-now-screen{flex:0 0 auto;width:48px;height:27px;border-radius:4px;background:color-mix(in srgb,var(--text) 6%,transparent);box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--text) 18%,transparent)}
+.diag-now[data-state="live"] .diag-now-screen:not(.pat-thumb){background:color-mix(in srgb,var(--accent) 55%,#000);box-shadow:inset 0 0 0 1px var(--accent)}
+.diag-now .diag-now-screen.pat-thumb{height:27px;border-radius:4px}
+.diag-now-text{display:flex;flex-direction:column;min-width:0;flex:1 1 auto;gap:1px}
+.diag-now-label{font-size:.62rem;letter-spacing:.04em;text-transform:uppercase;color:var(--text2)}
+.diag-now[data-state="live"] .diag-now-label{color:var(--accent)}
+.diag-now-name{font-size:.95rem;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.diag-now[data-state="idle"] .diag-now-name{font-size:.8rem;font-weight:400;color:var(--text2)}
+.diag-now-btn{flex:0 0 auto;display:inline-flex;align-items:center;justify-content:center;gap:6px;min-width:112px}
+.diag-now-btn svg{flex:0 0 auto}
+.diag-now-btn[hidden]{display:none}
 .pat-grid-sm{display:grid;grid-template-columns:repeat(auto-fill,minmax(55px,1fr));gap:4px}
 .pat-btn{padding:8px 4px;border:1px solid var(--border);border-radius:6px;
 background:var(--surface-inset);color:var(--text);font-size:.72rem;cursor:pointer;text-align:center;
@@ -836,18 +888,14 @@ cursor:pointer;user-select:none;display:flex;align-items:center;gap:4px}
 .pat-section-title::before{content:'\25BE';font-size:.8em;transition:transform .2s}
 .pat-section.collapsed .pat-section-title::before{content:'\25B8'}
 .pat-section.collapsed .pat-content{display:none}
-.diag-custom-assets{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;width:min(100%,570px)}
+.diag-custom-assets{display:grid;grid-template-columns:minmax(0,1fr);gap:10px}
 .diag-custom-asset{min-width:0}
-.diag-custom-picker{display:grid;grid-template-columns:minmax(0,1fr) 32px 32px 32px;gap:6px;align-items:center}
-.diag-custom-picker .btn{height:36px;display:flex;align-items:center;justify-content:center;color:#fff;font-size:1rem;line-height:1;padding:0}
-.diag-custom-picker .diag-asset-icon-btn{height:28px;min-height:28px;width:32px;padding:0;align-self:stretch}
-.diag-custom-picker .diag-asset-icon-btn{font-size:0!important}
-.diag-custom-picker .diag-asset-icon{display:none}
-.diag-custom-picker button[onclick^="diagPlaySelectedAsset"]::before,.diag-custom-picker button[onclick^="diagPlayG1Pattern"]::before{content:'';display:block;width:0;height:0;border-top:6px solid transparent;border-bottom:6px solid transparent;border-left:10px solid currentColor;transform:translateX(1px)}
-.diag-custom-picker button[onclick="stopPattern()"]::before{content:'';display:block;width:10px;height:10px;border-radius:1px;background:currentColor}
-.diag-custom-picker button[onclick^="diagDeleteSelectedAsset"]{font-size:1rem!important;color:var(--red);font-weight:700;line-height:1}
-.diag-custom-picker .diag-asset-icon-btn-delete:disabled{opacity:.35;cursor:not-allowed;color:#fff;border-color:var(--border)}
-.diag-custom-picker .diag-asset-icon-btn-delete:not(:disabled):hover{color:var(--on-danger);background:var(--danger-fill);border-color:var(--danger-fill)}
+.diag-custom-picker{display:grid;grid-template-columns:minmax(0,1fr) 32px;gap:6px;align-items:stretch}
+.diag-custom-picker .diag-select,.diag-select{width:100%}
+.diag-asset-delete{display:flex;align-items:center;justify-content:center;padding:0;min-height:0;color:var(--text2)}
+.diag-asset-delete:disabled{opacity:.35;cursor:not-allowed}
+.diag-asset-delete:not(:disabled):hover{color:var(--on-danger);background:var(--danger-fill);border-color:var(--danger-fill)}
+.diag-custom-hint{font-size:.64rem;color:var(--text2);margin:4px 0 0 2px;line-height:1.4}
 @media (max-width:720px){.diag-pattern-layout{grid-template-columns:1fr}}
 @media (hover:hover) and (pointer:fine){.pat-btn:hover{border-color:var(--accent);background:#1a1a2e;transform:translateY(-1px)}}
 .sat-row{display:flex;align-items:center;gap:4px;margin-bottom:4px}
@@ -912,7 +960,7 @@ body.is-widget-dragging *{cursor:grabbing!important}
 #meterCard > h2::after{margin-left:auto}
 .meter-card-header-meter{width:100%;max-width:none;min-width:0}
 .custom-ccss-panel-btn{width:100%}}
-@media(max-width:640px){.diag-custom-assets{grid-template-columns:1fr;max-width:none}}
+
 @media(max-width:480px){.grid{grid-template-columns:1fr}
 .hdr-right{width:100%;min-width:0;flex-wrap:wrap;justify-content:space-between}
 .status-bar{width:100%;min-width:0;flex-wrap:wrap;justify-content:flex-end}
@@ -1002,7 +1050,7 @@ body.layout-desktop #sessionCard[data-desktop-active="true"]{border-bottom:0;pad
 .session-actions{display:flex;flex-wrap:wrap;align-items:center;gap:8px 16px}
 .session-button-wrap{display:inline-flex;align-items:center;gap:5px}
 .session-format-note{margin-top:12px;color:var(--text2);font-size:.7rem;line-height:1.45}
-body.layout-tablet #sessionCard{grid-column:auto}
+body.layout-tablet #sessionCard{grid-column:1 / -1}
 body.layout-desktop #meterProfileCard[data-desktop-active="true"]{border-bottom:0}
 body.layout-desktop #meterProfileCard #customCcssEditorModal{display:block!important;position:static!important;inset:auto!important;background:transparent!important;padding:0!important;z-index:auto!important}
 body.layout-desktop #meterProfileCard #customCcssEditorModal>div{width:min(1180px,100%)!important;max-height:none!important;overflow:visible!important;background:transparent!important;border:0!important;border-radius:0!important;padding:0!important;box-shadow:none!important}

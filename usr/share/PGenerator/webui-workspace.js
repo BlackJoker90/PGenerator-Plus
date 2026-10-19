@@ -19794,7 +19794,7 @@ async function loadCustomCcssList(){
  const r=await fetchJSON('/api/ccss/list',{cache:'no-store',_quiet:true,_timeoutMs:5000});
  meterUpdateCustomCcssPanel(document.getElementById('meterDisplayType').value);
  const el=document.getElementById('customCcssList');
- if(!r||!r.files||r.files.length===0){el.innerHTML='<div style="font-size:.7rem;color:var(--text2)">No custom profiles</div>';return;}
+ if(!r||!r.files||r.files.length===0){el.innerHTML='<div style="font-size:.78rem;color:var(--text2)">No custom profiles</div>';return;}
  // The compact custom list and the viewer use different API payloads. If a
  // freshly created/uploaded file reaches this list before the full catalog,
  // refresh the catalog now so the viewer option and click target agree.
@@ -19817,8 +19817,8 @@ async function loadCustomCcssList(){
    ? ccssPreviewActiveValue===('custom\t'+f)
    : customCcssFile===f;
   return '<div style="display:flex;align-items:center;gap:6px;margin-bottom:3px">'
-  +'<button class="btn btn-sm '+(active?'btn-success':'btn-secondary')+'" data-ccss-filename="'+ccssPreviewEscapeHtml(f)+'" style="flex:1;font-size:.7rem;padding:2px 6px;text-align:left" onclick="selectCustomCcss(\''+f+'\')"><span data-ccss-selected-mark>'+(active?'\u2713 ':'')+'</span>['+format+'] '+label+'</button>'
-  +'<button class="btn btn-sm" style="font-size:.68rem;padding:2px 6px;color:var(--red)" onclick="deleteCustomCcss(\''+f+'\')">\u2715</button></div>';
+  +'<button class="btn btn-sm '+(active?'btn-success':'btn-secondary')+'" data-ccss-filename="'+ccssPreviewEscapeHtml(f)+'" style="flex:1;font-size:.78rem;padding:2px 6px;text-align:left" onclick="selectCustomCcss(\''+f+'\')"><span data-ccss-selected-mark>'+(active?'\u2713 ':'')+'</span>['+format+'] '+label+'</button>'
+  +'<button class="btn btn-sm" style="font-size:.78rem;padding:2px 6px;color:var(--red)" onclick="deleteCustomCcss(\''+f+'\')">\u2715</button></div>';
  }).join('');
 }
 
@@ -20115,8 +20115,10 @@ function ccssPreviewIsRgbWithoutWhiteEmitter(payload){
  return isRgbDisplay&&!hasWhiteEmitter;
 }
 
+let ccssPreviewEmptyMessage='';
 function ccssPreviewClear(message){
  ccssPreviewLastPayload=null;
+ ccssPreviewEmptyMessage=message||'';
  const meta=document.getElementById('ccssPreviewMeta');
  const legend=document.getElementById('ccssPreviewLegend');
  const canvas=document.getElementById('ccssPreviewCanvas');
@@ -20128,11 +20130,17 @@ function ccssPreviewClear(message){
  if(!ctx) return;
  ctx.fillStyle=pgThemeColor('--chart-bg','#0d0d15');
  ctx.fillRect(0,0,ctx.w,ctx.h);
- ctx.fillStyle='#80889a';
+ ctx.fillStyle=pgThemeColor('--chart-empty','#80808f');
  ctx.font='14px sans-serif';
  ctx.textAlign='center';
  ctx.textBaseline='middle';
- ctx.fillText(message||'Select a meter profile to preview',ctx.w/2,ctx.h/2);
+ // Wrap the hint so it stays inside narrow (tablet/phone) canvases.
+ const words=String(message||'Select a meter profile to preview').split(' ');
+ const lines=[];let line='';
+ words.forEach(w=>{const t=line?line+' '+w:w;if(line&&ctx.measureText(t).width>ctx.w-32){lines.push(line);line=w;}else line=t;});
+ if(line) lines.push(line);
+ const lh=20,top=ctx.h/2-(lines.length-1)*lh/2;
+ lines.forEach((l,i)=>ctx.fillText(l,ctx.w/2,top+i*lh));
 }
 
 function ccssPreviewPopulateOptions(files){
@@ -20286,7 +20294,7 @@ function ccssPreviewRender(payload){
  ctx.fillStyle=spectrum;
  ctx.fillRect(plotLeft,plotTop,plotWidth,plotHeight);
  ctx.restore();
- ctx.strokeStyle='rgba(132,148,178,0.85)';
+ ctx.strokeStyle=pgThemeColor('--chart-axis','#3a3a4a');
  ctx.lineWidth=1.2;
  ctx.beginPath();
  ctx.moveTo(plotLeft,plotTop);
@@ -20311,7 +20319,7 @@ function ccssPreviewRender(payload){
   if(points.length>=2) drawLine(ctx,chart,points,color,2);
  });
 
- ctx.fillStyle='#aeb8cd';
+ ctx.fillStyle=pgThemeColor('--chart-label','#888898');
  ctx.font='12px sans-serif';
  ctx.textAlign='center';
  ctx.fillText('Wavelength (nm)',plotLeft+(plotWidth/2),ctx.h-8);
@@ -20324,7 +20332,7 @@ function ccssPreviewRender(payload){
  if(meta){
   const parts=[];
   const title=payload.description||payload.display||payload.name||'CCSS profile';
-  parts.push('<strong style="color:#dfe6f6">'+ccssPreviewEscapeHtml(title)+'</strong>');
+  parts.push('<strong>'+ccssPreviewEscapeHtml(title)+'</strong>');
   if(payload.technology) parts.push(ccssPreviewEscapeHtml(payload.technology));
   if(payload.reference) parts.push('Ref: '+ccssPreviewEscapeHtml(payload.reference));
   if(payload.bands) parts.push(String(payload.bands)+' bands');
@@ -20342,10 +20350,10 @@ function ccssPreviewRender(payload){
    const peakText=!isCombinedRgb&&peakNm>0
     ? ('Peak '+Math.round(peakNm)+' nm'+(peakValue>0?' / '+peakValue.toFixed(3):''))
     : '';
-   return '<div style="display:flex;align-items:center;gap:6px;font-size:.68rem;color:var(--text2);padding:4px 8px;background:#111723;border:1px solid #2a3140;border-radius:999px">'
-    +'<span style="width:10px;height:10px;border-radius:999px;background:'+color+';display:inline-block"></span>'
+   return '<div class="ccss-legend-item">'
+    +'<span class="ccss-legend-swatch" style="background:'+color+'"></span>'
     +'<span>'+label+'</span>'
-    +(peakText?'<span style="color:#8d97ab">'+ccssPreviewEscapeHtml(peakText)+'</span>':'')
+    +(peakText?'<span class="ccss-legend-peak">'+ccssPreviewEscapeHtml(peakText)+'</span>':'')
     +'</div>';
   }).join('');
  }

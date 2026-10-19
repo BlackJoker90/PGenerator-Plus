@@ -74,6 +74,9 @@ body.layout-desktop #chartsGreyscaleTwoPointWrap>div:first-child{grid-template-c
 body.layout-desktop .diag-pattern-layout{grid-template-columns:minmax(0,1fr) minmax(0,1fr);max-width:1100px}
 body.layout-desktop .card[data-desktop-workspace="connectivity"] .info-grid{grid-template-columns:repeat(auto-fit,minmax(145px,220px));justify-content:start}
 body.layout-desktop .card[data-widget="wifi"] .wifi-list{width:min(680px,100%)}
+body.layout-desktop .net-card .card-section-head,body.layout-desktop .settings-card .card-section-head{max-width:680px}
+/* The workspace title already says Settings. */
+body.layout-desktop #settingsCard > h2{display:none}
 body.layout-desktop .site-footer{max-width:none;width:100%;margin:auto 0 0;padding:0 24px 20px;flex:0 0 auto}
 body.layout-desktop .site-footer-inner{background:transparent;border:0;border-top:1px solid var(--border);border-radius:0;padding:14px 0}
 .desktop-utility-toggle,.desktop-utility-drawer{display:none}
@@ -168,7 +171,7 @@ body.meter-stop-active.layout-desktop .desktop-sidebar{filter:grayscale(.25);opa
 [data-theme="light"] #meterReadSeriesBtn.btn-success:disabled,[data-theme="light"] #meterClearChartBtn.btn-danger:disabled{color:#fff!important}
 [data-theme="light"] #chartTooltip{background:var(--chart-tooltip)!important;color:var(--text-primary)!important;border-color:var(--border)!important;box-shadow:0 2px 8px var(--shadow)!important}
 [data-theme="light"] select option{background:var(--surface-field);color:var(--text-primary)}
-[data-theme="light"] input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
+[data-theme="light"] input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]),
 [data-theme="light"] select,[data-theme="light"] textarea,[data-theme="light"] .meter-card-header-select,
 [data-theme="light"] .inline-select,[data-theme="light"] .pat-btn,[data-theme="light"] .meter-chart-inline-input,
 [data-theme="light"] .meter-inline-value input{background-color:var(--surface-field)!important;color:var(--text-primary)!important}
@@ -201,7 +204,6 @@ body.meter-stop-active.layout-desktop .desktop-sidebar{filter:grayscale(.25);opa
 [data-theme="light"] .btn-secondary.btn-success,[data-theme="light"] .btn-secondary.btn-success:hover{background:var(--success-fill);color:var(--on-success)}
 [data-theme="light"] .btn-secondary:hover,[data-theme="light"] .pat-btn:hover{background:var(--hover-bg);color:var(--text-primary)}
 [data-theme="light"] #diagInfo{background:var(--surface-inset)!important;color:var(--text-secondary)!important}
-[data-theme="light"] #ccssPreviewMeta,[data-theme="light"] #ccssPreviewMeta strong{color:var(--text-primary)!important}
 [data-theme="light"] #colorReadingsTable tr.color-reading-selected{background:var(--selected-bg)!important}
 [data-theme="light"] .chart-expand-btn{background:rgba(255,255,255,.94);color:var(--accent);border-color:var(--chart-axis);box-shadow:0 1px 3px rgba(18,29,45,.18)}
 [data-theme="light"] .chart-expand-btn:hover{background:var(--surface-inset);color:#174fc4;border-color:var(--accent)}
@@ -262,7 +264,6 @@ body.layout-desktop #uiSettingsCard .ui-settings-zoom{display:block}
    available as a keyboard/hover tooltip and remains part of the button's
    accessible name. Desktop keeps the spacious selection tiles. */
 body.layout-tablet .dashboard > [data-widget="info"]{order:-300}
-body.layout-tablet #uiSettingsCard{grid-column:auto}
 body.layout-tablet .ui-settings-sections{grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
 body.layout-tablet .ui-choice-list{gap:5px}
 body.layout-tablet .ui-choice{position:relative;display:grid;grid-template-columns:minmax(0,1fr) 36px;align-items:center;min-height:42px;padding:8px 10px;overflow:visible}
@@ -318,6 +319,9 @@ body.layout-tablet .hdr-actions{gap:8px}
 body.layout-tablet .layout-switch{padding:2px}
 body.layout-tablet .layout-switch-btn{min-height:44px;padding:0 14px;font-size:.8rem}
 body.layout-tablet .header .icon-btn{min-width:44px;min-height:44px}
+body.layout-tablet .hdr-power .icon-btn{width:44px;height:44px}
+body.layout-tablet .ccss-input{min-height:44px}
+body.layout-tablet .hdr-power .icon-btn svg{width:22px;height:22px}
 body.layout-tablet .hdr-power::before{top:8px;bottom:8px}
 body.layout-tablet .status-bar{font-size:.8rem}
 /* The status line shares the first row with the actions and power group and
@@ -364,14 +368,14 @@ body.layout-tablet .dashboard [style*="font-size:.5"],body.layout-tablet .dashbo
    priority order (connection, warnings, software, signal, pattern, meter,
    temperature); the row wraps, nothing is hidden. */
 @media(max-width:600px){
-body.layout-tablet .header{padding:3px 12px;column-gap:8px;row-gap:0}
+body.layout-tablet .header{padding:10px 14px;column-gap:8px;row-gap:6px}
 body.layout-tablet .hdr-right{display:contents}
 body.layout-tablet .logo{order:0;margin-right:auto}
 body.layout-tablet .hdr-actions{order:1;flex:0 1 auto}
 body.layout-tablet .hdr-power{order:2;margin-left:0}
 body.layout-tablet .hdr-power::before{display:none}
 body.layout-tablet .update-btn-more{display:none}
-body.layout-tablet .status-bar{order:3;flex:1 1 100%;width:auto;min-height:32px;flex-wrap:wrap;justify-content:flex-start;column-gap:12px;row-gap:2px;padding-bottom:4px}
+body.layout-tablet .status-bar{order:3;flex:1 1 100%;width:auto;min-height:32px;flex-wrap:wrap;justify-content:flex-start;column-gap:12px;row-gap:4px;padding-bottom:0}
 }
 .tablet-jump-nav{display:none}
 body.layout-tablet .tablet-jump-nav:not([hidden]){display:flex;position:fixed;left:0;right:0;bottom:0;z-index:60;gap:2px;padding:4px max(6px,env(safe-area-inset-right)) calc(4px + env(safe-area-inset-bottom)) max(6px,env(safe-area-inset-left));background:var(--surface-header);border-top:1px solid var(--border);box-shadow:0 -6px 18px var(--shadow);overflow-x:auto;overscroll-behavior-x:contain;scrollbar-width:none;justify-content:safe center}

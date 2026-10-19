@@ -1,414 +1,313 @@
-# PGenerator+
-
 <p align="center">
-  <img src="Pgen+_Logo_black_bg_slim.png" alt="PGenerator+ Logo" width="720"/>
+  <img src="Pgen+_Logo_black_bg_slim.png" alt="PGenerator+" width="640"/>
 </p>
 
-## Use Case
+<h3 align="center">A Raspberry Pi 4 HDMI pattern generator for display calibration that is bit-exact, fast and quiet in daily use</h3>
 
-PGenerator+ is a free, open-source Raspberry Pi–based display calibration suite built around a precision HDMI test pattern generator. It is aimed at home users and display enthusiasts who want to produce accurate SDR, HDR10, HLG, and Dolby Vision test patterns on demand, and who want to run closed-loop SDR and HDR autocal workflows on the Pi itself using a USB colorimeter or spectrophotometer.
+<p align="center">
+  <a href="https://github.com/BlackJoker90/PGenerator-Plus/releases/latest"><img src="https://img.shields.io/github/v/release/BlackJoker90/PGenerator-Plus?style=for-the-badge&color=5b7fff&label=release" alt="Latest release"/></a>
+  <img src="https://img.shields.io/badge/Raspberry%20Pi-4-c51a4a?style=for-the-badge&logo=raspberrypi&logoColor=white" alt="Raspberry Pi 4"/>
+  <img src="https://img.shields.io/badge/SDR%20%C2%B7%20HDR10%20%C2%B7%20HLG%20%C2%B7%20Dolby%20Vision-1f2433?style=for-the-badge" alt="SDR, HDR10, HLG, Dolby Vision"/>
+  <a href="COPYING"><img src="https://img.shields.io/badge/license-GPLv3-3b4252?style=for-the-badge" alt="GPLv3"/></a>
+</p>
 
-The Pi outputs calibrated color patches and full-screen test patterns over HDMI and exposes them to calibration software running on a laptop or workstation over TCP/IP. Current releases also turn the Pi into a self-contained calibration tool: a local web dashboard, over-the-air updates, on-device meter-driven validation against the displayed patches using ArgyllCMS `spotread`, and closed-loop SDR and LG SDR/HDR autocal workflows that drive the display's picture-mode adjustments directly from the Pi.
+<p align="center">
+  <a href="#why-this-fork">Why this fork</a> ·
+  <a href="#at-a-glance-fork-vs-original">Fork vs. original</a> ·
+  <a href="#get-started">Get started</a> ·
+  <a href="#calibration-software-compatibility">Calman &amp; co.</a> ·
+  <a href="#reference">Reference</a> ·
+  <a href="https://buymeacoffee.com/fabioelia9r">☕ Support</a>
+</p>
 
-## Features
-
-- **Precision HDMI pattern generation** — full-screen patches, grayscale ramps, windows, color bars, custom RGB triplets, and user-defined patch sizes, driven directly through DRM/KMS on the Pi.
-- **HDR and Dolby Vision output** — HDR10 (ST.2084 PQ with full mastering display metadata), HLG, and Dolby Vision Low-Latency with proper AVI, DRM, and DOVI infoframes, plus EDID-based capability detection.
-- **Network-controlled** — TCP pattern source for Calman (UPGCI, port 2100), ColourSpace / LightSpace (XML, port 85), HCFR, DeviceControl, and the Resolve XML protocol (port 20002, outbound client mode); UDP auto-discovery on port 1977.
-- **Local web dashboard** — responsive single-page UI for HDMI signal settings, manual pattern injection, a live AVI/DRM infoframe decoder, HDMI-CEC TV control, WiFi management, OTA updates, and meter measurements.
-- **LG autocal (SDR and HDR)** — on-device closed-loop calibration of LG displays covering 26-point greyscale + RGB balance, 3D LUT profiling, and HDR tone mapping, in both SDR and HDR10 modes. SDR runs honor the selected transport end to end (RGB Full/Limited, YCbCr, 8/10-bit); HDR runs can enable the LG Tone Mapping Shadow Fix, which probes each panel's post-calibration shadow response and trims residual PQ shadow lift against the final viewing state. Fully driven from the Pi with no PC-side calibration software required.
-- **Meter-driven validation** — integrated ArgyllCMS `spotread` workflow with persistent meter sessions, on-device greyscale, color, and saturation sweeps, bundled and custom CCSS profile management, and live Delta E / chromaticity charts in the browser.
-- **Display profile creation** — measured Windows MHC2 profiles and KDE HDR cLUT profiles can be built in the browser. Advanced format controls select ICC v2.2 or v4.4 and expose the v4.4 CICP primaries, transfer, matrix and range code points. Calibration can be stored in VCGT, included without VCGT in the profile curves, or omitted for a display already calibrated internally. KDE HDR cLUT profiles fit a calibrated virtual display, keep D65 headroom in the high-resolution B2A output shapers, and refine the 65³ inverse from the measured forward model. OLED profile runs clear pattern insertion to black before restoring and settling the requested patch, which prevents insertion afterglow from corrupting near-black reads. KDE HDR defaults to Rec. 2020/PQ/full-range CICP. With Patch Companion connected, completed builds and Profile History can install and apply an ICC directly to the display showing the patches. On Windows, Profile Loader also enables the per-user profile list shown as "Use my settings for this device" in Color Management.
-- **Over-the-air updates** — self-updates from GitHub Releases via the web UI or `pgenerator-update`, with cumulative overlays and versioned migration scripts for users who skip releases.
-- **mDNS / Bonjour** — reachable at `pgenerator.local` with no DNS configuration.
-- **Headless and out-of-band networking** — Bluetooth PAN, WiFi AP mode, wired Ethernet, and ad-hoc wireless connections for field use without a router.
-
-Built on [PGenerator](https://github.com/Biasiolo/PGenerator) by Riccardo Biasiotto.
-
-## Installation & Updates
-
-### How to Flash the Image
-
-1. Download the latest full image release parts (`PGenerator_Plus_vX.Y.Z_pi4.img.7z.001` and `.002`) from the GitHub Releases page and place both files in the same folder.
-2. Extract the first part with [7-Zip](https://www.7-zip.org/) to reconstruct the full `.img` file, then flash it with a tool like [Balena Etcher](https://etcher.balena.io/) or [Rufus](https://rufus.ie/) to a microSD card or USB flash drive (minimum 8GB). MacOS users can use a tool such as [Keka](https://www.keka.io/en/) or [BetterZip ](https://macitbetter.com/downloads/)to extract and [Raspberry Pi Imager ](https://www.raspberrypi.com/software/)to flash.
-3. Insert the microSD card or USB flash drive into your Raspberry Pi and power it on.
-4. Connect to the Pi using one of the following methods:
-   - **Bluetooth PAN:**
-
-     1. First connect to the Bluetooth device on your computer.
-
-        <p align="left">
-          <img src="screenshots/add_bluetooth_device.png" alt="Add Bluetooth device" width="240"/>
-          <img src="screenshots/add_device.png" alt="Confirm device addition" width="240"/>
-          <img src="screenshots/select_bluetooth.png" alt="Select Bluetooth" width="240"/>
-          <img src="screenshots/select_pgenerator.png" alt="Select PGenerator" width="240"/>
-        </p>
-     2. Join its PAN in Windows settings.
-
-        <p align="left">
-          <img src="screenshots/join_bt_pan.png" alt="Join Bluetooth PAN" width="240"/>
-        </p>
-   - **Wired PAN:** Connect an Ethernet cable directly between your device and the Pi.
-   - **Wired LAN:** Connect the Pi to your local network router or switch via Ethernet.
-   - **Wireless PAN:** Connect your device to the Pi's default WiFi Access Point (SSID: `PGenerator`, Password: `PGenerator`).
-
-     <p align="left">
-       <img src="screenshots/join_wifi_pan.png" alt="Join WiFi PAN" width="240"/>
-     </p>
-   - **Wireless LAN:** Connect the Pi to your existing WiFi network (can be configured via the Web UI after using one of the other methods).
-5. Access the web UI at `http://pgenerator.local` or the device's IP address.
-
-### How to Update (OTA)
-
-PGenerator+ includes a built-in Over-The-Air (OTA) update system that pulls the latest releases directly from GitHub.
-
-**Via Web UI (Recommended):**
-
-1. Open the PGenerator+ web dashboard.
-2. Scroll down to the **Software Update** card.
-3. Click **Check for Updates**. If a new version is available, the changelog will appear.
-4. Click **Install Update**. The device will download the update, apply it, and restart the PGenerator service automatically.
-
-> Note: OTA updates apply within the same major.minor family only (e.g. 2.8.x → 2.8.x). Releases that change kernel modules start a new family and require re-flashing the image — the release notes always say when a flash is required.
-
-**Via Command Line:**
-You can also trigger updates via SSH (`root` / `PGenerator!!$`):
-
-```bash
-# Check for updates
-/usr/sbin/pgenerator-update check
-
-# Apply the latest update
-/usr/sbin/pgenerator-update apply
-```
-
-### Build Your Own Image (Bring Your Own BiasiLinux Base)
-
-If you want to assemble your own PGenerator+ image locally, use the included overlay builder:
-
-```bash
-sudo ./tools/build_pgenerator_plus_image.sh \
-  --base-image /path/to/compatible-biasilinux-pgenerator.img \
-  --output ./build/PGenerator_Plus_custom.img
-```
-
-What the script does:
-
-1. Copies your base image to a new output image.
-2. Mounts the Linux root partition from that copied image.
-3. Overlays this repository's `etc/`, `usr/`, `var/`, and `lib/` trees onto it.
-4. Leaves you with a bootable image that uses the repo's current PGenerator+ files and shipped prebuilt renderer binaries.
-
-Important limitations:
-
-- This is an overlay build, not a full from-scratch distro build.
-- The base image must already be a compatible BiasiLinux/PGenerator image with the expected distro dependencies, `pgenerator` account, and sudoers setup.
-- The `PGeneratord` and `PGeneratord.dv` binaries are prebuilt and are taken from this repository as-is.
-- The current image/runtime bundles an ArgyllCMS `3.5.0` armhf runtime. Its `colprof` comes from the PGenerator+ ICC v4.4/CICP fork so KDE HDR profiles can be written with a v4.4 header and CICP `9-16-0-1`; `applycal` supports calibration without a VCGT tag. The source remains in the separate ArgyllCMS fork rather than this repository.
-- For on-device TI3 to CCSS conversion, import the headless armhf Argyll runtime slice (`ccxxmake` required; `spotread`, `chartread`, `colprof`, `i1d3ccss`, and `oeminst` staged when available) into `usr/bin/` with [tools/import_argyll_runtime.sh](tools/import_argyll_runtime.sh) or stage it during image creation with `--argyll-runtime-dir`.
-- Before publishing or flashing a test image, make sure transient runtime state is cleared so the image is fresh. In particular, do not ship old meter/session artifacts, and confirm [etc/PGenerator/PGenerator.conf](etc/PGenerator/PGenerator.conf) is back on the default SDR 1080p RGB 8-bit profile.
-- The script does not shrink or compress the final image; if you want a smaller distributable image, run your preferred shrink/compression workflow afterward (for example `pishrink`, `xz`, or `zstd`).
-
-### VC4 Kernel Build Snapshot
-
-For kernel-side VC4 HDMI work, the saved `5.10.89+-7l` build tree lives under `build/vc4-kernel-build-env/` and is intentionally gitignored because of its size. The tracked usage note is [docs/vc4-kernel-build-environment.md](docs/vc4-kernel-build-environment.md), which covers refreshing the saved snapshot, rebuilding only `drivers/gpu/drm/vc4`, and deploying or rolling back `vc4.ko` on a Pi.
-
-### Building the Renderer Binary from Source
-
-The `PGeneratord` pattern renderer is a C++ application built on [openFrameworks](https://openframeworks.cc/) 0.11.2 with a custom DRM/KMS window addon for HDR and Dolby Vision HDMI output. The source is in the `src/` directory.
-
-#### Source Layout
-
-```
-src/
-  pattern_generator/             # Main PGeneratord application (openFrameworks project)
-    src/
-      main.cpp                   # Entry point — config parsing, Pi/distro checks, window setup
-      ofApp.cpp                  # Render loop — reads operations.txt, draws patterns, DV metadata
-      ofApp.h                    # Application class header
-      rgb2ycbcr.h                # RGB ↔ YCbCr color space conversion
-    Makefile                     # openFrameworks project makefile
-    addons.make                  # Lists the ofxRPI4Window addon dependency
-    config.make                  # Project-specific build config (defaults)
-  ofxRPI4Window/                 # DRM/KMS window addon (fork of jvcleave/ofxRPI4Window)
-    src/
-      ofxRPI4Window.cpp          # DRM atomic modesetting, EGL/GBM, HDR/DV infoframes
-      ofxRPI4Window.h            # Window class header
-      igt_edid.h                 # EDID parsing helpers
-    addon_config.mk              # openFrameworks addon build config
-    patchOF.sh                   # Script to patch openFrameworks for ofxRPI4Window support
-    ofx.patch                    # openFrameworks patch
-    drm_vc4.patch                # VC4 DRM driver patch
-    mesa_hdr.patch               # Mesa HDR support patch
-  PGeneratorDisplayMirror.c      # Standalone display mirror utility (VideoCore/bcm_host)
-  Makefile                       # Top-level Makefile for PGeneratorDisplayMirror
-  Makefile.include               # Shared compiler/linker flags (VideoCore, SDL, OMX)
-  COPYING                        # GPLv3 license
-```
-
-#### Prerequisites
-
-The binary must be built **natively on a Raspberry Pi 4** running BiasiLinux with the following installed:
-
-- **openFrameworks 0.11.2** — installed at `/opt/openFrameworks`
-- **Build tools** — `make`, `gcc`/`g++` (GCC 4.9.4+ or 7.x)
-- **Libraries** — `libdrm-dev`, `libgbm-dev`, `libgles2-mesa-dev`, `libegl1-mesa-dev`, `libgstreamer1.0-dev`, `libboost-filesystem-dev`, `libfreeimage-dev`, `libcairo2-dev`, `libcurl4-openssl-dev`, `libfontconfig1-dev`, `liburiparser-dev`
-- **VideoCore** — `/opt/vc/` (Raspberry Pi GPU libraries, included in BiasiLinux)
-
-#### Patching openFrameworks
-
-The ofxRPI4Window addon requires patching openFrameworks to disable the default GLFW window system:
-
-```bash
-cd /opt/openFrameworks/addons
-# Copy or symlink the addon
-cp -r /path/to/PGenerator-Plus/src/ofxRPI4Window ofxRPI4Window
-
-# Apply the patches
-cd ofxRPI4Window
-chmod +x patchOF.sh
-./patchOF.sh  # Select option 1 to enable ofxRPI4Window
-```
-
-#### Building PGeneratord
-
-```bash
-cd /path/to/PGenerator-Plus/src/pattern_generator
-make
-```
-
-The compiled binary will be at `src/pattern_generator/bin/PGeneratord`. This is useful for renderer development and local validation on target hardware.
-
-```bash
-sudo cp bin/PGeneratord /usr/sbin/PGeneratord
-sudo cp bin/PGeneratord /usr/sbin/PGeneratord.dv
-```
-
-For packaged releases and overlay builds, this repository ships prebuilt `/usr/sbin/PGeneratord` and `/usr/sbin/PGeneratord.dv` binaries. Treat those shipped binaries as the authoritative runtime artifacts for PGenerator+ images.
-
-#### Building PGeneratorDisplayMirror (optional)
-
-The display mirror utility is a standalone VideoCore program:
-
-```bash
-cd /path/to/PGenerator-Plus/src
-make
-```
-
-#### Architecture Notes
-
-- The binary reads pattern descriptions from `/var/lib/PGenerator/operations.txt` (written by the Perl daemon) and renders them via OpenGL ES 3.0 through DRM/KMS.
-- The deployed image uses separate prebuilt `PGeneratord` and `PGeneratord.dv` runtime binaries, with `dv_status` selecting which one the Perl daemon launches.
-- HDR10 output uses the `HDR_OUTPUT_METADATA` DRM connector property; Dolby Vision uses `DOVI_OUTPUT_METADATA`.
-- The binary verifies it is running on BiasiLinux + Raspberry Pi at startup (9-point filesystem check).
-- Original source: [BigShoots/PGenerator_Source](https://github.com/BigShoots/PGenerator_Source) (`pgen_dovi_latest` branch) by Riccardo Biasiotto, GPLv3.
-- DRM/KMS addon: [docdude/ofxRPI4WindowHDR](https://github.com/docdude/ofxRPI4WindowHDR) (`ofxRPI4Window_dovi_latest` branch), forked from [jvcleave/ofxRPI4Window](https://github.com/jvcleave/ofxRPI4Window).
+<p align="center">
+  <img src="screenshots/webui-patterns.png" alt="PGenerator+ Web UI: Patterns workspace with Calman G1 plates and test images" width="900"/>
+</p>
 
 ---
 
-## Features
+## Why this fork
 
-### Signal Modes
+This is **BlackJoker90's fork** of [BigShoots/PGenerator-Plus](https://github.com/BigShoots/PGenerator-Plus). It branched from upstream 2.12.1 in September 2026 and has had **110+ commits and 23 releases** since then (2.12.2 → 2.13.x). Upstream has nothing newer that the fork lacks.
 
-| Mode                                 | Description                                                            |
-| ------------------------------------ | ---------------------------------------------------------------------- |
-| **SDR**                        | Standard Dynamic Range (Rec.709), 8-bit                                |
-| **HDR10**                      | Static HDR with PQ (ST.2084) EOTF, 10-bit, full DRM InfoFrame metadata |
-| **HLG**                        | Hybrid Log-Gamma for broadcast HDR, 10-bit                             |
-| **Dolby Vision**               | Standard (TV-led, 8-bit RGB tunnel; used for Calman DV) or Low Latency (LLDV, YCbCr 4:2:2 12-bit) |
+Everything the original does is still here: patterns over TCP for Calman, ColourSpace, HCFR and Resolve; on-Pi meter workflows; LG AutoCal; profile building. The fork's focus is the **signal on the HDMI cable** and the **day-to-day experience**:
 
-The Raspberry Pi 4's KMS driver is used to set HDMI InfoFrames directly:
+<table>
+<tr>
+<td width="50%" valign="top">
 
-- **AVI InfoFrame** — color format (RGB / YCbCr 4:4:4 / 4:2:2), colorimetry (BT.709 / BT.2020), bit depth
-- **DRM InfoFrame** — EOTF, mastering display primaries (Rec.2020 / P3), luminance (max/min), MaxCLL, MaxFALL
-- **Dolby Vision** — DOVI output metadata blob via a dedicated binary (`PGeneratord.dv`) that detects DV capability from the display's EDID VSVDB
+### 🎯 Bit-exact output
+10-bit pattern codes reach the GPU **without 8-bit quantisation**. **RGB Limited is bit-exact**: a patched vc4 module skips the kernel's compression CSC. HDR10/HLG at 12 bpc goes out as bit-exact 10 bpc instead of crashing the renderer. Scanout readback on the Pi checks the codes; nobody has to eyeball them.
 
-### Calibration Software Compatibility
+</td>
+<td width="50%" valign="top">
 
-PGenerator+ acts as a TCP-controlled pattern generator, compatible with many major calibration software packages.
+### ⚡ Faster signal switching
+Changing signal mode takes **~3.5–4.5 s instead of ~10 s**. Format changes go into one atomic modeset, and signal settings are applied in place where possible. The link stays RGB until the renderer is up.
+
+</td>
+</tr>
+<tr>
+<td valign="top">
+
+### 🎛️ Calman that just works
+The UPGCI handshake now has proper ACKs and the settings format Calman actually parses. `GET_SETTINGS` works. Codes are rounded to the output depth, with a notice when a code is not exact. YCbCr 4:2:0 requests are refused cleanly with a NAK instead of breaking the link. The Portrait Displays **G1 specialty patterns** are rendered on the Pi.
+
+</td>
+<td valign="top">
+
+### 🌈 Dolby Vision, fixed
+Low Latency DV renders at **12 bpc** and really switches the TV into DV. Leaving DV signals "DV off" properly and restores the SDR colorimetry. Calman DV consistently runs as standard DV.
+
+</td>
+</tr>
+<tr>
+<td valign="top">
+
+### 🔌 Hotplug-safe
+Without a display, the renderer waits instead of failing. The UI says so in a banner, and your saved mode is kept. After a hotplug the screen shows black instead of grey or a text console. Before a reboot or power-off, the HDMI link is handed back as plain RGB.
+
+</td>
+<td valign="top">
+
+### 🖥️ A reworked Web UI
+**10 colour themes** (dark, light, OLED, Natrium …) and workspace navigation. The UI shows the measured HDMI link depth and clock. It is served compressed with an ETag, pauses polling in hidden tabs and uses its own dialogs instead of browser pop-ups. Toasts appear only for warnings and errors.
+
+</td>
+</tr>
+<tr>
+<td valign="top">
+
+### 📦 Safer OTA updates
+Updates come from **this fork's releases**. The dialog shows the release notes and download progress. You can **reinstall or roll back** to an earlier release. Update checks are cached (gentle on the GitHub API), and cross-site requests to the WebUI are refused.
+
+</td>
+<td valign="top">
+
+### 🧹 Small things that add up
+mDNS answers AAAA queries with an NSEC record, so clients do not wait for an IPv6 address that never comes. `/api/lg/status` answers in milliseconds instead of ~4 s. The boot splash shows once, early. **Download Logs** replaces the old log upload.
+
+</td>
+</tr>
+</table>
+
+## At a glance: fork vs. original
+
+| | Original ([BigShoots](https://github.com/BigShoots/PGenerator-Plus) 2.12.1) | **This fork (2.13.x)** |
+|---|---|---|
+| 10-bit pattern codes | quantised through 8 bit on the way to the GPU | **sent at full 10-bit precision** |
+| RGB Limited output | kernel compression CSC after the framebuffer | **bit-exact** (patched vc4, verified by scanout readback) |
+| HDR10 / HLG at 12 bpc | renderer crashed | bit-exact 10 bpc |
+| Signal-mode switch | ~10 s | **~3.5–4.5 s** |
+| Low Latency Dolby Vision | TV did not switch into DV | 12 bpc, TV switches into DV |
+| Calman UPGCI | settings replies Calman could not parse | ACK + parseable settings, `GET_SETTINGS` |
+| Calman YCbCr 4:2:0 request | no defined answer | clean NAK, current format kept, WebUI notice |
+| Calman G1 specialty patterns | – | rendered on the Pi, also in the WebUI |
+| No display connected | renderer started anyway | waits for a display, banner in the UI, saved mode kept |
+| WebUI themes | dark / light / system | **10 themes** incl. Natrium dark & light |
+| HDMI link readout | – | measured link depth and clock |
+| OTA | latest release only | release notes, progress, **reinstall / rollback** |
+| Popups | success and error toasts | warnings and errors only |
+
+> The left column describes upstream behaviour as stated in the fork commits that changed it. Run `git log origin/main..main` in a clone with both remotes for the full list.
+
+## Screenshots
+
+<table>
+<tr>
+<td width="68%" valign="top"><img src="screenshots/webui-settings.png" alt="Settings workspace with theme picker, GPU memory and software update"/></td>
+<td width="32%" valign="top"><img src="screenshots/webui-phone.png" alt="Web UI on a phone"/></td>
+</tr>
+<tr>
+<td align="center"><sub>Settings: themes, GPU memory, OTA update and backup in one place</sub></td>
+<td align="center"><sub>Same UI on a phone, with a bottom tab bar</sub></td>
+</tr>
+</table>
+
+---
+
+## Get started
+
+### New install: flash the image
+
+1. Download the newest release that has image parts, from [Releases](https://github.com/BlackJoker90/PGenerator-Plus/releases) (`PGenerator_Plus_vX.Y.Z_pi4.img.xz.001` and `.002`).
+   Image releases are rare by design. Most releases are OTA-only, so grab the latest image and update from there.
+2. Join the parts and flash:
+   - **Windows:** open `.001` with [7-Zip](https://www.7-zip.org/) to get the `.img`, then flash it with [Balena Etcher](https://etcher.balena.io/) or [Rufus](https://rufus.ie/).
+   - **macOS / Linux:** `cat PGenerator_Plus_*_pi4.img.xz.0* > pgen.img.xz`, then flash `pgen.img.xz` with [Raspberry Pi Imager](https://www.raspberrypi.com/software/). Imager reads `.xz` directly.
+   - Use a microSD card or USB stick of at least 8 GB.
+3. Boot the Pi and connect to it, using one of the methods below.
+4. Open **`http://pgenerator.local`** (or the Pi's IP address).
+5. Go to **Settings → Software Update → Check for Updates** to move to the newest OTA release.
+
+<details>
+<summary><b>Connection methods (Bluetooth PAN, Wi-Fi AP, Ethernet)</b></summary>
+
+- **Bluetooth PAN:** pair with the Pi, then join its PAN in Windows settings.
+  <p align="left">
+    <img src="screenshots/add_bluetooth_device.png" alt="Add Bluetooth device" width="200"/>
+    <img src="screenshots/add_device.png" alt="Confirm device addition" width="200"/>
+    <img src="screenshots/select_bluetooth.png" alt="Select Bluetooth" width="200"/>
+    <img src="screenshots/select_pgenerator.png" alt="Select PGenerator" width="200"/>
+    <img src="screenshots/join_bt_pan.png" alt="Join Bluetooth PAN" width="200"/>
+  </p>
+- **Wired PAN:** Ethernet cable directly between your computer and the Pi.
+- **Wired LAN:** Pi on your router or switch.
+- **Wireless PAN:** join the Pi's access point (SSID `PGenerator`, password `PGenerator`).
+  <p align="left"><img src="screenshots/join_wifi_pan.png" alt="Join WiFi PAN" width="200"/></p>
+- **Wireless LAN:** join your own Wi-Fi from **Connectivity** in the Web UI, after connecting once by one of the methods above.
+
+</details>
+
+### Coming from the original project?
+
+OTA updates stay within one `MAJOR.MINOR` family. 2.13 needs a new kernel module, so a Pi on upstream 2.12.x cannot update to the fork over the air. To switch:
+
+1. Export your settings with **Export System Settings** in the Web UI.
+2. Flash the latest fork image (see above).
+3. Import the backup, then use **Check for Updates** to reach the newest 2.13.x.
+
+From then on the Pi follows this fork's releases. The update source is `usr/share/PGenerator/update-channel`, and an `update_repo=owner/repo` line in `PGenerator.conf` overrides it.
+
+### Updating
+
+- **Web UI:** **Settings → Software Update → Check for Updates → Install Update.** The dialog shows the release notes and download progress, then restarts the service. The release dropdown also lets you reinstall the current release or roll back to an earlier one.
+- **SSH** (`root` / `PGenerator!!$`):
+
+  ```bash
+  /usr/sbin/pgenerator-update check   # is there something newer?
+  /usr/sbin/pgenerator-update apply   # install it
+  ```
+
+---
+
+## What PGenerator+ does
+
+PGenerator+ is a free, open-source display calibration suite for the Raspberry Pi 4, built around a precision HDMI test pattern generator. It produces SDR, HDR10, HLG and Dolby Vision patterns. The calibration software on your laptop drives it over TCP/IP, or it runs closed-loop SDR and HDR workflows on the Pi itself with a USB colorimeter.
+
+- **Precision HDMI patterns:** full-screen patches, windows, APL backgrounds, custom RGB triplets and patch sizes, drawn through DRM/KMS.
+- **HDR and Dolby Vision:** HDR10 (ST.2084 PQ with mastering metadata), HLG, standard and Low Latency Dolby Vision. AVI, DRM and DOVI infoframes are set correctly, and capabilities are detected from the EDID.
+- **Network control:** Calman (UPGCI, port 2100), ColourSpace / LightSpace and HCFR (port 85), DeviceControl, and the Resolve XML protocol (port 20002, outbound). UDP discovery runs on port 1977.
+- **Web dashboard:** signal settings, diagnostic patterns, a live infoframe decoder, HDMI-CEC, networking, OTA, and meter measurements.
+- **LG AutoCal (SDR and HDR):** on-device closed-loop calibration of LG TVs: 26-point greyscale, RGB balance, 3D LUT and HDR tone mapping, with an optional Tone Mapping Shadow Fix.
+- **Meter workflows:** ArgyllCMS `spotread` with persistent sessions, greyscale, colour and saturation sweeps, CCSS management, and live ΔE and chromaticity charts.
+- **Display profiles:** measured Windows MHC2 and KDE HDR cLUT profiles (ICC v2.2 / v4.4 with CICP), built in the browser.
+- **mDNS:** reachable at `pgenerator.local`.
+- **Field networking:** Bluetooth PAN, Wi-Fi AP, Ethernet.
+
+---
+
+## Calibration software compatibility
 
 **1. Calman (Portrait Displays)**
 
-- **Protocol:** SpectraCal Unified Pattern Generator Control Interface (Port `2100`)
-- **How to Connect:** In your workflow, click **Find Source** → Manufacturer: `SpectraCal` (or `Portrait Displays` in some versions) → Model: `SpectraCal - Unified Pattern Generator Control Interface`. Enter the PGenerator's IP address and click Connect.
-  - *Calman Control:* When connected via UPGCI, Calman can directly command the PGenerator to switch between SDR, HDR10 and HLG signal modes, set the EOTF, colorimetry, color format, mastering display metadata, and other InfoFrame parameters from its generator settings. PGenerator executes these commands in real time, eliminating the need to manually configure the signal on the device.
-  - *10-bit HDR Workflows:* PGenerator+ extends the original 8-bit Calman integration with automatic 10-bit handling for HDR workflows, keeping the pattern path aligned with the active HDMI link so HDR10 measurements run at full precision.
-  - *Window and APL Handling:* PGenerator+ supports both older and newer Calman window-generation methods on the Raspberry Pi, including fixed windows, custom windows, and gray-surround APL behavior used by G1-style workflows.
-  - *Session Safety:* Pattern state is cleared on session start, shutdown, and disconnect events so window or background settings do not leak into the next calibration run.
-  - *Dolby Vision Support:* Calman's Dolby Vision controls now switch the Pi into the correct Low-Latency Dolby Vision output path with matching HDMI signaling, BT.2020 colorimetry, and stable runtime metadata handling.
-  - *Pi Workflow Compatibility:* PGenerator+ covers the Calman control paths used in real Raspberry Pi workflows, including newer auxiliary control behavior, without requiring separate manual setup.
-  - *Compatibility Note:* In some Calman builds, connection may also work through the same generator entry users normally use for the G1. PGenerator+ is an independent community project, is not affiliated with or endorsed by Portrait Displays, and is documented here as a compatibility option rather than as official G1 hardware. Users are responsible for ensuring their Calman license and workflow comply with applicable vendor terms.
-  - *Deprecation Notice:* Portrait Displays removed the UPGCI protocol from Calman "Home" licenses starting with version 5.15.x (the 2024 releases) to push users toward their own generator hardware. There is no official add-on to re-enable it for Home users. If calibration with PGenerator is required, you must either remain on Calman 5.14.x or older, upgrade to a professional license tier (Calman Video Pro or higher), or use alternative software (like ColourSpace or HCFR).
+- **Protocol:** SpectraCal Unified Pattern Generator Control Interface (port `2100`)
+- **Connect:** **Find Source** → Manufacturer `SpectraCal` (or `Portrait Displays`) → Model `SpectraCal - Unified Pattern Generator Control Interface`. Enter the Pi's IP and connect.
+  - *Calman control:* Calman switches SDR / HDR10 / HLG / Dolby Vision, EOTF, colorimetry, format and mastering metadata directly; PGenerator+ applies them in real time.
+  - *Bit depth:* the Calman thread follows the configured bit depth. 10-bit codes stay exact, and codes are rounded to the output depth with a notice when one is not exact.
+  - *Modes:* `CONF_FORMAT` requests resolve to the EDID copy of a mode rather than the userdef boot mode. G1 sessions start at Calman's RGB 8-bit default.
+  - *Windows and APL:* fixed, custom and gray-surround APL windows (`RGB_S`, `RGB_A`, `CommandRGB`, `10_SIZE`, `11_APL`). With limited range, window backgrounds are drawn at black.
+  - *Unsupported formats:* a YCbCr 4:2:0 request gets a NAK, and the WebUI shows a notice. The current format stays.
+  - *Session safety:* pattern state is cleared on session start, shutdown and disconnect.
+  - *Compatibility note:* some Calman builds can also connect through the generator entry normally used for the G1. PGenerator+ is an independent community project, not affiliated with or endorsed by Portrait Displays. Make sure your Calman license and workflow comply with the vendor's terms.
+  - *License note:* Portrait Displays removed UPGCI from Calman **Home** licenses starting with 5.15.x (2024). Home users need 5.14.x or older, a professional tier, or other software (ColourSpace, HCFR).
 
 **2. ColourSpace / LightSpace CMS**
 
-- **Protocol:** XML Network Calibration Protocol (Port `85`)
-- **How to Connect:** Open **Hardware Options** → Hardware: `Network` (or `PGenerator` if listed). Enter the PGenerator's IP address in the Network Address field and click Connect.
+- **Protocol:** XML network calibration protocol (port `85`)
+- **Connect:** **Hardware Options** → Hardware `Network` (or `PGenerator`) → enter the Pi's IP.
 
 **3. HCFR**
 
-- **Protocol:** Network Pattern Generator Commands (Port `85`)
-- **How to Connect:** Go to **Measures** > **Generator** > **Configure** → Select `Network` from the dropdown and enter the PGenerator's IP address.
-- **Implementation Note:** HCFR compatibility work in PGenerator+ has been cross-checked against the upstream [HCFR](https://github.com/hcfr/hcfr) source so generator behavior, grayscale reference handling, and related measurement logic can be aligned to HCFR's actual application behavior where practical. HCFR remains a separate upstream project; PGenerator+ uses it as a reference and does not bundle the HCFR application itself.
+- **Protocol:** network pattern generator commands (port `85`)
+- **Connect:** **Measures → Generator → Configure** → `Network`, then enter the Pi's IP.
+- Generator behaviour has been cross-checked against the upstream [HCFR](https://github.com/hcfr/hcfr) source. HCFR itself is not bundled.
 
-**4. Resolve Protocol (CalMAN/HCFR/DisplayCAL)**
+**4. Resolve protocol (Calman / HCFR / DisplayCAL)**
 
-- **Protocol:** XML Calibration Protocol (Port `20002`) — PGenerator+ acts as a *client*, connecting outbound to calibration software. This is useful when the calibration PC cannot reach the PGenerator directly (e.g., different subnets).
-- **How to Connect:** In the PGenerator+ Web UI, find the **Resolve Protocol** card, enter the calibration PC's IP address and port, and click **Connect**. PGenerator+ will establish a TCP connection and begin accepting XML-encoded pattern commands.
-- **Windows Redirect Helper:** For CalMAN workflows that expect a local Resolve connection, use the included `tools/PGenerator-Resolve-Redirect.bat` to set up a Windows port proxy that forwards CalMAN's local port 20002 to the PGenerator's IP.
+- **Protocol:** XML calibration protocol (port `20002`). PGenerator+ connects *outbound* to the calibration PC, which helps across subnets.
+- **Connect:** in the Web UI's **Resolve Protocol** card, enter the PC's IP and port and click **Connect**.
+- **Windows redirect helper:** `tools/PGenerator-Resolve-Redirect.bat` forwards Calman's local port 20002 to the Pi.
 
 **5. DeviceControl**
 
-- **Protocol:** UDP discovery + TCP pattern control
-
-*Device Discovery:* Calibration software can often discover the device automatically via UDP broadcast on port `1977` (`"Who is a PGenerator"` → `"I am a PGenerator <name>"`), allowing you to select your device from a list instead of entering the IP address manually. On PGenerator+, the advertised discovery name defaults to `PGenerator+` when the system hostname is still the stock `pgenerator` value.
-
-### Web UI Dashboard
-
-PGenerator+ features a responsive, mobile-friendly single-page settings dashboard served on **port 80**. Access it from any browser at `http://pgenerator.local` or using the device's IP address.
-
-<p align="center">
-  <img src="screenshots/webui_dashboard.png" alt="PGenerator+ Web UI Dashboard" width="800"/>
-</p>
-
-The UI is divided into drag-and-drop functional cards that save your layout preferences locally.
-
-#### Device Information
-
-Monitor the real-time health and connectivity of your PGenerator+:
-
-- **System Metrics:** Uptime, CPU temperature, and active HDMI output resolution.
-- **Network Interfaces:** View all assigned IP addresses (Ethernet, WiFi, WiFi AP, and Bluetooth PAN).
-- **WiFi Status:** Detailed metrics on the current wireless network connection including SSID, band, and signal strength.
-- **Calibration Status:** Auto-detects and displays when calibration software (like Calman or ColourSpace) is actively connected.
-- **Latency Indicator:** Live ping response time to the device with a color-coded status.
-
-#### HDMI Signal Settings
-
-Complete control over the HDMI output parameters, InfoFrames, and DRMs without needing to use terminal commands:
-
-- **Signal Mode:** Instantly switch between SDR, HDR10, HLG, and Dolby Vision.
-- **Custom Resolutions:** Auto-detects available modes from the connected display's EDID.
-- **Base Video Parameters:** Configure Color Format (RGB/YCbCr), Colorimetry (BT.709/BT.2020), and Bit Depth (8/10/12-bit).
-- **HDR10 Metadata:** When HDR10 is active, take full control over the DRM InfoFrame (EOTF, Mastering Primaries, Max/Min Luma, MaxCLL, and MaxFALL).
-- **Dolby Vision Metadata:** Dolby Vision Low Latency (LLDV) is supported, configure specific DOVI Interface, Color Space, and Metadata details.
-
-#### Manual Pattern Injection
-
-A full suite of test patterns that can be manually injected on-screen for spot-checking and fast visual validation.
-
-- **Solid Colors:** White, Black, Red, Green, Blue, Cyan, Magenta, Yellow, and generic Grays.
-- **Ramps & Steps:** Grayscale ramps and varying steps (2% to 10% increments).
-- **Calibration Checks:** Window patterns, Overscan borders, and Color Bars.
-- **Custom RGB Patch:** Enter specific RGB triplets and pick a patch size (10%, 18%, 25%, 50%, or 100%) to instantly display a custom color window.
-
-#### InfoFrame Decoder
-
-Troubleshoot your display chain by reading exactly what InfoFrames the Raspberry Pi is writing to the HDMI port:
-
-- Live readout of active AVI and DRM InfoFrame hex data.
-- Decoded human-readable translation of the current signal flags (colorimetry, VIC, EOTF, and luminance).
-
-#### HDMI-CEC TV Control
-
-Direct display control using HDMI-CEC:
-
-- **TV Power Status:** Indicates if the TV is detected and turned On/Standby.
-- **Actions:** Wake, Turn On, Send to Standby, or force the TV to switch to the Active Input.
-
-#### System & Updates
-
-Manage the device directly from the interface:
-
-- **Network Management:** Configure the active WiFi client connection or manage the local WiFi Access Point (reachable at `10.10.10.1`).
-- **Power Options:** Restart the PGenerator backend service or safely reboot the entire Raspberry Pi.
-- **Boot GPU Split:** Adjust the boot-time GPU memory split from the UI and trigger the required reboot.
-- **OTA Updates:** Check GitHub for new PGenerator+ releases, view changelogs, and install the latest cumulative OTA overlay with a single click.
-
-#### Meter & Measurements
-
-The current Web UI includes an integrated measurement workflow built around ArgyllCMS `spotread`:
-
-- **USB Meter Detection:** Detects supported colorimeters attached over USB and reports whether `spotread` is available.
-- **Calibration Tool Workflow:** In current releases including `2.3.1`, PGenerator+ can be used as a simple calibration tool on the Pi itself, not just as a remote patch source.
-- **Persistent Read Sessions:** Uses a long-lived meter session so repeated reads avoid paying the full meter initialization cost every time.
-- **Interactive Measurements:** Supports both **Read Once** and **Continuous** live reading modes from the dashboard.
-- **Series Runs:** Built-in measurement series for **Greyscale 21pt**, **Greyscale 11pt**, **Colors 30**, and **Saturation Sweep 24**.
-- **Patch Controls:** Configurable settle delay, patch size, optional APL windows, refresh-rate override, OLED pattern insertion, and optional i1D3 AIO disable.
-- **On-Device Charts:** Displays live luminance, CCT, chromaticity, RGB balance, luminance tracking, and both CIELUV and CIEDE2000 Delta E charts in the browser.
-- **Supported Colorimeters:** Calibrite/X-Rite i1Display Pro Plus, X-Rite i1 Pro, X-Rite i1 Display Pro / ColorMunki Display, Datacolor Spyder 5, Datacolor SpyderX, ColorVision Spyder, and Sequel Chroma 5.
-- **Included ArgyllCMS Runtime:** The current source tree and Pi image include a bundled prebuilt ArgyllCMS `spotread` `3.5.0` armhf binary at `/usr/bin/spotread`, with `spotread_wrapper.sh`, `spotread_measure.py`, `meter_session.sh`, and `meter_series.sh` providing the Pi-side automation layer.
-- **Headless Argyll Runtime Path:** Cross-compiled or imported armhf builds of `ccxxmake` and its matching headless helpers (`spotread`, `chartread`, `colprof`, `i1d3ccss`, `oeminst`) can be staged into the repo with [tools/import_argyll_runtime.sh](tools/import_argyll_runtime.sh) and folded into a test image via [tools/build_pgenerator_plus_image.sh](tools/build_pgenerator_plus_image.sh#L1) `--argyll-runtime-dir`.
-- **Driver Model:** Meter support uses the standard Linux USB/HID stack plus bundled udev permission rules; no extra proprietary driver packages or out-of-tree kernel modules are required.
-
-#### LG Auto Calibration (SDR & HDR)
-
-On-device closed-loop calibration of LG displays, driven entirely from the Pi — no PC-side calibration software required. AutoCal is LG-only at this time (it drives the LG webOS calibration API and requires a paired LG TV).
-
-- **Two Workers:**
-  - **`meter_lg_autocal.pl`** — 1D greyscale + 2-point / 20-point white balance autocal. Tunes the display's picture-mode high/low controls and per-channel RGB gains against measured luminance and chroma targets, then runs an optional commit-and-polish pass to flatten residual Delta E.
-  - **`meter_lg_3d_autocal.pl`** — 3D LUT autocal. Probes a structured color cube through the picture mode, fits the residual errors into the display's 3D LUT, and re-measures to verify the fit.
-- **SDR and HDR10 Signal Modes:** Runs in SDR (Rec.709, `sdr26` DDC layout) and HDR10 (Rec.2020, `hdr20` DDC layout). The Pi switches the HDMI output between the two modes automatically based on the chosen signal mode — no manual relaunch needed.
-- **Pipeline Stages (Full AutoCal):** Pre-cal report reads → 26-point greyscale (1D DPG) → 3D LUT profiling and upload → HDR tone-map upload → optional LG Tone Mapping Shadow Fix → post-cal report reads. Greyscale and 3D LUT stages can also run standalone.
-- **LG Tone Mapping Shadow Fix (HDR):** optional Full AutoCal stage (wizard checkbox) that removes post-calibration PQ shadow lift. It probes the panel's true post-cal DPG sampling zones per run — the cal-off sampling map is panel-specific — then iteratively trims the 0–30% shadow band with chroma-neutral per-anchor corrections, converging against the final committed state with revert-if-worse protection.
-- **Panel Stabilization:** all AutoCal read paths honor the operator's pattern-insertion settings (grey stabilization flash + black reset between reads) to hold OLED panel state steady during long dim-patch sequences.
-- **Live Status from the Web UI:** The Meter & Measurements card surfaces per-stage progress, current patch, Delta E (ITP / CIEDE2000), luminance error, accepted vs. rejected DDC moves, and run IDs, with start/stop and "skip stage" controls.
-- **Display-Type Presets:** Built-in defaults for common LG panel types (OLED, QD-OLED, LCD WLED/CCFL/RGB LED) drive target luminance, gamma, color space, and tone-curve choices.
-- **Manual Target Overrides:** Target White and Target Black can be pinned to a fixed value instead of "use measured peak / floor", so every read anchors to the same reference.
-- **Meter Compatibility:** Uses the same supported X-Rite, Calibrite, Datacolor, ColorVision, and Sequel USB meters as the spotread workflow; no extra drivers required.
-- **Reports and Export:** Each autocal run produces an on-disk report (HTML + JSON) with the full stage log, per-step readings, accepted/rejected moves, and final Delta E summary that can be downloaded from the Web UI.
-- **Restart-Safe:** Active runs survive a WebUI reload and can be stopped cleanly; partial state is preserved on crash so the next run can resume from the last accepted step.
-
-#### CCSS Profile Management
-
-Meter correction files are now part of the runtime:
-
-- **Bundled Library:** `/usr/share/PGenerator/ccss/` ships a large set of generic and display-specific CCSS profiles.
-- **Built-In Presets:** Quick display-type selections map to generic OLED, QD-OLED, LCD WLED/CCFL/WGCCFL/RGB LED, Plasma, Projector, and CRT defaults.
-- **Custom Profiles:** Upload `.ccss` files or compatible spectral `.csv` files from the Web UI.
-- **Custom Storage:** Uploaded profiles are stored under `/usr/share/PGenerator/ccss/custom/` and can be listed and deleted from the UI.
-
-### mDNS / Bonjour
-
-Built-in mDNS responder on port 5353 — the device is reachable at `pgenerator.local` without any DNS configuration. Responds to A-record queries with subnet-aware IP selection.
-
-### OTA Updates
-
-Self-updating via GitHub Releases from this repository:
-
-- `pgenerator-update check` — queries the GitHub API for the latest release, returns JSON with version comparison and changelog
-- `pgenerator-update apply` — downloads the release `.tar.gz` asset, stops the service, extracts over the filesystem, and restarts
-
-Updates are triggered from the web UI or command line. Release assets are tar.gz archives with FHS-layout paths that overlay directly onto the root filesystem.
-
-Important OTA rule: the updater downloads only the latest tar.gz asset. It does not replay every intermediate release. That means each published `pgenerator-plus-<version>.tar.gz` asset must be a cumulative overlay built from the repository's current `etc`, `usr`, `var`, and `lib` trees, not a delta package.
-
-For changes that cannot be expressed by the latest overlay alone, ship a versioned migration script in `usr/share/PGenerator/update-migrations.d`. During `pgenerator-update apply`, scripts whose version is greater than the installed version and less than or equal to the target version are executed after extraction. Use those scripts for one-time data migrations and removal of obsolete files when users skip intermediate releases.
-
-To build the OTA tarball consistently from the repo overlay, use:
-
-```bash
-./tools/build_pgenerator_plus_ota.sh
-```
-
-### LUT Correction
-
-Per-channel color correction via `/etc/PGenerator/lut.txt`:
-
-```
-R,G,B=R_delta,G_delta,B_delta
-```
-
-Supports exact RGB matches and an `ALL` wildcard for global offset. Applied by the Perl daemon before writing pattern files.
+- UDP discovery on port `1977` (`"Who is a PGenerator"` → `"I am a PGenerator <name>"`) plus TCP pattern control. With the stock hostname, the device advertises itself as `PGenerator+`.
 
 ---
 
-## Architecture
+## Web UI tour
+
+Served on **port 80** at `http://pgenerator.local`. It has a **Desktop** layout with a sidebar of workspaces and a **Tablet** layout with draggable, collapsible cards and a bottom tab bar on phones.
+
+| Workspace | What's in it |
+|---|---|
+| **Output** | Signal mode (SDR / HDR10 / HLG / Dolby Vision), resolution from the EDID, bit depth, colour format, colorimetry, range, and HDR10 and DV metadata. Shows a banner while no display is connected. |
+| **Patterns** | Calman G1 plates (Basic Alignment, Brightness, Warm-Up, more), the test images White Clipping, Black Clipping and Overscan, and your own uploaded images and videos |
+| **Calibration** | Meter detection, single and continuous reads, series runs (Greyscale 21/11, Colors 30, Saturation 24), charts, and session export |
+| **Meter Profiler** | Meter correction (CCSS) editor and preview |
+| **3D LUT · Display Profiler** | LUT handling, MHC2 / KDE HDR profile building |
+| **LG Display** | LG pairing, AutoCal (greyscale, 3D LUT, HDR tone map, Shadow Fix) |
+| **Connectivity** | Wi-Fi client, access point and Bluetooth in one Network card, plus the Resolve client |
+| **System** | Device info: CPU, memory, temperature, interfaces, uptime |
+| **Live Information** (right-hand drawer) | Active signal, the infoframe decoder (AVI and DRM), the measured HDMI link depth and clock, and HDMI-CEC status |
+| **Settings** | Layout, zoom, **10 themes**, GPU memory, software update (with notes, progress, rollback), Download Logs, and settings backup and restore |
+
+The header shows the connection, HDMI display, calibration software, meter and temperature at a glance. Restart and power-off are one tap away.
+
+<details>
+<summary><b>Meter &amp; measurements in detail</b></summary>
+
+- **USB meter detection**, and reports whether `spotread` is available.
+- **Persistent read sessions**, so repeated reads skip the meter init cost.
+- **Read Once** and **Continuous** modes.
+- **Series:** Greyscale 21pt / 11pt, Colors 30, Saturation Sweep 24.
+- **Patch controls:** settle delay, patch size, APL windows, refresh-rate override, OLED pattern insertion, i1D3 AIO disable.
+- **Charts:** luminance, CCT, chromaticity, RGB balance, luminance tracking, CIELUV and CIEDE2000 ΔE.
+- **Supported meters:** Calibrite/X-Rite i1Display Pro Plus, i1 Pro, i1 Display Pro / ColorMunki Display, Datacolor Spyder 5 / SpyderX, ColorVision Spyder, Sequel Chroma 5.
+- **Runtime:** bundled ArgyllCMS `spotread` 3.5.0 (armhf) at `/usr/bin/spotread`, with `spotread_wrapper.sh`, `spotread_measure.py`, `meter_session.sh` and `meter_series.sh`. Plain Linux USB/HID plus bundled udev rules; no proprietary drivers.
+- **CCSS:** a bundled library in `/usr/share/PGenerator/ccss/`, display-type presets, and `.ccss` or spectral `.csv` uploads (stored in `ccss/custom/`).
+
+</details>
+
+<details>
+<summary><b>LG AutoCal (SDR &amp; HDR) in detail</b></summary>
+
+On-device closed-loop calibration of LG TVs through the webOS calibration API. LG only; it needs a paired TV.
+
+- **`meter_lg_autocal.pl`:** 1D greyscale plus 2-point / 20-point white balance, with an optional commit-and-polish pass.
+- **`meter_lg_3d_autocal.pl`:** 3D LUT autocal. It probes a colour cube, fits the residuals into the TV's LUT and re-measures.
+- **SDR and HDR10:** `sdr26` and `hdr20` DDC layouts. The Pi switches the HDMI mode itself.
+- **Full AutoCal pipeline:** pre-cal reads → 26-pt greyscale → 3D LUT → HDR tone map → optional Shadow Fix → post-cal reads.
+- **Tone Mapping Shadow Fix:** probes the panel's post-cal DPG zones and trims the 0–30 % PQ shadow band, with revert-if-worse.
+- **Panel stabilisation**, display-type presets, manual target white and black, live per-stage status, HTML and JSON reports, and restart-safe runs.
+
+</details>
+
+---
+
+## Reference
+
+### Signal modes
+
+| Mode | Description |
+|---|---|
+| **SDR** | Rec.709, 8 or 10 bpc, RGB Full / Limited or YCbCr |
+| **HDR10** | PQ (ST.2084), full DRM InfoFrame metadata, 10 bpc (12 bpc requests go out as bit-exact 10 bpc) |
+| **HLG** | Hybrid Log-Gamma, 10 bpc |
+| **Dolby Vision** | Standard (TV-led, 8-bit RGB tunnel; used for Calman DV) or Low Latency (LLDV, 12 bpc) |
+
+The Pi 4's KMS driver sets the HDMI InfoFrames directly:
+
+- **AVI:** colour format (RGB / YCbCr 4:4:4 / 4:2:2), colorimetry (BT.709 / BT.2020), quantisation range, VIC
+- **DRM:** EOTF, mastering primaries, max/min luminance, MaxCLL, MaxFALL
+- **Dolby Vision:** a DOVI output metadata blob from `PGeneratord.dv`, with DV capability detected from the EDID VSVDB
+
+### Architecture
 
 ```
 Boot: /etc/init.d/rcPGenerator → /etc/init.d/PGenerator
   ↓
-Splash: RGB565 framebuffer image → /dev/fb0 (1920×1080)
+Splash: RGB565 framebuffer image → /dev/fb0 (shown once, early)
   ↓
 Hardware init: USB gadget, WiFi AP, Bluetooth, DHCP
   ↓
@@ -416,18 +315,16 @@ Daemon: PGeneratord.pl (Perl TCP server)
   ├─ TCP port 85   — LightSpace / pattern protocol
   ├─ TCP port 2100 — Calman protocol
   ├─ TCP port 2101 — RPC service
-  ├─ TCP port 80   — Web UI (HTTP + JSON API)
+  ├─ TCP port 80   — Web UI (HTTP + JSON API, gzip + ETag)
   ├─ UDP port 5353 — mDNS responder
   ├─ UDP port 1977 — Device discovery
   ├─ UDP port 3529 — RPC discovery
-  ├─ Spawns PGeneratord (C/C++ renderer, reads operations.txt)
+  ├─ Spawns PGeneratord (C/C++ renderer, reads operations.txt) once a display is connected
   │    └─ PGeneratord.dv variant for Dolby Vision
   └─ Threads: main loop, device info, UDP discovery (x3), Resolve client, HTTP, mDNS
 ```
 
-### IPC
-
-The Perl daemon writes pattern descriptions to `/var/lib/PGenerator/operations.txt` in a simple DSL:
+**IPC:** the Perl daemon writes pattern descriptions to `/var/lib/PGenerator/operations.txt`:
 
 ```
 PATTERN_NAME=TestPattern
@@ -441,38 +338,100 @@ END=1
 FRAME=1
 ```
 
-The C/C++ binary (`PGeneratord`) reads this file and renders directly to the display via the Pi's GPU.
+`PGeneratord` reads this file and renders it through OpenGL ES on DRM/KMS.
 
-Standard Dolby Vision remains wire-compatible with PGenerator 1.6 on port
-`85`. Clients send the same ordinary 8-bit `RGB`, `TESTPATTERN`, or
-`TESTTEMPLATE` request they send to 1.6. PGenerator+ performs the 8-bit to
-12-bit Dolby source conversion internally while preserving the 8-bit HDMI
-tunnel. Clients must not send the internal `SOURCE_MAX` operations-file field.
-Existing `10bit` declarations are also accepted and retain their added source
-precision, but they are not required for 1.6-compatible operation.
+Standard Dolby Vision stays wire-compatible with PGenerator 1.6 on port `85`. Clients send the same 8-bit `RGB`, `TESTPATTERN` or `TESTTEMPLATE` requests they send to 1.6. PGenerator+ converts them internally from 8-bit to 12-bit Dolby source values and keeps the 8-bit HDMI tunnel. Clients must not send the internal `SOURCE_MAX` field. `10bit` declarations are accepted and keep their added precision.
 
-A client that supports both versions can advertise its name without detecting
-the PGenerator version by extending the side-effect-free `GETSTATUS` request:
+A client can advertise its name without detecting the version by extending `GETSTATUS`:
 
 ```
 GETSTATUS:CLIENTNAME=PerceptualPro
 ```
 
-PGenerator 1.6 handles this with its existing `GETSTATUS` command and does not
-draw or alter the current pattern. PGenerator+ returns the same status response
-and also shows the sanitized name in its status bar while the socket is
-connected. A PGenerator+-only client may alternatively send
-`CLIENTNAME:PerceptualPro` as a standalone command. `CLIENT_NAME` and
-`SOFTWARE` are accepted aliases, `=` may replace `:`, names are limited to 64
-safe display characters, and commands use the normal `0x02 0x0d` terminator.
+PGenerator 1.6 treats this as a normal `GETSTATUS`. PGenerator+ also shows the sanitised name in its status bar while the socket is connected. `CLIENTNAME:<name>` works as a standalone command, and so do the aliases `CLIENT_NAME` and `SOFTWARE`. `=` may replace `:`. Names are limited to 64 safe characters, and commands end with `0x02 0x0d`.
 
-### Privilege Separation
+**Privilege separation:** the daemon runs as `pgenerator`. Privileged operations (config writes, service control, updates) go through `PGenerator_cmd.pl` via `sudo`, with base64-encoded environment arguments. The WebUI refuses cross-site requests.
 
-The daemon runs as the `pgenerator` user. Privileged operations (config writes, service control, updates) are delegated to `PGenerator_cmd.pl` via `sudo`, with arguments passed as base64-encoded environment variables.
+### Configuration
 
----
+`/etc/PGenerator/PGenerator.conf`: flat `key=value`, no sections.
 
-## Project Structure
+| Key | Values | Description |
+|---|---|---|
+| `port_pattern` | `85` | TCP port for the pattern protocol (read-only) |
+| `color_format` | `0`=RGB, `1`=YCbCr444, `2`=YCbCr422 | HDMI output colour format |
+| `colorimetry` | `0`=BT.709, `1`=BT.2020 | AVI InfoFrame colorimetry |
+| `rgb_quant_range` | `0`=Auto, `1`=Limited, `2`=Full | RGB quantisation range |
+| `max_bpc` | `8`, `10`, `12` | Bits per channel |
+| `eotf` | `0`=SDR, `2`=PQ, `3`=HLG | Transfer function |
+| `primaries` | `1`=Rec.2020, `2`=P3/D65, `3`=P3/DCI | Mastering display primaries |
+| `max_luma` / `min_luma` | nits (min ×0.0001) | Mastering display luminance |
+| `max_cll` / `max_fall` | nits | Content light level metadata |
+| `dv_status` | `0`=off, `1`=on | Use the Dolby Vision renderer |
+| `is_hdr` / `is_sdr` | `0` / `1` | Signal mode flags |
+| `is_ll_dovi` / `is_std_dovi` | `0` / `1` | Dolby Vision mode flags |
+| `dv_interface` | `0`=Standard, `1`=Low Latency | DV interface type |
+| `dv_map_mode` | `1`=Absolute, `2`=Relative | DV source-mapping mode of the `.dv` renderer |
+| `dv_metadata` | `2`=Perceptual, `3`=Absolute, `4`=Relative | Calman metadata-mode bookkeeping |
+| `dv_color_space` | `0`=YCbCr422, `1`=RGB444, `2`=YCbCr444 | DV colour space |
+| `update_repo` | `owner/repo` | Optional: override the OTA source (default from `update-channel`) |
+
+**LUT correction:** `/etc/PGenerator/lut.txt` holds per-channel deltas (`R,G,B=R_delta,G_delta,B_delta`, plus an `ALL` wildcard). The daemon applies them before writing pattern files.
+
+### Hardware
+
+- **Raspberry Pi 4** (or Pi 400). This is required for HDR10/DV and the KMS driver. Other Pi models are not supported.
+- HDMI connection to the display
+- Network: Ethernet, Wi-Fi, Bluetooth or the Wi-Fi AP
+
+<details>
+<summary><b>API reference</b></summary>
+
+All endpoints are on port 80 and return JSON.
+
+| Method | Endpoint | Description |
+|---|---|---|
+| GET | `/api/ping` | Health check |
+| GET | `/api/info` | Device info (hostname, temp, IPs, Wi-Fi, resolution, calibration status) |
+| GET | `/api/config` | Current configuration |
+| POST | `/api/config` | Apply configuration changes (only the keys you send) |
+| GET | `/api/modes` | HDMI modes from the display EDID |
+| POST | `/api/restart` | Restart the pattern generator |
+| POST | `/api/reboot` | Reboot the device |
+| GET | `/api/wifi/scan` | Scan for Wi-Fi networks |
+| GET | `/api/wifi/status` | Wi-Fi connection status |
+| POST | `/api/wifi/connect` | Connect to Wi-Fi (`ssid`, `psk`) |
+| GET / POST | `/api/wifi/ap` | Read / set AP SSID and password |
+| GET | `/api/infoframes` | AVI and DRM InfoFrame hex data |
+| GET | `/api/cec/status` | HDMI-CEC TV power status |
+| GET | `/api/cec/{cmd}` | Send a CEC command (`wake`, `on`, `off`, `as`) |
+| POST | `/api/pattern` | Display a test pattern |
+| POST | `/api/resolve/connect` · `/disconnect` | Resolve client mode |
+| GET | `/api/resolve/status` | Resolve connection status |
+| GET | `/api/update/check` | Check this fork's releases for an OTA package |
+| POST | `/api/update/apply` | Start the OTA download and install |
+| GET | `/api/update/status` | OTA progress |
+| GET / POST | `/api/boot/memory` | Read / set the GPU memory split (POST reboots) |
+
+**Meter & CCSS**
+
+| Method | Endpoint | Description |
+|---|---|---|
+| GET | `/api/meter/status` | Detect the meter and `spotread` |
+| POST | `/api/meter/read` | Start a manual read |
+| GET | `/api/meter/read/result` | Poll the latest read |
+| POST | `/api/meter/series` | Start a greyscale, colour or saturation series |
+| GET | `/api/meter/series/status` | Series progress and readings |
+| POST | `/api/meter/stop` · `/clear` · `/reset` | Stop, clear results, force a meter reset |
+| GET / POST | `/api/meter/settings` | Load / save meter settings (POST replaces them; send the full object) |
+| GET | `/api/ccss/list` · `/api/ccss/all` | Custom / all CCSS profiles |
+| POST | `/api/ccss/upload` | Upload a `.ccss` or spectral `.csv` |
+| POST | `/api/ccss/delete/{filename}` | Delete a custom profile |
+
+</details>
+
+<details>
+<summary><b>Project structure</b></summary>
 
 ```
 src/
@@ -482,179 +441,116 @@ src/
 etc/
   init.d/PGenerator              # Init script (service start/stop)
   PGenerator/PGenerator.conf     # Configuration (key=value)
-  PGenerator/lut.txt             # LUT color correction table
-  udev/rules.d/99-colorimeter.rules # USB permissions for supported meters
-  sudo/sudoers.d/PGenerator      # Allows meter helpers and privileged commands
-usr/                               # Shared runtime copied into every target
+  PGenerator/lut.txt             # LUT colour correction table
+  udev/rules.d/99-colorimeter.rules
+  sudo/sudoers.d/PGenerator
+usr/
   sbin/
     PGeneratord.pl               # Main daemon (Perl, forks + threads)
-    pgenerator-update            # OTA update script (GitHub Releases)
+    PGeneratord, PGeneratord.dv  # Prebuilt renderers
+    pgenerator-update            # OTA updater (GitHub Releases)
   bin/
-    PGenerator_cmd.pl            # Privileged command handler (runs as root)
-    meter_session.sh             # Persistent spotread session for manual reads
-    meter_series.sh              # Background multi-patch measurement runner
-    meter_usb_reset.sh           # USB reset helper for stuck meter state
-    spotread_wrapper.sh          # Non-interactive spotread wrapper with JSON output
-    spotread_measure.py          # PTY-based spotread helper for single reads
+    PGenerator_cmd.pl            # Privileged command handler (root)
+    meter_*.sh, spotread_*       # Meter automation
   share/PGenerator/
-    daemon.pm                    # TCP server, request routing, thread management
-    pattern.pm                   # Pattern file creation, LUT, scaling
-    client.pm                    # LightSpace / Calman protocol handling
-    resolve.pm                   # Resolve calibration XML protocol (client mode)
-    discovery.pm                 # UDP broadcast discovery responder
-    webui.pm                     # Web UI: HTTP server, JSON API, HTML/CSS/JS SPA
-    version.pm                   # Version info ($version, $version_plus)
-    info.pm                      # Device info collection
-    log.pm                       # Logging
-    file.pm                      # File utilities
-    ccss/                        # Bundled generic and display-specific CCSS profiles
-tools/image-targets/
-  pi4-biasi/rootfs/              # Pi 4 renderer, display backend, CEC/hardware overlay
-  pi5-bookworm-armhf/rootfs/     # Pi 5 renderer, display backend, CEC/hardware overlay
+    daemon.pm                    # TCP server, request routing, threads
+    pattern.pm                   # Pattern files, LUT, scaling
+    client.pm                    # LightSpace / Calman protocols
+    resolve.pm                   # Resolve XML protocol (client mode)
+    discovery.pm                 # UDP discovery
+    webui.pm                     # HTTP server + JSON API
+    webui-*.html/css/js          # Web UI fragments
+    update-channel               # OTA source repository
+    version.pm                   # Version info
+    ccss/                        # Bundled CCSS profiles
+tools/
+  build_pgenerator_plus_ota.sh   # OTA package builder
+  build_pgenerator_plus_image.sh # Overlay image builder
+  renderer-build/                # Cross-build of the renderer in a VM
 ```
 
-The top-level `usr/share/PGenerator/webui.pm`, meter helpers, LG calibration
-workers, and CCSS profiles are the shared UI/calibration source for both images.
-Target overlays own the renderer binaries and hardware/display backend files,
-including `command.pm`, `conf.pm`, `variables.pm`, CEC helpers, DRM override
-libraries, and renderer executables. Those `tools/image-targets` manifests and
-overlays are supplied as a reviewed external release input; they are not in a
-clean public checkout. When the bundle has not been provisioned, the OTA
-builder and the Pi 5 image target fail with the missing manifest path, and the
-default Pi 4 image target warns and builds without the hardware overlay.
+Target overlays (`tools/image-targets/*/rootfs`) own the renderer binaries and hardware backend files (`command.pm`, `conf.pm`, `variables.pm`, CEC helpers, DRM override). They come from a reviewed external release input and are not part of a clean public checkout. The calibration maths are documented in [Calibration maths architecture](docs/calibration-math-architecture.md).
 
-The ownership, compatibility and deliberate runtime policies for calibration
-maths are documented in
-[Calibration maths architecture](docs/calibration-math-architecture.md).
+</details>
 
-### Key Modules
+<details>
+<summary><b>Build your own image or OTA package</b></summary>
 
-| Module                                                             | Purpose                                                                      |
-| ------------------------------------------------------------------ | ---------------------------------------------------------------------------- |
-| [daemon.pm](usr/share/PGenerator/daemon.pm)                         | TCP socket server, fork + thread management, request routing                 |
-| [pattern.pm](usr/share/PGenerator/pattern.pm)                       | Pattern DSL file creation, LUT application, resolution scaling               |
-| [client.pm](usr/share/PGenerator/client.pm)                         | LightSpace XML protocol, Calman protocol handling                            |
-| [resolve.pm](usr/share/PGenerator/resolve.pm)                       | Resolve calibration XML protocol (outbound client to CalMAN/HCFR/DisplayCAL) |
-| [discovery.pm](usr/share/PGenerator/discovery.pm)                   | UDP broadcast discovery for DeviceControl, LightSpace, and RPC               |
-| [webui.pm](usr/share/PGenerator/webui.pm)                           | Full web dashboard: HTTP server, REST API, single-page HTML/CSS/JS app       |
-| `tools/image-targets/*/rootfs/usr/share/PGenerator/command.pm`   | Target-specific HDMI/KMS/tvservice, renderer startup, and process management |
-| `tools/image-targets/*/rootfs/usr/share/PGenerator/conf.pm`      | Target-specific runtime/platform detection around shared`key=value` config |
-| `tools/image-targets/*/rootfs/usr/share/PGenerator/variables.pm` | Target-specific paths, display defaults, and hardware flags                  |
-| [version.pm](usr/share/PGenerator/version.pm)                       | Version string (`2.4.1`) and product name (`PGenerator+`)                |
+**Overlay image** (bring your own BiasiLinux / PGenerator base):
 
-### Meter Runtime Notes
+```bash
+sudo ./tools/build_pgenerator_plus_image.sh \
+  --base-image /path/to/compatible-biasilinux-pgenerator.img \
+  --output ./build/PGenerator_Plus_custom.img
+```
 
-- The `2.4.1` source tree and runtime include the prebuilt ArgyllCMS `spotread` `3.5.0` armhf binary at `/usr/bin/spotread`.
-- The Web UI launches meter helpers through sudo using the rules in `etc/sudo/sudoers.d/PGenerator`.
-- USB permissions for supported meter vendors are provided by `etc/udev/rules.d/99-colorimeter.rules`, including X-Rite/Calibrite, Datacolor, ColorVision, and Sequel devices.
-- Supported USB meter models are: Calibrite/X-Rite i1Display Pro Plus, X-Rite i1 Pro, X-Rite i1 Display Pro / ColorMunki Display, Datacolor Spyder 5, Datacolor SpyderX, ColorVision Spyder, and Sequel Chroma 5.
-- No additional proprietary driver bundle is required beyond the standard Linux USB/HID support already present in the Pi image.
-- The repo includes the bundled `spotread` runtime binary, wrapper scripts, and profile assets; it does not vendor the upstream ArgyllCMS source tree.
+The script copies the base image and overlays the repository's `etc/`, `usr/`, `var/` and `lib/` trees onto its root partition. It is an overlay build, not a from-scratch distro build: the base must already contain the BiasiLinux dependencies, the `pgenerator` account and the sudoers setup. The renderer binaries are taken from the repo as they are. Clear runtime state before publishing an image, and make sure `PGenerator.conf` is back on the SDR 1080p RGB 8-bit default. The script does not shrink or compress the image.
 
----
+The ArgyllCMS 3.5.0 armhf runtime is bundled. Its `colprof` comes from the PGenerator+ ICC v4.4/CICP fork. For on-device TI3 → CCSS conversion, import `ccxxmake` and its helpers with [tools/import_argyll_runtime.sh](tools/import_argyll_runtime.sh), or pass `--argyll-runtime-dir` to the image builder.
 
-## Configuration
+**OTA package:**
 
-`/etc/PGenerator/PGenerator.conf` — flat `key=value` format, no sections:
+```bash
+./tools/build_pgenerator_plus_ota.sh
+```
 
-| Key                              | Values                                           | Description                                                                                                                       |
-| -------------------------------- | ------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------- |
-| `port_pattern`                 | `85`                                           | TCP port for pattern protocol (read-only)                                                                                         |
-| `color_format`                 | `0`=RGB, `1`=YCbCr444, `2`=YCbCr422        | HDMI output color format                                                                                                          |
-| `colorimetry`                  | `0`=BT.709, `1`=BT.2020                      | AVI InfoFrame colorimetry                                                                                                         |
-| `rgb_quant_range`              | `0`=Auto, `1`=Limited, `2`=Full            | RGB quantization range                                                                                                            |
-| `max_bpc`                      | `8`, `10`, `12`                            | Bits per channel                                                                                                                  |
-| `eotf`                         | `0`=SDR, `2`=PQ, `3`=HLG                   | Electro-optical transfer function                                                                                                 |
-| `primaries`                    | `1`=Rec.2020, `2`=P3/D65, `3`=P3/DCI       | Mastering display primaries                                                                                                       |
-| `max_luma` / `min_luma`      | nits (min is ×0.0001)                           | Mastering display luminance                                                                                                       |
-| `max_cll` / `max_fall`       | nits                                             | Content light level metadata                                                                                                      |
-| `dv_status`                    | `0`=off, `1`=on                              | Enable Dolby Vision binary                                                                                                        |
-| `is_hdr` / `is_sdr`          | `0` / `1`                                    | Signal mode flags                                                                                                                 |
-| `is_ll_dovi` / `is_std_dovi` | `0` / `1`                                    | Dolby Vision mode flags                                                                                                           |
-| `dv_interface`                 | `0`=Standard, `1`=Low Latency                | DV interface type                                                                                                                 |
-| `dv_map_mode`                  | `1`=Absolute, `2`=Relative                   | DV source-mapping mode used by the current`.dv` renderer                                                                        |
-| `dv_metadata`                  | `2`=Perceptual, `3`=Absolute, `4`=Relative | Calman metadata-mode bookkeeping; Pi5 keeps this aligned with`dv_map_mode` so legacy and renderer paths select the same DV mode |
-| `dv_color_space`               | `0`=YCbCr422, `1`=RGB444, `2`=YCbCr444     | DV color space                                                                                                                    |
+The updater downloads only the newest tarball, so every OTA package is a **cumulative overlay** of `etc`, `usr`, `var` and `lib`, not a delta. Use versioned scripts in `usr/share/PGenerator/update-migrations.d` for one-time migrations and file removals. During `apply`, the updater runs every script newer than the installed version and no newer than the target.
 
----
+**VC4 kernel module:** the `5.10.89+-7l` build tree lives in `build/vc4-kernel-build-env/` (gitignored). The build notes are kept locally and are not part of the public tree.
 
-## Hardware Requirements
+</details>
 
-- **Raspberry Pi 4** (or Pi 400) — required for HDR10/DV and KMS driver support, and necessary to comfortably handle the overhead of the added local services (Web UI, active API calls, mDNS, etc.).
-- HDMI connection to target display
-- Network connection (Ethernet, WiFi, Bluetooth, or WiFi AP mode)
+<details>
+<summary><b>Build the renderer from source</b></summary>
 
-*Note: Not supported on any other models of Raspberry Pi
+`PGeneratord` is a C++ application on [openFrameworks](https://openframeworks.cc/) 0.11.2, with a custom DRM/KMS window addon for HDR and Dolby Vision output.
+
+```
+src/
+  pattern_generator/src/
+    main.cpp        # Config parsing, Pi/distro checks, window setup
+    ofApp.cpp       # Render loop: operations.txt, patterns, DV metadata
+    rgb2ycbcr.h     # RGB ↔ YCbCr conversion
+  ofxRPI4Window/src/
+    ofxRPI4Window.cpp  # Atomic modesetting, EGL/GBM, HDR/DV infoframes
+    igt_edid.h         # EDID parsing helpers
+  ofxRPI4Window/patchOF.sh, ofx.patch, drm_vc4.patch, mesa_hdr.patch
+```
+
+**On a Pi 4** with BiasiLinux, openFrameworks 0.11.2 in `/opt/openFrameworks`, and `libdrm`, `gbm`, `gles2`, `egl`, `gstreamer`, `boost-filesystem`, `freeimage`, `cairo`, `curl`, `fontconfig` and `uriparser` dev packages installed:
+
+```bash
+cp -r src/ofxRPI4Window /opt/openFrameworks/addons/
+cd /opt/openFrameworks/addons/ofxRPI4Window && ./patchOF.sh   # option 1
+cd /path/to/PGenerator-Plus/src/pattern_generator && make
+sudo cp bin/PGeneratord /usr/sbin/PGeneratord
+sudo cp bin/PGeneratord /usr/sbin/PGeneratord.dv
+```
+
+**Cross-build:** `tools/renderer-build/` builds `PGeneratord`, `PGeneratord.dv` and `drm_override.so` in a bionic sysroot VM. The shipped binaries in `usr/sbin/` are the authoritative runtime artifacts.
+
+Sources: [BigShoots/PGenerator_Source](https://github.com/BigShoots/PGenerator_Source) (`pgen_dovi_latest`) by Riccardo Biasiotto, GPLv3. The DRM/KMS addon is [docdude/ofxRPI4WindowHDR](https://github.com/docdude/ofxRPI4WindowHDR), forked from [jvcleave/ofxRPI4Window](https://github.com/jvcleave/ofxRPI4Window).
+
+</details>
 
 ---
 
-## API Reference
+## Credits
 
-All endpoints are served on port 80. Responses are JSON.
+This fork stands on the shoulders of:
 
-### Core API
+- **[PGenerator](https://github.com/Biasiolo/PGenerator)** by Riccardo Biasiotto: the pattern engine, TCP protocols and renderer (GPLv3).
+- **[BigShoots/PGenerator-Plus](https://github.com/BigShoots/PGenerator-Plus)**: the original PGenerator+, with the Web UI, HDR/DV configuration, meter workflows, LG AutoCal, profile building and OTA. This fork continues from its 2.12.1.
+- **[docdude/ofxRPI4WindowHDR](https://github.com/docdude/ofxRPI4WindowHDR)**, **[ArgyllCMS](https://www.argyllcms.com/)** and **[HCFR](https://github.com/hcfr/hcfr)**.
 
-| Method | Endpoint                    | Description                                                             |
-| ------ | --------------------------- | ----------------------------------------------------------------------- |
-| GET    | `/api/ping`               | Health check, returns`{"ok":1}`                                       |
-| GET    | `/api/info`               | Device info (hostname, temp, IPs, WiFi, resolution, calibration status) |
-| GET    | `/api/config`             | Current configuration as JSON                                           |
-| POST   | `/api/config`             | Apply configuration changes (JSON body)                                 |
-| GET    | `/api/modes`              | Available HDMI output modes from display EDID                           |
-| POST   | `/api/restart`            | Restart pattern generator                                               |
-| POST   | `/api/reboot`             | Reboot device                                                           |
-| GET    | `/api/wifi/scan`          | Scan for WiFi networks                                                  |
-| GET    | `/api/wifi/status`        | WiFi connection status                                                  |
-| POST   | `/api/wifi/connect`       | Connect to WiFi (JSON: ssid, psk)                                       |
-| GET    | `/api/wifi/ap`            | Get AP settings                                                         |
-| POST   | `/api/wifi/ap`            | Set AP SSID and password                                                |
-| GET    | `/api/infoframes`         | Read AVI and DRM InfoFrame hex data from HDMI output                    |
-| GET    | `/api/cec/status`         | HDMI-CEC TV power status                                                |
-| GET    | `/api/cec/{cmd}`          | Send CEC command (`wake`, `on`, `off`, `as`)                    |
-| POST   | `/api/pattern`            | Display a test pattern (JSON body with pattern name, RGB, and size)     |
-| POST   | `/api/resolve/connect`    | Connect outbound to a Resolve-compatible calibration server             |
-| POST   | `/api/resolve/disconnect` | Disconnect Resolve client mode                                          |
-| GET    | `/api/resolve/status`     | Resolve connection status                                               |
-| GET    | `/api/update/check`       | Check GitHub Releases for a newer OTA package                           |
-| POST   | `/api/update/apply`       | Start OTA download and install                                          |
-| GET    | `/api/boot/memory`        | Read current boot GPU memory split                                      |
-| POST   | `/api/boot/memory`        | Set boot GPU memory split and reboot                                    |
+## Support the project
 
-### Meter & CCSS API
+If this fork saves you time on your calibration bench, a coffee keeps the work going:
 
-| Method | Endpoint                        | Description                                                                                                        |
-| ------ | ------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
-| GET    | `/api/meter/status`           | Detect connected meter and`spotread` availability                                                                |
-| POST   | `/api/meter/read`             | Start a manual meter read using the current meter settings                                                         |
-| GET    | `/api/meter/read/result`      | Poll the latest single-read result                                                                                 |
-| POST   | `/api/meter/series`           | Start a greyscale, color, or saturation measurement series                                                         |
-| GET    | `/api/meter/series/status`    | Poll active series progress and collected readings                                                                 |
-| POST   | `/api/meter/stop`             | Stop the active meter session or series                                                                            |
-| POST   | `/api/meter/clear`            | Clear cached meter results in the UI/backend                                                                       |
-| POST   | `/api/meter/reset`            | Force meter cleanup/reset when the USB session is stuck                                                            |
-| GET    | `/api/meter/settings`         | Load saved meter settings                                                                                          |
-| POST   | `/api/meter/settings`         | Save meter settings such as display type, delay, patch size, insertion, refresh rate, AIO mode, and CCSS selection |
-| GET    | `/api/ccss/list`              | List custom uploaded CCSS profiles                                                                                 |
-| GET    | `/api/ccss/all`               | List bundled and custom CCSS profiles with metadata                                                                |
-| POST   | `/api/ccss/upload`            | Upload a`.ccss` file or compatible spectral `.csv` for conversion/import                                       |
-| POST   | `/api/ccss/delete/{filename}` | Delete a custom uploaded CCSS profile                                                                              |
-
----
-
-## Based On
-
-PGenerator+ is built on [PGenerator](https://github.com/Biasiolo/PGenerator) by Riccardo Biasiotto, licensed under the GNU General Public License v3.0. The original project provides the core pattern generation engine, TCP protocol handling, and C/C++ renderer binary.
-
-PGenerator+ adds the web-based dashboard, HDR/DV InfoFrame configuration UI, mDNS discovery, HDMI-CEC control, OTA updates via GitHub Releases, Calman 10-bit pattern support, validated Pi-side Calman window/APL handling (`RGB_S`, `RGB_A`, `CommandRGB`, `10_SIZE`, `11_APL`), outbound Resolve client mode, integrated meter workflows via ArgyllCMS `spotread`, bundled and custom CCSS profile management, stock-hostname discovery branding as `PGenerator+`, automatic bit depth management for HDR/SDR mode switching, and various stability improvements.
-
----
-
-## Support the Project
-
-If you'd like to support ongoing development, you can tip me at my Buy Me a Coffee link below.
-
-[☕ Buy Me a Coffee](https://buymeacoffee.com/bigshoots)
+<p>
+  <a href="https://buymeacoffee.com/fabioelia9r"><img src="https://img.shields.io/badge/Buy%20me%20a%20coffee-fabioelia9r-ffdd00?style=for-the-badge&logo=buymeacoffee&logoColor=black" alt="Buy me a coffee"/></a>
+</p>
 
 ## License
 
-GNU General Public License v3.0 — see [COPYING](COPYING) for details.
+GNU General Public License v3.0. See [COPYING](COPYING).

@@ -3231,7 +3231,7 @@ const PG_METER_CONFIG_COLLAPSE_KEY='pgen.ui.meterConfigCollapsed';
 const PG_DESKTOP_MIN_WIDTH=1024;
 const PG_DESKTOP_WORKSPACES={
  output:'Output',patterns:'Patterns',calibration:'Calibration','3d-lut':'3D LUT','icc-profile':'Display Profiler','meter-profile':'Meter Profiler',
- 'display-control':'LG Display',connectivity:'Connectivity',session:'Session','ui-settings':'UI Settings',system:'System'
+ 'display-control':'LG Display',connectivity:'Connectivity',system:'System',settings:'Settings'
 };
 let pgThemeMode='dark';
 let pgLayoutPreference='tablet';
@@ -3388,6 +3388,9 @@ function pgRedrawChartsForTheme(){
   try{
    if(typeof ccssPreviewLastPayload!=='undefined'&&ccssPreviewLastPayload&&typeof ccssPreviewRender==='function'){
     ccssPreviewRender(ccssPreviewLastPayload);
+   }else if(typeof ccssPreviewClear==='function'&&document.getElementById('ccssPreviewCanvas')){
+    // The empty placeholder is a canvas too; repaint it in the new theme.
+    ccssPreviewClear(typeof ccssPreviewEmptyMessage!=='undefined'?ccssPreviewEmptyMessage:'');
    }
   }catch(e){}
   try{ window.dispatchEvent(new Event('resize')); }catch(e){}
@@ -3557,7 +3560,11 @@ function meterSync3dLutWorkspaceUi(){
   button.textContent=(meterSeriesRunning||meterActionPending)?'Building…':'Build 3D LUT';
  }
 }
+// Session moved into the Calibration card and UI Settings into Settings;
+// older links and calls land on the new homes.
+const PG_DESKTOP_WORKSPACE_ALIASES={session:'calibration','ui-settings':'settings'};
 function pgSelectDesktopWorkspace(workspace,options){
+ if(PG_DESKTOP_WORKSPACE_ALIASES[workspace]) workspace=PG_DESKTOP_WORKSPACE_ALIASES[workspace];
  if(!Object.prototype.hasOwnProperty.call(PG_DESKTOP_WORKSPACES,workspace)) workspace='output';
  const previousWorkspace=pgDesktopWorkspace;
  const workspaceChanged=pgDesktopWorkspace!==workspace;
@@ -4125,7 +4132,7 @@ async function loadInfoframes(){
 // Device Info opens the page. Topic order: Signal (output, infoframes, patterns) · Measure (calibration,
 // session) · Display (LG, Resolve, CEC) · Device (network, system, UI, update).
 // The key carries a version so the new grouping replaces older saved drags once.
-const PG_DEFAULT_WIDGET_ORDER=['patterns','meter','session','lg','resolve','cec','wifi','ap','bluetooth','gpu_memory','ui_settings','update'];
+const PG_DEFAULT_WIDGET_ORDER=['patterns','meter','lg','resolve','cec','wifi','settings'];
 const PG_WIDGET_ORDER_KEY='pg_widget_order_v3';
 // Widget reorder: POINTER drag on ☰ .drag-handle only (no HTML5 DnD).
 // Drop target = card under the cursor; insert before/after by midpoint.
@@ -4161,14 +4168,9 @@ const PG_WIDGET_ORDER_KEY='pg_widget_order_v3';
  function restoreOrder(){
   try{
    const order=JSON.parse(localStorage.getItem(PG_WIDGET_ORDER_KEY));
-   const uiSettings=document.getElementById('uiSettingsCard');
-   const session=document.getElementById('sessionCard');
-   const update=document.getElementById('updateCard');
-   const placeBottomPair=()=>{
-    const anchor=(update&&update.parentNode===dash)?update:(dash.querySelector('.toast')||null);
-    if(uiSettings&&uiSettings.parentNode===dash) dash.insertBefore(uiSettings,anchor);
-    if(session&&session.parentNode===dash) dash.insertBefore(session,anchor);
-   };
+   // Settings replaced the UI Settings, GPU Memory and Update cards; saved
+   // orders from before that put it at the default end once.
+   const settings=document.getElementById('settingsCard');
    if(!order||!Array.isArray(order)){
     // Default order follows the sidebar groups (Signal, Measure, Display,
     // Device) so the tablet scroll matches the jump bar. Infoframes pair
@@ -4185,10 +4187,7 @@ const PG_WIDGET_ORDER_KEY='pg_widget_order_v3';
    const map={}; widgets().forEach(w=>{ map[w.dataset.widget]=w; });
    const end=dash.querySelector('.toast')||null;
    order.forEach(id=>{ if(map[id]) dash.insertBefore(map[id],end); });
-   // Existing browsers have a saved order created before UI Settings became
-   // draggable. Put that newly introduced widget at the default end once;
-   // the next drag save includes it and preserves the operator's placement.
-   if((uiSettings&&order.indexOf('ui_settings')<0)||(session&&order.indexOf('session')<0)) placeBottomPair();
+   if(settings&&order.indexOf('settings')<0) dash.insertBefore(settings,end);
    keepOutputGroup();
   }catch(e){}
  }
@@ -4393,7 +4392,7 @@ async function checkUpdate(manual){
 let _updateChecked=false;
 function showUpdateCard(){
  document.getElementById('updateCard').style.display='';
- if(document.body.classList.contains('layout-desktop')) pgSelectDesktopWorkspace('system');
+ if(document.body.classList.contains('layout-desktop')) pgSelectDesktopWorkspace('settings');
  document.getElementById('updateCard').scrollIntoView({behavior:'smooth'});
  if(!_updateChecked) checkUpdate();
 }

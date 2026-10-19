@@ -10901,7 +10901,7 @@ function meterLg3dSwitchTargetsForRun(signalMode,targetGamut,targetGamma){
  if(prev.gamut===String(want.gamut||'')&&prev.gamma===String(want.gamma||'')) return;
  try{ localStorage.setItem(METER_LG3D_TARGET_RESTORE_KEY,JSON.stringify(prev)); }catch(e){}
  meterLg3dApplyTargetDropdowns(want.gamut,want.gamma);
- try{ toast('Targets switched to '+(want.gamut||'')+' / '+(want.gamma||'')+' for the 3D LUT AutoCal (restored when it finishes)'); }catch(e){}
+ try{ toast('Targets switched to '+(want.gamut||'')+' / '+(want.gamma||'')+' for the 3D LUT AutoCal (restored when it finishes)','warn'); }catch(e){}
 }
 
 function meterLg3dRestoreTargetsAfterRun(){
@@ -11066,7 +11066,7 @@ async function meterCloseLg3dUploadRetry(){
  // Dismissing the failed upload ends the run; an HDR/DV run's greyscale
  // stage pinned Target Gamma to 2.2, so restore ST 2084 for verification.
  meterRestoreTargetGammaAfterAutoCal(wasDvSignal?'dv':getVal('signal_mode'));
- toast('3D LUT upload remains uncommitted');
+ toast('3D LUT upload remains uncommitted','warn');
 }
 
 async function meterPollLg3dAutoCal(options){

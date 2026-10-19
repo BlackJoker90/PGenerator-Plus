@@ -12474,96 +12474,6 @@ sub webui_pattern_render_black_clipping (@) {
  return &webui_pattern_image_save($image,$file);
 }
 
-sub webui_pattern_render_color_bars (@) {
- my $file=shift;
- my $w=int(shift);
- my $h=int(shift);
- my $signal_mode=shift;
- my $max_luma=shift;
- my $image=&webui_pattern_image_new($w,$h,0,0,0);
- my $l75=&webui_pattern_legacy_byte(int(255*0.75),$signal_mode,$max_luma);
- my @top=(
-  [$l75,$l75,$l75],
-  [$l75,$l75,0],
-  [0,$l75,$l75],
-  [0,$l75,0],
-  [$l75,0,$l75],
-  [$l75,0,0],
-  [0,0,$l75],
- );
- my @mid=(
-  [0,0,$l75],
-  [0,0,0],
-  [$l75,0,$l75],
-  [0,0,0],
-  [0,$l75,$l75],
-  [0,0,0],
-  [$l75,$l75,$l75],
- );
- my $top_h=int($h*0.67);
- my $mid_y=$top_h;
- my $mid_h=int($h*0.08);
- my $bottom_y=$mid_y+$mid_h;
- for(my $i=0;$i<7;$i++) {
-  my $x1=int($i*$w/7);
-  my $x2=int((($i+1)*$w)/7)-1;
-  $x2=$w-1 if($i == 6);
-  &webui_pattern_image_rect($image,$x1,0,$x2,$top_h-1,@{$top[$i]});
-  &webui_pattern_image_rect($image,$x1,$mid_y,$x2,$mid_y+$mid_h-1,@{$mid[$i]});
- }
- my $pluge_y1=$bottom_y+int(($h-$bottom_y)*0.18);
- my $pluge_y2=$h-int(($h-$bottom_y)*0.18)-1;
- my $pluge_x=int($w*0.08);
- my $pluge_gap=int($w*0.01);
- my $pluge_w=int($w*0.08);
- my @pluge=(0,8,16,25);
- $pluge_gap=2 if($pluge_gap < 2);
- $pluge_w=20 if($pluge_w < 20);
- for(my $i=0;$i<scalar(@pluge);$i++) {
-  my $x1=$pluge_x+$i*($pluge_w+$pluge_gap);
-  my $x2=$x1+$pluge_w-1;
-  my $v=&webui_pattern_legacy_byte($pluge[$i],$signal_mode,$max_luma);
-  &webui_pattern_image_rect($image,$x1,$pluge_y1,$x2,$pluge_y2,$v,$v,$v);
- }
- my $white_x1=int($w*0.39);
- my $white_x2=int($w*0.61)-1;
- my $white_ref=&webui_pattern_peak_byte($signal_mode,$max_luma);
- &webui_pattern_image_rect($image,$white_x1,$bottom_y,$white_x2,$h-1,$white_ref,$white_ref,$white_ref);
- return &webui_pattern_image_save($image,$file);
-}
-
-sub webui_pattern_render_gray_ramp (@) {
- my $file=shift;
- my $w=int(shift);
- my $h=int(shift);
- my $signal_mode=shift;
- my $max_luma=shift;
- my $image=&webui_pattern_image_new($w,$h,0,0,0);
- my $peak_byte=&webui_pattern_peak_byte($signal_mode,$max_luma);
- my $ramp_h=int($h*0.68);
- my $row="";
- for(my $x=0;$x<$w;$x++) {
-  my $v=int($x*$peak_byte/($w-1) + 0.5);
-  $row.=pack("C3",$v,$v,$v);
- }
- my $row_len=bytes::length($row);
- for(my $y=0;$y<$ramp_h;$y++) {
-  bytes::substr($image->{"buf"},$y*$row_len,$row_len,$row);
- }
- my $step_y=$ramp_h+int($h*0.05);
- my $steps=11;
- if($step_y < $h) {
-  for(my $i=0;$i<$steps;$i++) {
-   my $x1=int($i*$w/$steps);
-   my $x2=int((($i+1)*$w)/$steps)-1;
-   my $v=int($i*$peak_byte/($steps-1) + 0.5);
-   $x2=$w-1 if($i == $steps-1);
-   &webui_pattern_image_rect($image,$x1,$step_y,$x2,$h-1,$v,$v,$v);
-  }
- }
- return &webui_pattern_image_save($image,$file);
-}
-
 sub webui_pattern_render_overscan (@) {
  my $file=shift;
  my $w=int(shift);
@@ -12724,18 +12634,6 @@ sub webui_pattern (@) {
  # Black Clipping — near-black bar plate with labeled 2-25 bars on black
  elsif($pat eq "" && $name eq "black_clipping") {
   return '{"status":"error","message":"Failed to generate image pattern"}' if(!&webui_pattern_render_black_clipping($img,$w,$h,$signal_mode,$max_luma));
-  $pat=&webui_pattern_image_pattern($w,$h,$img);
-  $pat_bits=&webui_pattern_effective_bits("IMAGE",$signal_mode);
- }
- # Color Bars — 75% Rec.709 bars with a bottom PLUGE/reference section
- elsif($pat eq "" && $name eq "color_bars") {
-  return '{"status":"error","message":"Failed to generate image pattern"}' if(!&webui_pattern_render_color_bars($img,$w,$h,$signal_mode,$max_luma));
-  $pat=&webui_pattern_image_pattern($w,$h,$img);
-  $pat_bits=&webui_pattern_effective_bits("IMAGE",$signal_mode);
- }
- # Gray Ramp — smooth top gradient with 11 stepped bars underneath
- elsif($pat eq "" && $name eq "gray_ramp") {
-  return '{"status":"error","message":"Failed to generate image pattern"}' if(!&webui_pattern_render_gray_ramp($img,$w,$h,$signal_mode,$max_luma));
   $pat=&webui_pattern_image_pattern($w,$h,$img);
   $pat_bits=&webui_pattern_effective_bits("IMAGE",$signal_mode);
  }

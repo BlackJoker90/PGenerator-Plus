@@ -242,7 +242,7 @@ body.layout-desktop #uiSettingsCard .ui-settings-zoom{display:block}
 .ui-choice-list{display:grid;gap:8px}
 .ui-choice{display:grid;grid-template-columns:20px minmax(0,1fr);gap:3px 9px;width:100%;padding:11px 12px;text-align:left;background:var(--surface-inset);color:var(--text-primary);border:1px solid var(--border);border-radius:8px;cursor:pointer}
 .ui-choice:hover:not(:disabled){border-color:var(--accent);background:var(--hover-bg)}
-.ui-choice[aria-pressed="true"]{border-color:var(--accent);background:var(--selected-bg);box-shadow:inset 3px 0 0 var(--accent)}
+.ui-choice[aria-pressed="true"]{border-color:var(--accent);background:var(--selected-bg);box-shadow:inset 0 0 0 1px var(--accent)}
 .ui-choice[aria-pressed="true"]::before{content:'\2713';grid-row:1 / span 2;color:var(--accent);font-weight:800}
 .ui-choice:not([aria-pressed="true"])::before{content:'';grid-row:1 / span 2;width:12px;height:12px;margin-top:2px;border:1px solid var(--text-muted);border-radius:50%}
 .ui-choice:disabled{cursor:not-allowed;opacity:.52}
@@ -250,13 +250,13 @@ body.layout-desktop #uiSettingsCard .ui-settings-zoom{display:block}
 .ui-choice-description{font-size:.7rem;line-height:1.4;color:var(--text-secondary)}
 .ui-choice-note{display:none;margin-top:8px;color:var(--status-warning);font-size:.7rem;line-height:1.4}
 .ui-choice-note.is-visible{display:block}
-/* Selected choices use the same restrained blue fill and strong left rail as
+/* Selected choices use the same restrained fill and even 2px accent frame as
    UI Settings. Restrict this to mode/series/pattern selectors: primary action
    buttons retain their higher-emphasis gradient. */
 .pat-btn.active,#meterSeriesTabRow [data-series-tab].btn-primary,#meterSeriesBtnRow [data-series].btn-primary,
 #meterSeriesGroupAutoCal [data-autocal-series].btn-primary,#meterCustomSeriesBtn3dLut.btn-primary{
  border:1px solid var(--accent);background:var(--selected-bg);color:var(--text-primary);
- box-shadow:inset 4px 0 0 var(--accent);padding-left:12px
+ box-shadow:inset 0 0 0 1px var(--accent)
 }
 /* Tablet cards favour compact switches. The complete explanatory copy stays
    available as a keyboard/hover tooltip and remains part of the button's

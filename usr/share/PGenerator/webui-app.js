@@ -13,18 +13,29 @@ const IFACE_NAMES={
 };
 
 let toastHideTimer=0,toastHideMs=0,toastActionFn=null;
-// toast(msg,err,{detail,action:{label,run}}): detail is an optional secondary
-// line (raw server text); action adds one button, used only for safe retries.
+// toast(msg,level,{detail,action:{label,run}}): level 'warn' shows a warning,
+// any other truthy level an error. Successes (falsy level) show nothing: the
+// UI already reflects them, so the text only goes to the screen reader.
+// detail is an optional secondary line (raw server text); action adds one
+// button, used only for safe retries.
 function toast(msg,err,opts){
+ if(!err){
+  const sr=document.getElementById('pgStatusAnnounce');
+  if(sr&&msg){sr.textContent='';setTimeout(()=>{sr.textContent=String(msg);},60);}
+  return;
+ }
  const t=document.getElementById('toast');
  if(!t)return;
  if(toastHideTimer)clearTimeout(toastHideTimer);
  const o=opts&&typeof opts==='object'?opts:{};
+ const warn=err==='warn';
  const m=document.getElementById('toastMsg')||t;
- // Errors interrupt the screen reader; routine confirmations wait their turn.
- t.setAttribute('role',err?'alert':'status');
- t.setAttribute('aria-live',err?'assertive':'polite');
- m.textContent=msg;t.className='toast'+(err?' error':'')+' show';
+ const title=document.getElementById('toastTitle');
+ if(title) title.textContent=warn?'Warning':'Error';
+ // Errors interrupt the screen reader; warnings wait their turn.
+ t.setAttribute('role',warn?'status':'alert');
+ t.setAttribute('aria-live',warn?'polite':'assertive');
+ m.textContent=msg;t.className='toast '+(warn?'warn':'error')+' show';
  if(o.detail&&String(o.detail)!==String(msg)){
   const d=document.createElement('span');d.className='toast-detail';d.textContent=String(o.detail);m.appendChild(d);
  }
@@ -33,11 +44,11 @@ function toast(msg,err,opts){
  if(act){act.hidden=!toastActionFn;act.textContent=toastActionFn?(o.action.label||'Retry'):'';}
  const close=t.querySelector('.toast-close');
  if(close) close.tabIndex=0;
- // Routine confirmations clear after 3.5 s so they do not sit on the footer;
- // errors stay 12 s (20 s with an action) and can be dismissed with a click
- // or the close button. Hover/focus pauses the timer (toastHold below).
- // Resetting the shared timer prevents an older toast from hiding a newer one.
- toastHideMs=err?(toastActionFn?20000:12000):3500;
+ // Warnings clear after 8 s, errors stay 12 s (20 s with an action); both can
+ // be dismissed with a click or the close button. Hover/focus pauses the
+ // timer (toastHold below). Resetting the shared timer prevents an older
+ // toast from hiding a newer one.
+ toastHideMs=warn?8000:(toastActionFn?20000:12000);
  toastHideTimer=setTimeout(toastHide,toastHideMs);
 }
 function toastRunAction(ev){
@@ -189,7 +200,7 @@ function toastHide(){
  toastHideTimer=0;
  const t=document.getElementById('toast');
  if(!t) return;
- t.className='toast'+(t.classList.contains('error')?' error':'');
+ t.className='toast'+(t.classList.contains('warn')?' warn':' error');
  toastActionFn=null;
  const act=document.getElementById('toastAction');
  if(act){if(document.activeElement===act) act.blur();act.hidden=true;}
@@ -586,7 +597,7 @@ function noteLgBusyConnectionDelay(){
 	 const now=Date.now();
 	 if(now-_lastLgBusyConnectionNoticeAt<3500) return;
 	 _lastLgBusyConnectionNoticeAt=now;
-	 toast('LG TV command still running; UI polling is paused until it finishes');
+	 toast('LG TV command still running; UI polling is paused until it finishes','warn');
 	 updateLgCommandBusyUi();
 	}
 
@@ -1539,6 +1550,7 @@ function updateDropdowns(){
  checkSettingsChanged();
 }
 
+const _pingLatencies=[];
 async function checkPing(){
 	 if(isCalibrationWorkflowActive()){
 	  setConnectionBusyStatus(lgIsCommandBusy()?'LG TV':'Busy');
@@ -1594,11 +1606,15 @@ async function checkPing(){
   return;
  }
  const latency=Math.round(performance.now()-t0);
- var col='#4caf50';
- if(latency>500)col='var(--red)'; else if(latency>200)col='var(--orange)'; else if(latency>100)col='#ffeb3b';
- document.getElementById('statusDot').style.background=col;
- document.getElementById('statusText').textContent='Connected';
- document.getElementById('statusWrap').title='Connected to PGenerator+ \u00b7 response time '+latency+' ms';
+ // The time includes the browser's own queue (other polls, a busy page, a
+ // tab the phone throttled in the background), so one slow ping says
+ // nothing about the Pi. Only a run of slow pings is worth a colour.
+ _pingLatencies.push(latency);
+ if(_pingLatencies.length>3) _pingLatencies.shift();
+ const slow=_pingLatencies.length===3&&Math.min.apply(null,_pingLatencies)>1000;
+ document.getElementById('statusDot').style.background=slow?'var(--orange)':'#4caf50';
+ document.getElementById('statusText').textContent=slow?'Connected \u00b7 slow':'Connected';
+ document.getElementById('statusWrap').title=(slow?'Connected, but PGenerator+ answers slowly':'Connected to PGenerator+')+' \u00b7 response time '+latency+' ms';
  setPowerButtonState(true);
 }
 
@@ -2038,8 +2054,6 @@ function formatUptime(s){
 const DIAG_DESCRIPTIONS={
  white_clipping:'<b>White Clipping (Contrast)</b> &mdash; Labeled near-white bars from 232 to 255 on a reference-white field. Set HDMI output to RGB, then lower Contrast/White Level until the 236+ bars separate cleanly and 255 is not clipped into the background.',
  black_clipping:'<b>Black Clipping / PLUGE (Brightness)</b> &mdash; Labeled near-black bars from 2 to 25 on black. Set HDMI output to RGB, then raise Brightness until the first few bars above black become barely visible without turning the whole background gray.',
- color_bars:'<b>Color Bars</b> &mdash; 75% Rec.709 bars with a mid reference strip and a bottom PLUGE/white section for quick color and level checks. Use this pattern with HDMI output set to RGB.',
- gray_ramp:'<b>Gray Ramp</b> &mdash; Smooth black-to-white ramp across the top with 11 stepped gray bars underneath. Use HDMI RGB output and check for smooth transitions, neutral grayscale, and no banding.',
  overscan:'<b>Overscan</b> &mdash; Border lines at 0%, 2.5%, and 5% from screen edges with corner L-brackets and center crosshair. Use HDMI RGB output, and all lines should be visible &mdash; if not, disable overscan in your TV settings.',
 };
 const DIAG_UPLOAD_SENTINEL='__upload__';
@@ -2470,7 +2484,8 @@ async function diagPlayG1Pattern(tileKey,ev){
  const name='g1_'+key;
  if(btn&&activePattern===name){await stopPattern();return;}
  if(getVal('signal_mode')!=='sdr'){toast('G1 patterns are available only in SDR',true);return;}
- const label=btn?btn.textContent.trim():sel.options[sel.selectedIndex].textContent.trim();
+ const opt=sel?[...sel.options].find(o=>o.value===key):null;
+ const label=btn?btn.textContent.trim():(opt?opt.textContent.trim():key.replace(/_/g,' '));
  meterClearInteractiveSelection(true);
  clearActive();
  if(btn) btn.classList.add('active');
@@ -2483,8 +2498,8 @@ async function diagPlayG1Pattern(tileKey,ev){
     max_luma:document.getElementById('max_luma').value}),_timeoutMs:60000});
   if(r&&r.status==='ok'){
    toast('Pattern: '+label);
-   const thumb=btn&&btn.querySelector('.pat-thumb');
-   pgDiagRemember('G1 '+label,thumb?thumb.getAttribute('data-thumb'):'',()=>diagPlayG1Pattern(key,btn?{currentTarget:btn}:null));
+   // Every G1 plate has a preview (webui-theme.css), dropdown plates too.
+   pgDiagRemember('G1 '+label,'g1_'+key,()=>diagPlayG1Pattern(key,btn?{currentTarget:btn}:null));
    pgSetHeaderPattern('G1 '+label);
   }
   else {clearActive();toast(pgFailMsg('Couldn\u2019t show the pattern',r),true);}
@@ -2839,7 +2854,7 @@ async function connectWifi(){
    }else if(attempts>=40){
     clearInterval(poll);
     if(ws&&ws.wpa_state==='COMPLETED'&&ws.ip) toast('Connected to '+ws.ssid+' - '+ws.ip);
-    else if(ws&&ws.wpa_state==='COMPLETED') toast('Joined '+ws.ssid+', but the router hasn\u2019t assigned an IP address yet. Wait a moment, then check WiFi status; if it stays empty, check the router\u2019s DHCP settings.','err');
+    else if(ws&&ws.wpa_state==='COMPLETED') toast('Joined '+ws.ssid+', but the router hasn\u2019t assigned an IP address yet. Wait a moment, then check WiFi status; if it stays empty, check the router\u2019s DHCP settings.','warn');
     else toast('Couldn\u2019t confirm the connection to '+ssid+'. Check the password and signal, then look at WiFi status.','err');
     loadInfo();
    }
@@ -16253,7 +16268,7 @@ function meterWarnTargetWhiteAboveHdrMax(){
  const maxLuma=Number(rawMax);
  if(!(maxLuma>0)||Number(target.value)<=maxLuma) return false;
  const fmt=value=>Number(value).toLocaleString(undefined,{maximumFractionDigits:2});
- toast('Warning: Target White ('+fmt(target.value)+' cd/m\u00B2) is above HDR Max Luma ('+fmt(maxLuma)+' cd/m\u00B2). The target curve will use Target White; output metadata remains '+fmt(maxLuma)+' cd/m\u00B2.',true);
+ toast('Warning: Target White ('+fmt(target.value)+' cd/m\u00B2) is above HDR Max Luma ('+fmt(maxLuma)+' cd/m\u00B2). The target curve will use Target White; output metadata remains '+fmt(maxLuma)+' cd/m\u00B2.','warn');
  return true;
 }
 // Resolve the effective Target Black level. Returns {useMeasured,value}.
@@ -18212,7 +18227,7 @@ async function meterToggleSimulatedMeter(){
     sel.value='99';
     try{ sel.dispatchEvent(new Event('change',{bubbles:true})); }catch(e){}
    }
-   toast('Simulated meter enabled. Readings are synthetic.');
+   toast('Simulated meter enabled. Readings are synthetic.','warn');
   } else {
    toast('Simulated meter disabled');
   }

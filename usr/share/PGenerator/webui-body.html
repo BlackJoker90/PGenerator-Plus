@@ -291,16 +291,8 @@ __PG_LOGO_DARK__
     </div>
     <div class="diag-pattern-layout">
      <div class="diag-pattern-column">
-      <div class="diag-pattern-title">Test images</div>
-      <div class="pat-grid">
-        <button class="pat-btn" onclick="showPattern('white_clipping',event)"><span class="pat-thumb" data-thumb="white" aria-hidden="true"></span><span class="pat-label">White Clipping</span></button>
-        <button class="pat-btn" onclick="showPattern('black_clipping',event)"><span class="pat-thumb" data-thumb="black" aria-hidden="true"></span><span class="pat-label">Black Clipping</span></button>
-        <button class="pat-btn" onclick="showPattern('color_bars',event)"><span class="pat-thumb" data-thumb="bars" aria-hidden="true"></span><span class="pat-label">Color Bars</span></button>
-        <button class="pat-btn" onclick="showPattern('gray_ramp',event)"><span class="pat-thumb" data-thumb="ramp" aria-hidden="true"></span><span class="pat-label">Gray Ramp</span></button>
-        <button class="pat-btn" onclick="showPattern('overscan',event)"><span class="pat-thumb" data-thumb="overscan" aria-hidden="true"></span><span class="pat-label">Overscan</span></button>
-      </div>
-      <div class="diag-pattern-title diag-pattern-title-gap">Calman G1 plates &middot; SDR only</div>
-      <div class="pat-grid pat-grid-g1">
+      <div class="diag-pattern-title">Calman G1 plates &middot; SDR only</div>
+      <div class="pat-grid pat-grid-16x9">
         <button class="pat-btn" onclick="diagPlayG1Pattern('basic_alignment',event)"><span class="pat-thumb" data-thumb="g1_basic_alignment" aria-hidden="true"></span><span class="pat-label">Basic Alignment</span></button>
         <button class="pat-btn" onclick="diagPlayG1Pattern('brightness',event)"><span class="pat-thumb" data-thumb="g1_brightness" aria-hidden="true"></span><span class="pat-label">Brightness</span></button>
         <button class="pat-btn" onclick="diagPlayG1Pattern('warmup',event)"><span class="pat-thumb" data-thumb="g1_warmup" aria-hidden="true"></span><span class="pat-label">Warm-Up</span></button>
@@ -325,6 +317,12 @@ __PG_LOGO_DARK__
        <option value="smpte">SMPTE Bars</option>
        <option value="tint">Tint</option>
       </select>
+      <div class="diag-pattern-title diag-pattern-title-gap">Test images</div>
+      <div class="pat-grid pat-grid-16x9">
+        <button class="pat-btn" onclick="showPattern('white_clipping',event)"><span class="pat-thumb" data-thumb="white" aria-hidden="true"></span><span class="pat-label">White Clipping</span></button>
+        <button class="pat-btn" onclick="showPattern('black_clipping',event)"><span class="pat-thumb" data-thumb="black" aria-hidden="true"></span><span class="pat-label">Black Clipping</span></button>
+        <button class="pat-btn" onclick="showPattern('overscan',event)"><span class="pat-thumb" data-thumb="overscan" aria-hidden="true"></span><span class="pat-label">Overscan</span></button>
+      </div>
      </div>
      <div class="diag-pattern-column">
       <div class="diag-pattern-title">Your files</div>
@@ -2124,7 +2122,7 @@ __PG_LOGO_DARK__
  </div>
 </div>
 
-<div class="toast" id="toast" onclick="toastHide()" onmouseenter="toastHold(true)" onmouseleave="toastHold(false)" onfocusin="toastHold(true)" onfocusout="toastHold(false)" role="status" aria-live="polite"><span class="toast-msg" id="toastMsg"></span><button type="button" class="toast-action" id="toastAction" hidden onclick="toastRunAction(event)"></button><button type="button" class="toast-close" tabindex="-1" aria-label="Dismiss message">&times;</button></div>
+<div class="toast" id="toast" onclick="toastHide()" onmouseenter="toastHold(true)" onmouseleave="toastHold(false)" onfocusin="toastHold(true)" onfocusout="toastHold(false)" role="status" aria-live="polite"><svg class="toast-icon toast-icon-error" viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="8.25" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M10 5.75v5.5" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"/><circle cx="10" cy="14.1" r="1.05" fill="currentColor"/></svg><svg class="toast-icon toast-icon-warn" viewBox="0 0 20 20" aria-hidden="true"><path d="M10 2.75 18.1 16.6a.6.6 0 0 1-.52.9H2.42a.6.6 0 0 1-.52-.9Z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><path d="M10 7.5v4.75" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"/><circle cx="10" cy="14.8" r="1" fill="currentColor"/></svg><span class="toast-body"><span class="toast-title" id="toastTitle">Error</span><span class="toast-msg" id="toastMsg"></span></span><button type="button" class="toast-action" id="toastAction" hidden onclick="toastRunAction(event)"></button><button type="button" class="toast-close" tabindex="-1" aria-label="Dismiss message"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg></button></div>
 <div class="sr-only" id="pgStatusAnnounce" role="status" aria-live="polite" aria-atomic="true"></div>
 <div class="help-tip-pop" id="helpTipPop" role="tooltip" hidden></div>
 <div hidden id="helpTipTexts"></div>

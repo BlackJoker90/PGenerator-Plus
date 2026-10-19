@@ -404,6 +404,9 @@ public:
 	static hdmi_eotf eotf;
 	static int hdr_primaries; 
 	static int bit_depth;
+	// Bit depth the HDMI link actually runs at: drm_override.so forces the
+	// configured max bpc onto the connector, whatever the renderer asks for.
+	static int wire_bpc;
 	static int mode_idx;
 	static int dv_profile;	
 	static int dv_status;

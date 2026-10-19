@@ -117,6 +117,12 @@ static void applySignalConf() {
  ofxRPI4Window::hdr_metadata.hdmi_metadata_type1.max_display_mastering_luminance=atof(max_luma.c_str());
  ofxRPI4Window::hdr_metadata.hdmi_metadata_type1.min_display_mastering_luminance=atof(min_luma.c_str());
  ofxRPI4Window::avi_info.max_bpc=atoi(max_bpc.c_str());
+ /* Same promotions as drm_override.so: 4:2:2 needs at least 10 bpc, and
+    12 bpc only exists for Dolby Vision. */
+ int wire=atoi(max_bpc.c_str());
+ if(atoi(color_format.c_str()) == 2 && wire < 10) wire=10;
+ if(atoi(dv_status.c_str()) != 1 && wire == 12) wire=10;
+ ofxRPI4Window::wire_bpc=wire;
 }
 
 /* is_hdr at startup: the surface type depends on it, so a reload must not

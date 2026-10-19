@@ -139,6 +139,7 @@ class ofApp : public ofBaseApp{
   int normalizeSourceValue(int value, int source_range_mode);
   int scaleSourceToBitDepth(int value);
   void normalizeImageSourcePixels(int source_range_mode);
+  bool usesFloatImage();
   void setDoViBackground(int redbg, int greenbg, int bluebg);
   void shader_begin(int is_image);
   void shader_end(int is_image);

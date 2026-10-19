@@ -89,6 +89,21 @@ inline bool usesDolbyVisionTransport() {
  return ofxRPI4Window::isDoVi || ofxRPI4Window::is_std_DoVi;
 }
 
+/*
+ * An 8-bit SDR pattern on a 10 bpc link (G1 plates, diagnostic images):
+ * an 8-bit plane leaves the 8 -> 10 bit step to the HVS, which replicates
+ * the top bits (235 -> 943, 128 -> 514). Draw it in the 10-bit framebuffer
+ * instead, with the codes the 8-bit pattern has on an 8 bpc link times 4.
+ * HDR and Dolby Vision keep their own surfaces.
+ */
+inline int effectivePatternBits(int bits) {
+ if(bits != 8 || ofxRPI4Window::wire_bpc != 10)
+  return bits;
+ if(ofxRPI4Window::isHDR || usesDolbyVisionTransport())
+  return bits;
+ return 10;
+}
+
 inline bool usesLowLatencyDoVi422Transport() {
 	return false;
 }
@@ -199,9 +214,9 @@ void ofApp::update(){
    /* Start Patch RPI P4 */
    if(el[0] == "BITS") {
     bits=boost::lexical_cast<int>(el[1]);
-    ofxRPI4Window::bit_depth = bits;
+    ofxRPI4Window::bit_depth = effectivePatternBits(bits);
     if (!usesDolbyVisionTransport())
-     ofxRPI4Window::avi_info.max_bpc = bits;
+     ofxRPI4Window::avi_info.max_bpc = ofxRPI4Window::bit_depth;
  //   ofxRPI4Window::colorspace_on=1;
    }
    if(el[0] == "SOURCE_MAX") {
@@ -492,9 +507,9 @@ void ofApp::set_values () {
  arr_bits[frame][n_draw[frame]]=bits;
  arr_source_max[frame][n_draw[frame]]=source_max;
  arr_source_range[frame][n_draw[frame]]=source_range;
- ofxRPI4Window::bit_depth=bits;
+ ofxRPI4Window::bit_depth=effectivePatternBits(bits);
  if (!usesDolbyVisionTransport())
-  ofxRPI4Window::avi_info.max_bpc = bits;
+  ofxRPI4Window::avi_info.max_bpc = ofxRPI4Window::bit_depth;
  /* End Patch RPI P4 */
 }
 
@@ -559,13 +574,24 @@ void ofApp::text() {
  #                         Image                          #
  ##########################################################
 */
+/*
+ * Float texture for HDR images and for 10-bit images in SDR (BITS=10: the
+ * G1 10-bit plates, 16-bit PNGs whose samples carry 10-bit codes). The
+ * 8-bit ofImage would cut those to 8 bits.
+ */
+bool ofApp::usesFloatImage() {
+ if (ofxRPI4Window::avi_info.max_bpc == 10 && ofxRPI4Window::isHDR)
+  return true;
+ return arr_bits[i][to_draw] == 10 && !usesDolbyVisionTransport();
+}
+
 void ofApp::image() {
  if(arr_posx[i][to_draw] == -1) {
   arr_posx[i][to_draw]=(ofGetWindowWidth()-arr_dim1[i][to_draw])/2;
   arr_posy[i][to_draw]=(ofGetWindowHeight()-arr_dim2[i][to_draw])/2;
  }
  /* Start Patch RPI P4 */
- if (ofxRPI4Window::avi_info.max_bpc == 10 && ofxRPI4Window::isHDR) {
+ if (usesFloatImage()) {
   if (previous_image != arr_image[i][to_draw] || loop_count < 2) { //needs to load each new image twice to allow time to load shader
   float_img.clear();
   float_img.load(arr_image[i][to_draw]);
@@ -591,7 +617,16 @@ void ofApp::image() {
     img.getTexture().setTextureMinMagFilter(GL_NEAREST, GL_NEAREST); //set pixel precision
 	loop_count++;
   }
-  ofSetColor(255,255,255,255);
+  /* Passthrough puts the texels on the wire as they are, and the YCbCr
+     shader encodes them as studio-range codes: an 8-bit texel in the
+     10-bit framebuffer must become texel * 4 (white tint gives
+     texel * 1023 / 255, 235 -> 943). */
+  if (ofxRPI4Window::bit_depth == 10 &&
+      (ofxRPI4Window::rgbLimitedPassthrough() ||
+       (ofxRPI4Window::avi_info.output_format != 0 && !ofxRPI4Window::isHDR && !usesDolbyVisionTransport())))
+   ofSet10bitColor(1020,1020,1020,1023);
+  else
+   ofSetColor(255,255,255,255);
   /* Start Patch RPI P4 */
   ofApp::shader_begin(1); //set for image = 1
   /* End Patch RPI P4 */
@@ -728,6 +763,21 @@ int ofApp::scaleSourceToBitDepth(int value) {
   return value;
  int source_max=arr_source_max[i][to_draw];
  int target_max=(ofxRPI4Window::bit_depth == 10) ? 1023 : 255;
+ /* 8-bit pattern drawn in the 10-bit framebuffer (effectivePatternBits):
+    RGB Limited wire codes go out times 4; full-range values take the
+    8 -> 10 bit step that keeps 255 at 1023, so the later Limited
+    compression lands on the 8 bpc code times 4 as well. */
+ if(arr_bits[i][to_draw] == 8 && ofxRPI4Window::bit_depth == 10 && source_max == 255 && value >= 0) {
+  if(value > 255)
+   value=255;
+  if(arr_source_range[i][to_draw] == 1 && ofxRPI4Window::avi_info.output_format == 0 &&
+     ofxRPI4Window::avi_info.rgb_quant_range == 1)
+   return value << 2;
+  /* The YCbCr shader encodes its input as studio-range codes. */
+  if(ofxRPI4Window::avi_info.output_format != 0)
+   return value << 2;
+  return (value * 1023 + 127) / 255;
+ }
  if(value < 0 || source_max <= target_max)
   return value;
  return (value * target_max + source_max / 2) / source_max;
@@ -791,16 +841,20 @@ void ofApp::normalizeImageSourcePixels(int source_range_mode) {
  if(ofxRPI4Window::rgbLimitedPassthrough()) {
   if(source_range_mode == 1)
    return;
-  if(ofxRPI4Window::avi_info.max_bpc == 10 && ofxRPI4Window::isHDR) {
+  if(usesFloatImage()) {
    ofFloatPixels &pixels=float_img.getPixels();
    int channels=pixels.getNumChannels();
    int color_channels=(channels == 2) ? 1 : std::min(3,channels);
    float *data=pixels.getData();
    size_t pixel_count=(size_t)pixels.getWidth() * pixels.getHeight();
+   const bool codes10=(arr_bits[i][to_draw] == 10);
+   const float black=codes10 ? 64.0f : 16.0f;
+   const float span=codes10 ? 876.0f : 219.0f;
+   const float top=codes10 ? 1023.0f : 255.0f;
    for(size_t pixel=0;pixel<pixel_count;pixel++) {
     for(int channel=0;channel<color_channels;channel++) {
      float value=ofClamp(data[pixel*channels+channel],0.0f,1.0f);
-     data[pixel*channels+channel]=(16.0f + value * 219.0f) / 255.0f;
+     data[pixel*channels+channel]=(black + value * span) / top;
     }
    }
    float_img.update();
@@ -829,14 +883,16 @@ void ofApp::normalizeImageSourcePixels(int source_range_mode) {
   * Full -> wire Limited CSC. Values below 16 and above 235 cannot survive
   * that CSC and are intentionally clamped to framebuffer black/white.
   */
- if(ofxRPI4Window::avi_info.max_bpc == 10 && ofxRPI4Window::isHDR) {
+ if(usesFloatImage()) {
   ofFloatPixels &pixels=float_img.getPixels();
   int channels=pixels.getNumChannels();
   int color_channels=(channels == 2) ? 1 : std::min(3,channels);
   float *data=pixels.getData();
   size_t pixel_count=(size_t)pixels.getWidth() * pixels.getHeight();
-  const float limited_min=16.0f / 255.0f;
-  const float limited_scale=255.0f / 219.0f;
+  // 10-bit plates carry 10-bit codes (64-940); HDR images 8-bit ones.
+  const bool codes10=(arr_bits[i][to_draw] == 10);
+  const float limited_min=codes10 ? 64.0f / 1023.0f : 16.0f / 255.0f;
+  const float limited_scale=codes10 ? 1023.0f / 876.0f : 255.0f / 219.0f;
   for(size_t pixel=0;pixel<pixel_count;pixel++) {
    for(int channel=0;channel<color_channels;channel++) {
     float normalized=(data[pixel*channels+channel] - limited_min) * limited_scale;
@@ -868,7 +924,7 @@ void ofApp::normalizeImageSourcePixels(int source_range_mode) {
 void ofApp::shader_begin(int is_image) {
  if (!ofxRPI4Window::shader_init && usesRendererShader()) {
   if (is_image) { 
-	if (ofxRPI4Window::avi_info.max_bpc == 10 && ofxRPI4Window::isHDR) float_img.getTexture().bind();
+	if (usesFloatImage()) float_img.getTexture().bind();
 	else 															         img.getTexture().bind();
   }
   if (ofxRPI4Window::is_std_DoVi && ofxRPI4Window::bit_depth == 10) fbo10.begin();
@@ -921,7 +977,7 @@ void ofApp::shader_end(int is_image) {
   ofxRPI4Window::shader.end();
 
   if (is_image) { 
-	if (ofxRPI4Window::avi_info.max_bpc == 10 && ofxRPI4Window::isHDR) float_img.getTexture().unbind();
+	if (usesFloatImage()) float_img.getTexture().unbind();
     else 															         img.getTexture().unbind();
   }
   if (ofxRPI4Window::is_std_DoVi && ofxRPI4Window::bit_depth == 10) fbo10.end();

@@ -1563,6 +1563,7 @@ int ofxRPI4Window::isHDR = 0;
 int ofxRPI4Window::isDoVi = 0;
 int ofxRPI4Window::is_std_DoVi = 0;
 int ofxRPI4Window::bit_depth = 0;
+int ofxRPI4Window::wire_bpc = 8;
 int ofxRPI4Window::mode_idx = 0;
 int ofxRPI4Window::dv_profile = 2;
 int ofxRPI4Window::dv_status = 0;
@@ -1929,15 +1930,17 @@ void ofxRPI4Window::rgb2ycbcr_shader()
 
 		void main() {
 			if (is_image == 1) {
-				vec4 color = texture(tex0, texCoordVarying);
+				// The tint is white except for 8-bit texels in a 10-bit
+				// framebuffer, where it scales them to texel * 4.
+				vec4 color = texture(tex0, texCoordVarying) * globalColor;
 				outputColor = RGBtoYCbCr(color.rgba);
 			} else {
 				outputColor = RGBtoYCbCr(globalColor.rgba);
 			}
 		}
-		
+
 	)";
-	shader.setup(settings);	
+	shader.setup(settings);
 }
 #endif
 #if 0

@@ -839,7 +839,39 @@ sub reboot(@) {
  # this process or PGenerator_serial.pl.
  system("/usr/bin/pkill -9 -f PGeneratord 2>/dev/null");
  system("/usr/bin/pkill -9 -f spotread 2>/dev/null");
+ &reset_hdmi_output();
  system("$reboot");
+}
+
+###############################################
+#   Reset HDMI output before reboot/halt      #
+###############################################
+sub reset_hdmi_output(@) {
+ # The renderer's connector properties outlive it in the kernel. With a
+ # YCbCr output format left set, the sink keeps decoding YCbCr while the
+ # shutdown and the firmware restart briefly send all-zero pixels, which
+ # a YCbCr decoder shows as a green screen. Put the link back to 8 bpc
+ # RGB SDR so those zeros arrive as black.
+ my $connector_id="";
+ open(MT,"timeout 3 $modetest -c 2>/dev/null|");
+ while(<MT>) {
+  if(/^(\d+)\s+\d+\s+connected\s+HDMI/) {
+   $connector_id=$1;
+   last;
+  }
+ }
+ close(MT);
+ return if($connector_id eq "");
+ local $is_kms=1;
+ &wait_for_drm_master_unowned(2);
+ &modetest_connector_write($connector_id,"output format",0);
+ &modetest_connector_write($connector_id,"max bpc",8);
+ &modetest_connector_write($connector_id,"HDR_OUTPUT_METADATA",0);
+ if(&kms_connector_has_property("Colorimetry")) {
+  &modetest_connector_write($connector_id,"Colorimetry",0);
+ } else {
+  &modetest_connector_write($connector_id,"Colorspace",0);
+ }
 }
 
 ###############################################
@@ -851,6 +883,7 @@ sub halt(@) {
  &process_pid("$pattern_generator.pl","kill");
  system("/usr/bin/pkill -9 -f PGeneratord 2>/dev/null");
  system("/usr/bin/pkill -9 -f spotread 2>/dev/null");
+ &reset_hdmi_output();
  system("$halt");
 }
 

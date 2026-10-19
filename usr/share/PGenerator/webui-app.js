@@ -12,18 +12,193 @@ const IFACE_NAMES={
  bnep0:'Bluetooth PAN',
 };
 
-let toastHideTimer=0;
-function toast(msg,err){
+let toastHideTimer=0,toastHideMs=0,toastActionFn=null;
+// toast(msg,err,{detail,action:{label,run}}): detail is an optional secondary
+// line (raw server text); action adds one button, used only for safe retries.
+function toast(msg,err,opts){
  const t=document.getElementById('toast');
  if(!t)return;
  if(toastHideTimer)clearTimeout(toastHideTimer);
- t.textContent=msg;t.className='toast'+(err?' error':'')+' show';
- // Success messages stay visible for 8 seconds; warnings and errors get 12.
+ const o=opts&&typeof opts==='object'?opts:{};
+ const m=document.getElementById('toastMsg')||t;
+ // Errors interrupt the screen reader; routine confirmations wait their turn.
+ t.setAttribute('role',err?'alert':'status');
+ t.setAttribute('aria-live',err?'assertive':'polite');
+ m.textContent=msg;t.className='toast'+(err?' error':'')+' show';
+ if(o.detail&&String(o.detail)!==String(msg)){
+  const d=document.createElement('span');d.className='toast-detail';d.textContent=String(o.detail);m.appendChild(d);
+ }
+ const act=document.getElementById('toastAction');
+ toastActionFn=o.action&&typeof o.action.run==='function'?o.action.run:null;
+ if(act){act.hidden=!toastActionFn;act.textContent=toastActionFn?(o.action.label||'Retry'):'';}
+ const close=t.querySelector('.toast-close');
+ if(close) close.tabIndex=0;
+ // Routine confirmations clear after 3.5 s so they do not sit on the footer;
+ // errors stay 12 s (20 s with an action) and can be dismissed with a click
+ // or the close button. Hover/focus pauses the timer (toastHold below).
  // Resetting the shared timer prevents an older toast from hiding a newer one.
- toastHideTimer=setTimeout(()=>{
-  toastHideTimer=0;
-  t.className='toast';
- },err?12000:8000);
+ toastHideMs=err?(toastActionFn?20000:12000):3500;
+ toastHideTimer=setTimeout(toastHide,toastHideMs);
+}
+function toastRunAction(ev){
+ if(ev) ev.stopPropagation();
+ const fn=toastActionFn;
+ toastHide();
+ if(fn){try{fn();}catch(e){console.warn('toast action failed',e);}}
+}
+// Screen-reader announcements for header status. Only real transitions are
+// spoken (the first state seen is the silent baseline), and a state must hold
+// for 1.5 s, so a flapping poll or a quick reconnect is not read out.
+const pgAnnounceState={};
+function pgAnnounceStatus(key,state,text){
+ const a=pgAnnounceState[key]||(pgAnnounceState[key]={spoken:undefined,pending:null,timer:0});
+ if(a.spoken===undefined){a.spoken=state;return;}
+ if(a.timer){clearTimeout(a.timer);a.timer=0;}
+ if(state===a.spoken) return;
+ a.timer=setTimeout(()=>{
+  a.timer=0;a.spoken=state;
+  const el=document.getElementById('pgStatusAnnounce');
+  if(!el) return;
+  el.textContent='';
+  setTimeout(()=>{el.textContent=text;},60);
+ },1500);
+}
+// Help tips: every .meter-help-tip opens one shared popover on click, tap,
+// Enter or Space (Esc, outside tap or a second press closes it); fine
+// pointers also preview it on hover. The text is the tip's title attribute,
+// moved into data-tip so the browser tooltip does not double it, and
+// mirrored into a hidden node the tip is described by.
+let pgHelpTipOpen=null,pgHelpTipPinned=false,pgHelpTipSeq=0,pgHelpTipHoverTimer=0;
+function pgHelpTipText(el){
+ if(el.hasAttribute('title')){el.dataset.tip=el.getAttribute('title');el.removeAttribute('title');}
+ const text=el.dataset.tip||'';
+ if(!el.id) el.id='pgHelpTip'+(++pgHelpTipSeq);
+ let d=document.getElementById(el.id+'Text');
+ const box=document.getElementById('helpTipTexts');
+ if(!d&&box){d=document.createElement('span');d.id=el.id+'Text';box.appendChild(d);el.setAttribute('aria-describedby',d.id);}
+ if(d&&d.textContent!==text) d.textContent=text;
+ return text;
+}
+function pgHelpTipPrepare(el){
+ if(el.dataset.tipReady) return;
+ el.dataset.tipReady='1';
+ el.setAttribute('role','button');
+ el.tabIndex=0;
+ el.setAttribute('aria-expanded','false');
+ el.setAttribute('aria-controls','helpTipPop');
+ if(!el.getAttribute('aria-label')) el.setAttribute('aria-label','Help');
+ pgHelpTipText(el);
+}
+function pgHelpTipPlace(el,pop){
+ const m=8,r=el.getBoundingClientRect(),vw=document.documentElement.clientWidth;
+ // Stay clear of the fixed header and the phone/tablet bottom bar.
+ const nav=document.getElementById('tabletJumpNav'),hdr=document.querySelector('.header');
+ const navTop=nav&&!nav.hidden&&nav.getClientRects().length?nav.getBoundingClientRect().top:window.innerHeight;
+ const hdrBottom=hdr&&getComputedStyle(hdr).position!=='static'?Math.max(0,hdr.getBoundingClientRect().bottom):0;
+ const minTop=Math.min(hdrBottom,r.top)+m,maxBottom=Math.max(navTop,r.bottom)-m;
+ const below=maxBottom-(r.bottom+6),above=(r.top-6)-minTop;
+ pop.style.maxHeight='';pop.style.left='0px';pop.style.top='0px';
+ const w=pop.offsetWidth;
+ let left=Math.min(Math.max(m,r.left+r.width/2-w/2),vw-w-m);
+ let h=pop.offsetHeight,top;
+ if(h<=below||below>=above){h=Math.min(h,below);top=r.bottom+6;}
+ else{h=Math.min(h,above);top=r.top-6-h;}
+ pop.style.maxHeight=Math.max(60,Math.floor(h))+'px';
+ pop.style.left=Math.round(left)+'px';pop.style.top=Math.round(top)+'px';
+}
+function pgHelpTipShow(el,pinned){
+ const pop=document.getElementById('helpTipPop');
+ if(!pop) return;
+ pgHelpTipPrepare(el);
+ if(pgHelpTipOpen&&pgHelpTipOpen!==el) pgHelpTipOpen.setAttribute('aria-expanded','false');
+ pgHelpTipOpen=el;pgHelpTipPinned=!!pinned;
+ pop.textContent=pgHelpTipText(el);
+ pop.hidden=false;
+ el.setAttribute('aria-expanded','true');
+ pgHelpTipPlace(el,pop);
+}
+function pgHelpTipHide(){
+ if(pgHelpTipHoverTimer){clearTimeout(pgHelpTipHoverTimer);pgHelpTipHoverTimer=0;}
+ const pop=document.getElementById('helpTipPop');
+ if(pop) pop.hidden=true;
+ if(pgHelpTipOpen) pgHelpTipOpen.setAttribute('aria-expanded','false');
+ pgHelpTipOpen=null;pgHelpTipPinned=false;
+}
+function pgHelpTipsInit(){
+ document.querySelectorAll('.meter-help-tip').forEach(pgHelpTipPrepare);
+ const tipOf=t=>t&&t.closest?t.closest('.meter-help-tip'):null;
+ // Tips sit inside <label>s: stop the click before it toggles the control.
+ document.addEventListener('click',e=>{
+  const el=tipOf(e.target);
+  if(el){
+   e.preventDefault();e.stopPropagation();
+   if(pgHelpTipOpen===el&&pgHelpTipPinned) pgHelpTipHide(); else pgHelpTipShow(el,true);
+   return;
+  }
+  if(pgHelpTipOpen&&!e.target.closest('#helpTipPop')) pgHelpTipHide();
+ },true);
+ document.addEventListener('keydown',e=>{
+  const el=tipOf(e.target);
+  if(el&&(e.key==='Enter'||e.key===' ')){
+   e.preventDefault();e.stopPropagation();
+   if(pgHelpTipOpen===el&&pgHelpTipPinned) pgHelpTipHide(); else pgHelpTipShow(el,true);
+   return;
+  }
+  if(e.key==='Escape'&&pgHelpTipOpen){
+   const back=pgHelpTipOpen;
+   e.stopPropagation();pgHelpTipHide();
+   if(document.activeElement!==back&&back.isConnected) back.focus();
+  }
+ },true);
+ const hover=window.matchMedia?window.matchMedia('(hover:hover) and (pointer:fine)'):null;
+ // Hover preview: the pointer may cross onto the popover (to read or select
+ // long text) without closing it.
+ const inTipOrPop=n=>!!(n&&n.closest&&(n.closest('.meter-help-tip')||n.closest('#helpTipPop')));
+ document.addEventListener('mouseover',e=>{
+  if(!hover||!hover.matches||pgHelpTipPinned||!inTipOrPop(e.target)) return;
+  if(pgHelpTipHoverTimer){clearTimeout(pgHelpTipHoverTimer);pgHelpTipHoverTimer=0;}
+  const el=tipOf(e.target);
+  if(!el||pgHelpTipOpen===el) return;
+  pgHelpTipText(el);
+  pgHelpTipHoverTimer=setTimeout(()=>{pgHelpTipHoverTimer=0;pgHelpTipShow(el,false);},250);
+ });
+ document.addEventListener('mouseout',e=>{
+  if(pgHelpTipPinned||!inTipOrPop(e.target)||inTipOrPop(e.relatedTarget)) return;
+  if(pgHelpTipHoverTimer) clearTimeout(pgHelpTipHoverTimer);
+  pgHelpTipHoverTimer=setTimeout(()=>{pgHelpTipHoverTimer=0;if(!pgHelpTipPinned) pgHelpTipHide();},200);
+ });
+ // Tabbing away closes it; a tap on the popover itself (relatedTarget null) does not.
+ document.addEventListener('focusout',e=>{
+  if(pgHelpTipOpen&&e.target===pgHelpTipOpen&&e.relatedTarget&&!inTipOrPop(e.relatedTarget)) pgHelpTipHide();
+ });
+ // A fixed popover would drift away from its tip when the page moves;
+ // scrolling inside a long popover is fine.
+ window.addEventListener('scroll',e=>{if(pgHelpTipOpen&&e.target!==document.getElementById('helpTipPop')) pgHelpTipHide();},true);
+ window.addEventListener('resize',()=>{if(pgHelpTipOpen) pgHelpTipHide();});
+}
+if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',pgHelpTipsInit);
+else pgHelpTipsInit();
+function toastHold(hold){
+ const t=document.getElementById('toast');
+ if(!t||!t.classList.contains('show')) return;
+ if(toastHideTimer)clearTimeout(toastHideTimer);
+ toastHideTimer=hold?0:setTimeout(toastHide,Math.max(4000,toastHideMs/2));
+}
+function toastHide(){
+ if(toastHideTimer)clearTimeout(toastHideTimer);
+ toastHideTimer=0;
+ const t=document.getElementById('toast');
+ if(!t) return;
+ t.className='toast'+(t.classList.contains('error')?' error':'');
+ toastActionFn=null;
+ const act=document.getElementById('toastAction');
+ if(act){if(document.activeElement===act) act.blur();act.hidden=true;}
+ const close=t.querySelector('.toast-close');
+ if(close){
+  // Do not leave keyboard focus on the now invisible close button.
+  if(document.activeElement===close) close.blur();
+  close.tabIndex=-1;
+ }
 }
 
 // Apply Settings modal: full-screen mask + spinner/check card. The corner
@@ -327,6 +502,9 @@ function lgConnectSubmitPinFromModal(){
 
 let _pingFailCount=0;
 let _uiOffline=false;
+// Set by the first answered ping. Until then failed startup loads are not
+// user actions, so they go to the header status instead of a toast.
+let _pgEverConnected=false;
 let _lastLgBusyConnectionNoticeAt=0;
 window._configApplyPending=false;
 window._lgCommandBusyCount=window._lgCommandBusyCount||0;
@@ -437,8 +615,8 @@ function setConnectionBusyStatus(label){
  const text=document.getElementById('statusText');
  const wrap=document.getElementById('statusWrap');
  if(dot) dot.style.background='var(--orange)';
-	 if(text) text.textContent=label||'Busy';
-	 if(wrap) wrap.title='Calibration in progress';
+	 if(text) text.textContent=label==='LG TV'?'Connected \u00b7 LG TV busy':'Connected \u00b7 busy';
+	 if(wrap) wrap.title=label==='LG TV'?'Connected; waiting for an LG TV command to finish':'Connected; a measurement or calibration is in progress';
  setPowerButtonState(true);
 }
 
@@ -458,27 +636,88 @@ function setUiOffline(offline){
  return true;
 }
 
+// Transport failures, phrased once: what went wrong and what to do next.
+// fetchJSON remembers the last one so a caller's own "Couldn't ..." toast can
+// reuse the cause instead of replacing it with a bare "failed".
+let _pgFetchFail=null;
+const PG_FAIL_TEXT={
+ network:'PGenerator+ couldn\u2019t be reached. Check that the Pi is on and on the same network as this device, then try again.',
+ timeout:'PGenerator+ took too long to answer. It may be busy; wait a moment, then try again.',
+ unreadable:'PGenerator+ sent a reply this page couldn\u2019t read. Reload the page, then try again.',
+ http:'PGenerator+ reported an internal error{status}. Try again; if it keeps happening, reboot the Pi.'
+};
+function pgFailKind(e){
+ const n=e&&e.name||'',m=String(e&&e.message||e||'');
+ if(n==='AbortError'||n==='TimeoutError'||/timed? ?out/i.test(m)) return 'timeout';
+ if(n==='SyntaxError') return 'unreadable';
+ if(n==='TypeError'&&/fetch|network|load failed/i.test(m)) return 'network';
+ return '';
+}
+// Plain-language reason for a caught error. Technical text goes to the console.
+function pgErrText(e){
+ const kind=pgFailKind(e);
+ if(e) console.warn('PGenerator+ request error:',e);
+ if(kind) return PG_FAIL_TEXT[kind];
+ const m=String(e&&e.message||e||'').trim();
+ return m||'PGenerator+ gave no reason. Try again.';
+}
+// "<what>. <reason>" for an API reply (r) that was missing or not ok.
+// r.message from the server is kept as the reason; a missing reply reuses
+// the transport cause fetchJSON just reported.
+function pgFailMsg(what,r,next){
+ const msg=r&&(r.message||r.error);
+ if(msg) return what+': '+String(msg).replace(/^\s+|\s+$/g,'');
+ const f=!r&&_pgFetchFail&&Date.now()-_pgFetchFail.at<8000?_pgFetchFail:null;
+ if(f) return what+'. '+f.text;
+ return what+'. '+(next||'PGenerator+ gave no reason. Try again.');
+}
+// Safe retry for a failed GET: re-run the caller's loader when it passed one,
+// otherwise recheck the connection and refresh the polled status/settings.
+function pgRetryLoads(){
+ try{ checkPing(); }catch(e){}
+ try{ loadConfig(true); }catch(e){}
+ pgVisiblePolls.forEach(fn=>{try{fn();}catch(e){}});
+}
 async function fetchJSON(url,opts){
  const req=Object.assign({},opts||{});
  const quiet=!!req._quiet;
  const timeoutMs=req._timeoutMs||8000;
+ const retry=typeof req._retry==='function'?req._retry:null;
  delete req._quiet;
  delete req._timeoutMs;
+ delete req._retry;
+ const isGet=!req.method||String(req.method).toUpperCase()==='GET';
  let timer=null;
  if(!req.signal){
   const controller=new AbortController();
   req.signal=controller.signal;
   timer=setTimeout(()=>controller.abort(),timeoutMs);
  }
+ let reached=false,status=0;
  try{
   const r=await fetch(API+url,req);
+  reached=true;status=r.status;
   return await r.json();
 	 }
  catch(e){
+  const kind=reached?(status>=400?'http':'unreadable'):(pgFailKind(e)==='timeout'?'timeout':'network');
+  const text=PG_FAIL_TEXT[kind].replace('{status}',status?' (HTTP '+status+')':'');
+  _pgFetchFail={at:Date.now(),kind,text};
+  console.warn('fetchJSON '+(req.method||'GET')+' '+url+' failed ('+kind+(status?' '+status:'')+')',e);
   if(!quiet){
+   // GETs only read, so they may be retried; a write may already have
+   // happened, so it is never repeated automatically.
+   const what=isGet?'Couldn\u2019t load the latest data.':'Your last change may not have been applied.';
+   const action=isGet?{label:'Retry',run:retry||pgRetryLoads}:null;
    if(lgIsCommandBusy()) noteLgBusyConnectionDelay();
    else if(typeof cecIsCommandBusy==='function'&&cecIsCommandBusy()){}
-   else toast('Connection error','err');
+   else if(reached) toast(what+' '+text,'err',{action});
+   else if(!_uiOffline){
+    // Say what failed and hand over to the ping/offline logic right away
+    // instead of waiting for the next 10 s poll.
+    if(_pgEverConnected) toast(what+' '+text,'err',{action});
+    try{ checkPing(); }catch(_e){}
+   }
   }
   return null;
 	 }
@@ -576,6 +815,7 @@ function applyConfigState(nextConfig){
  updateModeVisibility();
  updateDropdowns();
  refreshSavedSettingsSnapshot();
+ pgCaptureHeaderSignal();
 }
 
 async function syncRemoteConfig(){
@@ -1313,11 +1553,13 @@ async function checkPing(){
   await r.json();
   const wasOffline=_pingFailCount>=3||_uiOffline;
   _pingFailCount=0;
+  _pgEverConnected=true;
   setUiOffline(false);
+  pgAnnounceStatus('connection','online','Connection to PGenerator+ restored.');
   if(wasOffline){
    document.getElementById('statusDot').style.background='#4caf50';
-   document.getElementById('statusText').textContent='Online';
-   document.getElementById('statusWrap').title='Connection restored';
+   document.getElementById('statusText').textContent='Connected';
+   document.getElementById('statusWrap').title='Connection to PGenerator+ restored';
    setPowerButtonState(true);
    return;
   }
@@ -1340,14 +1582,15 @@ async function checkPing(){
   _pingFailCount++;
   if(_pingFailCount<3){
    document.getElementById('statusDot').style.background='var(--orange)';
-   document.getElementById('statusText').textContent='Retry';
-   document.getElementById('statusWrap').title='Transient timeout';
+   document.getElementById('statusText').textContent='Reconnecting\u2026';
+   document.getElementById('statusWrap').title='PGenerator+ did not answer; retrying';
    return;
   }
   document.getElementById('statusDot').style.background='var(--red)';
   document.getElementById('statusText').textContent='Offline';
-  document.getElementById('statusWrap').title='No response';
+  document.getElementById('statusWrap').title='PGenerator+ is not responding; still retrying';
   setUiOffline(true);
+  pgAnnounceStatus('connection','offline','Connection to PGenerator+ lost. Retrying automatically.');
   setPowerButtonState(false);
   return;
  }
@@ -1355,8 +1598,8 @@ async function checkPing(){
  var col='#4caf50';
  if(latency>500)col='var(--red)'; else if(latency>200)col='var(--orange)'; else if(latency>100)col='#ffeb3b';
  document.getElementById('statusDot').style.background=col;
- document.getElementById('statusText').textContent=latency+'ms';
- document.getElementById('statusWrap').title='Response time: '+latency+'ms';
+ document.getElementById('statusText').textContent='Connected';
+ document.getElementById('statusWrap').title='Connected to PGenerator+ \u00b7 response time '+latency+' ms';
  setPowerButtonState(true);
 }
 
@@ -1422,13 +1665,17 @@ async function loadInfo(quiet){
  if(info.calibration && info.calibration.connected){
   calDot.style.background='#4caf50';
   calText.style.color='';
-  calText.textContent=info.calibration.software||'Connected';
-  calWrap.title=(info.calibration.software||'Calibration')+' ('+info.calibration.ip+')';
+  calText.textContent=(info.calibration.software||'Calibration software')+' connected';
+  calWrap.title=(info.calibration.software||'Calibration software')+' connected from '+info.calibration.ip;
+  pgAnnounceStatus('calibration','on:'+(info.calibration.software||''),(info.calibration.software||'Calibration software')+' connected.');
+  // External software drives its own patches; the page no longer knows what is on the TV.
+  pgSetHeaderPattern('');
  }else{
   calDot.style.background='var(--text2)';
   calText.style.color='var(--text2)';
-  calText.textContent='No SW';
+  calText.textContent='No calibration software';
   calWrap.title='No calibration software connected';
+  pgAnnounceStatus('calibration','off','Calibration software disconnected.');
  }
  // Update Resolve card status
  const rBadge=document.getElementById('resolveStatusBadge');
@@ -1586,6 +1833,8 @@ function pgShowDaemonNotice(notice){
  root.id='pgDaemonNotice';
  root.setAttribute('role','alertdialog');
  root.setAttribute('aria-modal','true');
+ root.setAttribute('aria-labelledby','pgDaemonNoticeTitle');
+ root.setAttribute('aria-describedby','pgDaemonNoticeBody');
  root.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:100002;display:flex;align-items:center;justify-content:center;padding:20px;box-sizing:border-box';
  const card=document.createElement('div');
  card.style.cssText='background:var(--panel,#0f1320);border:1px solid var(--orange,#ffa726);border-left:6px solid var(--orange,#ffa726);border-radius:10px;max-width:520px;width:100%;padding:22px;color:var(--text,#e3e6ef);box-shadow:0 18px 60px rgba(0,0,0,0.6);font-family:inherit';
@@ -1597,9 +1846,11 @@ function pgShowDaemonNotice(notice){
  icon.style.cssText='flex:none;width:26px;height:26px;border-radius:50%;background:var(--orange,#ffa726);color:#111;display:inline-flex;align-items:center;justify-content:center;font-weight:800;font-style:italic;font-family:Georgia,serif';
  const titleText=document.createElement('span');
  titleText.textContent=String(notice.title||'Info');
+ titleText.id='pgDaemonNoticeTitle';
  title.appendChild(icon);title.appendChild(titleText);
  const body=document.createElement('div');
  body.style.cssText='font-size:.9rem;color:var(--text2,#a8b0c0);line-height:1.55;margin-bottom:18px;white-space:pre-line';
+ body.id='pgDaemonNoticeBody';
  body.textContent=String(notice.text||'');
  const actions=document.createElement('div');
  actions.style.cssText='display:flex;justify-content:flex-end';
@@ -1614,6 +1865,7 @@ function pgShowDaemonNotice(notice){
  actions.appendChild(ok);
  card.appendChild(title);card.appendChild(body);card.appendChild(actions);
  root.appendChild(card);
+ root.addEventListener('keydown',ev=>pgDialogTrapTab(card,ev));
  document.body.appendChild(root);
  ok.focus();
 }
@@ -1632,6 +1884,53 @@ function pgUpdateNoHdmiBanner(connected){
  pgHdmiConnected=connected;
  // Plugging or unplugging changes what is on the wire: re-read the infoframes.
  if(changed&&typeof loadInfoframes==='function') loadInfoframes();
+ pgRenderHeaderSignal();
+}
+// Header status: the output signal as last applied (config from the Pi, not
+// unsaved form edits) and the pattern this page last started. Both stay
+// hidden until there is real data, so an offline page shows no stale values.
+let pgHeaderSignal=null;
+function pgCaptureHeaderSignal(){
+ const sm=String(getVal('signal_mode')||'sdr');
+ const mode=({sdr:'SDR',hdr10:'HDR10',hlg:'HLG',dv:'Dolby Vision'})[sm]||sm.toUpperCase();
+ let bpc=String(getVal('max_bpc')||'');
+ // Outside Dolby Vision 12 bpc goes out as 10 bpc (see pgUtilityBitDepthText).
+ if(sm!=='dv'&&bpc==='12') bpc='10';
+ const fmt=({'0':'RGB','1':'YCbCr 4:4:4','2':'YCbCr 4:2:2'})[String(getVal('color_format'))]||'';
+ const range=({'1':'Limited','2':'Full'})[String(getVal('rgb_quant_range'))]||'';
+ const parts=[mode];
+ if(bpc) parts.push(bpc+'-bit');
+ if(fmt) parts.push(fmt+(range?' '+range:''));
+ const res=pgUtilityControlText('mode_idx');
+ pgHeaderSignal={text:parts.join(' \u00b7 '),title:'Output signal (applied settings): '+parts.join(', ')+(res&&res!=='-'?', '+res:'')};
+ pgRenderHeaderSignal();
+}
+function pgRenderHeaderSignal(){
+ const wrap=document.getElementById('signalStatusWrap');
+ const text=document.getElementById('signalStatusText');
+ if(!wrap||!text) return;
+ const dot=document.getElementById('signalDot');
+ if(pgHdmiConnected===false){
+  if(dot) dot.style.background='var(--text2)';
+  text.textContent='No HDMI display';
+  wrap.title='No HDMI display connected; nothing is being sent';
+  wrap.hidden=false;
+  return;
+ }
+ wrap.hidden=!pgHeaderSignal;
+ if(!pgHeaderSignal) return;
+ if(dot) dot.style.background='var(--green)';
+ text.textContent=pgHeaderSignal.text;
+ wrap.title=pgHeaderSignal.title;
+}
+function pgSetHeaderPattern(label){
+ const wrap=document.getElementById('patternStatusWrap');
+ const text=document.getElementById('patternStatusText');
+ if(!wrap||!text) return;
+ label=String(label||'').trim();
+ wrap.hidden=!label;
+ text.textContent=label?'On TV: '+label:'';
+ wrap.title=label?'Pattern started from this page: '+label+'. Calibration patches replace it.':'';
 }
 
 async function loadStats(quiet){
@@ -1730,7 +2029,7 @@ const DIAG_VIDEO_SEQUENCE_MAX_FRAMES=24;
 const DIAG_VIDEO_SEQUENCE_MAX_SECONDS=3;
 let diagCustomAssets={video:[],image:[]};
 let activePattern=null;
-function clearActive(){document.querySelectorAll('.pat-btn').forEach(b=>b.classList.remove('active'));if(document.activeElement&&document.activeElement.classList&&document.activeElement.classList.contains('pat-btn'))document.activeElement.blur();activePattern=null;}
+function clearActive(){document.querySelectorAll('.pat-btn').forEach(b=>b.classList.remove('active'));if(document.activeElement&&document.activeElement.classList&&document.activeElement.classList.contains('pat-btn'))document.activeElement.blur();activePattern=null;pgSetHeaderPattern('');}
 function isAvsHd709Pattern(name){return !!AVS_HD_709_PATTERNS[String(name||'')];}
 function diagSetInfoHtml(html){
  const el=document.getElementById('diagInfo');
@@ -1789,7 +2088,7 @@ async function diagDeleteSelectedAsset(kind){
  if(!filename || filename===DIAG_UPLOAD_SENTINEL) return;
  const files=Array.isArray(diagCustomAssets[kind])?diagCustomAssets[kind]:[];
  if(!files.includes(filename)) return;
- if(!await pgConfirm({title:'Delete custom diagnostic '+kind+'?',body:'"'+diagAssetDisplayLabel(filename)+'" is removed from the generator.',acceptLabel:'Delete'})) return;
+ if(!await pgConfirm({title:'Delete custom diagnostic '+kind+'?',body:'"'+diagAssetDisplayLabel(filename)+'" is removed from the generator.',acceptLabel:'Delete '+kind,destructive:true})) return;
  const btn=document.getElementById(kind==='video'?'diagCustomVideoDelete':'diagCustomImageDelete');
  if(btn) btn.disabled=true;
  try{
@@ -2040,8 +2339,8 @@ async function diagShowUploadedAsset(kind,filename,forcePlay){
  diagSetInfoHtml(diagAssetInfoHtml(kind,filename));
  const body={name:kind==='video'?'uploaded_diag_video':'uploaded_diag_image',filename:filename,signal_mode:getVal('signal_mode'),max_luma:document.getElementById('max_luma').value};
  const r=await fetchJSON('/api/pattern',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
- if(r&&r.status==='ok') toast('Pattern: '+diagAssetDisplayLabel(filename));
- else toast(r&&r.message?r.message:'Pattern error',true);
+ if(r&&r.status==='ok'){toast('Pattern: '+diagAssetDisplayLabel(filename));pgSetHeaderPattern(diagAssetDisplayLabel(filename));}
+ else toast(pgFailMsg('Couldn\u2019t show the pattern',r),true);
 }
 async function diagHandleAssetSelect(kind){
  const sel=document.getElementById(diagAssetSelectId(kind));
@@ -2137,16 +2436,16 @@ async function showPattern(name,ev){
   const r=await fetchJSON('/api/pattern',{method:'POST',headers:{'Content-Type':'application/json'},
    body:JSON.stringify({name:name,signal_mode:getVal('signal_mode'),
     max_luma:document.getElementById('max_luma').value})});
-  if(r&&r.status==='ok') toast('Pattern: '+label);
+  if(r&&r.status==='ok'){toast('Pattern: '+label);pgSetHeaderPattern(label);}
   else {
    clearActive();
    diagSetInfoHtml('');
-   toast(r?r.message:'Pattern error',true);
+   toast(pgFailMsg('Couldn\u2019t show the pattern',r),true);
   }
  }catch(e){
   clearActive();
   diagSetInfoHtml('');
-  toast(e&&e.message?e.message:'Pattern error',true);
+  toast('Couldn\u2019t show the pattern. '+pgErrText(e),true);
  }
 }
 async function diagPlayG1Pattern(){
@@ -2167,11 +2466,11 @@ async function diagPlayG1Pattern(){
   const r=await fetchJSON('/api/pattern',{method:'POST',headers:{'Content-Type':'application/json'},
    body:JSON.stringify({name:name,signal_mode:getVal('signal_mode'),
     max_luma:document.getElementById('max_luma').value}),_timeoutMs:60000});
-  if(r&&r.status==='ok') toast('Pattern: '+label);
-  else {clearActive();toast(r?r.message:'Pattern error',true);}
+  if(r&&r.status==='ok'){toast('Pattern: '+label);pgSetHeaderPattern(label);}
+  else {clearActive();toast(pgFailMsg('Couldn\u2019t show the pattern',r),true);}
  }catch(e){
   clearActive();
-  toast(e&&e.message?e.message:'Pattern error',true);
+  toast('Couldn\u2019t show the pattern. '+pgErrText(e),true);
  }
 }
 async function showPatch(id,pr,pg,pb,ev){
@@ -2244,7 +2543,8 @@ function dvTransportDefaults(mode){
  return {dv_transport:'standard',is_ll_dovi:'0',is_std_dovi:'1',dv_interface:'0',color_format:'0',max_bpc:'8',rgb_quant_range:'2'};
 }
 
-function resetDefaults(){
+async function resetDefaults(){
+ if(!await pgConfirm({title:'Reset display settings to defaults?',body:'Signal mode, format, range, HDR metadata and Dolby Vision fields return to SDR 8-bit RGB defaults. Unsaved edits in this card are lost; the output changes only after Apply & Restart.',acceptLabel:'Reset Defaults',destructive:true,tone:'caution'})) return;
  setVal('signal_mode','sdr');
  setVal('max_bpc','8');
  setVal('color_format','0');
@@ -2262,7 +2562,7 @@ function resetDefaults(){
  updateModeVisibility();
  updateDropdowns();
  checkSettingsChanged();
- toast('Defaults loaded. Click Apply to save and restart.');
+ toast('Defaults loaded. Click Apply & Restart to use them.');
 }
 
 async function applySettings(){
@@ -2272,7 +2572,7 @@ async function applySettings(){
  // Mirror the series-selector behavior: ask, then stop the read before applying.
  if(meterContinuousActive||meterSeriesRunning){
   const what=meterSeriesRunning?'series read':'continuous read';
-  const ok=await meterShowChoiceModal({title:'Apply new settings?',body:'A '+what+' is running. Stop it and apply the new signal settings?',acceptLabel:'Stop & apply',cancelLabel:'Cancel'});
+  const ok=await meterShowChoiceModal({title:'Apply new settings?',body:'A '+what+' is running. Stop it and apply the new signal settings?',acceptLabel:'Stop & apply',cancelLabel:'Cancel',destructive:true,tone:'caution'});
   if(!ok) return false;
   if(meterSeriesRunning) meterStop();
   else meterStopContinuous();
@@ -2362,20 +2662,23 @@ async function applySettings(){
 // Project-styled replacement for window.confirm(). Takes an options object
 // ({title,body,acceptLabel,cancelLabel}) or a message string, whose first
 // paragraph becomes the title. Resolves true when accepted.
-async function pgConfirm(opts){
+async function pgConfirm(opts,extra){
  if(typeof opts!=='object'||!opts){
   const text=String(opts||'');
   const cut=text.indexOf('\n\n');
   opts=cut>0?{title:text.slice(0,cut),body:text.slice(cut+2)}:{title:text};
  }
+ if(extra) opts=Object.assign({},opts,extra);
+ // destructive:true focuses Cancel and styles the accept button as danger;
+ // tone:'caution' switches that to the amber outline (restart/install).
  const choice=await meterShowChoiceModal({title:opts.title,body:opts.body||'',
-  bodyNode:opts.bodyNode,wide:opts.wide,
+  bodyNode:opts.bodyNode,wide:opts.wide,destructive:!!opts.destructive,tone:opts.tone,
   acceptLabel:opts.acceptLabel||'OK',cancelLabel:opts.cancelLabel||'Cancel'});
  return !!choice;
 }
 
 async function confirmReboot(){
- if(!await pgConfirm({title:'Reboot device?',body:'PGenerator+ restarts and the WebUI is unreachable for about a minute.',acceptLabel:'Reboot'})) return;
+ if(!await pgConfirm({title:'Reboot device?',body:'PGenerator+ restarts and the WebUI is unreachable for about a minute.',acceptLabel:'Reboot Pi',destructive:true})) return;
  rebootDevice();
 }
 async function rebootDevice(){
@@ -2385,7 +2688,7 @@ async function rebootDevice(){
 }
 let _powerOffRequested=false;
 async function shutdownDevice(){
- if(!await pgConfirm({title:'Power off the Pi?',body:'The WebUI will become unreachable until you power-cycle the device.',acceptLabel:'Power off'})) return;
+ if(!await pgConfirm({title:'Power off the Pi?',body:'The WebUI will become unreachable until you power-cycle the device.',acceptLabel:'Power off Pi',destructive:true})) return;
  _powerOffRequested=true;
  setPowerButtonState(false);
  toast('Shutting down...');
@@ -2455,11 +2758,11 @@ async function applyMemory(){
   prompt='Set GPU memory to '+gpu+'MB and reboot?';
   body={gpu_mem:gpu};
  }
- if(!await pgConfirm({title:prompt,acceptLabel:'Reboot'}))return;
+ if(!await pgConfirm({title:prompt,acceptLabel:'Apply & Reboot',destructive:true,tone:'caution'}))return;
  const r=await fetchJSON('/api/boot/memory',{method:'POST',
   headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
  if(r&&r.status==='ok') toast(r.message);
- else toast(r&&r.message?r.message:'Failed to apply','err');
+ else toast(pgFailMsg('Couldn\u2019t change the GPU memory split',r),'err');
 }
 
 async function scanWifi(){
@@ -2516,19 +2819,19 @@ async function connectWifi(){
    }else if(attempts>=40){
     clearInterval(poll);
     if(ws&&ws.wpa_state==='COMPLETED'&&ws.ip) toast('Connected to '+ws.ssid+' - '+ws.ip);
-    else if(ws&&ws.wpa_state==='COMPLETED') toast('Connected to '+ws.ssid+', but no IP lease yet','err');
-    else toast('Connection to '+ssid+' may have failed - check status','err');
+    else if(ws&&ws.wpa_state==='COMPLETED') toast('Joined '+ws.ssid+', but the router hasn\u2019t assigned an IP address yet. Wait a moment, then check WiFi status; if it stays empty, check the router\u2019s DHCP settings.','err');
+    else toast('Couldn\u2019t confirm the connection to '+ssid+'. Check the password and signal, then look at WiFi status.','err');
     loadInfo();
    }
   },1500);
- }else toast((r&&r.message)?r.message:'Connection failed','err');
+ }else toast(pgFailMsg('Couldn\u2019t connect to '+ssid,r),'err');
  btn.disabled=false;btn.textContent='Connect';
 }
 
 async function disconnectWifi(){
  const btn=document.getElementById('wifiDisconnectBtn');
  if(btn) btn.disabled=true;
- if(!await pgConfirm({title:'Disconnect WiFi?',body:'The current WiFi client connection is closed.',acceptLabel:'Disconnect'})){
+ if(!await pgConfirm({title:'Disconnect WiFi?',body:'The current WiFi client connection is closed.',acceptLabel:'Disconnect WiFi',destructive:true})){
   if(btn) btn.disabled=false;
   return;
  }
@@ -2538,14 +2841,14 @@ async function disconnectWifi(){
   hideWifiForm();
   setTimeout(()=>{loadInfo();if(btn) btn.disabled=false;},1500);
  }else{
-  toast('WiFi disconnect failed','err');
+  toast(pgFailMsg('Couldn\u2019t disconnect WiFi',r),'err');
   if(btn) btn.disabled=false;
  }
 }
 async function forgetWifi(){
  const btn=document.getElementById('wifiForgetBtn');
  if(btn) btn.disabled=true;
- if(!await pgConfirm({title:'Forget WiFi network?',body:'Stored credentials will be deleted and WiFi will not reconnect on reboot.',acceptLabel:'Forget'})){
+ if(!await pgConfirm({title:'Forget WiFi network?',body:'Stored credentials will be deleted and WiFi will not reconnect on reboot.',acceptLabel:'Forget network',destructive:true})){
   if(btn) btn.disabled=false;
   return;
  }
@@ -2555,7 +2858,7 @@ async function forgetWifi(){
   hideWifiForm();
   setTimeout(()=>{loadInfo();if(btn) btn.disabled=false;},1500);
  }else{
-  toast('WiFi forget failed','err');
+  toast(pgFailMsg('Couldn\u2019t forget this WiFi network',r),'err');
   if(btn) btn.disabled=false;
  }
 }
@@ -2727,7 +3030,7 @@ async function onWifiRadioToggle(el){
  if(!enable){
   const aps=await fetchJSON('/api/wifi/ap/status',{_quiet:true,_timeoutMs:8000});
   if(aps&&aps.status==='ok'&&aps.active){
-   if(!await pgConfirm({title:'Disable the WiFi radio?',body:'This also stops the WiFi Access Point (they share one radio).',acceptLabel:'Disable'})){
+   if(!await pgConfirm({title:'Disable the WiFi radio?',body:'This also stops the WiFi Access Point (they share one radio).',acceptLabel:'Disable WiFi',destructive:true})){
     el.checked=true;
     return;
    }
@@ -2736,7 +3039,7 @@ async function onWifiRadioToggle(el){
  switchBusy('wifiRadioToggle',true);
  const r=await fetchJSON('/api/wifi/radio',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({enabled:enable})});
  if(r&&r.status==='ok') toast(r.message||('WiFi radio '+(enable?'enabled':'disabled')));
- else toast(r&&(r.message||r.error)?(r.message||r.error):'WiFi radio change failed','err');
+ else toast(pgFailMsg('Couldn\u2019t '+(enable?'turn on':'turn off')+' the WiFi radio',r),'err');
  setTimeout(()=>{loadWifiRadio();loadAP();switchBusy('wifiRadioToggle',false);},1500);
 }
 async function loadWifiRadio(){
@@ -2753,7 +3056,7 @@ async function applyAP(){
  const r=await fetchJSON('/api/wifi/ap',{method:'POST',
   headers:{'Content-Type':'application/json'},body:JSON.stringify({ssid,password})});
  if(r&&r.status==='ok'){toast('AP settings saved');loadAP();}
- else toast(r&&(r.message||r.error)?(r.message||r.error):'AP apply failed','err');
+ else toast(pgFailMsg('Couldn\u2019t save the access point settings',r),'err');
 }
 
 async function controlAP(action){
@@ -2789,7 +3092,7 @@ async function btSet(kind,enabled){
  if(!path)return;
  const r=await fetchJSON(path,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({enabled})});
  if(r&&r.status==='ok'){toast(r.message||'Bluetooth updated');setTimeout(loadBluetooth,800);}
- else toast(r&&(r.message||r.error)?(r.message||r.error):'Bluetooth command failed','err');
+ else toast(pgFailMsg('Couldn\u2019t change the Bluetooth setting',r),'err');
 }
 
 async function onBtPowerToggle(el){
@@ -2801,7 +3104,7 @@ async function onBtPowerToggle(el){
 async function btRestartPan(){
  const r=await fetchJSON('/api/bluetooth/pan/restart',{method:'POST'});
  if(r&&r.status==='ok'){toast(r.message||'Bluetooth PAN restarted');setTimeout(loadBluetooth,1000);}
- else toast(r&&(r.message||r.error)?(r.message||r.error):'Bluetooth PAN restart failed','err');
+ else toast(pgFailMsg('Couldn\u2019t restart the Bluetooth network',r),'err');
 }
 
 // Set by the modal Cancel button so the connect poll loop below bails out and
@@ -2824,7 +3127,7 @@ async function resolveConnect(){
  if(resolveConnectCancelled) return;
  if(!(r&&r.status==='ok')){
   meterStopModalHide();
-  toast(r&&r.message?r.message:'Connect failed','err');
+  toast(pgFailMsg('Couldn\u2019t connect to Resolve at '+ip+':'+port,r),'err');
   return;
  }
  const t0=Date.now();
@@ -2839,7 +3142,7 @@ async function resolveConnect(){
  if(resolveConnectCancelled) return;
  meterStopModalHide();
  if(connected){toast('Resolve connected to '+ip+':'+port);loadInfo();}
- else{toast('Resolve connect timed out. Check the calibration software is listening on '+ip+':'+port,'err');loadInfo();}
+ else{toast('Resolve didn\u2019t answer at '+ip+':'+port+'. Check that Resolve is running and listening on that address and port, then connect again.','err');loadInfo();}
 }
 // Cancel an in-progress connect (e.g. the operator realises the IP is wrong).
 // Signals the daemon to abort via the disconnect flag; the daemon's connect is
@@ -2870,7 +3173,7 @@ async function resolveForceCenterChanged(on){
 async function resolveDisconnect(){
  const r=await fetchJSON('/api/resolve/disconnect',{method:'POST'});
  if(r&&r.status==='ok'){toast('Disconnected');setTimeout(loadInfo,500);}
- else toast('Disconnect failed','err');
+ else toast(pgFailMsg('Couldn\u2019t disconnect the calibration software',r),'err');
 }
 
 // Interface layout controller. Desktop mode is deliberately a presentation
@@ -2979,6 +3282,7 @@ function meterSyncConfigurationCollapse(){
  card.classList.toggle('meter-config-collapsed',collapsed);
  button.setAttribute('aria-expanded',collapsed?'false':'true');
  button.title=collapsed?'Expand meter and target settings':'Collapse meter and target settings';
+ button.setAttribute('aria-label',button.title);
 }
 function meterToggleConfiguration(event){
  if(event){ event.preventDefault();event.stopPropagation(); }
@@ -3003,6 +3307,9 @@ function pgUpdateLayoutControls(){
  });
  const note=document.getElementById('desktopLayoutUnavailable');
  if(note) note.classList.toggle('is-visible',!pgWideEnoughForDesktop());
+ // Below the Desktop width the header switch has only one usable option, so
+ // it is hidden there; UI Settings keeps the switch and the explanation.
+ document.body.classList.toggle('desktop-unavailable',!pgWideEnoughForDesktop());
 }
 // Theme ids: each one is a palette over one of the two base themes, so the
 // light-mode overrides and data-theme checks keep working for every palette.
@@ -3275,6 +3582,7 @@ function pgApplyLayout(options){
   document.querySelectorAll('.dashboard > .card[data-desktop-active]').forEach(panel=>panel.removeAttribute('data-desktop-active'));
   pgRefreshVisibleWorkspace();
  }
+ pgSyncTabletNav();
 }
 function meterSyncGreyscaleDesktopLayout(){
  const live=document.getElementById('meterLiveReading');
@@ -3298,6 +3606,228 @@ function pgUpdateHeaderOffset(){
  if(!header) return;
  document.documentElement.style.setProperty('--pg-header-height',Math.ceil(header.getBoundingClientRect().height)+'px');
 }
+// Tablet/phone stacks every card in one scroll. The bottom jump bar reuses the
+// desktop workspace metadata (data-desktop-workspace + sidebar icons) to scroll
+// to each group; it never filters cards, so drag-and-drop order still applies.
+let pgTabletNavFrame=0;
+let pgTabletNavPinned='';
+function pgTabletWorkspaceAnchors(){
+ const first={};
+ document.querySelectorAll('.dashboard > .card[data-desktop-workspace]').forEach(card=>{
+  const workspace=card.getAttribute('data-desktop-workspace');
+  if(!Object.prototype.hasOwnProperty.call(PG_DESKTOP_WORKSPACES,workspace)||!card.getClientRects().length) return;
+  const top=card.getBoundingClientRect().top;
+  if(!first[workspace]||top<first[workspace].top) first[workspace]={workspace:workspace,card:card,top:top};
+ });
+ return Object.keys(first).map(key=>first[key]).sort((a,b)=>a.top-b.top);
+}
+function pgTabletNavOffset(){
+ const header=document.querySelector('.header');
+ return (header?header.getBoundingClientRect().height:0)+8;
+}
+// Order and grouping come from the desktop sidebar (.desktop-nav-group), so
+// Desktop and Tablet share one workspace list. When the row would scroll,
+// whole groups stay in the bar and the rest fold into a grouped "More" sheet;
+// narrow screens keep PG_TABLET_NAV_PRIMARY plus "More".
+const PG_TABLET_NAV_PRIMARY=['output','patterns','calibration'];
+// Desktop-only workspaces live inside the Calibration card on Tablet: their
+// jump target is the in-card control, and choosing them presses it.
+const PG_TABLET_NAV_TOOLS={
+ 'meter-profile':{host:'calibration',control:'#customCcssPanelBtn'},
+ '3d-lut':{host:'calibration',control:'#meterSeriesTabRow [data-series-tab="3dlut"]'},
+ 'icc-profile':{host:'calibration',control:'#meterSeriesTabRow [data-series-tab="icc"]'}
+};
+let pgTabletMoreOpen=false;
+function pgTabletNavButton(workspace,className){
+ const btn=document.createElement('button');
+ btn.type='button';
+ btn.className=className;
+ btn.setAttribute('data-workspace-jump',workspace);
+ const icon=document.querySelector('.desktop-nav-btn[data-workspace-target="'+workspace+'"] .desktop-nav-icon');
+ if(icon) btn.appendChild(icon.cloneNode(true));
+ const label=document.createElement('span');
+ label.textContent=PG_DESKTOP_WORKSPACES[workspace];
+ btn.appendChild(label);
+ btn.addEventListener('click',()=>{ pgSetTabletMore(false); pgJumpToTabletWorkspace(workspace); });
+ return btn;
+}
+function pgTabletNavGroups(anchors){
+ const has={};
+ anchors.forEach(a=>{ has[a.workspace]=true; });
+ return Array.prototype.map.call(document.querySelectorAll('.desktop-nav-group'),group=>{
+  const label=group.querySelector('.desktop-nav-group-label');
+  const items=Array.prototype.map.call(group.querySelectorAll('[data-workspace-target]'),b=>b.getAttribute('data-workspace-target'))
+   .filter(w=>has[w]||(PG_TABLET_NAV_TOOLS[w]&&has[PG_TABLET_NAV_TOOLS[w].host]));
+  return {label:label?label.textContent.trim():'',items:items};
+ }).filter(g=>g.items.length);
+}
+function pgTabletNavSplit(list,compact){
+ if(Array.isArray(compact)) return {primary:list.filter(w=>compact.indexOf(w)>=0),more:list.filter(w=>compact.indexOf(w)<0)};
+ if(!compact||list.length<=PG_TABLET_NAV_PRIMARY.length+1) return {primary:list,more:[]};
+ const keep=list.filter(w=>PG_TABLET_NAV_PRIMARY.indexOf(w)>=0);
+ list.forEach(w=>{ if(keep.length<PG_TABLET_NAV_PRIMARY.length&&keep.indexOf(w)<0) keep.push(w); });
+ return {primary:list.filter(w=>keep.indexOf(w)>=0),more:list.filter(w=>keep.indexOf(w)<0)};
+}
+function pgBuildTabletNav(nav,groups,compact){
+ nav.textContent='';
+ const list=[].concat.apply([],groups.map(g=>g.items));
+ const split=pgTabletNavSplit(list,compact);
+ nav.classList.toggle('is-compact',compact===true&&split.more.length>0);
+ let lastGroup=null;
+ split.primary.forEach(w=>{
+  const group=groups.find(g=>g.items.indexOf(w)>=0);
+  if(compact!==true&&lastGroup&&group!==lastGroup){
+   const sep=document.createElement('span');
+   sep.className='tablet-nav-sep';
+   sep.setAttribute('aria-hidden','true');
+   nav.appendChild(sep);
+  }
+  lastGroup=group;
+  nav.appendChild(pgTabletNavButton(w,'tablet-nav-btn'));
+ });
+ if(!split.more.length) return;
+ const more=document.createElement('button');
+ more.type='button';
+ more.className='tablet-nav-btn tablet-nav-more';
+ more.id='tabletMoreBtn';
+ more.setAttribute('aria-expanded','false');
+ more.setAttribute('aria-controls','tabletMoreSheet');
+ more.setAttribute('aria-label','More workspaces');
+ more.innerHTML='<span class="desktop-nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="12" r="1.9" fill="currentColor"/><circle cx="12" cy="12" r="1.9" fill="currentColor"/><circle cx="19" cy="12" r="1.9" fill="currentColor"/></svg></span><span>More</span>';
+ more.addEventListener('click',()=>pgSetTabletMore(!pgTabletMoreOpen,{focus:true}));
+ nav.appendChild(more);
+ const sheet=document.createElement('div');
+ sheet.className='tablet-more-sheet';
+ sheet.id='tabletMoreSheet';
+ sheet.setAttribute('role','group');
+ sheet.setAttribute('aria-label','More workspaces');
+ sheet.hidden=true;
+ groups.forEach((g,i)=>{
+  const items=g.items.filter(w=>split.more.indexOf(w)>=0);
+  if(!items.length) return;
+  const section=document.createElement('div');
+  section.className='tablet-more-group';
+  section.setAttribute('role','group');
+  const label=document.createElement('div');
+  label.className='tablet-more-label';
+  label.id='tabletMoreGroup'+i;
+  label.textContent=g.label;
+  section.setAttribute('aria-labelledby',label.id);
+  section.appendChild(label);
+  items.forEach(w=>section.appendChild(pgTabletNavButton(w,'tablet-more-item')));
+  sheet.appendChild(section);
+ });
+ nav.appendChild(sheet);
+}
+function pgSetTabletMore(open,options){
+ const btn=document.getElementById('tabletMoreBtn');
+ const sheet=document.getElementById('tabletMoreSheet');
+ pgTabletMoreOpen=!!open&&!!btn&&!!sheet;
+ if(!btn||!sheet) return;
+ sheet.hidden=!pgTabletMoreOpen;
+ btn.setAttribute('aria-expanded',pgTabletMoreOpen?'true':'false');
+ if(pgTabletMoreOpen&&options&&options.focus){
+  const target=sheet.querySelector('[aria-current="location"]')||sheet.querySelector('button');
+  if(target) target.focus();
+ }else if(!pgTabletMoreOpen&&options&&options.returnFocus) btn.focus();
+}
+function pgTabletMoreKeydown(event){
+ if(!pgTabletMoreOpen) return;
+ if(event.key==='Escape'){
+  event.preventDefault();
+  pgSetTabletMore(false,{returnFocus:true});
+  return;
+ }
+ const sheet=document.getElementById('tabletMoreSheet');
+ if(!sheet||!sheet.contains(event.target)) return;
+ const items=Array.prototype.slice.call(sheet.querySelectorAll('button'));
+ const index=items.indexOf(document.activeElement);
+ let next=-1;
+ if(event.key==='ArrowDown') next=(index+1)%items.length;
+ else if(event.key==='ArrowUp') next=(index-1+items.length)%items.length;
+ else if(event.key==='Home') next=0;
+ else if(event.key==='End') next=items.length-1;
+ if(next<0) return;
+ event.preventDefault();
+ items[next].focus();
+}
+function pgSyncTabletNav(){
+ const nav=document.getElementById('tabletJumpNav');
+ if(!nav) return;
+ const tablet=document.body.classList.contains('layout-tablet');
+ nav.hidden=!tablet;
+ document.body.classList.toggle('has-tablet-nav',tablet);
+ if(!tablet){ pgSetTabletMore(false); return; }
+ const anchors=pgTabletWorkspaceAnchors();
+ const groups=pgTabletNavGroups(anchors);
+ const list=[].concat.apply([],groups.map(g=>g.items));
+ const signature=list.join(',')+'|'+nav.clientWidth;
+ if(nav.getAttribute('data-signature')!==signature){
+  nav.setAttribute('data-signature',signature);
+  const refocusMore=!!(pgTabletMoreOpen&&nav.contains(document.activeElement));
+  pgTabletMoreOpen=false;
+  pgBuildTabletNav(nav,groups,false);
+  // Content-driven: fold into "More" only when the full row would scroll.
+  if(nav.scrollWidth>nav.clientWidth+1){
+   let fitted=false;
+   for(let k=groups.length-1;k>0&&!fitted;k--){
+    const keep=[].concat.apply([],groups.slice(0,k).map(g=>g.items));
+    if(keep.length<=PG_TABLET_NAV_PRIMARY.length) break;
+    pgBuildTabletNav(nav,groups,keep);
+    fitted=nav.scrollWidth<=nav.clientWidth+1;
+   }
+   if(!fitted) pgBuildTabletNav(nav,groups,true);
+  }
+  const moreBtn=document.getElementById('tabletMoreBtn');
+  if(refocusMore&&moreBtn) moreBtn.focus();
+ }
+ let current=anchors.length?anchors[0].workspace:'';
+ const threshold=pgTabletNavOffset()+48;
+ anchors.forEach(a=>{ if(a.top<=threshold) current=a.workspace; });
+ if(pgTabletNavPinned&&list.indexOf(pgTabletNavPinned)>=0) current=pgTabletNavPinned;
+ const compact=nav.classList.contains('is-compact');
+ nav.querySelectorAll('[data-workspace-jump]').forEach(btn=>{
+  const active=btn.getAttribute('data-workspace-jump')===current;
+  if(active){
+   if(btn.getAttribute('aria-current')!=='location'){
+    btn.setAttribute('aria-current','location');
+    if(!compact&&btn.classList.contains('tablet-nav-btn')){
+     const left=btn.offsetLeft-(nav.clientWidth-btn.offsetWidth)/2;
+     nav.scrollTo({left:Math.max(0,left),behavior:'auto'});
+    }
+   }
+  }else btn.removeAttribute('aria-current');
+ });
+ const more=document.getElementById('tabletMoreBtn');
+ if(more){
+  const inMore=!!nav.querySelector('.tablet-more-item[aria-current="location"]');
+  const label=inMore?'More workspaces, current: '+PG_DESKTOP_WORKSPACES[current]:'More workspaces';
+  more.classList.toggle('has-current',inMore);
+  if(more.getAttribute('aria-label')!==label) more.setAttribute('aria-label',label);
+ }
+}
+function pgScheduleTabletNavSync(){
+ if(pgTabletNavFrame||!document.body.classList.contains('layout-tablet')) return;
+ pgTabletNavFrame=requestAnimationFrame(()=>{ pgTabletNavFrame=0; pgSyncTabletNav(); });
+}
+function pgJumpToTabletWorkspace(workspace){
+ const tool=PG_TABLET_NAV_TOOLS[workspace];
+ const anchor=pgTabletWorkspaceAnchors().find(a=>a.workspace===(tool?tool.host:workspace));
+ if(!anchor) return;
+ const reduce=!!(window.matchMedia&&window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+ const control=tool?document.querySelector(tool.control):null;
+ const top=control&&control.getClientRects().length?control.getBoundingClientRect().top-12:anchor.top;
+ pgTabletNavPinned=workspace;
+ window.scrollTo({top:Math.max(0,window.scrollY+top-pgTabletNavOffset()),behavior:reduce?'auto':'smooth'});
+ pgSyncTabletNav();
+ if(control){
+  try{ control.focus({preventScroll:true}); }catch(e){}
+  control.click();
+  return;
+ }
+ if(!anchor.card.hasAttribute('tabindex')) anchor.card.setAttribute('tabindex','-1');
+ try{ anchor.card.focus({preventScroll:true}); }catch(e){}
+}
 function pgLayoutInit(){
  pgApplyThemeMode(pgReadThemeMode(),{initial:true});
  pgLayoutPreference=pgReadLayoutPreference();
@@ -3319,10 +3849,19 @@ function pgLayoutInit(){
   try{
    pgLayoutPanelObserver=new MutationObserver(mutations=>{
     if(document.body.classList.contains('layout-desktop')&&mutations.some(m=>m.target&&m.target.matches&&m.target.matches('.dashboard > .card[data-desktop-workspace]'))) pgSyncDesktopPanels();
+    else if(mutations.some(m=>m.target&&m.target.matches&&m.target.matches('.dashboard > .card[data-desktop-workspace]'))) pgScheduleTabletNavSync();
    });
    pgLayoutPanelObserver.observe(dashboard,{subtree:true,attributes:true,attributeFilter:['style']});
   }catch(e){}
  }
+ const jumpNav=document.getElementById('tabletJumpNav');
+ if(jumpNav){
+  jumpNav.addEventListener('keydown',pgTabletMoreKeydown);
+  jumpNav.addEventListener('focusout',event=>{ if(pgTabletMoreOpen&&!(event.relatedTarget&&jumpNav.contains(event.relatedTarget))&&event.relatedTarget) pgSetTabletMore(false); });
+  document.addEventListener('pointerdown',event=>{ if(pgTabletMoreOpen&&!jumpNav.contains(event.target)) pgSetTabletMore(false); });
+ }
+ window.addEventListener('scroll',pgScheduleTabletNavSync,{passive:true});
+ ['wheel','touchstart','keydown'].forEach(type=>window.addEventListener(type,()=>{ if(pgTabletNavPinned){ pgTabletNavPinned=''; pgScheduleTabletNavSync(); } },{passive:true}));
  window.addEventListener('resize',()=>{
   const width=Math.round(window.innerWidth||0);
   const height=Math.round(window.innerHeight||0);
@@ -3741,17 +4280,15 @@ async function checkUpdate(manual){
  finally{ if(btn) btn.disabled=false; }
  const checkedAt=new Date().toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'});
  if(!r||r.status==='error'){
-  const msg=r&&r.message?r.message:'Check failed — no internet?';
+  const msg=r&&r.message?r.message:'Couldn\u2019t reach GitHub. The Pi needs internet access to check for updates; check its network connection, then try again.';
   setUpdateStatus('\u26a0 '+msg,'error');
-  if(manual) toast('Update check failed: '+msg,true);
+  if(manual) toast(r&&r.message?'Couldn\u2019t check for updates: '+msg:msg,true,{action:{label:'Retry',run:()=>checkUpdate(true)}});
   return;
  }
  document.getElementById('updateCurrent').textContent='v'+r.current;
  document.getElementById('updateLatest').textContent='v'+r.latest;
  document.getElementById('updatePublished').textContent=r.published?r.published.split('T')[0]:'-';
- if(r.changelog){
-  document.getElementById('updateChangelog').textContent=r.changelog;
- }
+ pgSetReleaseNotes('updateChangelog',r.update_available?pgReleaseNotesText({notes:r.changelog}):'','What\u2019s new in v'+r.latest);
  window._updateCheck=r;
  // GitHub refused and the device answered from its cache: say how old the
  // answer is instead of reporting it as the latest state.
@@ -3773,8 +4310,8 @@ async function checkUpdate(manual){
  } else if(staleNote){
   document.getElementById('applyUpdateBtn').style.display='none';
   document.getElementById('updateBtn').style.display='none';
-  setUpdateStatus('\u26a0 Could not check for updates. '+staleNote,'warn');
-  if(manual) toast('Could not check for updates: '+staleNote,true);
+  setUpdateStatus('\u26a0 Couldn\u2019t check for updates. '+staleNote,'warn');
+  if(manual) toast('Couldn\u2019t check for updates. '+staleNote,true);
  } else {
   document.getElementById('applyUpdateBtn').style.display='none';
   document.getElementById('updateBtn').style.display='none';
@@ -3847,8 +4384,8 @@ async function applyUpdate(){
  warn.className='release-notes-warn';
  warn.textContent='PGenerator+ will restart. Stop any running measurement or session first. Your settings stay.';
  wrap.appendChild(warn);
- if(!await pgConfirm({title:r.latest?'Install v'+r.latest+'?':'Install update now?',bodyNode:wrap,wide:true,acceptLabel:'Install'}))return;
- await runUpdate('');
+ if(!await pgConfirm({title:r.latest?'Install v'+r.latest+'?':'Install update now?',bodyNode:wrap,wide:true,acceptLabel:r.latest?'Install v'+r.latest:'Install Update',destructive:true,tone:'caution'}))return;
+ await runUpdate('',{mode:'install',from:r.current,to:r.latest});
 }
 
 // Release list (pgenerator-update list): the newest installable releases of
@@ -3894,8 +4431,22 @@ function onReleaseSelectChange(){
  const rel=(window._releaseList||[]).find(x=>x.version===sel.value);
  const cmp=pgVersionCmp(sel.value,window._releaseCurrent||'0');
  if(btn) btn.textContent=cmp<0?'Roll back':(cmp===0?'Reinstall':'Install');
- const notes=document.getElementById('releaseNotes');
- if(notes) notes.textContent=rel&&rel.notes?rel.notes.replace(/\n*\u{1F916}.*$/su,'').trim():'';
+ pgSetReleaseNotes('releaseNotes',pgReleaseNotesText(rel),'Release notes \u00b7 v'+sel.value);
+}
+// Release notes in the update card sit in a closed <details> (summary names the
+// version) rendered like the install dialog; empty notes hide the disclosure.
+function pgReleaseNotesText(rel){
+ return rel&&rel.notes?rel.notes.replace(/\n*\u{1F916}.*$/su,'').trim():'';
+}
+function pgSetReleaseNotes(id,markdown,summary){
+ const box=document.getElementById(id);
+ const wrap=document.getElementById(id+'Wrap');
+ if(!box||!wrap) return;
+ const sum=wrap.querySelector('summary');
+ if(sum) sum.textContent=summary;
+ box.textContent='';
+ if(markdown) box.appendChild(pgReleaseNotesNode(markdown));
+ wrap.hidden=!markdown;
 }
 async function installSelectedRelease(){
  const sel=document.getElementById('releaseSelect');
@@ -3903,51 +4454,227 @@ async function installSelectedRelease(){
  if(!v) return;
  const cmp=pgVersionCmp(v,window._releaseCurrent||'0');
  const title=cmp<0?'Roll back to v'+v+'?':(cmp===0?'Reinstall v'+v+'?':'Install v'+v+'?');
- const body='PGenerator+ will restart. Stop any running measurement or session first.\n\n'
-  +'Your settings stay. The current files are saved first and restored automatically if the installation fails.'
+ const wrap=document.createElement('div');
+ const relNotes=pgReleaseNotesText((window._releaseList||[]).find(x=>x.version===v));
+ if(relNotes){
+  const meta=document.createElement('div');
+  meta.className='release-notes-meta';
+  meta.textContent='v'+(window._releaseCurrent||'?')+' \u2192 v'+v;
+  wrap.append(meta,pgReleaseNotesNode(relNotes));
+ }
+ const warn=document.createElement('div');
+ warn.className='release-notes-warn';
+ warn.textContent='PGenerator+ will restart. Stop any running measurement or session first. Your settings stay. The current files are saved first and restored automatically if the installation fails.'
   +(cmp<0?' Files added by newer versions stay on the device. To return, select the newer version here or use Check for Updates.':'');
- if(!await pgConfirm({title,body,acceptLabel:cmp<0?'Roll back':(cmp===0?'Reinstall':'Install')}))return;
- await runUpdate(v);
+ wrap.appendChild(warn);
+ if(!await pgConfirm({title,bodyNode:wrap,wide:!!relNotes,acceptLabel:(cmp<0?'Roll back to v':(cmp===0?'Reinstall v':'Install v'))+v,destructive:true,tone:'caution'}))return;
+ await runUpdate(v,{mode:cmp<0?'rollback':(cmp===0?'reinstall':'install'),from:window._releaseCurrent,to:v});
 }
 
-async function runUpdate(version){
- document.getElementById('applyUpdateBtn').disabled=true;
- const relBtn=document.getElementById('installReleaseBtn');
- if(relBtn) relBtn.disabled=true;
- document.getElementById('updateStatus').innerHTML='<span class="spinner"></span> Downloading and installing...';
- const r=await fetchJSON('/api/update/apply',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(version?{version}:{})});
- if(r&&r.status==='ok'){
-  // Follow pgenerator-update's phases (/api/update/status) across the
-  // daemon restart; reload only when it is done, show a failure in place.
-  const statusEl=document.getElementById('updateStatus');
-  const startedAt=Number(r.now)||0;
-  const deadline=Date.now()+15*60*1000;
-  statusEl.innerHTML='<span class="spinner"></span> Starting the update...';
-  const poll=async()=>{
-   let st=null;
-   try{const p=await fetch(API+'/api/update/status',{signal:AbortSignal.timeout(3000)});if(p.ok) st=await p.json();}catch(e){}
-   if(st&&st.ts>=startedAt&&st.phase){
-    if(st.phase==='failed'){
-     statusEl.textContent='Update failed: '+(st.message||'see the update log');
-     document.getElementById('applyUpdateBtn').disabled=false;
-     if(relBtn) relBtn.disabled=false;
-     return;
-    }
-    if(st.phase==='done'){location.reload();return;}
-    statusEl.innerHTML='<span class="spinner"></span> ';
-    statusEl.appendChild(document.createTextNode((st.message||st.phase)+'...'));
-   }else if(!st){
-    statusEl.innerHTML='<span class="spinner"></span> PGenerator+ is restarting...';
-   }
-   if(Date.now()>deadline){location.reload();return;}
-   setTimeout(poll,3000);
-  };
-  setTimeout(poll,3000);
- } else {
-  document.getElementById('updateStatus').textContent=r?r.message:'Update failed';
-  document.getElementById('applyUpdateBtn').disabled=false;
-  if(relBtn) relBtn.disabled=false;
+// Install progress dialog: follows pgenerator-update's phases
+// (/api/update/status) as five steps on one bar. The download fills 0-60%
+// from the updater's percent, or sweeps while the size is unknown (older
+// updaters); later phases sit at fixed marks, so no percentage is invented.
+const PG_UPD_STEPS=['Download','Verify','Back up','Install','Restart'];
+const PG_UPD_PHASE_STEP={starting:0,checking:0,downloading:0,verifying:1,backup:2,installing:3,restarting:4,done:5};
+const PG_UPD_STEP_MARK=[0,62,70,80,90,100];
+const PG_UPD_ICONS={done:'<path d="M5 12.5l4.5 4.5L19 7.5"/>',current:'<circle cx="12" cy="12" r="8" opacity=".3"/><path d="M20 12a8 8 0 0 0-8-8"/>',pending:'<circle cx="12" cy="12" r="3"/>',failed:'<path d="M7 7l10 10M17 7L7 17"/>'};
+let _pgUpd=null;
+function pgUpdateDialog(info){
+ const old=document.getElementById('updateProgressModal');
+ if(old) old.remove();
+ const root=document.createElement('div');
+ root.id='updateProgressModal';
+ root.className='upd-modal';
+ const card=document.createElement('div');
+ card.className='upd-card';
+ card.setAttribute('role','dialog');
+ card.setAttribute('aria-modal','true');
+ card.setAttribute('aria-labelledby','updProgTitle');
+ card.setAttribute('aria-describedby','updProgMsg');
+ card.tabIndex=-1;
+ card.innerHTML='<div class="upd-title" id="updProgTitle"></div><div class="upd-meta"><span class="upd-versions"></span><span class="upd-elapsed"></span></div>'
+  +'<div class="upd-bar" role="progressbar" aria-labelledby="updProgTitle" aria-valuemin="0" aria-valuemax="100"><div class="upd-bar-fill"></div><div class="upd-bar-seek"></div></div>'
+  +'<div class="upd-status"><span class="upd-msg" id="updProgMsg" aria-live="polite"></span><span class="upd-pct"></span></div>'
+  +'<ol class="upd-steps">'+PG_UPD_STEPS.map(t=>'<li class="upd-step"><svg class="btn-ico" viewBox="0 0 24 24" aria-hidden="true"></svg><span>'+t+'</span><span class="sr-only"></span></li>').join('')+'</ol>'
+  +'<div class="upd-note" hidden></div><div class="btn-row btn-row-end upd-actions"></div>';
+ root.appendChild(card);
+ document.body.appendChild(root);
+ const to=info.to?'v'+info.to:'';
+ const words={rollback:['Rolling back to ','Rolled back to '],reinstall:['Reinstalling ','Reinstalled ']}[info.mode]||['Installing ','Updated to '];
+ const d={root,card,info,to,words,phase:'starting',progress:null,message:'Starting the update',offline:false,result:'running',step:0,value:0,
+  t0:Date.now(),hidden:false,actionsFor:'',opener:document.activeElement,timer:0,onKey:null};
+ card.querySelector('.upd-versions').textContent=info.from&&to?'v'+info.from+' \u2192 '+to:to;
+ const tick=()=>{ const s=Math.floor((Date.now()-d.t0)/1000); card.querySelector('.upd-elapsed').textContent=Math.floor(s/60)+':'+String(s%60).padStart(2,'0')+' elapsed'; };
+ tick();
+ d.tick=tick;
+ d.timer=setInterval(()=>{ if(d.result==='running') tick(); else clearInterval(d.timer); },1000);
+ d.onKey=ev=>{
+  if(d.hidden||!root.isConnected) return;
+  if(ev.key==='Escape'){ ev.preventDefault(); if(d.result==='running') pgUpdateHide(d); else if(d.result!=='done') pgUpdateClose(d); return; }
+  pgDialogTrapTab(card,ev);
+ };
+ document.addEventListener('keydown',d.onKey,true);
+ card.focus();
+ return d;
+}
+function pgUpdateHide(d){
+ d.hidden=true;
+ d.root.hidden=true;
+ pgUpdateRender(d);
+ const show=document.getElementById('updateShowProgressBtn');
+ if(show) show.focus();
+}
+function pgUpdateShow(){
+ const d=_pgUpd;
+ if(!d||!d.root.isConnected) return;
+ d.hidden=false;
+ d.root.hidden=false;
+ pgUpdateRender(d);
+ d.card.focus();
+}
+function pgUpdateClose(d){
+ clearInterval(d.timer);
+ document.removeEventListener('keydown',d.onKey,true);
+ d.root.remove();
+ if(_pgUpd===d) _pgUpd=null;
+ const back=[document.getElementById('applyUpdateBtn'),document.getElementById('installReleaseBtn'),d.opener].find(el=>el&&el.isConnected&&!el.disabled&&el.getClientRects().length);
+ if(back) back.focus();
+}
+function pgUpdateRender(d){
+ const c=d.card,run=d.result==='running';
+ let step=PG_UPD_PHASE_STEP[d.phase];
+ if(step==null) step=d.step;
+ // PGenerator+ (and with it this WebUI) is stopped from the install on, so an
+ // unanswered poll after the backup is the restart, not an error.
+ if(run&&d.offline&&d.step>=2) step=4;
+ if(d.result==='done') step=5;
+ d.step=Math.max(d.step,step);
+ const dl=d.step===0&&d.progress!=null;
+ d.value=Math.max(d.value,dl?Math.round(d.progress*0.6):PG_UPD_STEP_MARK[d.step]);
+ const indet=run&&d.step===0&&d.progress==null;
+ c.classList.toggle('is-done',d.result==='done');
+ c.classList.toggle('is-failed',d.result==='failed');
+ c.classList.toggle('is-timeout',d.result==='timeout');
+ const title={running:d.words[0]+(d.to||'the update'),done:d.to?d.words[1]+d.to:'Update installed',
+  failed:d.startFailed?'The update didn\u2019t start':(d.to||'The update')+' didn\u2019t install',timeout:'The update is taking too long'}[d.result];
+ c.querySelector('.upd-title').textContent=title;
+ let msg;
+ if(d.result==='done') msg='Reloading the page\u2026';
+ else if(d.result==='timeout') msg='It has not finished after 15 minutes.';
+ else if(!run) msg=d.message||'';
+ else if(d.offline) msg=d.step>=2?'PGenerator+ is restarting \u2014 this page reconnects automatically.':'Waiting for PGenerator+ to answer\u2026';
+ else msg=(d.message||'Working')+'\u2026';
+ const msgEl=c.querySelector('.upd-msg');
+ if(msgEl.textContent!==msg) msgEl.textContent=msg;
+ const pct=run&&dl?d.progress+'%':'';
+ c.querySelector('.upd-pct').textContent=pct;
+ const bar=c.querySelector('.upd-bar');
+ bar.classList.toggle('is-indeterminate',indet);
+ c.querySelector('.upd-bar-fill').style.width=d.value+'%';
+ const stepName=PG_UPD_STEPS[Math.min(d.step,4)];
+ if(indet) bar.removeAttribute('aria-valuenow');
+ else bar.setAttribute('aria-valuenow',String(d.value));
+ bar.setAttribute('aria-valuetext',d.result==='done'?'Done':(d.result==='running'?'Step '+(d.step+1)+' of 5, '+stepName+(pct?', '+d.progress+' percent downloaded':''):'Stopped at '+stepName));
+ c.querySelectorAll('.upd-step').forEach((li,i)=>{
+  let st='pending';
+  if(i<d.step) st='done';
+  else if(i===d.step) st=run?'current':(d.result==='failed'?'failed':(d.result==='timeout'?'stalled':'done'));
+  if(li.dataset.state===st) return;
+  li.dataset.state=st;
+  const svg=li.querySelector('svg');
+  svg.innerHTML=PG_UPD_ICONS[st==='stalled'?'pending':st];
+  svg.classList.toggle('upd-spin',st==='current');
+  if(st==='current') li.setAttribute('aria-current','step'); else li.removeAttribute('aria-current');
+  li.querySelector('.sr-only').textContent={done:', done',current:', in progress',failed:', failed',stalled:', not finished',pending:''}[st];
+ });
+ const note=c.querySelector('.upd-note');
+ const noteText=d.result==='failed'?(d.startFailed?'':'The previous version was kept. Try again; if it fails again, send the logs with Submit Logs.')
+  :(d.result==='timeout'?'Reload the page to see which version is running now. If it is still the old one, send the logs with Submit Logs.':'');
+ note.textContent=noteText;
+ note.hidden=!noteText;
+ if(d.actionsFor!==d.result){
+  d.actionsFor=d.result;
+  const row=c.querySelector('.upd-actions');
+  row.innerHTML='';
+  const mk=(label,cls,fn)=>{ const b=document.createElement('button'); b.type='button'; b.className='btn btn-sm '+cls; b.textContent=label; b.onclick=fn; row.appendChild(b); return b; };
+  let focus=null;
+  if(run) mk('Hide','btn-secondary',()=>pgUpdateHide(d));
+  else if(d.result==='failed'){
+   const logs=mk('Submit Logs','btn-secondary ico-logs',async()=>{ logs.disabled=true; try{ await submitLogs(); }finally{ logs.disabled=false; } });
+   focus=mk('Close','btn-primary',()=>pgUpdateClose(d));
+  } else if(d.result==='timeout'){
+   mk('Close','btn-secondary',()=>pgUpdateClose(d));
+   focus=mk('Reload','btn-primary ico-refresh',()=>location.reload());
+  }
+  row.hidden=!row.children.length;
+  if(focus&&!d.hidden) focus.focus();
+  else if(d.result==='done'&&!d.hidden) c.focus();
  }
+ // The card's status line keeps the same story while the dialog is hidden.
+ if(run){
+  const line=pct?msg.replace(/\u2026$/,'')+' \u00b7 '+pct:msg;
+  const el=document.getElementById('updateStatus');
+  const span=el&&el.querySelector('.upd-inline-text');
+  // Update the text in place so the Show progress button keeps its focus.
+  if(span&&!!document.getElementById('updateShowProgressBtn')===d.hidden){ span.textContent=line; }
+  else if(el){
+   setUpdateStatus('','',true);
+   const t=document.createElement('span');
+   t.className='upd-inline-text';
+   t.textContent=line;
+   el.appendChild(t);
+   if(d.hidden){
+    const b=document.createElement('button');
+    b.type='button';
+    b.id='updateShowProgressBtn';
+    b.className='btn btn-sm btn-secondary upd-show-btn';
+    b.textContent='Show progress';
+    b.onclick=pgUpdateShow;
+    el.appendChild(b);
+   }
+  }
+ } else if(d.result==='done') setUpdateStatus(title+'. Reloading the page\u2026','ok');
+ else if(d.result==='timeout') setUpdateStatus('The update has not finished after 15 minutes. Reload the page to see which version is running now.','warn');
+ else setUpdateStatus(d.startFailed?d.message:'The update didn\u2019t install'+(d.message?': '+d.message.replace(/([^.!?])$/,'$1.'):'.')+' The previous version was kept. Try again; if it fails again, send the logs with Submit Logs.','error');
+}
+async function runUpdate(version,info){
+ // One install at a time: the buttons are disabled too, this guards the rest.
+ if(_pgUpd&&_pgUpd.result==='running'){ pgUpdateShow(); return; }
+ const relBtn=document.getElementById('installReleaseBtn');
+ const setBusy=busy=>{ document.getElementById('applyUpdateBtn').disabled=busy; if(relBtn) relBtn.disabled=busy; };
+ setBusy(true);
+ const d=_pgUpd=pgUpdateDialog(Object.assign({mode:'install'},info||{}));
+ const finish=result=>{ d.tick(); d.result=result; if(result!=='done') setBusy(false); pgUpdateRender(d); };
+ pgUpdateRender(d);
+ const r=await fetchJSON('/api/update/apply',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(version?{version}:{})});
+ if(!r||r.status!=='ok'){
+  d.startFailed=true;
+  d.message=pgFailMsg('The update didn\u2019t start',r,'Check the Pi\u2019s internet connection, then try again.');
+  finish('failed');
+  return;
+ }
+ // Follow the phases across the daemon restart; reload only when it is
+ // done, show a failure in place.
+ const startedAt=Number(r.now)||0;
+ const deadline=Date.now()+15*60*1000;
+ const poll=async()=>{
+  if(d.result!=='running') return;
+  let st=null;
+  try{const p=await fetch(API+'/api/update/status',{signal:AbortSignal.timeout(3000)});if(p.ok) st=await p.json();}catch(e){}
+  d.offline=!st;
+  if(st&&st.ts>=startedAt&&st.phase){
+   d.phase=st.phase;
+   d.message=st.message||st.phase;
+   d.progress=st.phase==='downloading'&&typeof st.progress==='number'?Math.max(0,Math.min(100,Math.round(st.progress))):null;
+   if(st.phase==='failed'){ finish('failed'); return; }
+   if(st.phase==='done'){ finish('done'); setTimeout(()=>location.reload(),1500); return; }
+  }
+  if(Date.now()>deadline){ finish('timeout'); return; }
+  pgUpdateRender(d);
+  setTimeout(poll,3000);
+ };
+ setTimeout(poll,3000);
 }
 async function submitLogs(){
  const btn=document.getElementById('submitLogsBtn');
@@ -3970,7 +4697,7 @@ async function submitLogs(){
    toast(j?j.message:'Failed to collect logs','error');
   }
  }catch(e){toast('Error: '+e.message,'error');}
- btn.disabled=false;btn.innerHTML='&#128230; Submit Logs';
+ btn.disabled=false;btn.textContent='Submit Logs';
 }
 
 function systemBackupSetStatus(message,isError){
@@ -4030,8 +4757,8 @@ async function exportSystemSettings(){
   systemBackupSetStatus('System backup downloaded ('+(blob.size/1048576).toFixed(1)+' MB).',false);
   toast('System backup downloaded');
  }catch(error){
-  systemBackupSetStatus(error&&error.message?error.message:'System backup failed',true);
-  toast(error&&error.message?error.message:'System backup failed',true);
+  systemBackupSetStatus('Couldn\u2019t create the system backup. '+pgErrText(error),true);
+  toast('Couldn\u2019t create the system backup. '+pgErrText(error),true);
  }
  if(btn){btn.disabled=false;btn.textContent='Export System Settings';}
 }
@@ -4047,7 +4774,7 @@ async function importSystemSettingsFile(file){
   if(input)input.value='';
   return;
  }
- const accepted=await pgConfirm({acceptLabel:'Import',title:'Import this PGenerator+ system backup?',body:'Matching system settings, profiles and custom diagnostic media will be replaced. Existing history and media with different names will be preserved. A local rollback backup will be created first. Stop all measurements and calibration work before continuing.'});
+ const accepted=await pgConfirm({acceptLabel:'Import backup',destructive:true,title:'Import this PGenerator+ system backup?',body:'Matching system settings, profiles and custom diagnostic media will be replaced. Existing history and media with different names will be preserved. A local rollback backup will be created first. Stop all measurements and calibration work before continuing.'});
  if(!accepted){if(input)input.value='';return;}
  const btn=document.getElementById('importSystemSettingsBtn');
  if(btn){btn.disabled=true;btn.textContent='Importing...';}
@@ -4071,7 +4798,7 @@ async function importSystemSettingsFile(file){
     const count=Number(result.restored_files)||0;
     systemBackupSetStatus('Import complete. Restored '+count+' files. Reboot to apply all settings.',false);
     toast('System backup imported');
-    if(await pgConfirm({title:'System backup imported',body:'Reboot PGenerator+ now to apply all restored settings?',acceptLabel:'Reboot',cancelLabel:'Later'})){
+    if(await pgConfirm({title:'System backup imported',body:'Reboot PGenerator+ now to apply all restored settings?',acceptLabel:'Reboot Pi',cancelLabel:'Later',destructive:true})){
      const reboot=await fetchJSON('/api/reboot',{method:'POST'});
      if(!reboot||reboot.status!=='ok')throw new Error(reboot&&reboot.message?reboot.message:'Could not start reboot');
      systemBackupSetStatus('Rebooting PGenerator+...',false);
@@ -4303,20 +5030,28 @@ function pgPrompt(opts){
   const root=document.createElement('div');
   root.id='pgPromptModal';
   root.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,0.55);z-index:100001;display:flex;align-items:center;justify-content:center;padding:20px;box-sizing:border-box';
+  const opener=document.activeElement;
   const card=document.createElement('div');
+  card.setAttribute('role','dialog');
+  card.setAttribute('aria-modal','true');
+  card.setAttribute('aria-labelledby','pgPromptTitle');
+  card.tabIndex=-1;
   card.style.cssText='background:var(--panel,#0f1320);border:1px solid var(--border,#1d2230);border-radius:10px;max-width:480px;width:100%;padding:20px;color:var(--text,#e3e6ef);box-shadow:0 18px 60px rgba(0,0,0,0.6);font-family:inherit';
   const title=document.createElement('div');
   title.style.cssText='font-size:1.0rem;font-weight:700;margin-bottom:12px';
   title.textContent=String(o.title||'Enter a value');
+  title.id='pgPromptTitle';
   const input=document.createElement('input');
   input.type='text';
+  input.setAttribute('aria-labelledby','pgPromptTitle');
   input.value=String(o.value||'');
   input.style.cssText='width:100%;box-sizing:border-box;margin-bottom:6px';
   const hint=document.createElement('div');
   hint.style.cssText='font-size:.75rem;color:var(--text2,#a8b0c0);margin-bottom:14px';
   hint.textContent=String(o.hint||'');
+  if(o.hint){ hint.id='pgPromptHint'; input.setAttribute('aria-describedby','pgPromptHint'); }
   const row=document.createElement('div');
-  row.style.cssText='display:flex;gap:10px;justify-content:flex-end';
+  row.className='btn-row btn-row-end';
   const cancel=document.createElement('button');
   cancel.className='btn btn-sm btn-secondary';
   cancel.textContent=String(o.cancelLabel||'Cancel');
@@ -4335,11 +5070,13 @@ function pgPrompt(opts){
    done=true;
    document.removeEventListener('keydown',onKey,true);
    root.remove();
+   try{ if(opener&&opener!==document.body&&opener.isConnected&&typeof opener.focus==='function') opener.focus(); }catch(e){}
    resolve(v);
   };
   function onKey(ev){
    if(ev.key==='Escape'){ev.preventDefault();finish(null);}
    else if(ev.key==='Enter'&&document.activeElement===input){ev.preventDefault();finish(input.value);}
+   else pgDialogTrapTab(card,ev);
   }
   document.addEventListener('keydown',onKey,true);
   ok.onclick=()=>finish(input.value);
@@ -13030,7 +13767,7 @@ async function meterCcssCreateRefreshStatus(quiet){
   }
   if(!quiet) toast(r.message||'Meter profile created');
  }
- if(!quiet&&r.status==='error') toast(r.message||'Meter profile creation failed',true);
+ if(!quiet&&r.status==='error') toast(pgFailMsg('Meter profile creation failed',r),true);
  if(!quiet&&r.status==='cancelled') toast(r.message||'Meter profile creation cancelled');
  return r;
 }
@@ -13168,7 +13905,7 @@ async function meterCreateCcmxFromSuppliedMatrix(name,target,matrix,displayType,
 }
 
 async function meterStartCcssCreate(){
- if(meterActionPending){toast('Meter operation already in progress',true);return;}
+ if(meterActionPending){toast('The meter is busy with another reading. Wait for it to finish, or stop it first.',true);return;}
  const initialFormat=meterCcssCreateFormatValue();
  meterCcssCreateSetStartingFeedback(true,initialFormat);
  // Stop any continuous read loop first. Otherwise it keeps re-POSTing reads,
@@ -13231,7 +13968,7 @@ async function meterStartCcssCreate(){
   if(!r||r.status==='error'){
    meterCcssCreateJobActive=false;
    meterCcssCreateSetUi(r||{status:'error',message:'Failed to start meter profile creation'});
-   toast(r&&r.message?r.message:'Failed to start meter profile creation',true);
+   toast(pgFailMsg('Couldn\u2019t start meter profile creation',r),true);
    return;
   }
   if(meterCcssCreatePolling) clearInterval(meterCcssCreatePolling);
@@ -13246,7 +13983,7 @@ async function meterStartCcssCreate(){
 async function meterStopCcssCreate(){
  const r=await fetchJSON('/api/ccss/create/stop',{method:'POST',_timeoutMs:5000});
  if(!r||r.status!=='ok'){
-  toast(r&&r.message?r.message:'Failed to stop meter profile creation',true);
+  toast(pgFailMsg('Couldn\u2019t stop meter profile creation',r,'It may still be running; try Stop again.'),true);
   return;
  }
  meterCcssCreateJobActive=false;
@@ -15003,7 +15740,7 @@ function meterApplySingleReadResult(result,requestedStep){
    toast('Reading: '+rd.luminance.toFixed(2)+' cd/m\\u00B2');
   }
  } else {
-  toast(result&&result.message?result.message:'Measurement failed',true);
+  toast(pgFailMsg('Measurement failed',result,'Check that the meter is connected and placed on the screen, then read again.'),true);
  }
 }
 
@@ -15526,10 +16263,10 @@ function meterUpdateTargetMeasureButtons(){
 async function meterMeasureTargetLevel(kind){
  const targetKind=kind==='black'?'black':'white';
  if(meterActionPending||meterSeriesRunning||meterAutoCalRunning||meterLg3dAutoCalRunning||meterFullAutoCalRunning||meterContinuousActive){
-  toast('Meter operation already in progress',true);
+  toast('The meter is busy with another reading. Wait for it to finish, or stop it first.',true);
   return;
  }
- if(!(await meterEnsureDetected())){ toast('No meter detected',true); return; }
+ if(!(await meterEnsureDetected())){ toast('No meter detected. Plug in the meter, wait a few seconds for it to appear, then try again.',true); return; }
  if(!meterEnsureAppliedGeneratorSettings()) return;
  const ire=targetKind==='white'?100:0;
  const code=meterCodeFromSignalPercent(ire);
@@ -15560,7 +16297,7 @@ async function meterMeasureTargetLevel(kind){
   });
   const result=await meterStartSingleRead(payload);
   if(!meterReadResultOk(result)){
-   toast(result&&result.message?result.message:'Measurement failed',true);
+   toast(pgFailMsg('Measurement failed',result,'Check that the meter is connected and placed on the screen, then read again.'),true);
    return;
   }
   const reading=result.readings[0];
@@ -15574,7 +16311,7 @@ async function meterMeasureTargetLevel(kind){
   meterSetTargetLevels();
   toast((targetKind==='white'?'Target White: ':'Target Black: ')+meterTargetLevelFormat(targetKind,luminance)+' cd/m\u00B2');
  }catch(e){
-  toast('Target '+targetKind+' measurement failed: '+(e&&e.message?e.message:'unknown error'),true);
+  toast('Couldn\u2019t measure the target '+targetKind+'. '+pgErrText(e),true);
  }finally{
   meterTargetLevelMeasuring='';
   meterActionPending=false;
@@ -15933,12 +16670,12 @@ async function meterSignalManualPromptReady(){
     meterClearManualPromptAwaiting(true);
     return;
    }
-   toast(r&&r.message?r.message:'Failed to resume measurement',true);
+   toast(pgFailMsg('Couldn\u2019t resume the measurement',r,'Stop it and start the reading again.'),true);
    return;
   }
   meterClearManualPromptAwaiting(true);
  }catch(e){
-  toast('Failed to resume measurement',true);
+  toast('Couldn\u2019t resume the measurement. '+pgErrText(e),true);
  }finally{
   meterReadySignalPending=false;
   meterUpdateReadButtons();
@@ -16041,13 +16778,13 @@ async function meterSpectroSetupAck(){
   const r=await fetchJSON(meterSpectroSetupAckEndpoint,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({step_id:id}),_timeoutMs:5000});
   if(!r||r.status!=='ok'){
    if(btn) btn.disabled=false;
-   toast(r&&r.message?r.message:'Could not continue setup',true);
+   toast(pgFailMsg('Couldn\u2019t continue meter setup',r),true);
    return;
   }
   meterSpectroSetupApply({keepBusy:true,step:step,message:meterSpectroSetupWorkingText(step)},meterSpectroSetupAckEndpoint);
  }catch(e){
   if(btn) btn.disabled=false;
-  toast('Could not continue meter setup',true);
+  toast('Couldn\u2019t continue meter setup. '+pgErrText(e),true);
  }
 }
 async function meterSpectroSetupCancel(){
@@ -16063,8 +16800,8 @@ async function meterSpectroSetupCancel(){
 }
 
 async function meterCalibrateSelectedMeter(){
- if(meterActionPending){toast('Meter operation already in progress',true);return;}
- if(!(await meterEnsureDetected())){toast('No meter detected',true);return;}
+ if(meterActionPending){toast('The meter is busy with another reading. Wait for it to finish, or stop it first.',true);return;}
+ if(!(await meterEnsureDetected())){toast('No meter detected. Plug in the meter, wait a few seconds for it to appear, then try again.',true);return;}
  const selected=meterSelectedMeasurementMeter();
  if(!meterRequiresManualCalibration(selected)){toast('The selected meter does not require manual calibration',true);return;}
  if(meterSeriesRunning||meterContinuousActive){toast('Stop the active meter run before calibrating',true);return;}
@@ -16096,7 +16833,7 @@ async function meterCalibrateSelectedMeter(){
   if(result&&result.status==='ok') toast(result.message||'Meter calibration complete');
   else throw new Error((result&&result.message)||'Meter calibration did not complete');
  }catch(e){
-  toast('Meter calibration error: '+e.message,true);
+  toast('Meter calibration didn\u2019t finish. '+pgErrText(e),true);
  }finally{
   meterSpectroSetupApply(null);
   meterActionPending=false;
@@ -16162,8 +16899,8 @@ function meterSeriesSpectroSetupApplyFromStatus(r){
 }
 
 async function meterReadOnce(){
- if(meterActionPending){toast('Meter operation already in progress',true);return;}
- if(!(await meterEnsureDetected())){toast('No meter detected',true);return;}
+ if(meterActionPending){toast('The meter is busy with another reading. Wait for it to finish, or stop it first.',true);return;}
+ if(!(await meterEnsureDetected())){toast('No meter detected. Plug in the meter, wait a few seconds for it to appear, then try again.',true);return;}
  if(!(await meterCalibrationRequirePatternProvider())) return;
  if(meterSeriesRunning){toast('Series scan is running \u2014 stop it first',true);return;}
  if(!meterEnsureAppliedGeneratorSettings()) return;
@@ -16221,7 +16958,7 @@ async function meterReadOnce(){
   } else {
    await meterRunManualReadStep(requestedStep,{...readContext,displayFirst:false});
   }
- }catch(e){toast('Meter read error: '+e.message,true);}
+ }catch(e){toast('Meter reading failed. '+pgErrText(e),true);}
  finally{
   if(!meterPendingDeviceReadyAction) await meterFinishSingleRead();
  }
@@ -16275,7 +17012,7 @@ async function meterToggleContinuous(){
  if(meterContinuousActive){
   meterStopContinuous();
  } else {
-  if(!(await meterEnsureDetected())){toast('No meter detected',true);return;}
+  if(!(await meterEnsureDetected())){toast('No meter detected. Plug in the meter, wait a few seconds for it to appear, then try again.',true);return;}
   if(!(await meterCalibrationRequirePatternProvider())) return;
   if(!meterEnsureAppliedGeneratorSettings()) return;
   // Enter manual continuous mode and cut off any leftover series state.
@@ -16668,13 +17405,13 @@ async function meterSignalDeviceReady(){
    await meterSyncSeriesAfterReady(previousLabel,4000);
    return;
   }
-   toast(r&&r.message?r.message:'Failed to resume measurement',true);
+   toast(pgFailMsg('Couldn\u2019t resume the measurement',r,'Stop it and start the reading again.'),true);
    return;
   }
   meterSeriesAwaitingReady=false;
   await meterSyncSeriesAfterReady(previousLabel,4000);
  }catch(e){
-  toast('Failed to resume measurement',true);
+  toast('Couldn\u2019t resume the measurement. '+pgErrText(e),true);
  }finally{
   meterReadySignalPending=false;
   meterUpdateReadButtons();
@@ -16711,9 +17448,9 @@ async function meterResetUSB(){
   await new Promise(r=>setTimeout(r,2000));
   await meterCheckStatus();
   if(meterDetected) toast('Meter reconnected!');
-  else toast('Meter still not detected after USB reset',true);
+  else toast('Meter still not detected after the USB reset. Unplug the meter, plug it back in, then try again.',true);
  } else {
-  toast(r&&r.message?r.message:'USB reset failed',true);
+  toast(pgFailMsg('Couldn\u2019t reset the meter\u2019s USB connection',r,'Unplug the meter and plug it back in.'),true);
  }
 }
 
@@ -18173,11 +18910,11 @@ function meterSetSeriesTab(tab,skipAutoSelect){
  // preserveTab: this IS meterSetSeriesTab, and the tab UI is already in sync.
  const remembered=meterLastSeriesByTab[meterSeriesTab];
  if(remembered){
-  meterSelectSeries(remembered.type,remembered.points,{preserveTab:true});
+  meterSelectSeries(remembered.type,remembered.points,{preserveTab:true,quiet:true});
  } else {
   const defaultBtn=meterDefaultSeriesButtonForTab(meterSeriesTab);
   const match=defaultBtn?String(defaultBtn.dataset.series||'').match(/^([^-]+)-(\d+)$/):null;
-  if(match) meterSelectSeries(match[1],parseInt(match[2],10));
+  if(match) meterSelectSeries(match[1],parseInt(match[2],10),{quiet:true});
  }
  // Leaving Tone Map / 3D LUT empty shell: restore charts if another series is live.
  try{
@@ -18320,10 +19057,10 @@ function meterSelectAutoCalDvProfile(){
 async function meterStartDvProfileStandalone(){
  if(meterBlockAutoCalForSimulation()) return;
  if(meterActionPending||meterAutoCalRunning||meterLg3dAutoCalRunning||meterFullAutoCalRunning||meterDvProfileStandaloneRunning||meterDvAutoCalProfileRunning){
-  toast('Meter operation already in progress',true); return;
+  toast('The meter is busy with another reading. Wait for it to finish, or stop it first.',true); return;
  }
  if(!meterDvProfileSeriesAllowedForSignal()){ toast('DV Config requires Dolby Vision signal mode',true); return; }
- if(!(await meterEnsureDetected())){ toast('No meter detected',true); return; }
+ if(!(await meterEnsureDetected())){ toast('No meter detected. Plug in the meter, wait a few seconds for it to appear, then try again.',true); return; }
  if(typeof meterFullAutoCalAvailable==='function'&&!meterFullAutoCalAvailable()){
   toast('Connect an LG TV before running the DV Config pass',true); return;
  }
@@ -18627,7 +19364,7 @@ async function meterStartToneMapMeasureUpload(){
   peak=null;
  }
  if(!(Number.isFinite(peak)&&peak>0)){
-  toast('Could not measure 100% white peak',true);
+  toast('Couldn\u2019t measure the 100% white peak. Check that the meter is connected and placed on the screen, then try again.',true);
   meterToneMapSetStatus('Measurement failed — check meter placement and try again.',true);
   window._meterToneMapBusy=false;
   if(btn){ btn.disabled=false; btn.textContent='\u25B6 Measure & Upload'; }
@@ -18661,12 +19398,12 @@ async function meterStartToneMapMeasureUpload(){
     meterAutoCalRecordHdrToneMapReport({user_choice:'uploaded',peak_luminance:peak,source:'tone-map-series'});
    }catch(e){}
   }else{
-   const msg=(response&&response.message)||'HDR tone map upload failed';
+   const msg=pgFailMsg('Couldn\u2019t upload the HDR tone map to the TV',response);
    toast(msg,true);
    meterToneMapSetStatus(msg,true);
   }
  }catch(e){
-  const msg='HDR tone map upload failed: '+(e&&e.message?e.message:e);
+  const msg='Couldn\u2019t upload the HDR tone map to the TV. '+pgErrText(e);
   toast(msg,true);
   meterToneMapSetStatus(msg,true);
  }
@@ -20392,6 +21129,9 @@ function meterCloseLutTools(){
  const reduceMotion=window.matchMedia?window.matchMedia('(prefers-reduced-motion: reduce)'):null;
  let menu=null,current=null,items=[],activeIndex=-1,typeBuf='',typeTimer=0,touchStart=null;
  let watcher=null,watchTimer=0,watchedIndex=-1;
+ // iOS opens its own picker when a select gets focus during a touch gesture,
+ // so touch-opened menus leave the select unfocused (touchOpenAt).
+ let touchOpenAt=0,touchMenu=false;
  function eligible(el){
   return !!el&&el.tagName==='SELECT'&&!el.multiple&&!(el.size>1)&&!el.disabled&&!el.hasAttribute('data-native-select');
  }
@@ -20550,7 +21290,7 @@ function meterCloseLutTools(){
   if(watcher){ watcher.disconnect(); watcher=null; }
   if(watchTimer){ clearInterval(watchTimer); watchTimer=0; }
  }
- function open(select){
+ function open(select,viaTouch){
   if(current===select){ close(); return; }
   close(true);
   current=select;
@@ -20561,7 +21301,9 @@ function meterCloseLutTools(){
   select.setAttribute('aria-expanded','true');
   const selected=items.findIndex(li=>li.pgOption.selected);
   setActive(selected>=0?selected:enabledIndex(0,1));
-  try{ select.focus({preventScroll:true}); }catch(e){}
+  touchMenu=!!viaTouch;
+  if(viaTouch) touchOpenAt=Date.now();
+  else try{ select.focus({preventScroll:true}); }catch(e){}
   watch(select);
   const m=menu;
   requestAnimationFrame(()=>requestAnimationFrame(()=>m.classList.add('is-open')));
@@ -20580,10 +21322,10 @@ function meterCloseLutTools(){
  function choose(i){
   const li=items[i];
   if(!li||li.getAttribute('aria-disabled')==='true') return;
-  const select=current,opt=li.pgOption;
+  const select=current,opt=li.pgOption,byTouch=touchMenu;
   close();
   if(!select) return;
-  try{ select.focus({preventScroll:true}); }catch(e){}
+  if(!byTouch) try{ select.focus({preventScroll:true}); }catch(e){}
   // The options may have been rebuilt by a poller while the menu was open.
   const target=select.contains(opt)?opt:Array.from(select.options).find(o=>o.value===opt.value);
   if(!target||target.selected) return;
@@ -20601,20 +21343,32 @@ function meterCloseLutTools(){
   }
   if(menu) close();
  },true);
+ // A tap on a select, or on the text of its <label>, which would focus the
+ // select and open the iOS picker. Controls and help tips inside the label
+ // keep their own tap.
+ function tapSelect(t){
+  if(eligible(t)) return t;
+  const label=t&&t.closest?t.closest('label'):null;
+  if(!label||t.closest('a,button,input,textarea,.meter-help-tip')) return null;
+  return eligible(label.control)?label.control:null;
+ }
  document.addEventListener('touchstart',e=>{
-  const t=e.target;
-  touchStart=eligible(t)&&e.touches.length===1?{el:t,x:e.touches[0].clientX,y:e.touches[0].clientY}:null;
-  if(menu&&!menu.contains(t)&&t!==current) close();
+  const t=e.target,sel=tapSelect(t);
+  touchStart=sel&&e.touches.length===1?{el:sel,target:t,x:e.touches[0].clientX,y:e.touches[0].clientY}:null;
+  if(menu&&!menu.contains(t)&&sel!==current) close();
  },{capture:true,passive:true});
  document.addEventListener('touchend',e=>{
   const start=touchStart;
   touchStart=null;
   const p=e.changedTouches&&e.changedTouches[0];
-  if(!start||!p||e.target!==start.el) return;
+  if(!start||!p||e.target!==start.target) return;
   if(Math.abs(p.clientX-start.x)>10||Math.abs(p.clientY-start.y)>10) return;
   e.preventDefault();
-  if(start.el.options.length) open(start.el);
+  if(start.el.options.length) open(start.el,true);
  },{capture:true,passive:false});
+ document.addEventListener('focusin',e=>{
+  if(eligible(e.target)&&Date.now()-touchOpenAt<1000) e.target.blur();
+ },true);
  document.addEventListener('keydown',e=>{
   const t=e.target;
   if(menu&&current){

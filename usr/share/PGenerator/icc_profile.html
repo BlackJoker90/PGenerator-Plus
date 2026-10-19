@@ -281,7 +281,7 @@
       <div style="font-size:1rem;font-weight:700;color:var(--text)">Profile Check</div>
       <div id="meterIccValidationFile" class="meter-icc-note" style="margin-top:4px"></div>
      </div>
-     <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;justify-content:flex-end">
+     <div class="btn-row btn-row-end">
       <button type="button" class="btn btn-sm btn-primary" id="meterIccValidationDownloadBtn">Download Profile</button>
       <button type="button" class="btn btn-sm btn-success meter-icc-install-profile" id="meterIccValidationInstallBtn" style="display:none" title="Install this profile on the target computer and apply it to the display used by Patch Companion">Install &amp; Apply</button>
       <button type="button" class="btn btn-sm btn-secondary" onclick="meterIccCloseValidation()">Close</button>
@@ -313,7 +313,7 @@
    <div style="width:min(560px,100%);background:#111723;border:1px solid #2a3140;border-radius:10px;padding:18px;box-sizing:border-box">
     <div style="font-size:1rem;font-weight:700;color:var(--text);margin-bottom:8px">Reuse Previous Test Patch Read Results?</div>
     <div id="meterIccReuseMessage" class="meter-icc-note" style="line-height:1.55;margin-bottom:14px"></div>
-    <div class="btn-row" style="justify-content:flex-end;margin:0;flex-wrap:wrap">
+    <div class="btn-row btn-row-end" style="margin:0">
      <button type="button" class="btn btn-sm btn-secondary" onclick="meterIccResolveReuseChoice('cancel')">Cancel</button>
      <button type="button" class="btn btn-sm btn-secondary" onclick="meterIccResolveReuseChoice('fresh')">Start All New Test Patch Reads</button>
      <button id="meterIccReuseConfirmBtn" type="button" class="btn btn-sm btn-primary" onclick="meterIccResolveReuseChoice('reuse')">Reuse Previous Test Patch Read Results</button>
@@ -327,7 +327,7 @@
     <div id="meterIccFineTuneModeFile" class="meter-icc-note" style="margin-bottom:10px"></div>
     <div id="meterIccFineTuneModeMessage" class="meter-icc-note" style="line-height:1.55;margin-bottom:14px">Choose how to refine this Windows HDR cLUT profile.</div>
     <div id="meterIccFineTuneModeClosedLoopReason" class="meter-icc-note" style="line-height:1.55;margin-bottom:14px;display:none"></div>
-    <div class="btn-row" style="justify-content:flex-end;margin:0;flex-wrap:wrap">
+    <div class="btn-row btn-row-end" style="margin:0">
      <button type="button" class="btn btn-sm btn-secondary" onclick="meterIccResolveFineTuneMode('cancel')">Cancel</button>
      <button type="button" class="btn btn-sm btn-secondary" id="meterIccFineTuneModeGreyBtn" onclick="meterIccResolveFineTuneMode('grey-color')">Grey and colour loop</button>
      <button type="button" class="btn btn-sm btn-primary" id="meterIccFineTuneModeClosedLoopBtn" onclick="meterIccResolveFineTuneMode('closed-loop')">Closed-loop MHC2 refine</button>
@@ -357,7 +357,7 @@
    <div style="width:min(560px,100%);background:#111723;border:1px solid #2a3140;border-radius:10px;padding:18px;box-sizing:border-box">
     <div style="font-size:1rem;font-weight:700;color:var(--text);margin-bottom:8px">3D LUT Created</div>
     <div id="meterIccCubeSummary" class="meter-icc-note" style="line-height:1.55;margin-bottom:14px"></div>
-    <div class="btn-row" style="justify-content:flex-end;margin:0;flex-wrap:wrap">
+    <div class="btn-row btn-row-end" style="margin:0">
      <button type="button" class="btn btn-sm btn-secondary" onclick="meterIccCloseCubeModal()">Close</button>
      <button type="button" class="btn btn-sm btn-secondary" onclick="meterIccCubeOpenWorkspace()" title="Open LUT Tools and load this LUT in the 3D cube viewer">View in 3D LUT Workspace</button>
      <button type="button" class="btn btn-sm btn-primary" onclick="meterIccCubeDownload()" title="Standard .cube (Resolve, madVR, LUT boxes)">Download .cube</button>

@@ -1107,12 +1107,12 @@ async function lgDisplayControlCommit(key){
    toast(meta.label+' updated');
   }else{
    lgDisplayControlValues[key]=previousValue;
-   toast((r&&r.message)||('Unable to update '+meta.label),'err');
+   toast(pgFailMsg('Couldn\u2019t change '+meta.label+' on the TV',r,'Check that the TV is on and on the same network as the Pi, then try again.'),'err');
    refreshAfter=true;
   }
  }catch(e){
   lgDisplayControlValues[key]=previousValue;
-  toast('Unable to update '+meta.label,'err');
+  toast('Couldn\u2019t change '+meta.label+' on the TV. '+pgErrText(e),'err');
   refreshAfter=true;
  }finally{
   lgEndCommand(commandHandle);
@@ -1385,13 +1385,13 @@ async function lgConnect(){
     else toast(r.message||'PIN was not accepted.','err');
     return false;
    }
-   if(showModal) lgConnectModalError('The daemon returned no response.');
-   else toast('Unable to submit PIN','err');
+   if(showModal) lgConnectModalError('PGenerator+ didn\u2019t answer. Check that the Pi is still reachable, then try again.');
+   else toast(pgFailMsg('Couldn\u2019t submit the PIN',r),'err');
    return false;
   }catch(e){
    if(aborted()) return false;
    if(showModal) lgConnectModalError((e&&e.message)||'PIN submission failed.');
-   else toast('Unable to submit PIN','err');
+   else toast('Couldn\u2019t submit the PIN. '+pgErrText(e),'err');
    return false;
   }finally{
    lgEndCommand(commandHandle);
@@ -1428,16 +1428,16 @@ async function lgConnect(){
      else toast(r.message||'LG TV connected');
     }else{
      if(showModal) lgConnectModalError(r.message);
-     else toast(r.message||'Unable to connect to LG TV','err');
+     else toast(pgFailMsg('Couldn\u2019t connect to the LG TV',r,'Check that the TV is on and on the same network as the Pi, then try again.'),'err');
     }
    }else{
-    if(showModal) lgConnectModalError('The daemon returned no response.');
-    else toast('Unable to connect to LG TV','err');
+    if(showModal) lgConnectModalError('PGenerator+ didn\u2019t answer. Check that the Pi is still reachable, then try again.');
+    else toast(pgFailMsg('Couldn\u2019t connect to the LG TV',r),'err');
    }
   }catch(e){
    if(aborted()) return;
    if(showModal) lgConnectModalError((e&&e.message)||'Connect request failed.');
-   else toast('Unable to connect to LG TV','err');
+   else toast('Couldn\u2019t connect to the LG TV. '+pgErrText(e),'err');
   }finally{
    lgEndCommand(commandHandle);
    if(button&&!aborted()){button.disabled=false;button.textContent=pinFallback?'Pair With PIN':'Connect';}
@@ -1559,12 +1559,12 @@ async function lgStartPinPairing(){
       toast(r.message||'LG TV pairing started');
     if(r.pin_pairing_pending) lgRevealPinEntry();
    }
-    else toast(r.message||'Unable to start LG TV pairing','err');
+    else toast(pgFailMsg('Couldn\u2019t start LG TV pairing',r,'Check that the TV is on and on the same network as the Pi, then try again.'),'err');
   }else{
-    toast('Unable to start LG TV pairing','err');
+    toast(pgFailMsg('Couldn\u2019t start LG TV pairing',r),'err');
   }
 	 }catch(e){
-	   toast('Unable to start LG TV pairing','err');
+	   toast('Couldn\u2019t start LG TV pairing. '+pgErrText(e),'err');
 	 }finally{
 	   lgEndCommand(commandHandle);
 	   if(button){
@@ -1808,7 +1808,7 @@ async function lgResetPictureMode(){
 	  return;
  }
  const label=mode?lgPictureModeLabel(mode):'the active mode';
- if(!await pgConfirm('Reset '+label+' picture settings?\n\nThis restores core picture defaults (brightness, contrast, backlight, etc.) for the mode. Greyscale DDC calibration is NOT wiped (use Auto Cal preflight for that).')) return;
+ if(!await pgConfirm('Reset '+label+' picture settings?\n\nThis restores core picture defaults (brightness, contrast, backlight, etc.) for the mode. Greyscale DDC calibration is NOT wiped (use Auto Cal preflight for that).',{acceptLabel:'Reset picture',destructive:true})) return;
  lgSetPictureResetButtonsDisabled(true);
  const commandHandle=lgBeginCommand('Resetting LG picture mode');
  try{
@@ -1929,10 +1929,10 @@ async function lgDisconnectClient(){
    renderLgStatus(r);
    toast('LG TV disconnected; pairing saved');
   }else{
-   toast(r&&r.message?r.message:'Unable to disconnect LG TV','err');
+   toast(pgFailMsg('Couldn\u2019t disconnect the LG TV',r),'err');
   }
  }catch(e){
-  toast('Unable to disconnect LG TV','err');
+  toast('Couldn\u2019t disconnect the LG TV. '+pgErrText(e),'err');
  }finally{
   const fresh=window.lgStatusState||{};
   if(button) button.disabled=!lgStatusConnected(fresh)||!lgStatusHasSavedKey(fresh)||!!fresh.pinPending;
@@ -2026,7 +2026,7 @@ async function lgCalHistoryReupload(id){
  const item=lgCalHistoryCache.find(x=>x&&x.id===id);
  if(!item){ toast('History item not found','err'); return; }
  if(item.type==='dv'&&item.reuploadable===0){ toast(item.note||'Cannot reupload this DV config','err'); return; }
- if(!await pgConfirm('Reupload this '+lgCalHistoryTypeLabel(item.type)+' to the TV?\n\nCalibration mode will be enabled, the payload uploaded, then calibration mode disabled.')) return;
+ if(!await pgConfirm('Reupload this '+lgCalHistoryTypeLabel(item.type)+' to the TV?\n\nCalibration mode will be enabled, the payload uploaded, then calibration mode disabled.',{acceptLabel:'Reupload to TV',destructive:true,tone:'caution'})) return;
  lgCalHistoryBusy=true;
  try{
   if(typeof lgBeginCommand==='function') lgBeginCommand('Reuploading '+lgCalHistoryTypeLabel(item.type));

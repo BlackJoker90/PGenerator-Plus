@@ -27,18 +27,14 @@ __PG_LOGO_DARK__
     <button type="button" class="layout-switch-btn" data-layout-mode="tablet" aria-pressed="true" onclick="pgSetLayoutPreference('tablet')">Tablet</button>
     <button type="button" class="layout-switch-btn" data-layout-mode="desktop" aria-pressed="false" onclick="pgSetLayoutPreference('desktop')">Desktop</button>
    </div>
-   <button class="btn btn-sm update-btn" id="updateBtn" style="display:none" onclick="showUpdateCard()"><svg viewBox="0 0 24 24" width="13" height="13" aria-hidden="true"><path d="M12 4v11M7 10.5l5 5 5-5M5 20h14" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg>Update Available</button>
-  <button class="icon-btn power-btn offline" id="pwrBtn" aria-label="Power off" title="Power off" onclick="shutdownDevice()">
-   <svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><path d="M12 3v8" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/><path d="M7.2 6.8a7 7 0 1 0 9.6 0" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg>
-   </button>
-   <button class="icon-btn reboot-btn" id="rebootBtn" aria-label="Reboot" title="Reboot" onclick="confirmReboot()">
-    <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M19 12a7 7 0 1 1-2.05-4.95" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/><path d="M19 4.65V8.85H14.8" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
-   </button>
+   <button class="btn btn-sm update-btn" id="updateBtn" style="display:none" aria-label="Update available" onclick="showUpdateCard()"><svg viewBox="0 0 24 24" width="13" height="13" aria-hidden="true"><path d="M12 4v11M7 10.5l5 5 5-5M5 20h14" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg>Update<span class="update-btn-more">&nbsp;Available</span></button>
   </div>
-  <div class="status-bar">
-   <span title="" id="statusWrap"><span class="status-dot" id="statusDot"></span><span id="statusText">...</span></span>
+  <div class="status-bar" id="statusBar">
+   <span title="Checking the connection to PGenerator+" id="statusWrap"><span class="status-dot" id="statusDot"></span><span id="statusText">Connecting…</span></span>
    <span id="tempDisplay"></span>
-   <span id="calStatusWrap" title="No calibration software connected"><span class="status-dot" id="calDot" style="background:var(--text2)"></span><span id="calStatusText" style="color:var(--text2)">No SW</span></span>
+   <span id="signalStatusWrap" class="status-signal" title="Output signal (applied settings)" hidden><span class="status-dot" id="signalDot"></span><span class="status-label" id="signalStatusText"></span></span>
+   <span id="patternStatusWrap" class="status-pattern" title="Pattern started from this page" hidden><span class="status-dot status-dot-accent"></span><span class="status-label" id="patternStatusText"></span></span>
+   <span id="calStatusWrap" title="No calibration software connected"><span class="status-dot" id="calDot" style="background:var(--text2)"></span><span id="calStatusText" style="color:var(--text2)">No calibration software</span></span>
    <span id="meterDisplayStatusStack" class="status-stack" title="Meter, display and PGenerator+ Patch Companion">
     <span id="meterStatusWrap" class="status-line" style="display:none" title="Colorimeter"><span class="status-dot" id="meterDot" style="background:var(--text2)"></span><span class="status-label" id="meterStatusText" style="color:var(--text2)">Meter</span></span>
     <span id="lgTopStatusWrap" class="status-line status-line-sub" style="display:none" title="Display"><span class="status-dot" id="lgTopDot" style="background:var(--text2)"></span><span class="status-label" id="lgTopStatusText" style="color:var(--text2)">Display</span></span>
@@ -47,9 +43,20 @@ __PG_LOGO_DARK__
    <span id="hdmiWarnBadge" onclick="hdmiShowOverlay()" title="HDMI cable is on the wrong port">&#9888; Wrong HDMI Port</span>
    <span id="meterUsbWarnBadge" title="USB link unstable">&#9888; USB Unstable</span>
   </div>
+  <!-- Device power sits last in the header (after status) and apart from the layout toggle, so it is the last header Tab stop. -->
+  <div class="hdr-power" role="group" aria-label="Device power">
+   <button class="icon-btn reboot-btn" id="rebootBtn" aria-label="Reboot Pi" title="Reboot" onclick="confirmReboot()">
+    <svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 12a8.5 8.5 0 1 0 2.6-6.1L3.5 8.5"/><path d="M3.5 3.5v5h5"/><path d="M12 8.5v4"/></svg>
+   </button>
+   <button class="icon-btn power-btn offline" id="pwrBtn" aria-label="Power off Pi" title="Power off" onclick="shutdownDevice()">
+   <svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v8"/><path d="M6.6 6.6a8 8 0 1 0 10.8 0"/></svg>
+   </button>
+  </div>
  </div>
 </div>
 
+<!-- Fixed to the bottom edge, but placed after the header so keyboard users reach it before the cards. -->
+<nav class="tablet-jump-nav" id="tabletJumpNav" aria-label="Jump to workspace" hidden></nav>
 <div class="main-content" id="mainContent">
 <div class="desktop-shell">
 <aside class="desktop-sidebar" aria-label="Desktop workspace navigation">
@@ -60,17 +67,30 @@ __PG_LOGO_DARK__
     <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M8 4v16" fill="none" stroke="currentColor" stroke-width="1.8"/><path class="desktop-sidebar-chevron" d="m15 9-3 3 3 3" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
    </button>
   </div>
+  <!-- One workspace order for both layouts: the Tablet jump bar reads these groups. -->
+  <div class="desktop-nav-group" role="group" aria-labelledby="desktopNavGroupSignal">
+  <div class="desktop-nav-group-label" id="desktopNavGroupSignal">Signal</div>
   <button type="button" class="desktop-nav-btn" data-workspace-target="output" title="Output" onclick="pgSelectDesktopWorkspace('output')"><span class="desktop-nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="13" rx="2" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M8 21h8M12 17v4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg></span><span class="desktop-nav-label">Output</span></button>
   <button type="button" class="desktop-nav-btn" data-workspace-target="patterns" title="Patterns" onclick="pgSelectDesktopWorkspace('patterns')"><span class="desktop-nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.8"/><rect x="14" y="3" width="7" height="7" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.8"/><rect x="3" y="14" width="7" height="7" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.8"/><rect x="14" y="14" width="7" height="7" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.8"/></svg></span><span class="desktop-nav-label">Patterns</span></button>
+  </div>
+  <div class="desktop-nav-group" role="group" aria-labelledby="desktopNavGroupMeasure">
+  <div class="desktop-nav-group-label" id="desktopNavGroupMeasure">Measure</div>
   <button type="button" class="desktop-nav-btn" data-workspace-target="calibration" title="Calibration" onclick="pgSelectDesktopWorkspace('calibration')"><span class="desktop-nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="7" fill="none" stroke="currentColor" stroke-width="1.8"/><circle cx="12" cy="12" r="2.5" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M12 2v4M12 18v4M2 12h4M18 12h4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg></span><span class="desktop-nav-label">Calibration</span></button>
+  <button type="button" class="desktop-nav-btn" data-workspace-target="meter-profile" title="Meter Profiler" onclick="pgSelectDesktopWorkspace('meter-profile')"><span class="desktop-nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 3h8v4.5a4 4 0 0 1-8 0zM10 12v3.5a3.5 3.5 0 0 0 7 0V14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><circle cx="17" cy="11" r="2.5" fill="none" stroke="currentColor" stroke-width="1.8"/></svg></span><span class="desktop-nav-label">Meter Profiler</span></button>
+  <button type="button" class="desktop-nav-btn" data-workspace-target="session" title="Session" onclick="pgSelectDesktopWorkspace('session')"><span class="desktop-nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7.5h7l2 2h9v9.5a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2zM3 7.5V5a2 2 0 0 1 2-2h5l2 2h7a2 2 0 0 1 2 2v2.5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg></span><span class="desktop-nav-label">Session</span></button>
+  </div>
+  <div class="desktop-nav-group" role="group" aria-labelledby="desktopNavGroupDisplay">
+  <div class="desktop-nav-group-label" id="desktopNavGroupDisplay">Display</div>
   <button type="button" class="desktop-nav-btn" data-workspace-target="3d-lut" title="3D LUT" onclick="pgSelectDesktopWorkspace('3d-lut')"><span class="desktop-nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 2.8 8 4.5v9.4l-8 4.5-8-4.5V7.3zM4 7.3l8 4.6 8-4.6M12 11.9v9.3" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg></span><span class="desktop-nav-label">3D LUT</span></button>
   <button type="button" class="desktop-nav-btn" data-workspace-target="icc-profile" title="Display Profiler" onclick="pgSelectDesktopWorkspace('icc-profile')"><span class="desktop-nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 3h10l4 4v14H5zM15 3v5h4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><circle cx="9" cy="14" r="2" fill="none" stroke="currentColor" stroke-width="1.5"/><circle cx="13" cy="14" r="2" fill="none" stroke="currentColor" stroke-width="1.5"/><circle cx="11" cy="17" r="2" fill="none" stroke="currentColor" stroke-width="1.5"/></svg></span><span class="desktop-nav-label">Display Profiler</span></button>
-  <button type="button" class="desktop-nav-btn" data-workspace-target="meter-profile" title="Meter Profiler" onclick="pgSelectDesktopWorkspace('meter-profile')"><span class="desktop-nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 3h8v4.5a4 4 0 0 1-8 0zM10 12v3.5a3.5 3.5 0 0 0 7 0V14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><circle cx="17" cy="11" r="2.5" fill="none" stroke="currentColor" stroke-width="1.8"/></svg></span><span class="desktop-nav-label">Meter Profiler</span></button>
   <button type="button" class="desktop-nav-btn" data-workspace-target="display-control" title="LG Display" onclick="pgSelectDesktopWorkspace('display-control')"><span class="desktop-nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="2.8" y="4" width="18.4" height="13" rx="2" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M8 21h8M12 17v4M6.5 9v4h3M17.5 9.7a2.2 2.2 0 1 0 0 2.6V11h-1.7" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></span><span class="desktop-nav-label">LG Display</span></button>
+  </div>
+  <div class="desktop-nav-group" role="group" aria-labelledby="desktopNavGroupDevice">
+  <div class="desktop-nav-group-label" id="desktopNavGroupDevice">Device</div>
   <button type="button" class="desktop-nav-btn" data-workspace-target="connectivity" title="Connectivity" onclick="pgSelectDesktopWorkspace('connectivity')"><span class="desktop-nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="12" r="2.2" fill="none" stroke="currentColor" stroke-width="1.8"/><circle cx="19" cy="6" r="2.2" fill="none" stroke="currentColor" stroke-width="1.8"/><circle cx="19" cy="18" r="2.2" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="m7 11 9.8-4M7 13l9.8 4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg></span><span class="desktop-nav-label">Connectivity</span></button>
-  <button type="button" class="desktop-nav-btn" data-workspace-target="ui-settings" title="UI Settings" onclick="pgSelectDesktopWorkspace('ui-settings')"><span class="desktop-nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h7M15 6h5M4 12h3M11 12h9M4 18h9M17 18h3" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><circle cx="13" cy="6" r="2" fill="none" stroke="currentColor" stroke-width="1.8"/><circle cx="9" cy="12" r="2" fill="none" stroke="currentColor" stroke-width="1.8"/><circle cx="15" cy="18" r="2" fill="none" stroke="currentColor" stroke-width="1.8"/></svg></span><span class="desktop-nav-label">UI Settings</span></button>
-  <button type="button" class="desktop-nav-btn" data-workspace-target="session" title="Session" onclick="pgSelectDesktopWorkspace('session')"><span class="desktop-nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7.5h7l2 2h9v9.5a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2zM3 7.5V5a2 2 0 0 1 2-2h5l2 2h7a2 2 0 0 1 2 2v2.5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg></span><span class="desktop-nav-label">Session</span></button>
   <button type="button" class="desktop-nav-btn" data-workspace-target="system" title="System" onclick="pgSelectDesktopWorkspace('system')"><span class="desktop-nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M12 2.8v2.1M12 19.1v2.1M2.8 12h2.1M19.1 12h2.1M5.5 5.5 7 7M17 17l1.5 1.5M18.5 5.5 17 7M7 17l-1.5 1.5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><circle cx="12" cy="12" r="8" fill="none" stroke="currentColor" stroke-width="1.4" stroke-dasharray="2 3"/></svg></span><span class="desktop-nav-label">System</span></button>
+  <button type="button" class="desktop-nav-btn" data-workspace-target="ui-settings" title="UI Settings" onclick="pgSelectDesktopWorkspace('ui-settings')"><span class="desktop-nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h7M15 6h5M4 12h3M11 12h9M4 18h9M17 18h3" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><circle cx="13" cy="6" r="2" fill="none" stroke="currentColor" stroke-width="1.8"/><circle cx="9" cy="12" r="2" fill="none" stroke="currentColor" stroke-width="1.8"/><circle cx="15" cy="18" r="2" fill="none" stroke="currentColor" stroke-width="1.8"/></svg></span><span class="desktop-nav-label">UI Settings</span></button>
+  </div>
  </nav>
 </aside>
 <div class="desktop-content">
@@ -116,18 +136,18 @@ __PG_LOGO_DARK__
 
  <!-- Display Settings -->
  <div class="card" id="displaySettingsCard" data-desktop-workspace="output" data-desktop-order="10">
-  <h2>Display Settings <button class="btn btn-sm btn-secondary" style="float:right;font-size:.65rem;padding:2px 8px" onclick="resetDefaults()">Defaults</button></h2>
+  <h2>Display Settings <button type="button" class="btn btn-sm btn-secondary card-h2-action" onclick="resetDefaults()" title="Reset the display settings below to SDR defaults (applied only after Apply &amp; Restart)">Reset Defaults</button></h2>
   <div id="displayNoHdmiBanner" style="display:none;background:var(--surface-inset);border:1px solid var(--border);border-left:3px solid var(--orange);border-radius:6px;padding:10px 12px;margin-bottom:10px;font-size:.82rem;color:var(--text);line-height:1.45"><strong>No HDMI display connected.</strong> Settings can still be changed and saved; the renderer starts when a display is plugged in. The resolution list appears once the display is detected.</div>
   <div class="grid">
   <div class="field field-display">
-    <label>Resolution</label>
+    <label for="mode_idx">Resolution</label>
     <div class="mode-select-wrap">
      <select id="mode_idx"></select>
      <span id="mode_idx_text" class="mode-select-value"></span>
     </div>
    </div>
   <div class="field field-gamut">
-    <label>Signal Mode</label>
+    <label for="signal_mode">Signal Mode</label>
     <select id="signal_mode">
      <option value="sdr">SDR</option>
      <option value="hdr10">HDR10 (PQ)</option>
@@ -136,7 +156,7 @@ __PG_LOGO_DARK__
     </select>
    </div>
   <div class="field field-gamma">
-    <label>Bit Depth</label>
+    <label for="max_bpc">Bit Depth</label>
     <select id="max_bpc">
      <option value="8">8-bit</option>
      <option value="10">10-bit</option>
@@ -144,7 +164,7 @@ __PG_LOGO_DARK__
     </select>
    </div>
   <div class="field field-display">
-    <label>Color Format</label>
+    <label for="color_format">Color Format</label>
     <select id="color_format" onchange="uiEnforceQuantRangeForColorFormat()">
      <option value="0">RGB</option>
      <option value="1">YCbCr 4:4:4</option>
@@ -152,14 +172,14 @@ __PG_LOGO_DARK__
     </select>
    </div>
   <div class="field field-gamut">
-    <label>Colorimetry</label>
+    <label for="colorimetry">Colorimetry</label>
     <select id="colorimetry">
      <option value="2">BT.709</option>
      <option value="9">BT.2020</option>
     </select>
    </div>
   <div class="field field-gamma">
-    <label>Range</label>
+    <label for="rgb_quant_range">Range</label>
     <select id="rgb_quant_range">
      <option value="0">Default</option>
      <option value="1">Limited (16-235)</option>
@@ -174,7 +194,7 @@ __PG_LOGO_DARK__
   <h2>HDR Metadata</h2>
   <div class="grid">
    <div class="field">
-    <label>EOTF</label>
+    <label for="eotf">EOTF</label>
     <select id="eotf">
      <option value="0">SDR Gamma</option>
      <option value="1">HDR Gamma</option>
@@ -183,7 +203,7 @@ __PG_LOGO_DARK__
     </select>
    </div>
    <div class="field">
-    <label>Primaries</label>
+    <label for="primaries">Primaries</label>
     <select id="primaries">
      <option value="0">Custom / BT.709</option>
      <option value="1">BT.2020 / D65</option>
@@ -192,19 +212,19 @@ __PG_LOGO_DARK__
     </select>
    </div>
    <div class="field">
-    <label>Max Luma (nits)</label>
+    <label for="max_luma">Max Luma (nits)</label>
     <input type="number" id="max_luma" min="0" max="10000" step="1">
    </div>
    <div class="field">
-    <label>Min Luma (nits)</label>
+    <label for="min_luma">Min Luma (nits)</label>
     <input type="number" id="min_luma" min="0" max="100" step="0.0001">
    </div>
    <div class="field">
-    <label>MaxCLL</label>
+    <label for="max_cll">MaxCLL</label>
     <input type="number" id="max_cll" min="0" max="10000" step="1">
    </div>
    <div class="field">
-    <label>MaxFALL</label>
+    <label for="max_fall">MaxFALL</label>
     <input type="number" id="max_fall" min="0" max="10000" step="1">
    </div>
   </div>
@@ -216,14 +236,14 @@ __PG_LOGO_DARK__
 	  <div class="grid">
 	   <input type="hidden" id="dv_interface" value="0">
 	   <div class="field">
-	    <label>Transport</label>
+	    <label for="dv_transport">Transport</label>
 	    <select id="dv_transport">
 	     <option value="standard">Standard</option>
 	     <option value="lldv">Low Latency (LLDV)</option>
 	    </select>
 	   </div>
 	   <div class="field">
-	    <label>Map Mode</label>
+	    <label for="dv_map_mode">Map Mode</label>
     <select id="dv_map_mode">
      <option value="2">Relative (Calibration)</option>
      <option value="1">Absolute (Mastering)</option>
@@ -231,19 +251,19 @@ __PG_LOGO_DARK__
     </select>
    </div>
      <div class="field">
-      <label>Max Luma (nits)</label>
+      <label for="dv_max_luma">Max Luma (nits)</label>
       <input type="number" id="dv_max_luma" min="0" max="10000" step="1">
      </div>
      <div class="field">
-      <label>Min Luma (nits)</label>
+      <label for="dv_min_luma">Min Luma (nits)</label>
       <input type="number" id="dv_min_luma" min="0" max="100" step="0.0001">
      </div>
      <div class="field">
-      <label>MaxCLL</label>
+      <label for="dv_max_cll">MaxCLL</label>
       <input type="number" id="dv_max_cll" min="0" max="10000" step="1">
      </div>
      <div class="field">
-      <label>MaxFALL</label>
+      <label for="dv_max_fall">MaxFALL</label>
       <input type="number" id="dv_max_fall" min="0" max="10000" step="1">
      </div>
   </div>
@@ -278,7 +298,7 @@ __PG_LOGO_DARK__
       </div>
       <div class="diag-custom-asset" style="margin-top:10px">
        <div class="diag-custom-picker">
-        <select id="diagCustomVideoSelect" class="inline-select" style="width:100%" onchange="diagHandleAssetSelect('video')">
+        <select id="diagCustomVideoSelect" aria-label="Custom diagnostic video" class="inline-select" style="width:100%" onchange="diagHandleAssetSelect('video')">
          <option value="">Custom Diagnostic Video...</option>
          <option value="__upload__">Upload video...</option>
         </select>
@@ -300,7 +320,7 @@ __PG_LOGO_DARK__
       </div>
       <div class="diag-custom-asset" style="margin-top:10px">
        <div class="diag-custom-picker">
-        <select id="diagCustomImageSelect" class="inline-select" style="width:100%" onchange="diagHandleAssetSelect('image')">
+        <select id="diagCustomImageSelect" aria-label="Custom diagnostic image" class="inline-select" style="width:100%" onchange="diagHandleAssetSelect('image')">
          <option value="">Custom Diagnostic Image...</option>
          <option value="__upload__">Upload image...</option>
         </select>
@@ -312,7 +332,7 @@ __PG_LOGO_DARK__
       </div>
       <div class="diag-custom-asset" style="margin-top:10px">
        <div class="diag-custom-picker">
-        <select id="diagG1Select" class="inline-select" style="width:100%" onchange="diagPlayG1Pattern()">
+        <select id="diagG1Select" aria-label="Portrait Displays G1 pattern" class="inline-select" style="width:100%" onchange="diagPlayG1Pattern()">
          <option value="">Portrait Displays G1 Pattern...</option>
          <option value="basic_alignment">Basic Alignment</option>
          <option value="alignment">Alignment</option>
@@ -357,8 +377,8 @@ __PG_LOGO_DARK__
   <h2 id="meterCardTitle"><span class="meter-card-header-title"><span class="drag-handle">&#9776;</span><span id="meterCardTitleText">Calibration</span></span><button type="button" id="meterConfigToggle" class="meter-config-toggle" data-no-collapse aria-expanded="true" aria-controls="meterSettingsGrid" title="Collapse meter and target settings" onclick="meterToggleConfiguration(event)">&#9662;</button></h2>
   <div class="meter-card-header-row">
    <div class="meter-card-header-col meter-card-header-col-meter">
-    <label class="meter-header-label">Meter</label>
-    <div class="meter-card-header-meter"><select id="meterMeasurementPort" class="meter-card-header-select" title="Used for Read Once, Continuous, and series measurements."><option value="">Meter</option></select><span class="meter-xyz-gear-wrap meter-profile-gear-wrap"><button type="button" id="meterProfileGear" class="meter-xyz-gear" aria-label="Meter settings" aria-expanded="false" title="Meter settings">&#9881;</button><div class="meter-xyz-gear-popover" id="meterProfileGearPopover" role="dialog" aria-label="Meter settings"><div class="meter-profile-title">Meter Settings</div><div id="meterProfileRelocSlot"></div><div class="meter-profile-section" id="meterProfileLowLight"><div class="meter-profile-section-title">Low Light Handler <span class="meter-help-tip" title="Below the Trigger, take 2, 3, or 5 physical meter samples on the same patch and average them in linear XYZ. The meter process stays open between samples." aria-label="Low light handler help">?</span></div><label class="meter-toggle"><input type="checkbox" id="meterLowLightEnabled" onchange="meterSetLowLightHandler()"> Enabled</label><div class="field"><label>Mode</label><select id="meterLowLightMode" onchange="meterSetLowLightHandler()"><option value="off" title="One physical meter sample">Off (single read)</option><option value="a" title="Average 2 physical XYZ samples">2 reads (a)</option><option value="aa" title="Average 3 physical XYZ samples">3 reads (aa)</option><option value="aaa" title="Average 5 physical XYZ samples">5 reads (aaa)</option></select></div><div class="field"><label>Trigger</label><div class="meter-inline-value"><input type="number" id="meterLowLightTrigger" onchange="meterSetLowLightHandler()" min="0.1" max="1000" step="0.1" value="5.0" title="Expected target luminance below which repeated sampling is used. Default 5.0."><span class="meter-inline-unit">cd/m&sup2;</span></div></div></div></div></span><span class="meter-help-tip" title="Used for Read Once, Continuous, and series measurements." aria-label="Measurement meter help">?</span></div>
+    <label class="meter-header-label">Meter <span class="meter-help-tip" title="Used for Read Once, Continuous, and series measurements." aria-label="Measurement meter help">?</span></label>
+    <div class="meter-card-header-meter"><select id="meterMeasurementPort" class="meter-card-header-select" title="Used for Read Once, Continuous, and series measurements."><option value="">Meter</option></select><span class="meter-xyz-gear-wrap meter-profile-gear-wrap"><button type="button" id="meterProfileGear" class="meter-xyz-gear" aria-label="Meter settings" aria-expanded="false" title="Meter settings">&#9881;</button><div class="meter-xyz-gear-popover" id="meterProfileGearPopover" role="dialog" aria-label="Meter settings"><div class="meter-profile-title">Meter Settings</div><div id="meterProfileRelocSlot"></div><div class="meter-profile-section" id="meterProfileLowLight"><div class="meter-profile-section-title">Low Light Handler <span class="meter-help-tip" title="Below the Trigger, take 2, 3, or 5 physical meter samples on the same patch and average them in linear XYZ. The meter process stays open between samples." aria-label="Low light handler help">?</span></div><label class="meter-toggle"><input type="checkbox" id="meterLowLightEnabled" onchange="meterSetLowLightHandler()"> Enabled</label><div class="field"><label for="meterLowLightMode">Mode</label><select id="meterLowLightMode" onchange="meterSetLowLightHandler()"><option value="off" title="One physical meter sample">Off (single read)</option><option value="a" title="Average 2 physical XYZ samples">2 reads (a)</option><option value="aa" title="Average 3 physical XYZ samples">3 reads (aa)</option><option value="aaa" title="Average 5 physical XYZ samples">5 reads (aaa)</option></select></div><div class="field"><label>Trigger</label><div class="meter-inline-value"><input type="number" id="meterLowLightTrigger" onchange="meterSetLowLightHandler()" min="0.1" max="1000" step="0.1" value="5.0" title="Expected target luminance below which repeated sampling is used. Default 5.0."><span class="meter-inline-unit">cd/m&sup2;</span></div></div></div></div></span></div>
    </div>
    <div class="meter-card-header-col meter-card-header-col-display">
     <label class="meter-header-label">Display Type <span class="meter-help-tip" title="Panel technology used for calibration paths (OLED window size, WRGB compensation and pattern insertion defaults). Correction selection is controlled separately by Meter Profile." aria-label="Display type help">?</span></label>
@@ -376,7 +396,7 @@ __PG_LOGO_DARK__
    <div class="meter-card-header-col meter-card-header-col-generator" id="meterPatternProviderCol">
     <label class="meter-header-label">Patch Generator <span class="meter-help-tip" title="PGenerator+ output sends calibration patches through the Pi HDMI output. PGenerator+ Patch Companion sends full-window patches through the target computer so measurements include its operating-system color pipeline and installed ICC profile. Run the paired companion on that computer before reading. PGenerator+ Windows SDR MHC2 profiles default to sRGB but can use another selected target transfer. Choose the matching Target Gamma when validating one." aria-label="Patch generator help">?</span></label>
     <div class="meter-generator-control-row">
-     <select id="meterPatternProvider" class="meter-card-header-select" onchange="meterCalibrationPatternProviderChanged()">
+     <select id="meterPatternProvider" aria-label="Patch generator" class="meter-card-header-select" onchange="meterCalibrationPatternProviderChanged()">
       <option value="local">PGenerator+ output</option>
       <option value="companion" disabled title="Run PGenerator+ Patch Companion on the target computer to enable this option">PGenerator+ Patch Companion</option>
      </select>
@@ -411,13 +431,13 @@ __PG_LOGO_DARK__
     <div id="meterCalibrationPairRequests"></div>
    </div>
   </div>
-  <div id="meterResetRow" style="display:none;background:#3a2020;border-radius:6px;padding:8px 12px;margin-bottom:10px;align-items:center;gap:10px">
-   <span style="color:var(--orange);font-size:.85rem">&#9888; Meter disconnected &mdash; USB may need a reset</span>
-   <button class="btn btn-sm" style="margin-left:auto" onclick="meterResetUSB()">&#128260; Reset USB</button>
+  <div id="meterResetRow" class="meter-reset-row" style="display:none">
+   <span class="meter-reset-row-text">&#9888; Meter disconnected. Reset USB to reconnect it; if that doesn&rsquo;t help, unplug the meter and plug it back in.</span>
+   <button class="btn btn-sm btn-secondary btn-push-end" onclick="meterResetUSB()">Reset USB</button>
   </div>
   <div id="meterNoMeterBanner" style="display:none;background:var(--surface-inset);border:1px solid var(--border);border-left:3px solid var(--orange);border-radius:6px;padding:10px 12px;margin-bottom:10px;align-items:center;gap:12px;flex-wrap:wrap">
    <span id="meterNoMeterBannerText" style="font-size:.82rem;color:var(--text);line-height:1.45;flex:1 1 320px"></span>
-   <button class="btn btn-sm btn-secondary" id="meterSimToggleBtn" style="white-space:nowrap" onclick="meterToggleSimulatedMeter()">Use Simulated Meter</button>
+   <button class="btn btn-sm btn-secondary" id="meterSimToggleBtn" onclick="meterToggleSimulatedMeter()">Use Simulated Meter</button>
   </div>
   <div class="grid" id="meterSettingsGrid" style="margin-bottom:10px">
   <div class="field field-display">
@@ -462,8 +482,8 @@ __PG_LOGO_DARK__
            <div class="field-whitepoint" id="meterTargetWhitePointField">
             <label class="meter-field-label">Target White x / y <span class="meter-help-tip" title="Custom values update the CIE target, greyscale target white, and color analysis for D65 target colorspaces." aria-label="Target white point help">?</span></label>
             <div class="meter-whitepoint-row">
-             <input type="number" id="meterTargetWhiteX" min="0.001" max="0.999" step="0.0001" placeholder="0.3127">
-             <input type="number" id="meterTargetWhiteY" min="0.001" max="0.999" step="0.0001" placeholder="0.3290">
+             <input type="number" id="meterTargetWhiteX" aria-label="Target white x" min="0.001" max="0.999" step="0.0001" placeholder="0.3127">
+             <input type="number" id="meterTargetWhiteY" aria-label="Target white y" min="0.001" max="0.999" step="0.0001" placeholder="0.3290">
              <button class="btn btn-sm btn-secondary" type="button" onclick="meterUseMeasuredWhiteTarget()">Use measured values</button>
             </div>
            </div>
@@ -529,7 +549,7 @@ __PG_LOGO_DARK__
     </div>
    <div class="field field-gamut">
     <label>Target Colorspace <span class="meter-help-tip" title="Affects meter target math and chart references. Dolby Vision patterns still use BT.2020 container signalling; this setting changes the analysis target, not the DV transport primaries." aria-label="Target colorspace help">?</span></label>
-    <select id="meterTargetGamut">
+    <select id="meterTargetGamut" aria-label="Target colorspace">
      <option value="auto">Auto (match signal)</option>
      <option value="bt709" selected>BT.709</option>
      <option value="bt2020">BT.2020</option>
@@ -539,7 +559,7 @@ __PG_LOGO_DARK__
   </div>
   <div class="field field-gamma">
     <label>Target Gamma <span class="meter-help-tip" title="Selects the reference transfer curve used for greyscale luminance targets, error calculations and SDR linear-reference colour encoding. This changes the target curve, not the generator signal mode." aria-label="Target gamma help">?</span></label>
-    <select id="meterTargetGamma" onchange="meterOnGreyRefChange('target-gamma')">
+    <select id="meterTargetGamma" aria-label="Target gamma" onchange="meterOnGreyRefChange('target-gamma')">
      <option value="bt1886">BT.1886 (2.4)</option>
      <option value="2.2">Gamma 2.2</option>
      <option value="2.4">Gamma 2.4</option>
@@ -549,7 +569,7 @@ __PG_LOGO_DARK__
     </div>
    <div class="field field-chromaticity">
     <label>Observer <span class="meter-help-tip" title="Selects the observer ArgyllCMS uses for new measurements and the coordinate view used by the chart. Existing readings made with another observer are not converted.&#10;&#10;CIE 1931 xy (2&deg;): Standard display-calibration view. Works with any supported meter and may use a CCMX.&#10;CIE 1976 u&#8242;v&#8242; (2&deg;): A more uniform coordinate view of the same CIE 1931 measurements. It has the same meter requirements.&#10;CIE 1964 xy (10&deg;): Intended for a larger visual field. Requires a selected spectrophotometer.&#10;CIE 1976 u&#8242;v&#8242; (10&deg;): A more uniform coordinate view of CIE 1964 measurements. It requires a selected spectrophotometer.&#10;CIE 170-2 xF yF (2&deg; and 10&deg;): Modern physiologically based observers for observer-metamerism analysis. Requires a selected spectrophotometer.&#10;MacLeod-Boynton (2&deg; and 10&deg;): Cone-response views derived from CIE 170-2 measurements. They require a selected spectrophotometer.&#10;Cone-Opponent Polar (2&deg;): Polar cone-response view dedicated to the MacLeod-Boynton Hue Circle series. It requires a selected spectrophotometer.&#10;&#10;A colorimeter and CCMX contain only tristimulus or 3x3 matrix data and cannot supply the spectra needed for these alternate observers. ArgyllCMS can derive alternate observers from certain CCSS-capable colorimeters, but PGenerator enables them only with a spectrophotometer selected to prevent unsupported meter modes. Gamut specifications and target-only presets use a stable reference projection when source spectra are unavailable." aria-label="Observer help">?</span></label>
-    <select id="meterChromaticityChart" onchange="meterOnChromaticityChartChange()">
+    <select id="meterChromaticityChart" aria-label="Observer" onchange="meterOnChromaticityChartChange()">
      <option value="cie1931_2" selected>CIE 1931 xy (2&deg;)</option>
      <option value="cie1964_10">CIE 1964 xy (10&deg;)</option>
      <option value="cie1976_2">CIE 1976 u&#8242;v&#8242; (2&deg;)</option>
@@ -570,7 +590,7 @@ __PG_LOGO_DARK__
 	   </div>
   <div class="field field-patch">
     <label>Patch Size <span class="meter-help-tip" title="Controls the measurement pattern area. Window options set the patch percentage; APL options add a background to maintain the stated average picture level." aria-label="Patch size help">?</span></label>
-    <select id="meterPatchSize">
+    <select id="meterPatchSize" aria-label="Patch size">
      <option value="2">2% Window</option>
      <option value="5">5% Window</option>
      <option value="10" selected>10% Window</option>
@@ -610,7 +630,7 @@ __PG_LOGO_DARK__
 	    </div>
 	   </div>
   <div class="field field-refresh">
-    <label>Refresh Rate</label>
+    <label for="meterRefreshRate">Refresh Rate</label>
     <select id="meterRefreshRate">
      <option value="auto">Auto (meter detects)</option>
      <option value="" selected>Match Display Setting</option>
@@ -633,7 +653,7 @@ __PG_LOGO_DARK__
   <div id="meterSeriesHeader" style="font-size:.65rem;color:var(--text2);text-transform:uppercase;margin-bottom:4px;padding-top:8px;border-top:1px solid var(--border)">Series Measurements</div>
   <div class="meter-series-control-layout">
    <div class="meter-series-selector-panel">
-    <div class="btn-row" id="meterSeriesTabRow" style="margin:0">
+    <div class="btn-row btn-seg" id="meterSeriesTabRow" style="margin:0">
      <button class="btn btn-sm btn-primary" data-series-tab="greyscale" onclick="meterSetSeriesTab('greyscale')">Greyscale</button>
      <button class="btn btn-sm btn-secondary" data-series-tab="color" onclick="meterSetSeriesTab('color')">Color</button>
      <button class="btn btn-sm btn-secondary" data-series-tab="3dlut" onclick="meterSetSeriesTab('3dlut')">3D LUT</button>
@@ -644,7 +664,7 @@ __PG_LOGO_DARK__
      <div id="meterSeriesGroupGreyscale" style="display:flex;gap:4px;flex-wrap:wrap">
       <label style="display:inline-flex;align-items:center;gap:5px;font-size:.7rem;color:var(--text2)">
        <span>Series</span>
-       <select id="meterGreyscaleSeriesSelect" class="inline-select" onchange="meterSelectGreyscaleSeries(this.value)" style="max-width:240px">
+       <select id="meterGreyscaleSeriesSelect" class="inline-select" onchange="meterSelectGreyscaleSeries(this.value)">
         <option value="custom" data-custom-active="1" disabled hidden>Custom Series</option>
         <option value="custom-manager">Custom Series&hellip;</option>
         <option value="2">Greyscale 2pt</option>
@@ -661,7 +681,7 @@ __PG_LOGO_DARK__
      <div id="meterSeriesGroupColor" style="display:none;gap:4px;flex-wrap:wrap">
      <label style="display:inline-flex;align-items:center;gap:5px;font-size:.7rem;color:var(--text2)">
       <span>Series</span>
-      <select id="meterColorCheckerSeriesSelect" class="inline-select" onchange="meterSelectBuiltinSeries(this.value)" style="max-width:240px">
+      <select id="meterColorCheckerSeriesSelect" class="inline-select" onchange="meterSelectBuiltinSeries(this.value)">
        <option value="custom" data-custom-active="1" disabled hidden>Custom Series</option>
        <option value="custom-manager">Custom Series&hellip;</option>
        <optgroup label="ColorChecker">
@@ -697,7 +717,7 @@ __PG_LOGO_DARK__
       <button class="btn btn-sm btn-secondary" id="meterCustomSeriesBtn3dLut" onclick="meterOpenCustomSeriesManager('3dlut')" title="Load, create, edit, import and export custom lattice series">Custom Series</button>
       <button class="btn btn-sm btn-primary" id="meter3dLutWorkspaceBuildBtn" onclick="meterDesktop3dLutBuildFlow()">Build 3D LUT</button>
       <span id="meterCustomSeriesLoaded3dLut" style="display:none;align-self:center;font-size:.72rem;color:var(--text2);padding:0 4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:180px"></span>
-      <button class="btn btn-sm btn-secondary" id="meterLutToolsBtn" onclick="meterOpenLutTools()" style="margin-left:auto" title="View, import and download 3D LUTs">LUT Tools</button>
+      <button class="btn btn-sm btn-secondary btn-push-end" id="meterLutToolsBtn" onclick="meterOpenLutTools()" title="View, import and download 3D LUTs">LUT Tools</button>
      </div>
      <div id="meterSeriesGroupAutoCal" style="display:none;gap:4px;flex-wrap:wrap">
       <button class="btn btn-sm btn-secondary" id="meterFullAutoCalBtn" onclick="meterStartFullAutoCal()" style="display:none">&#9654; Full Auto Cal</button>
@@ -844,7 +864,7 @@ __PG_LOGO_DARK__
      <div class="btn-row" style="margin:0">
       <button class="btn btn-sm btn-secondary" onclick="meterResetGreyProfileEditor()">Reset Defaults</button>
      </div>
-     <div class="btn-row" style="margin:0">
+     <div class="btn-row btn-row-end" style="margin:0">
       <button class="btn btn-sm btn-secondary" onclick="meterCloseGreyProfileEditor()">Cancel</button>
       <button class="btn btn-sm btn-primary" onclick="meterSaveGreyProfileEditor()">Save</button>
      </div>
@@ -889,7 +909,7 @@ __PG_LOGO_DARK__
       <button class="btn btn-sm btn-secondary" onclick="meterExportCustomSeries('calman')" title="Export the patch list as 8-bit RGB triplets (CalMAN import)">Export CalMAN CSV</button>
       <button class="btn btn-sm btn-secondary" onclick="meterExportCustomSeries('colourspace')" title="Export the patch list as a ColourSpace CSV (10-bit, # Bitdepth/# Range header)">Export ColourSpace CSV</button>
      </div>
-     <div class="btn-row" style="margin:0">
+     <div class="btn-row btn-row-end" style="margin:0">
       <button class="btn btn-sm btn-secondary" onclick="meterCloseCustomSeriesEditor()">Cancel</button>
       <button class="btn btn-sm btn-primary" onclick="meterSaveCustomSeriesEditor()">Save</button>
      </div>
@@ -904,10 +924,10 @@ __PG_LOGO_DARK__
      <button class="btn btn-sm btn-secondary" onclick="meterCloseCustomSeriesManager()">Close</button>
     </div>
     <div id="meterCustomSeriesManagerStatus" style="display:none;margin:0 0 10px;padding:8px 10px;border:1px solid var(--status-error);border-radius:6px;background:rgba(198,40,40,.12);color:var(--text-primary);font-size:.76rem;line-height:1.4"></div>
-    <div class="btn-row" style="margin:0 0 12px 0">
-     <button class="btn btn-sm btn-primary" id="meterCustomSeriesNewGrey" onclick="meterManagerNewSeries('greyscale')">New Greyscale</button>
-     <button class="btn btn-sm btn-primary" id="meterCustomSeriesNewColor" onclick="meterManagerNewSeries('color')">New Color</button>
-     <button class="btn btn-sm btn-primary" id="meterCustomSeriesNew3dLut" onclick="meterOpenLatticeGenerator()">New 3D LUT Lattice&hellip;</button>
+    <div class="btn-grid" style="margin:0 0 12px 0">
+     <button class="btn btn-sm btn-secondary" id="meterCustomSeriesNewGrey" onclick="meterManagerNewSeries('greyscale')">New Greyscale</button>
+     <button class="btn btn-sm btn-secondary" id="meterCustomSeriesNewColor" onclick="meterManagerNewSeries('color')">New Color</button>
+     <button class="btn btn-sm btn-secondary" id="meterCustomSeriesNew3dLut" onclick="meterOpenLatticeGenerator()">New 3D LUT Lattice&hellip;</button>
      <button class="btn btn-sm btn-secondary" id="meterCustomSeriesImport" onclick="meterOpenImportWizard()" title="Import patch series from a CalMAN CSV, ColourSpace CSV, or CalMAN CCFX (multiple series)">Import&hellip;</button>
     </div>
     <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin:0 0 8px 0">
@@ -1025,9 +1045,9 @@ __PG_LOGO_DARK__
    <div style="width:min(520px,100%);background:#111723;border:1px solid #2a3140;border-radius:10px;padding:16px;box-sizing:border-box">
     <div style="font-size:.95rem;font-weight:700;color:#eee;margin-bottom:8px">3D LUT solved</div>
     <div id="lutSolveDoneSummary" style="font-size:.8rem;color:var(--text2);margin-bottom:12px;line-height:1.5"></div>
-    <div class="btn-row" style="margin:0;flex-wrap:wrap;gap:6px">
+    <div class="btn-row" style="margin:0">
      <button class="btn btn-sm btn-primary" id="lutSolveDoneDownloadCubeBtn" onclick="meterLutSolveDownload('cube')" title="Standard .cube (Resolve, madVR, LUT boxes)">Download .cube</button>
-     <button class="btn btn-sm btn-primary" id="lutSolveDoneDownload3dlBtn" onclick="meterLutSolveDownload('3dl')" title="Autodesk/Kodak .3dl (Lustre, Flame)">Download .3dl</button>
+     <button class="btn btn-sm btn-secondary" id="lutSolveDoneDownload3dlBtn" onclick="meterLutSolveDownload('3dl')" title="Autodesk/Kodak .3dl (Lustre, Flame)">Download .3dl</button>
      <button class="btn btn-sm btn-secondary" onclick="meterLutSolveView3d()" title="Inspect the solved LUT as a 3D cube in LUT Tools">View in 3D</button>
      <button class="btn btn-sm btn-secondary" onclick="meterLutSolveDoneClose()">Close</button>
     </div>
@@ -1068,7 +1088,7 @@ __PG_LOGO_DARK__
       <span><strong>33&sup3;</strong> (35,937 nodes) — denser export cube; ~7&times; more nodes so solve takes longer. TV upload stays 33&sup3; either way.</span>
      </label>
     </div>
-    <div style="display:flex;justify-content:flex-end;gap:8px;flex-wrap:wrap">
+    <div class="btn-row btn-row-end">
      <button type="button" class="btn btn-sm btn-secondary" onclick="meterCloseLg3dAutoCalModal()">Cancel</button>
      <button type="button" class="btn btn-sm btn-primary" id="meterLg3dModalStartBtn" onclick="meterConfirmLg3dAutoCalModal()">&#9654; Start 3D LUT AutoCal</button>
     </div>
@@ -1093,7 +1113,7 @@ __PG_LOGO_DARK__
     </div>
     <div id="meterLg3dSelSeriesExplain" style="font-size:.8rem;color:var(--text);line-height:1.5;background:var(--surface-inset);border:1px solid #2a3140;border-radius:8px;padding:12px;margin-bottom:10px;min-height:7.5em"></div>
     <div id="meterLg3dSelSeriesCount" style="font-size:.75rem;color:var(--text2);margin-bottom:14px">&nbsp;</div>
-    <div style="display:flex;justify-content:flex-end;gap:8px;flex-wrap:wrap">
+    <div class="btn-row btn-row-end">
      <button type="button" class="btn btn-sm btn-secondary" onclick="meterCloseLg3dSelectSeriesModal()">Cancel</button>
      <button type="button" class="btn btn-sm btn-primary" id="meterLg3dSelSeriesLoadBtn" onclick="meterConfirmLg3dSelectSeries()">Load series</button>
     </div>
@@ -1120,16 +1140,16 @@ __PG_LOGO_DARK__
       <span>Skip below luminance %</span>
       <input type="number" id="meterLatticeThreshold" min="0" max="50" step="0.5" value="0" oninput="meterLatticeGenSyncReadout()" style="width:110px;background:var(--surface-inset);border:1px solid #2a3140;border-radius:4px;color:#eee;padding:6px;box-sizing:border-box">
      </label>
-     <label style="font-size:.72rem;color:var(--text2);display:flex;flex-direction:column;gap:4px">
+     <label class="sel-stack">
       <span>Measurement order</span>
-      <select id="meterLatticeOrder" onchange="meterLatticeGenSyncReadout()" style="width:150px;background:var(--surface-inset);border:1px solid #2a3140;border-radius:4px;color:#eee;padding:6px;box-sizing:border-box">
+      <select id="meterLatticeOrder" onchange="meterLatticeGenSyncReadout()" style="background:var(--surface-inset);border:1px solid #2a3140;border-radius:4px;color:#eee;padding:6px;box-sizing:border-box">
        <option value="spread" selected>Spread (thermal-safe)</option>
        <option value="grid">Grid order</option>
       </select>
      </label>
-     <label style="font-size:.72rem;color:var(--text2);display:flex;flex-direction:column;gap:4px">
+     <label class="sel-stack">
       <span>Node spacing <span class="meter-help-tip" title="Signal-uniform: classic equal code steps. Light-uniform: node values spaced evenly in decoded LIGHT up to the mastering peak (corners still hit 100% signal). In HDR/PQ, signal-uniform mixes decode to near-primary light ratios and crowd the gamut edge — light-uniform fills the chroma interior with the same patch count." aria-label="Node spacing help">?</span></span>
-      <select id="meterLatticeSpacing" onchange="meterLatticeGenSyncReadout()" style="width:190px;background:var(--surface-inset);border:1px solid #2a3140;border-radius:4px;color:#eee;padding:6px;box-sizing:border-box">
+      <select id="meterLatticeSpacing" onchange="meterLatticeGenSyncReadout()" style="background:var(--surface-inset);border:1px solid #2a3140;border-radius:4px;color:#eee;padding:6px;box-sizing:border-box">
        <option value="signal" selected>Signal-uniform</option>
        <option value="light">Light-uniform</option>
       </select>
@@ -1140,7 +1160,7 @@ __PG_LOGO_DARK__
      </label>
     </div>
     <div id="meterLatticeCountReadout" style="font-size:.8rem;color:var(--text);margin-bottom:12px">&nbsp;</div>
-    <div style="display:flex;justify-content:flex-end;gap:8px">
+    <div class="btn-row btn-row-end">
      <button class="btn btn-sm btn-secondary" onclick="meterCloseLatticeGenerator()">Cancel</button>
      <button class="btn btn-sm btn-primary" onclick="meterSaveLatticeGenerator()">Save</button>
     </div>
@@ -1220,10 +1240,10 @@ __PG_LOGO_DARK__
     <input type="text" id="meterCcssCreateName" placeholder="Ex. LG G4 WRGB OLED" oninput="meterCcssCreateUpdateStartState(true)" style="width:100%;font-size:.8rem;padding:7px 8px;background:#12121e;border:1px solid #444;border-radius:4px;color:var(--text);box-sizing:border-box">
     </div>
     <div id="meterCcssCreateProgress" style="font-size:.74rem;color:var(--text2);margin-bottom:12px;min-height:2.4em;line-height:1.45">Select a profile type and the required meter or meters, then start.</div>
-    <div style="display:flex;justify-content:flex-end;gap:8px;flex-wrap:wrap">
+    <div class="btn-row btn-row-end">
       <button class="btn btn-sm btn-secondary" id="meterCcssCreateCloseBtn" onclick="meterCloseCcssCreateModal(true)">Close</button>
       <button class="btn btn-sm btn-danger" id="meterCcssCreateStopBtn" onclick="meterStopCcssCreate()" style="display:none">Stop</button>
-      <button class="btn btn-sm btn-success" id="meterCcssCreateContinueBtn" onclick="meterCcssCreateSetupAck()" style="display:none">Continue</button>
+      <button class="btn btn-sm btn-primary" id="meterCcssCreateContinueBtn" onclick="meterCcssCreateSetupAck()" style="display:none">Continue</button>
       <span id="meterCcssCreateStartBtnHint" class="meter-disabled-action-hint" style="display:inline-flex" title="Checking for a ready reference meter." data-tooltip="Checking for a ready reference meter."><button class="btn btn-sm btn-primary" id="meterCcssCreateStartBtn" onclick="meterStartCcssCreate()" disabled>Start Creation</button></span>
     </div>
    </div>
@@ -1236,18 +1256,18 @@ __PG_LOGO_DARK__
       <div class="meter-profile-dialog-title" style="font-size:1rem;font-weight:700;color:#eee">Meter Profiler</div>
        <div style="font-size:.72rem;color:var(--text2);margin-top:4px;max-width:58ch">Import CCSS spectral corrections or meter-specific CCMX matrices. TI3, EDR, and spectral CSV imports are converted to CCSS.</div>
      </div>
-      <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <div class="btn-row">
        <button class="btn btn-sm btn-secondary" onclick="meterOpenCcssCreateModal()">Create Profile</button>
        <button class="btn btn-sm btn-secondary ccss-editor-close-btn" onclick="meterCloseCustomCcssEditor()">Close</button>
       </div>
     </div>
-    <div class="ccss-editor-layout" style="display:grid;grid-template-columns:minmax(260px,320px) minmax(0,1fr);gap:16px;align-items:start">
+    <div class="ccss-editor-layout">
      <div class="ccss-editor-panel" style="background:#161d2a;border:1px solid #2a3140;border-radius:10px;padding:12px">
        <label style="font-size:.74rem;color:var(--text2);display:block;margin-bottom:6px">Import CCSS, CCMX, EDR, TI3, or spectral CSV</label>
        <input type="file" id="ccssFileInput" accept=".ccss,.ccmx,.edr,.csv,.ti3" style="font-size:.74rem;width:100%;margin-bottom:8px">
       <div style="display:flex;gap:6px;align-items:center">
        <input type="text" id="ccssName" placeholder="Profile name" style="flex:1;font-size:.8rem;padding:5px 7px;background:#12121e;border:1px solid #444;border-radius:4px;color:var(--text)">
-       <button id="ccssUploadBtn" class="btn btn-sm btn-secondary" style="white-space:nowrap;font-size:.74rem;padding:5px 10px" disabled>Upload</button>
+       <button id="ccssUploadBtn" class="btn btn-sm btn-secondary" disabled>Upload</button>
       </div>
       <div id="ccssUploadStatus" style="font-size:.72rem;color:var(--text2);margin-top:6px;min-height:1.1em"></div>
       <div style="margin-top:12px;padding-top:10px;border-top:1px solid #2b2f42">
@@ -1270,8 +1290,8 @@ __PG_LOGO_DARK__
           <option value="csv">Export CSV</option>
           <option value="edr">Export EDR</option>
          </select>
-         <button id="ccssExportBtn" class="btn btn-sm btn-secondary" style="white-space:nowrap" onclick="ccssExportSelected()" disabled>Export</button>
-         <button id="ccssDeleteSelectedBtn" class="btn btn-sm" style="white-space:nowrap;color:var(--red)" onclick="deleteSelectedCustomCcss()" disabled>Delete Profile</button>
+         <button id="ccssExportBtn" class="btn btn-sm btn-secondary" onclick="ccssExportSelected()" disabled>Export</button>
+         <button id="ccssDeleteSelectedBtn" class="btn btn-sm btn-danger-quiet" onclick="deleteSelectedCustomCcss()" disabled>Delete Profile</button>
          <div id="ccssExportStatus" style="flex:1 1 220px;font-size:.72rem;color:var(--text2);min-height:1.1em">Select a meter profile to download. Custom profiles can also be deleted here.</div>
         </div>
       <div id="ccssPreviewMeta" style="font-size:.72rem;color:var(--text2);margin-top:8px;line-height:1.5;min-height:1.2em">Select a CCSS to inspect its spectral curves or a CCMX to inspect its matrix.</div>
@@ -1341,9 +1361,9 @@ __PG_LOGO_DARK__
 	      </div>
 	     </div>
 	    </div>
-	    <div id="meterDeltaEBlock" style="margin-bottom:10px">
-	     <div style="display:flex;align-items:center;gap:10px;margin-bottom:4px;flex-wrap:wrap">
-      <label style="font-size:.7rem;color:var(--text2);user-select:none;display:flex;align-items:center;gap:4px" title="HCFR grayscale reference mode: Relative Y normalizes each patch to its own luminance; Absolute Y w/gamma includes target gamma/EOTF luminance error; Absolute Y w/o gamma keeps the measured relative luminance while cancelling gamma error.">
+	    <div id="meterDeltaEBlock" class="sel-cq" style="margin-bottom:10px">
+	     <div class="sel-rows sel-rows-2" style="margin-bottom:6px">
+      <label title="HCFR grayscale reference mode: Relative Y normalizes each patch to its own luminance; Absolute Y w/gamma includes target gamma/EOTF luminance error; Absolute Y w/o gamma keeps the measured relative luminance while cancelling gamma error.">
        Grey ref
        <select id="meterGreyRefMode" class="inline-select" onchange="meterOnGreyRefChange()">
         <option value="absolute">Relative Y</option>
@@ -1351,7 +1371,7 @@ __PG_LOGO_DARK__
         <option value="relative" selected>Absolute Y w/o gamma (default)</option>
        </select>
       </label>
-      <label style="font-size:.7rem;color:var(--text2);user-select:none;display:flex;align-items:center;gap:4px" title="Near-black luminance weighting: reduces over-sensitivity on very dark grayscale steps by scaling the luminance term before ΔE evaluation.">
+      <label title="Near-black luminance weighting: reduces over-sensitivity on very dark grayscale steps by scaling the luminance term before ΔE evaluation.">
        Grey World
        <select id="meterGrayWorld" class="inline-select" onchange="meterOnGreyRefChange()">
         <option value="1">Off (default)</option>
@@ -1359,7 +1379,7 @@ __PG_LOGO_DARK__
         <option value="0.05">Near-black (0.05)</option>
        </select>
       </label>
-      <label style="font-size:.7rem;color:var(--text2);user-select:none;display:flex;align-items:center;gap:4px" title="RGB balance method: Perceptual magnifies L* channel deviations by up to 20x near black and returns to normal at 100% IRE; Absolute uses the original unweighted L* calculation; Chromaticity uses linear RGB normalized to the target white.">
+      <label title="RGB balance method: Perceptual magnifies L* channel deviations by up to 20x near black and returns to normal at 100% IRE; Absolute uses the original unweighted L* calculation; Chromaticity uses linear RGB normalized to the target white.">
        RGB bal
        <select id="meterRgbBalanceFormula" class="inline-select" onchange="meterOnRgbBalanceFormulaChange()">
         <option value="absolute" selected>Absolute (default)</option>
@@ -1367,7 +1387,7 @@ __PG_LOGO_DARK__
         <option value="hcfr">Chromaticity</option>
        </select>
       </label>
-      <label style="font-size:.7rem;color:var(--text2);user-select:none;display:flex;align-items:center;gap:4px" title="Changes the greyscale ΔE calculation. At 0%, chromaticity is undefined, so only black-level luminance is scored.">
+      <label title="Changes the greyscale ΔE calculation. At 0%, chromaticity is undefined, so only black-level luminance is scored.">
        Grey ΔE
        <select id="meterDeltaEForm" class="inline-select" onchange="meterOnGreyRefChange()">
         <option value="deitp" selected>ΔE ITP (default)</option>
@@ -1489,7 +1509,7 @@ __PG_LOGO_DARK__
        <canvas id="meterXYYCanvasColor" width="200" height="400" style="width:100%;flex:1;min-height:0;display:block"></canvas>
       </div>
       <div id="colorReadingDetail" style="flex:0 0 205px;width:205px;height:450px;background:var(--surface-inset);border-radius:6px;padding:12px;font-size:12px;color:#888;box-sizing:border-box;overflow:auto">
-       <div id="colorDetailContent" style="text-align:center;padding:30px 0;color:#555">Select a color<br>to see details</div>
+       <div id="colorDetailContent" style="text-align:center;padding:30px 0;color:var(--text-muted)">Select a color<br>to see details</div>
       </div>
      </div>
     </div>
@@ -1557,9 +1577,9 @@ __PG_LOGO_DARK__
   </div>
 
   <!-- Export / Report -->
-  <div class="btn-row" id="meterExportRow" style="display:none">
-   <button class="btn btn-sm btn-secondary" onclick="meterExportCSV()">&#128190; Export CSV</button>
-   <button class="btn btn-sm btn-secondary" onclick="meterOpenReportDialog()">&#128196; Generate Report</button>
+  <div class="btn-grid btn-grid-sm" id="meterExportRow" style="display:none">
+   <button class="btn btn-sm btn-secondary" onclick="meterExportCSV()">Export CSV</button>
+   <button class="btn btn-sm btn-secondary" onclick="meterOpenReportDialog()">Generate Report</button>
   </div>
 
   <div id="meterReportOverlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:10000;align-items:center;justify-content:center;padding:16px">
@@ -1576,7 +1596,7 @@ __PG_LOGO_DARK__
      <label style="display:flex;align-items:center;gap:6px;cursor:pointer"><input type="radio" name="meterReportFormat" value="html" checked> HTML</label>
      <label style="display:flex;align-items:center;gap:6px;cursor:pointer"><input type="radio" name="meterReportFormat" value="pdf"> PDF</label>
     </div>
-    <div class="btn-row" style="justify-content:flex-end;margin:0">
+    <div class="btn-row btn-row-end" style="margin:0">
      <button class="btn btn-sm btn-secondary" onclick="meterCloseReportDialog()">Cancel</button>
      <button class="btn btn-sm btn-primary" id="meterReportGenerateBtn" onclick="meterGenerateReport()">Generate</button>
     </div>
@@ -1656,22 +1676,22 @@ __PG_LOGO_DARK__
 
  <!-- WiFi Client -->
  <div class="card" data-widget="wifi" data-desktop-workspace="connectivity" data-desktop-order="10" draggable="true">
-  <h2><span class="drag-handle">&#9776;</span>WiFi Client<label class="pg-switch" data-no-collapse title="Enable or disable the WiFi radio (also stops the Access Point)"><input type="checkbox" id="wifiRadioToggle" onchange="onWifiRadioToggle(this)"><span class="pg-switch-track"><span class="pg-switch-thumb"></span></span></label></h2>
+  <h2><span class="drag-handle">&#9776;</span>WiFi Client<label class="pg-switch" data-no-collapse title="Enable or disable the WiFi radio (also stops the Access Point)"><input type="checkbox" id="wifiRadioToggle" aria-label="WiFi radio" onchange="onWifiRadioToggle(this)"><span class="pg-switch-track"><span class="pg-switch-thumb"></span></span></label></h2>
   <div class="info-grid" id="wifiStatus" style="margin-bottom:8px"></div>
-  <div class="btn-row" style="margin-bottom:8px">
+  <div class="btn-grid btn-grid-sm" style="margin-bottom:8px">
    <button class="btn btn-sm btn-secondary" onclick="scanWifi()">Scan Networks</button>
-     <button class="btn btn-sm btn-danger" id="wifiDisconnectBtn" onclick="disconnectWifi()" style="display:none">Disconnect</button>
-     <button class="btn btn-sm btn-danger" id="wifiForgetBtn" onclick="forgetWifi()" style="display:none">Forget</button>
+   <button class="btn btn-sm btn-danger-quiet" id="wifiDisconnectBtn" onclick="disconnectWifi()" style="display:none">Disconnect</button>
+   <button class="btn btn-sm btn-danger-quiet" id="wifiForgetBtn" onclick="forgetWifi()" style="display:none">Forget</button>
   </div>
   <div id="wifiList" class="wifi-list"></div>
   <div id="wifiConnect" class="hidden" style="margin-top:8px">
    <div class="grid">
     <div class="field">
-     <label>Network</label>
+     <label for="wifiSsid">Network</label>
      <input type="text" id="wifiSsid" readonly>
     </div>
     <div class="field">
-     <label>Password</label>
+     <label for="wifiPsk">Password</label>
      <input type="password" id="wifiPsk" placeholder="Enter password">
     </div>
    </div>
@@ -1688,15 +1708,13 @@ __PG_LOGO_DARK__
   <div style="display:flex;align-items:center;gap:12px;margin-bottom:8px">
    <span id="cecStatus" style="font-size:.85rem;color:var(--text2)">Checking...</span>
   </div>
-  <div class="btn-row" style="margin-bottom:8px">
-   <button class="btn btn-sm btn-success" onclick="cecCmd('on')" title="Wake TV and switch to PGenerator+ input">&#9654; Power On</button>
-   <button class="btn btn-sm btn-danger" onclick="cecCmd('off')" title="Put TV in standby">&#9724; Standby</button>
-   <button class="btn btn-sm btn-secondary" onclick="cecCmd('active')" title="Switch TV to PGenerator+ HDMI input">&#8594; Switch Input</button>
-  </div>
-  <div class="btn-row" style="margin-bottom:8px">
-   <button class="btn btn-sm btn-secondary" onclick="cecCmd('volup')" title="Volume Up">&#128266;+</button>
-   <button class="btn btn-sm btn-secondary" onclick="cecCmd('voldown')" title="Volume Down">&#128264;-</button>
-   <button class="btn btn-sm btn-secondary" onclick="cecCmd('mute')" title="Toggle Mute">&#128263; Mute</button>
+  <div class="cec-remote" role="group" aria-label="TV remote">
+   <button class="btn btn-sm btn-primary" type="button" onclick="cecCmd('on')" title="Wake TV and switch to PGenerator+ input"><svg class="btn-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v8"/><path d="M6.6 6.6a8 8 0 1 0 10.8 0"/></svg>Power On</button>
+   <button class="btn btn-sm btn-secondary" type="button" onclick="cecCmd('off')" title="Put TV in standby"><svg class="btn-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z"/></svg>Standby</button>
+   <button class="btn btn-sm btn-secondary" type="button" onclick="cecCmd('active')" title="Switch TV to PGenerator+ HDMI input"><svg class="btn-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M14 4h4a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-4"/><path d="M3 12h11"/><path d="M10 8l4 4-4 4"/></svg>Switch Input</button>
+   <button class="btn btn-sm btn-secondary" type="button" onclick="cecCmd('volup')" title="Volume Up" aria-label="Volume up"><svg class="btn-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 9.5h3.5L11 5.5v13l-4.5-4H3z"/><path d="M15 12h6M18 9v6"/></svg>Volume +</button>
+   <button class="btn btn-sm btn-secondary" type="button" onclick="cecCmd('voldown')" title="Volume Down" aria-label="Volume down"><svg class="btn-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 9.5h3.5L11 5.5v13l-4.5-4H3z"/><path d="M15 12h6"/></svg>Volume −</button>
+   <button class="btn btn-sm btn-secondary" type="button" onclick="cecCmd('mute')" title="Toggle Mute"><svg class="btn-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 9.5h3.5L11 5.5v13l-4.5-4H3z"/><path d="M15.5 9.5l5 5M20.5 9.5l-5 5"/></svg>Mute</button>
   </div>
   <details style="margin-top:4px">
    <summary style="cursor:pointer;font-size:.85rem;color:var(--text2)">CEC Bus Devices</summary>
@@ -1713,15 +1731,15 @@ __PG_LOGO_DARK__
   <div style="font-size:.7rem;color:var(--text2);margin-bottom:8px;line-height:1.4">Connect via HCFR / DisplayCAL Resolve protocol. Enter the IP of the PC running calibration software.</div>
   <div class="grid">
    <div class="field">
-    <label>Calibration PC IP</label>
+    <label for="resolveIp">Calibration PC IP</label>
     <input type="text" id="resolveIp" placeholder="192.168.1.x">
    </div>
    <div class="field">
-    <label>Port</label>
+    <label for="resolvePort">Port</label>
     <input type="number" id="resolvePort" value="20002" min="1" max="65535">
    </div>
    <div class="field">
-    <label>Patch Size Override</label>
+    <label for="resolvePatchSize">Patch Size Override</label>
     <select id="resolvePatchSize" onchange="resolvePatchSizeChanged(this.value)">
      <option value="">Auto (follow software)</option>
      <option value="2">2% Window</option>
@@ -1740,22 +1758,22 @@ __PG_LOGO_DARK__
    </div>
   </div>
   <div class="btn-row" style="margin-top:8px">
-   <button class="btn btn-sm btn-success" id="resolveConnectBtn" onclick="resolveConnect()">&#9654; Connect</button>
-   <button class="btn btn-sm btn-danger" id="resolveDisconnectBtn" onclick="resolveDisconnect()" style="display:none">&#9724; Disconnect</button>
+   <button class="btn btn-sm btn-primary" id="resolveConnectBtn" onclick="resolveConnect()">&#9654; Connect</button>
+   <button class="btn btn-sm btn-secondary" id="resolveDisconnectBtn" onclick="resolveDisconnect()" style="display:none">&#9724; Disconnect</button>
   </div>
  </div>
 
  <!-- WiFi AP (PAN) -->
  <div class="card" data-widget="ap" data-desktop-workspace="connectivity" data-desktop-order="20" draggable="true">
-  <h2><span class="drag-handle">&#9776;</span>WiFi Access Point<label class="pg-switch" data-no-collapse title="Start or stop the WiFi Access Point"><input type="checkbox" id="apEnableToggle" onchange="onApToggle(this)"><span class="pg-switch-track"><span class="pg-switch-thumb"></span></span></label></h2>
+  <h2><span class="drag-handle">&#9776;</span>WiFi Access Point<label class="pg-switch" data-no-collapse title="Start or stop the WiFi Access Point"><input type="checkbox" id="apEnableToggle" aria-label="WiFi Access Point" onchange="onApToggle(this)"><span class="pg-switch-track"><span class="pg-switch-thumb"></span></span></label></h2>
   <div class="info-grid" id="apStatus" style="margin-bottom:8px"></div>
   <div class="grid">
    <div class="field">
-    <label>SSID</label>
+    <label for="apSsid">SSID</label>
     <input type="text" id="apSsid" placeholder="PGenerator">
    </div>
    <div class="field">
-    <label>Password</label>
+    <label for="apPass">Password</label>
     <input type="text" id="apPass" placeholder="Min 8 characters">
    </div>
   </div>
@@ -1767,15 +1785,13 @@ __PG_LOGO_DARK__
 
  <!-- Bluetooth PAN -->
  <div class="card" data-widget="bluetooth" data-desktop-workspace="connectivity" data-desktop-order="30" draggable="true">
-  <h2><span class="drag-handle">&#9776;</span>Bluetooth PAN<label class="pg-switch" data-no-collapse title="Power the Bluetooth radio on or off"><input type="checkbox" id="btPowerToggle" onchange="onBtPowerToggle(this)"><span class="pg-switch-track"><span class="pg-switch-thumb"></span></span></label></h2>
+  <h2><span class="drag-handle">&#9776;</span>Bluetooth PAN<label class="pg-switch" data-no-collapse title="Power the Bluetooth radio on or off"><input type="checkbox" id="btPowerToggle" aria-label="Bluetooth radio" onchange="onBtPowerToggle(this)"><span class="pg-switch-track"><span class="pg-switch-thumb"></span></span></label></h2>
   <div class="info-grid" id="btStatus" style="margin-bottom:8px"></div>
-  <div class="btn-row" style="margin-bottom:8px">
+  <div class="btn-grid btn-grid-sm">
    <button class="btn btn-sm btn-secondary" onclick="btSet('discoverable',true)">Discoverable</button>
    <button class="btn btn-sm btn-secondary" onclick="btSet('agent',true)">Pairing Agent</button>
-  </div>
-  <div class="btn-row">
-   <button class="btn btn-sm btn-primary" onclick="btRestartPan()">Restart PAN</button>
    <button class="btn btn-sm btn-secondary" onclick="loadBluetooth()">Refresh</button>
+   <button class="btn btn-sm btn-warning" onclick="btRestartPan()">Restart PAN</button>
   </div>
  </div>
 
@@ -1807,7 +1823,7 @@ __PG_LOGO_DARK__
   <div class="info-grid" id="gpuMemInfo" style="margin-bottom:8px"></div>
   <div class="grid">
    <div class="field" id="gpuMemField">
-    <label>GPU Memory Allocation</label>
+    <label for="gpu_mem">GPU Memory Allocation</label>
     <select id="gpu_mem">
      <option value="64">64 MB</option>
      <option value="128">128 MB</option>
@@ -1816,7 +1832,7 @@ __PG_LOGO_DARK__
     </select>
    </div>
    <div class="field" id="cmaMemField" style="display:none">
-    <label>Graphics Memory (CMA pool)</label>
+    <label for="cma_mb">Graphics Memory (CMA pool)</label>
     <select id="cma_mb">
      <option value="default">64 MB (Raspberry Pi OS default)</option>
      <option value="128">128 MB</option>
@@ -1829,7 +1845,7 @@ __PG_LOGO_DARK__
    </div>
   </div>
   <div class="btn-row" style="margin-top:10px">
-   <button class="btn btn-sm btn-success" onclick="applyMemory()">Apply &amp; Reboot</button>
+   <button class="btn btn-sm btn-warning" onclick="applyMemory()">Apply &amp; Reboot</button>
   </div>
   <div style="margin-top:6px;font-size:.7rem;color:var(--text2)" id="gpuMemNote">Changes require a reboot. Increase if calibration software reports insufficient GPU memory.</div>
  </div>
@@ -1843,26 +1859,32 @@ __PG_LOGO_DARK__
     <div class="info-item"><div class="label">Latest</div><div class="value" id="updateLatest">-</div></div>
     <div class="info-item"><div class="label">Published</div><div class="value" id="updatePublished">-</div></div>
    </div>
-   <div id="updateChangelog" style="margin-top:8px;font-size:.75rem;color:var(--text2);max-height:80px;overflow-y:auto"></div>
-   <div class="btn-row" style="margin-top:10px">
-    <button class="btn btn-sm btn-secondary" id="checkUpdateBtn" onclick="checkUpdate(true)">Check for Updates</button>
-    <button class="btn btn-sm btn-success" id="applyUpdateBtn" style="display:none" onclick="applyUpdate()">Install Update</button>
-    <button class="btn btn-sm btn-secondary" id="submitLogsBtn" onclick="submitLogs()" title="Download a diagnostic log bundle">&#128230; Submit Logs</button>
-    <button class="btn btn-sm btn-secondary" id="exportSystemSettingsBtn" onclick="exportSystemSettings()" title="Download PGenerator+ settings, profiles, calibration history and custom diagnostic media">Export System Settings</button>
-    <button class="btn btn-sm btn-secondary" id="importSystemSettingsBtn" onclick="selectSystemSettingsImport()" title="Restore PGenerator+ settings, profiles, calibration history and custom diagnostic media">Import System Settings</button>
-    <input type="file" id="systemSettingsImportFile" accept=".pgbackup,application/gzip" style="display:none" onchange="importSystemSettingsFile(this.files&&this.files[0])">
+   <div id="updateStatus" class="update-status"></div>
+   <details class="update-notes" id="updateChangelogWrap" hidden><summary id="updateChangelogSummary">What’s new</summary><div id="updateChangelog"></div></details>
+   <div class="btn-grid btn-grid-lg" style="margin-top:10px">
+    <button class="btn btn-sm btn-primary ico-install" id="applyUpdateBtn" style="display:none" onclick="applyUpdate()">Install Update</button>
+    <button class="btn btn-sm btn-secondary ico-refresh" id="checkUpdateBtn" onclick="checkUpdate(true)">Check for Updates</button>
+    <button class="btn btn-sm btn-secondary ico-logs" id="submitLogsBtn" onclick="submitLogs()" title="Download a diagnostic log bundle">Submit Logs</button>
    </div>
-   <div id="releaseRow" style="display:none;margin-top:10px">
-    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
-     <label for="releaseSelect" style="font-size:.75rem;color:var(--text2)">Install a release</label>
-     <select id="releaseSelect" onchange="onReleaseSelectChange()" style="min-width:220px"></select>
+   <section class="update-section" id="releaseRow" style="display:none" aria-labelledby="releaseRowTitle">
+    <div class="update-section-title" id="releaseRowTitle">Other versions</div>
+    <label class="update-field-label" for="releaseSelect">Install a release</label>
+    <div class="release-pick">
+     <select id="releaseSelect" onchange="onReleaseSelectChange()"></select>
      <button class="btn btn-sm btn-warning" id="installReleaseBtn" onclick="installSelectedRelease()">Install</button>
     </div>
-    <div id="releaseNotes" style="margin-top:6px;font-size:.72rem;color:var(--text2);max-height:80px;overflow-y:auto;white-space:pre-line"></div>
+    <details class="update-notes" id="releaseNotesWrap" hidden><summary id="releaseNotesSummary">Release notes</summary><div id="releaseNotes"></div></details>
+   </section>
+   <section class="update-section" aria-labelledby="backupSectionTitle">
+   <div class="update-section-title" id="backupSectionTitle">Backup</div>
+   <div class="btn-grid btn-grid-lg">
+    <button class="btn btn-sm btn-secondary ico-export" id="exportSystemSettingsBtn" onclick="exportSystemSettings()" title="Download PGenerator+ settings, profiles, calibration history and custom diagnostic media">Export System Settings</button>
+    <button class="btn btn-sm btn-secondary ico-import" id="importSystemSettingsBtn" onclick="selectSystemSettingsImport()" title="Restore PGenerator+ settings, profiles, calibration history and custom diagnostic media">Import System Settings</button>
+    <input type="file" id="systemSettingsImportFile" accept=".pgbackup,application/gzip" style="display:none" onchange="importSystemSettingsFile(this.files&&this.files[0])">
    </div>
-   <div id="updateStatus" style="margin-top:6px;font-size:.7rem;color:var(--text2)"></div>
    <div id="systemBackupStatus" style="margin-top:6px;font-size:.7rem;color:var(--text2)"></div>
-   <div style="margin-top:6px;font-size:.7rem;color:var(--text2)">System exports include PGenerator+ configuration, custom series, custom meter and ICC profiles, calibration history, LUTs, Dolby Vision configurations, reports, and user-added diagnostic images and videos. Built-in media, caches, logs, hardware identity, and Companion pairing data are excluded.</div>
+   <div class="update-hint">System exports include PGenerator+ configuration, custom series, custom meter and ICC profiles, calibration history, LUTs, Dolby Vision configurations, reports, and user-added diagnostic images and videos. Built-in media, caches, logs, hardware identity, and Companion pairing data are excluded.</div>
+   </section>
   </div>
  </div>
 
@@ -1904,13 +1926,14 @@ __PG_LOGO_DARK__
   <section class="desktop-utility-section">
    <h3>HDMI-CEC</h3>
    <div class="desktop-utility-cec-status" id="desktopUtilityCecStatus">Checking...</div>
-   <div class="desktop-utility-cec-actions">
-    <button class="btn btn-sm btn-success" onclick="cecCmd('on')">Power On</button>
-    <button class="btn btn-sm btn-danger" onclick="cecCmd('off')">Standby</button>
-    <button class="btn btn-sm btn-secondary" onclick="cecCmd('volup')">Volume +</button>
-    <button class="btn btn-sm btn-secondary" onclick="cecCmd('voldown')">Volume -</button>
-    <button class="btn btn-sm btn-secondary" onclick="cecCmd('mute')">Mute</button>
-    <button class="btn btn-sm btn-secondary" onclick="cecScan()">Scan</button>
+   <div class="desktop-utility-cec-actions cec-remote" role="group" aria-label="TV remote">
+    <button class="btn btn-sm btn-primary" type="button" onclick="cecCmd('on')" title="Wake TV and switch to PGenerator+ input"><svg class="btn-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v8"/><path d="M6.6 6.6a8 8 0 1 0 10.8 0"/></svg>Power On</button>
+    <button class="btn btn-sm btn-secondary" type="button" onclick="cecCmd('off')" title="Put TV in standby"><svg class="btn-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z"/></svg>Standby</button>
+    <button class="btn btn-sm btn-secondary" type="button" onclick="cecCmd('active')" title="Switch TV to PGenerator+ HDMI input"><svg class="btn-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M14 4h4a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-4"/><path d="M3 12h11"/><path d="M10 8l4 4-4 4"/></svg>Switch Input</button>
+    <button class="btn btn-sm btn-secondary" type="button" onclick="cecCmd('volup')" title="Volume Up" aria-label="Volume up"><svg class="btn-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 9.5h3.5L11 5.5v13l-4.5-4H3z"/><path d="M15 12h6M18 9v6"/></svg>Volume +</button>
+    <button class="btn btn-sm btn-secondary" type="button" onclick="cecCmd('voldown')" title="Volume Down" aria-label="Volume down"><svg class="btn-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 9.5h3.5L11 5.5v13l-4.5-4H3z"/><path d="M15 12h6"/></svg>Volume −</button>
+    <button class="btn btn-sm btn-secondary" type="button" onclick="cecCmd('mute')" title="Toggle Mute"><svg class="btn-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 9.5h3.5L11 5.5v13l-4.5-4H3z"/><path d="M15.5 9.5l5 5M20.5 9.5l-5 5"/></svg>Mute</button>
+    <button class="btn btn-sm btn-secondary cec-remote-wide" type="button" onclick="cecScan()">Scan CEC Bus</button>
    </div>
    <div class="desktop-utility-data" id="desktopUtilityCecDevices" style="margin-top:8px">Not scanned yet</div>
   </section>
@@ -1935,7 +1958,7 @@ __PG_LOGO_DARK__
     <div id="meterSpectroSetupTitle" style="font-size:1rem;font-weight:700;color:#eee;margin-bottom:4px">Meter Setup</div>
     <div id="meterSpectroSetupStepLabel" style="font-size:.72rem;color:var(--text2);margin-bottom:10px">Step</div>
     <div id="meterSpectroSetupMessage" style="font-size:.86rem;color:var(--text);line-height:1.5;margin-bottom:16px;min-height:3em">Preparing the meter…</div>
-    <div style="display:flex;justify-content:flex-end;gap:8px">
+    <div class="btn-row btn-row-end">
      <button class="btn btn-sm btn-secondary" id="meterSpectroSetupCancelBtn" onclick="meterSpectroSetupCancel()">Cancel</button>
      <button class="btn btn-sm btn-primary" id="meterSpectroSetupBtn" onclick="meterSpectroSetupAck()">Continue</button>
     </div>
@@ -2089,28 +2112,31 @@ __PG_LOGO_DARK__
 		   </div>
 	  </div>
 		  <div id="meterAutoCalProgressBox"><div class="meter-autocal-progress"><div class="meter-autocal-progress-fill" id="meterAutoCalProgressFill"></div></div></div>
-		  <div class="btn-row" style="justify-content:flex-end;margin:0">
+		  <div class="btn-row btn-row-end" style="margin:0">
 			   <button class="btn btn-sm btn-secondary" id="meterAutoCalBackBtn" onclick="meterAutoCalBackToLuminance()" style="display:none">Back</button>
 	   <button class="btn btn-sm btn-secondary" id="meterFullAutoCalCancelBtn" onclick="meterFullAutoCalResolveConfirm(false)" style="display:none">Cancel</button>
-	   <button class="btn btn-sm btn-success" id="meterAutoCalResetBtn" onclick="meterAutoCalRunPreflightReset()" style="display:none">Reset</button>
-		   <button class="btn btn-sm btn-success" id="meterAutoCalUseCaseContinueBtn" onclick="meterAutoCalUseCaseContinue()" style="display:none">&#9654; Continue</button>
-		   <button class="btn btn-sm btn-success" id="meterAutoCalDisplayTypeContinueBtn" onclick="meterAutoCalDisplayTypeContinue()" style="display:none">&#9654; Continue</button>
-		   <button class="btn btn-sm btn-success" id="meterAutoCalGammaContinueBtn" onclick="meterAutoCalGammaTargetContinue()" style="display:none">&#9654; Continue</button>
-		   <button class="btn btn-sm btn-success" id="meterAutoCalDisclaimerContinueBtn" onclick="meterAutoCalAcceptDisclaimer()" style="display:none">&#9654; Continue</button>
-		   <button class="btn btn-sm btn-success" id="meterAutoCalContinueBtn" onclick="meterAutoCalContinueFromLuminanceSetup()" style="display:none">&#9654; Continue</button>
-		   <button class="btn btn-sm btn-success" id="meterAutoCalStartConfirmBtn" onclick="meterAutoCalConfirmAndStart()" style="display:none">&#9654; Start</button>
+	   <button class="btn btn-sm btn-warning" id="meterAutoCalResetBtn" onclick="meterAutoCalRunPreflightReset()" style="display:none">Reset</button>
+		   <button class="btn btn-sm btn-primary" id="meterAutoCalUseCaseContinueBtn" onclick="meterAutoCalUseCaseContinue()" style="display:none">&#9654; Continue</button>
+		   <button class="btn btn-sm btn-primary" id="meterAutoCalDisplayTypeContinueBtn" onclick="meterAutoCalDisplayTypeContinue()" style="display:none">&#9654; Continue</button>
+		   <button class="btn btn-sm btn-primary" id="meterAutoCalGammaContinueBtn" onclick="meterAutoCalGammaTargetContinue()" style="display:none">&#9654; Continue</button>
+		   <button class="btn btn-sm btn-primary" id="meterAutoCalDisclaimerContinueBtn" onclick="meterAutoCalAcceptDisclaimer()" style="display:none">&#9654; Continue</button>
+		   <button class="btn btn-sm btn-primary" id="meterAutoCalContinueBtn" onclick="meterAutoCalContinueFromLuminanceSetup()" style="display:none">&#9654; Continue</button>
+		   <button class="btn btn-sm btn-primary" id="meterAutoCalStartConfirmBtn" onclick="meterAutoCalConfirmAndStart()" style="display:none">&#9654; Start</button>
 	   <button class="btn btn-sm btn-secondary" id="meterFullAutoCalSkipBtn" onclick="meterFullAutoCalResolveConfirm('skip')" style="display:none">Skip Pre-Cal</button>
-		   <button class="btn btn-sm btn-success" id="meterFullAutoCalContinueBtn" onclick="meterFullAutoCalResolveConfirm(true)" style="display:none">&#9654; Continue</button>
-	   <button class="btn btn-sm btn-primary" id="meterFullAutoCalPostReportBtn" onclick="meterFullAutoCalGeneratePostReport()" style="display:none">&#128196; Generate Post-Cal Report</button>
+		   <button class="btn btn-sm btn-primary" id="meterFullAutoCalContinueBtn" onclick="meterFullAutoCalResolveConfirm(true)" style="display:none">&#9654; Continue</button>
+	   <button class="btn btn-sm btn-primary" id="meterFullAutoCalPostReportBtn" onclick="meterFullAutoCalGeneratePostReport()" style="display:none">Generate Post-Cal Report</button>
 	   <button class="btn btn-sm btn-secondary" id="meterFullAutoCalSkipReportBtn" onclick="meterAutoCalCloseCompleteAction()" style="display:none">Close</button>
 	   <button class="btn btn-sm btn-secondary" id="meterAutoCalUploadRetryCloseBtn" onclick="meterCloseLg3dUploadRetry()" style="display:none">Close</button>
-	   <button class="btn btn-sm btn-success" id="meterAutoCalUploadRetryBtn" onclick="meterRetryLg3dUpload()" style="display:none">Retry upload</button>
+	   <button class="btn btn-sm btn-primary" id="meterAutoCalUploadRetryBtn" onclick="meterRetryLg3dUpload()" style="display:none">Retry upload</button>
 	   <button class="btn btn-sm btn-danger" id="meterAutoCalStopOverlayBtn" onclick="meterStopAutoCal()">&#9632; Stop</button>
 	  </div>
  </div>
 </div>
 
-<div class="toast" id="toast"></div>
+<div class="toast" id="toast" onclick="toastHide()" onmouseenter="toastHold(true)" onmouseleave="toastHold(false)" onfocusin="toastHold(true)" onfocusout="toastHold(false)" role="status" aria-live="polite"><span class="toast-msg" id="toastMsg"></span><button type="button" class="toast-action" id="toastAction" hidden onclick="toastRunAction(event)"></button><button type="button" class="toast-close" tabindex="-1" aria-label="Dismiss message">&times;</button></div>
+<div class="sr-only" id="pgStatusAnnounce" role="status" aria-live="polite" aria-atomic="true"></div>
+<div class="help-tip-pop" id="helpTipPop" role="tooltip" hidden></div>
+<div hidden id="helpTipTexts"></div>
 
 <!-- Apply Settings modal: shown when the operator clicks "Apply & Restart" on
      the display-settings card and the daemon is restarting the renderer.

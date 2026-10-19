@@ -130,6 +130,8 @@ body.meter-stop-active.layout-desktop .desktop-sidebar{filter:grayscale(.25);opa
 [data-theme="light"] .header{background:#e3e7ed;color:var(--text-primary)}
 [data-theme="light"] .logo > img:first-child{display:none!important}
 [data-theme="light"] .logo .logo-light{display:block}
+[data-theme="light"] #hdmiWarnBadge{color:var(--status-hdmi)}
+[data-theme="light"] #meterUsbWarnBadge{color:#8a4500}
 [data-theme="light"] .offline-mask-card{background:var(--surface-modal);color:var(--text-primary);border-color:var(--border);box-shadow:0 12px 30px var(--shadow)}
 [data-theme="light"] .meter-scroll-sync,[data-theme="light"] #meterGreyRgbLegacyWrap,[data-theme="light"] #meterGreyTvWrap,[data-theme="light"] #meterRGBColorWrap,[data-theme="light"] #meterXYYColorWrap,[data-theme="light"] #colorReadingDetail{background:var(--chart-bg)!important}
 [data-theme="light"] #chartRGB,[data-theme="light"] #chartDeltaE,[data-theme="light"] #chartGammaValue,[data-theme="light"] #chartEOTF,[data-theme="light"] #chartGamma,[data-theme="light"] #chartCubeView,[data-theme="light"] #chartCIE,[data-theme="light"] #chartColorDE,[data-theme="light"] #ccssPreviewCanvas,[data-theme="light"] #lutCubeView{background:var(--chart-bg)!important}
@@ -201,6 +203,7 @@ body.meter-stop-active.layout-desktop .desktop-sidebar{filter:grayscale(.25);opa
 [data-theme="light"] #meterTwoPointLow,[data-theme="light"] #meterTwoPointHigh{background:var(--surface-field)!important;color:var(--text-primary)!important;border-color:var(--border)!important}
 [data-theme="light"] .meter-profile-title{color:var(--text-primary)}
 [data-theme="light"] .btn-secondary{background:var(--divider);color:var(--text-primary)}
+[data-theme="light"] .btn-secondary.btn-success,[data-theme="light"] .btn-secondary.btn-success:hover{background:var(--success-fill);color:var(--on-success)}
 [data-theme="light"] .btn-secondary:hover,[data-theme="light"] .pat-btn:hover{background:var(--hover-bg);color:var(--text-primary)}
 [data-theme="light"] .diag-asset-icon-btn{color:var(--text-primary)!important}
 [data-theme="light"] .diag-asset-icon-btn-delete:not(:disabled){color:var(--status-error)!important}
@@ -210,6 +213,8 @@ body.meter-stop-active.layout-desktop .desktop-sidebar{filter:grayscale(.25);opa
 [data-theme="light"] .chart-expand-btn{background:rgba(255,255,255,.94);color:var(--accent);border-color:var(--chart-axis);box-shadow:0 1px 3px rgba(18,29,45,.18)}
 [data-theme="light"] .chart-expand-btn:hover{background:var(--surface-inset);color:#174fc4;border-color:var(--accent)}
 [data-theme="light"] input:disabled,[data-theme="light"] select:disabled,[data-theme="light"] button:disabled{color:var(--text-disabled)!important}
+[data-theme="light"] .btn-primary:disabled{color:var(--on-accent)!important;opacity:.55}
+[data-theme="light"] .btn-success:disabled,[data-theme="light"] .btn-danger:disabled{color:#fff!important;opacity:.55}
 [data-theme="light"] #meterCcssCreateStartBtn,[data-theme="light"] #meterCcssCreateStartBtn:disabled,
 [data-theme="light"] #meter3dLutWorkspaceBuildBtn,[data-theme="light"] #meter3dLutWorkspaceBuildBtn:disabled{color:#fff!important}
 [data-theme="light"] #meterThumbsRow,[data-theme="light"] .meter-scroll-sync,[data-theme="light"] .meter-modal-scroll{scrollbar-color:var(--scroll-thumb) var(--scroll-track)}
@@ -285,6 +290,7 @@ body.layout-tablet .ui-choice:disabled:hover .ui-choice-description,body.layout-
    overlap the rest of the page. */
 @media(max-width:800px){
  html,body{max-width:100%;overflow-x:hidden}
+ body{overflow-x:clip}
  body.layout-tablet .dashboard{grid-template-columns:minmax(0,1fr);max-width:100%;overflow-x:clip}
  body.layout-tablet #displaySettingsCard,
  body.layout-tablet #hdrCard,
@@ -308,3 +314,100 @@ body.layout-tablet .ui-choice:disabled:hover .ui-choice-description,body.layout-
  }
 }
 [data-theme="light"][data-palette] .header{background:var(--surface-header)}
+/* Touch layout (phone/tablet). Scoped to body.layout-tablet so the Desktop
+   workspace layout keeps its density: 44px targets, a 12px floor for UI text,
+   the device power group on the first row (order keeps the DOM/Tab order),
+   apart from the layout toggle, and a bottom workspace
+   jump bar built from the existing data-desktop-workspace metadata. */
+body.layout-tablet .hdr-actions{gap:8px}
+body.layout-tablet .layout-switch{padding:2px}
+body.layout-tablet .layout-switch-btn{min-height:44px;padding:0 14px;font-size:.8rem}
+body.layout-tablet .header .icon-btn{min-width:44px;min-height:44px}
+body.layout-tablet .hdr-power::before{top:8px;bottom:8px}
+body.layout-tablet .status-bar{font-size:.8rem}
+/* The status line shares the first row with the actions and power group and
+   wraps inside it, so the longer labels and the signal/pattern chips never
+   run past the viewport and the header stays one row on tablets. */
+body.layout-tablet .hdr-right{min-width:0;max-width:100%;flex-wrap:wrap;justify-content:flex-end;row-gap:4px}
+body.layout-tablet .status-bar{flex:1 1 0;min-width:0;flex-wrap:wrap;row-gap:2px}
+/* Desktop needs 1024px; below that the header switch is a dead control.
+   UI Settings keeps the switch and its explanation. */
+body.desktop-unavailable .header .layout-switch{display:none}
+@media(min-width:481px){body.layout-tablet .hdr-right{flex:1 1 0}}
+body.layout-tablet .btn,body.layout-tablet .btn-sm{min-height:44px}
+/* Phone: dialog/form footers stack full-width in DOM order (Cancel above the primary). */
+@media(max-width:600px){body.layout-tablet .btn-row-end{flex-direction:column;align-items:stretch}body.layout-tablet .btn-row-end>.btn{justify-content:center}}
+body.layout-tablet .dashboard h2 .btn{position:relative;min-height:32px}
+body.layout-tablet .dashboard h2 .btn.card-h2-action{min-height:44px;padding:0 14px}
+body.layout-tablet .dashboard h2 .btn::after{content:'';position:absolute;left:0;right:0;top:-6px;bottom:-6px}
+body.layout-tablet .dashboard select,body.layout-tablet .dashboard input:not([type=checkbox]):not([type=radio]):not([type=range]):not([type=color]):not([type=file]),body.layout-tablet .dashboard textarea{min-height:44px;box-sizing:border-box}
+/* Read-only values styled as fields (LG current input) match the field height. */
+body.layout-tablet .dashboard .lg-current-input-value{min-height:44px}
+@media(pointer:coarse){body.layout-tablet .dashboard .lg-current-input-value{font-size:16px}}
+body.layout-tablet .dashboard input[type=checkbox],body.layout-tablet .dashboard input[type=radio]{width:22px;height:22px;min-width:22px}
+body.layout-tablet .dashboard label:has(> input[type=checkbox]),body.layout-tablet .dashboard label:has(> input[type=radio]){min-height:44px;align-items:center}
+body.layout-tablet #meterSettingsGrid label.meter-toggle,body.layout-tablet #meterSettingsGrid label.meter-note-toggle{min-height:44px;height:auto;align-items:center}
+body.layout-tablet #meterSettingsGrid .meter-target-white-row,body.layout-tablet #meterSettingsGrid .meter-target-black-row{flex-wrap:wrap;row-gap:4px}
+body.layout-tablet .dashboard summary{min-height:44px;display:flex;align-items:center}
+body.layout-tablet .meter-config-toggle,body.layout-tablet .meter-xyz-gear,body.layout-tablet .meter-pattern-insert-gear{width:44px;height:44px;flex:0 0 44px}
+body.layout-tablet .pat-btn,body.layout-tablet .theme-switch-btn,body.layout-tablet .ui-choice{min-height:44px}
+body.layout-tablet .diag-custom-picker{grid-template-columns:minmax(0,1fr) 44px 44px 44px}
+body.layout-tablet .diag-custom-picker .btn{height:44px}
+/* Help tips keep the 15px glyph; an invisible 44px square takes the tap. */
+body.layout-tablet .meter-help-tip::before{content:'';position:absolute;left:50%;top:50%;width:44px;height:44px;transform:translate(-50%,-50%)}
+@media(pointer:coarse){.meter-help-tip::before{content:'';position:absolute;left:50%;top:50%;width:44px;height:44px;transform:translate(-50%,-50%)}}
+/* EOTF + luminance charts: equal-height columns with the canvas at the bottom so
+   both charts start level however their option rows wrap; one column on phones. */
+body.layout-tablet #meterEotfBlock,body.layout-tablet #meterLuminanceBlock{display:flex;flex-direction:column;min-width:0}
+body.layout-tablet #meterEotfScroller,body.layout-tablet #meterLuminanceScroller{margin-top:auto}
+@media(max-width:700px){body.layout-tablet #meterEotfLuminanceGrid{grid-template-columns:minmax(0,1fr)!important}}
+body.layout-tablet .field label,body.layout-tablet .meter-header-label,body.layout-tablet .meter-target-inline-label,body.layout-tablet .meter-toggle,body.layout-tablet .meter-toggle-label,body.layout-tablet .meter-note-toggle,body.layout-tablet .meter-inline-unit,body.layout-tablet .stat-label,body.layout-tablet .stat-sub,body.layout-tablet .info-item .label,body.layout-tablet .diag-pattern-title,body.layout-tablet .dv-badge,body.layout-tablet .pat-btn,body.layout-tablet .theme-switch-btn span,body.layout-tablet .btn-sm,body.layout-tablet .ui-choice-note,body.layout-tablet .session-format-note,body.layout-tablet .site-footer-note,body.layout-tablet .desktop-nav-title,body.layout-tablet #meterSettingsGrid .meter-target-inline-label,body.layout-tablet #meterSettingsGrid .meter-target-measure-btn,body.layout-tablet #meterSettingsGrid .meter-target-use-measured{font-size:.75rem}
+body.layout-tablet .dashboard [style*="font-size:.5"],body.layout-tablet .dashboard [style*="font-size:.6"],body.layout-tablet .dashboard [style*="font-size:.7"],body.layout-tablet .dashboard [style*="font-size:0.6"],body.layout-tablet .dashboard [style*="font-size:0.7"],body.layout-tablet .dashboard [style*="font-size:9px"],body.layout-tablet .dashboard [style*="font-size:10px"],body.layout-tablet .dashboard [style*="font-size:11px"],body.layout-tablet .dashboard [style*="font-size: 0.6"],body.layout-tablet .dashboard [style*="font-size: 0.7"],body.layout-tablet .dashboard [style*="font-size: 9px"],body.layout-tablet .dashboard [style*="font-size: 10px"],body.layout-tablet .dashboard [style*="font-size: 11px"]{font-size:.75rem!important}
+@media(pointer:coarse){body.layout-tablet .dashboard select,body.layout-tablet .dashboard input:not([type=checkbox]):not([type=radio]):not([type=range]),body.layout-tablet .dashboard textarea{font-size:16px}}
+/* Phone header: logo + power on one row, then a single status row in
+   priority order (connection, warnings, software, signal, pattern, meter,
+   temperature); the row wraps, nothing is hidden. */
+@media(max-width:600px){
+body.layout-tablet .header{padding:3px 12px;column-gap:8px;row-gap:0}
+body.layout-tablet .hdr-right{display:contents}
+body.layout-tablet .logo{order:0;margin-right:auto}
+body.layout-tablet .hdr-actions{order:1;flex:0 1 auto}
+body.layout-tablet .hdr-power{order:2;margin-left:0}
+body.layout-tablet .hdr-power::before{display:none}
+body.layout-tablet .update-btn-more{display:none}
+body.layout-tablet .status-bar{order:3;flex:1 1 100%;width:auto;min-height:32px;flex-wrap:wrap;justify-content:flex-start;column-gap:12px;row-gap:2px;padding-bottom:4px}
+}
+.tablet-jump-nav{display:none}
+body.layout-tablet .tablet-jump-nav:not([hidden]){display:flex;position:fixed;left:0;right:0;bottom:0;z-index:60;gap:2px;padding:4px max(6px,env(safe-area-inset-right)) calc(4px + env(safe-area-inset-bottom)) max(6px,env(safe-area-inset-left));background:var(--surface-header);border-top:1px solid var(--border);box-shadow:0 -6px 18px var(--shadow);overflow-x:auto;overscroll-behavior-x:contain;scrollbar-width:none;justify-content:safe center}
+body.layout-tablet .tablet-jump-nav::-webkit-scrollbar{display:none}
+.tablet-nav-btn{flex:0 0 auto;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;min-width:64px;min-height:52px;padding:4px 10px;border:0;border-radius:8px;background:transparent;color:var(--text2);font:inherit;font-size:.75rem;font-weight:600;line-height:1.1;white-space:nowrap;cursor:pointer;transition:background .16s,color .16s}
+.tablet-nav-btn .desktop-nav-icon{flex:0 0 20px}
+.tablet-nav-btn[aria-current="location"]{background:var(--selected-bg);color:var(--text);box-shadow:inset 0 2px 0 var(--accent)}
+[data-theme="light"] .tablet-nav-btn[aria-current="location"]{color:var(--text-primary)}
+.tablet-nav-btn:focus-visible{outline:2px solid var(--focus-ring);outline-offset:-2px}
+@media(hover:hover) and (pointer:fine){.tablet-nav-btn:hover{background:var(--hover-bg);color:var(--text-primary)}}
+/* Narrow: Output, Patterns, Calibration + More; the rest live in a sheet
+   above the bar (built by pgBuildTabletNav, never scrolls sideways). */
+body.layout-tablet .tablet-jump-nav.is-compact:not([hidden]){justify-content:stretch;overflow:visible}
+.tablet-jump-nav.is-compact .tablet-nav-btn{flex:1 1 0;min-width:0;padding:4px 6px}
+.tablet-nav-more[aria-expanded="true"]{background:var(--hover-bg);color:var(--text)}
+.tablet-nav-more.has-current{color:var(--text);box-shadow:inset 0 2px 0 var(--accent)}
+.tablet-more-sheet{position:fixed;left:max(8px,env(safe-area-inset-left));right:max(8px,env(safe-area-inset-right));bottom:calc(68px + env(safe-area-inset-bottom));z-index:61;display:flex;flex-direction:column;gap:2px;max-width:340px;margin-left:auto;padding:6px;background:var(--surface-header);border:1px solid var(--border);border-radius:12px;box-shadow:0 -6px 18px var(--shadow)}
+.tablet-more-sheet[hidden]{display:none}
+.tablet-more-sheet{max-height:calc(100vh - 96px - var(--pg-header-height,61px));overflow-y:auto}
+.tablet-more-group{display:flex;flex:0 0 auto;flex-direction:column;gap:2px}
+.tablet-more-group+.tablet-more-group{margin-top:4px;padding-top:4px;border-top:1px solid var(--border)}
+.tablet-more-label{padding:6px 12px 2px;color:var(--text-muted);font-size:.6875rem;font-weight:700;line-height:1.4;text-transform:uppercase;letter-spacing:.7px}
+.tablet-nav-sep{flex:0 0 1px;align-self:center;height:28px;margin:0 4px;background:var(--border)}
+.tablet-more-item{display:flex;align-items:center;gap:12px;min-height:48px;padding:0 12px;border:0;border-radius:8px;background:transparent;color:var(--text2);font:inherit;font-size:.875rem;font-weight:600;text-align:left;cursor:pointer;transition:background .16s,color .16s}
+.tablet-more-item .desktop-nav-icon{flex:0 0 20px}
+.tablet-more-item[aria-current="location"]{background:var(--selected-bg);color:var(--text)}
+.tablet-more-item[aria-current="location"] .desktop-nav-icon{color:var(--accent)}
+[data-theme="light"] .tablet-more-item[aria-current="location"]{color:var(--text-primary)}
+.tablet-more-item:focus-visible{outline:2px solid var(--focus-ring);outline-offset:-2px}
+@media(hover:hover) and (pointer:fine){.tablet-more-item:hover{background:var(--hover-bg);color:var(--text-primary)}}
+body.has-tablet-nav{padding-bottom:calc(62px + env(safe-area-inset-bottom))}
+body.has-tablet-nav .toast{bottom:calc(74px + env(safe-area-inset-bottom))}
+body.layout-tablet .dashboard > .card[tabindex="-1"]:focus{outline:none}
+body.layout-tablet .dashboard > .card[tabindex="-1"]:focus-visible{outline:2px solid var(--focus-ring);outline-offset:2px}
+body.layout-tablet .dashboard > .card[data-desktop-workspace]{scroll-margin-top:calc(var(--pg-header-height,61px) + 8px)}

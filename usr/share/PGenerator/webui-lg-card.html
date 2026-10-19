@@ -14,10 +14,10 @@
 	    <input type="text" id="lgPromptManualIp" placeholder="192.168.1.x" oninput="lgPromptManualIpChanged()">
 	   </div>
    <div id="lgConnectScanStatus" style="font-size:.75rem;color:var(--text2);line-height:1.35;margin-bottom:12px">Scanning the local network...</div>
-   <div class="btn-row" style="justify-content:flex-end">
+   <div class="btn-row btn-row-end">
     <button class="btn btn-sm btn-secondary" onclick="lgScanTvs(true)">Scan Again</button>
     <button class="btn btn-sm btn-secondary" onclick="lgDismissDetectedPrompt()">Not Now</button>
-    <button class="btn btn-sm btn-success" id="lgConnectPromptBtn" onclick="lgPromptConnect()">Connect</button>
+    <button class="btn btn-sm btn-primary" id="lgConnectPromptBtn" onclick="lgPromptConnect()">Connect</button>
    </div>
   </div>
 	 </div>
@@ -37,13 +37,14 @@
 	   body.layout-desktop #lgCardTitle .lg-card-title-label{display:none}
 	   body.layout-desktop .lg-display-control-open-desktop{display:inline-flex;margin:0 0 8px}
 	   body.layout-desktop #lgCalHistoryDesktop{display:block}
-	   .lg-card-title-actions{margin-left:auto;display:inline-flex;gap:6px;min-width:0}
+	   .lg-card-title-actions{margin-left:auto;display:inline-flex;gap:var(--btn-gap,8px);min-width:0}
 	   @media(max-width:600px){
 	    #lgCardTitle{flex-wrap:wrap}
 	    #lgCardTitle::after{order:2;margin-left:auto}
 	    #lgStatusBadge{margin-left:0!important}
-	    .lg-card-title-actions{order:3;display:grid;width:100%;grid-template-columns:minmax(0,1fr) minmax(0,1.35fr);margin-left:0}
+	    .lg-card-title-actions{order:3;display:grid;width:100%;grid-template-columns:repeat(2,minmax(0,1fr));margin-left:0}
 	    .lg-card-title-actions .btn{width:100%;min-width:0;justify-content:center;white-space:normal}
+	    body.layout-tablet .dashboard h2 .lg-card-title-actions .btn{min-height:44px}
 	   }
 	   #lgCalHistoryDesktop{display:none;margin-top:14px;padding-top:12px;border-top:1px solid var(--border)}
 	   .lg-cal-hist-section{margin-bottom:12px}
@@ -52,7 +53,7 @@
 	   .lg-cal-hist-item{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:8px 9px;border:1px solid var(--border);border-radius:6px;background:var(--surface-inset)}
 	   .lg-cal-hist-meta{flex:1;min-width:140px;font-size:.76rem;color:var(--text);line-height:1.35}
 	   .lg-cal-hist-meta small{display:block;color:var(--text2);font-size:.68rem}
-	   .lg-cal-hist-actions{display:flex;gap:5px;flex-wrap:wrap}
+	   .lg-cal-hist-actions{display:flex;gap:var(--btn-gap);flex-wrap:wrap}
 	   .lg-cal-hist-empty{font-size:.74rem;color:var(--text2);padding:4px 0}
 	   #lgCalHistoryModal{display:none;position:fixed;inset:0;z-index:10000;background:rgba(0,0,0,.7);align-items:center;justify-content:center;padding:18px;box-sizing:border-box}
 	   #lgCalHistoryPanel{width:min(720px,calc(100vw - 36px));max-height:min(780px,calc(100vh - 36px));overflow:auto;background:var(--card);border:1px solid var(--border);border-radius:8px;padding:16px;box-sizing:border-box}
@@ -96,11 +97,11 @@
 	  <div id="lgStatusMeta" style="font-size:.75rem;color:var(--text2);margin-bottom:8px"></div>
 		  <div class="grid">
 		   <div class="field">
-		    <label>TV IP</label>
+		    <label for="lgManualIp">TV IP</label>
 		    <input type="text" id="lgManualIp" placeholder="192.168.1.x">
 		   </div>
 	   <div class="field">
-	    <label>Picture Mode</label>
+	    <label for="lgPictureMode">Picture Mode</label>
     <select id="lgPictureMode" onchange="lgSetPictureMode()" disabled>
      <option value="">Connect display</option>
     </select>
@@ -123,7 +124,7 @@
 		   </div>
 	   <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:6px">
 	    <span id="lgCardScanStatus" style="font-size:.7rem;color:var(--text2);line-height:1.3">Scanning the local network...</span>
-	    <button type="button" class="btn btn-sm btn-secondary" style="padding:4px 8px;font-size:.68rem" onclick="lgScanTvs(true)">Scan</button>
+	    <button type="button" class="btn btn-sm btn-secondary" onclick="lgScanTvs(true)">Scan</button>
 	   </div>
 	  </div>
 	  <!-- The PIN entry row used to live here, but the LG Connect modal
@@ -131,11 +132,11 @@
 	       The modal pops when the operator clicks Connect and the field
 	       appears inline as soon as the TV starts showing a PIN, so the
 	       operator never has to hunt around the LG card behind the modal. -->
-	  <div class="btn-row" style="margin-top:8px">
-	      <button class="btn btn-sm btn-success" id="lgConnectBtn" onclick="lgConnect()">Connect</button>
+	  <div class="btn-grid btn-grid-sm" style="margin-top:8px">
+	      <button class="btn btn-sm btn-primary" id="lgConnectBtn" onclick="lgConnect()">Connect</button>
 	    <button class="btn btn-sm btn-secondary" id="lgDisconnectBtn" onclick="lgDisconnectClient()" disabled>Disconnect</button>
-   <button class="btn btn-sm btn-primary" onclick="loadLgStatus()">Refresh</button>
-   <button class="btn btn-sm btn-danger" onclick="lgForgetClient()">Forget Pairing</button>
+   <button class="btn btn-sm btn-secondary" onclick="loadLgStatus()">Refresh</button>
+   <button class="btn btn-sm btn-danger-quiet" onclick="lgForgetClient()">Forget Pairing</button>
   </div>
     <div id="lgWorkflowHint" style="font-size:.75rem;color:var(--text2);margin-top:8px;line-height:1.45">Display detection is checking for an LG TV.</div>
   <div id="lgCalHistoryDesktop">
@@ -161,8 +162,8 @@
    <button class="btn btn-sm btn-secondary" onclick="lgCloseDisplayControl()">Close</button>
   </div>
   <div id="lgDisplayControlStatus" style="font-size:.8rem;color:var(--text2);line-height:1.45;margin-bottom:8px">Connect display</div>
-	  <div class="btn-row" style="margin-bottom:10px">
-	   <button class="btn btn-sm btn-primary" id="lgDisplayControlRefreshBtn" onclick="lgDisplayControlRefresh(true)">Refresh Settings</button>
+	  <div class="btn-grid" style="margin-bottom:10px">
+	   <button class="btn btn-sm btn-secondary" id="lgDisplayControlRefreshBtn" onclick="lgDisplayControlRefresh(true)">Refresh Settings</button>
 	   <button class="btn btn-sm btn-warning" id="lgDisplayControlResetBtn" onclick="lgResetPictureMode()" disabled>&#8634; Reset Picture Mode</button>
 	   <button class="btn btn-sm btn-secondary" id="lgApplyAllInputsBtn" onclick="lgApplyAllInputs()" disabled title="Copy the active picture mode's settings to the same mode on every input (the TV's Picture &gt; Apply to All Inputs)">Apply to All Inputs</button>
 	  </div>
@@ -178,7 +179,7 @@
     <li>Do this only after calibration, when you are happy with this mode as it is now.</li>
     <li>At best the TV acknowledges the request and reports the action as done; it never says which inputs changed. Check another input if you want confirmation.</li>
    </ul>
-   <div class="btn-row" style="justify-content:flex-end">
+   <div class="btn-row btn-row-end">
     <button class="btn btn-sm btn-secondary" type="button" onclick="lgApplyAllInputsClose()">Cancel</button>
     <button class="btn btn-sm btn-warning" type="button" id="lgApplyAllInputsConfirmBtn" onclick="lgApplyAllInputsConfirmed()">Apply to All Inputs</button>
    </div>

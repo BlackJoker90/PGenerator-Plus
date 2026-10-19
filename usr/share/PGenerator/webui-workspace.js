@@ -132,7 +132,7 @@ async function meterDeleteCustomSeriesById(id){
  const series=meterCustomSeriesById(id);
  if(!series) return false;
  meterCustomSeriesDirty=true;
- const ok=await meterShowChoiceModal({title:'Delete series?',body:'Delete "'+series.name+'" and all its patches? This cannot be undone.',acceptLabel:'Delete',cancelLabel:'Keep'});
+ const ok=await meterShowChoiceModal({title:'Delete series?',body:'Delete "'+series.name+'" and all its patches? This cannot be undone.',acceptLabel:'Delete series',cancelLabel:'Keep',destructive:true});
  if(!ok) return false;
  const state=meterCustomSeriesNormalizeState();
  const seriesKey=((series.category==='color')?'colors':'greyscale')+'-'+series.id;
@@ -388,7 +388,7 @@ function meterRenderCubePreview(parsed,filename){
    +'<div>Neutral axis: black '+fmt3(parsed.neutral[0])+' &middot; mid '+fmt3(mid)+' &middot; white '+fmt3(parsed.neutral[parsed.neutral.length-1])+'</div>'
    +'<div>Neutral monotonic: '+(parsed.monotonic?'<span style="color:var(--green)">yes</span>':'<span style="color:var(--red)">NO</span>')+'</div>'
    +'<div style="margin-top:6px;color:var(--text2)">Preview only &mdash; this LUT is not applied to the display.</div>'
-   +'<div style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap"><button class="btn btn-sm btn-secondary" onclick="meterViewImportedLutIn3d()" title="Render the previewed LUT as a 3D cube (input lattice vs LUT output positions)">View in 3D</button><button class="btn btn-sm btn-secondary" onclick="meterDownloadPreviewedCubeAs3dl()" title="Convert the previewed LUT and download as Autodesk/Kodak .3dl">Download as .3dl</button></div>';
+   +'<div class="btn-row" style="margin-top:8px"><button class="btn btn-sm btn-secondary" onclick="meterViewImportedLutIn3d()" title="Render the previewed LUT as a 3D cube (input lattice vs LUT output positions)">View in 3D</button><button class="btn btn-sm btn-secondary" onclick="meterDownloadPreviewedCubeAs3dl()" title="Convert the previewed LUT and download as Autodesk/Kodak .3dl">Download as .3dl</button></div>';
  }
  panel.innerHTML=html;
  panel.style.display='';
@@ -490,18 +490,18 @@ function meterDownloadSolvedLut(name){
  }catch(e){
   // Fallback: fetch + blob (same as other exports).
   fetch('/api/3d-lut/cube?file='+encodeURIComponent(file)).then(function(resp){
-   if(!resp.ok){ toast('LUT download failed',true); return null; }
+   if(!resp.ok){ toast('Couldn\u2019t download the LUT (HTTP '+resp.status+'). Re-solve the LUT, or reload the LUT list and try again.',true); return null; }
    return resp.blob();
   }).then(function(blob){
    if(blob) meterDownloadBlob(blob,file);
-  }).catch(function(){ toast('LUT download failed',true); });
+  }).catch(function(e){ toast('Couldn\u2019t download the LUT. '+pgErrText(e),true); });
  }
 }
 
 async function meterDownloadSolvedLutAs3dl(name){
  try{
   const resp=await fetch('/api/3d-lut/cube?file='+encodeURIComponent(name));
-  if(!resp.ok){ toast('LUT download failed',true); return; }
+  if(!resp.ok){ toast('Couldn\u2019t download the LUT (HTTP '+resp.status+'). Re-solve the LUT, or reload the LUT list and try again.',true); return; }
   const parsed=meterCubeLutParse(await resp.text());
   if(!parsed.ok){ toast('.cube could not be parsed for conversion',true); return; }
   const text=meterCubeTo3dl(parsed);
@@ -513,7 +513,7 @@ async function meterDownloadSolvedLutAs3dl(name){
 }
 
 async function meterDeleteSolvedLut(name){
- const ok=await meterShowChoiceModal({title:'Delete LUT?',body:'Delete "'+String(name)+'" and its companion .bin/.json files from the LUT history? The TV keeps whatever is already uploaded. This cannot be undone.',acceptLabel:'Delete',cancelLabel:'Keep'});
+ const ok=await meterShowChoiceModal({title:'Delete LUT?',body:'Delete "'+String(name)+'" and its companion .bin/.json files from the LUT history? The TV keeps whatever is already uploaded. This cannot be undone.',acceptLabel:'Delete LUT',cancelLabel:'Keep',destructive:true});
  if(!ok) return;
  try{
   const r=await fetchJSON('/api/3d-lut/delete',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({file:name}),_timeoutMs:8000});
@@ -521,10 +521,10 @@ async function meterDeleteSolvedLut(name){
    toast('LUT deleted');
    meterLoadSolvedLutList();
   } else {
-   toast((r&&r.message)?r.message:'LUT delete failed',true);
+   toast(pgFailMsg('Couldn\u2019t delete the LUT',r),true);
   }
  }catch(e){
-  toast('LUT delete failed',true);
+  toast('Couldn\u2019t delete the LUT. '+pgErrText(e),true);
  }
 }
 
@@ -580,12 +580,12 @@ function meterViewImportedLutIn3d(){
 async function meterViewSolvedLutIn3d(name){
  try{
   const resp=await fetch('/api/3d-lut/cube?file='+encodeURIComponent(name));
-  if(!resp.ok){ toast('LUT download failed',true); return; }
+  if(!resp.ok){ toast('Couldn\u2019t download the LUT (HTTP '+resp.status+'). Re-solve the LUT, or reload the LUT list and try again.',true); return; }
   const parsed=meterCubeLutParse(await resp.text());
   if(!parsed.ok){ toast('.cube could not be parsed',true); return; }
   meterLutCubeShow(parsed,name);
  }catch(e){
-  toast('LUT view failed',true);
+  toast('Couldn\u2019t open the LUT viewer. '+pgErrText(e),true);
  }
 }
 
@@ -906,7 +906,7 @@ async function meterLutSolveStart(series,readings,opts){
   if(meterBuild3dLutPending) meterBuild3dLutPending=null;
   meterLutSolvePendingDownload='';
   meterLutSolveProgressHide();
-  toast((r&&r.message)||'LUT solve failed to start',true);
+  toast(pgFailMsg('Couldn\u2019t start the 3D LUT solve',r),true);
   return false;
  }
  toast('Solving 3D LUT…');
@@ -1025,7 +1025,7 @@ async function meterLutSolvePoll(){
   meterLutSolvePendingDownload='';
   meterBuild3dLutPending=null;
   meterLutSolveProgressHide();
-  toast(s.message||'LUT solve failed',true);
+  toast(pgFailMsg('The 3D LUT solve failed',s),true);
  }
 }
 
@@ -1053,7 +1053,7 @@ function meterLutSolveDonePrompt(name,how,state){
  const cubeBtn=document.getElementById('lutSolveDoneDownloadCubeBtn');
  const d3Btn=document.getElementById('lutSolveDoneDownload3dlBtn');
  if(cubeBtn){ cubeBtn.className='btn btn-sm btn-primary'; cubeBtn.textContent='Download .cube'; }
- if(d3Btn){ d3Btn.className='btn btn-sm btn-primary'; d3Btn.textContent='Download .3dl'; }
+ if(d3Btn){ d3Btn.className='btn btn-sm btn-secondary'; d3Btn.textContent='Download .3dl'; }
  // In desktop layout Calibration is a hidden workspace while 3D LUT is
  // active.  These overlays originate in Calibration markup, so hoist them to
  // body or the hidden ancestor suppresses the dialog until the operator
@@ -1529,7 +1529,7 @@ function meterOpenCustomSeriesEditor(category,id){
 let meterCustomSeriesEditorUnsaved=false;
 async function meterCloseCustomSeriesEditor(){
  if(meterCustomSeriesEditorUnsaved){
-  const ok=await meterShowChoiceModal({title:'Discard changes?',body:'This series has unsaved changes (imported or edited patches). Close without saving?',acceptLabel:'Discard',cancelLabel:'Keep editing'});
+  const ok=await meterShowChoiceModal({title:'Discard changes?',body:'This series has unsaved changes (imported or edited patches). Close without saving?',acceptLabel:'Discard changes',cancelLabel:'Keep editing',destructive:true});
   if(!ok) return;
  }
  meterCustomSeriesEditorUnsaved=false;
@@ -1710,7 +1710,7 @@ async function meterSaveCustomSeriesEditor(){
  const saved=await saveMeterSettings();
  if(!saved||saved.status!=='ok'){
   meterCustomSeriesEditorUnsaved=true;
-  toast('Custom series could not be saved to the Pi',true);
+  toast(pgFailMsg('Couldn\u2019t save the custom series to the Pi',saved,'Your edits are still open; try Save again.'),true);
   return;
  }
  meterCloseCustomSeriesEditor();
@@ -2676,7 +2676,7 @@ function meterSelectBuiltinColorChecker(selected){
   meterSyncColorCheckerSeriesUi(points);
   return true;
  };
- const pending=meterSelectSeries('colors',points);
+ const pending=meterSelectSeries('colors',points,explicit?undefined:{quiet:true});
  return pending&&typeof pending.then==='function'?pending.then(finishSelection):finishSelection(pending);
 }
 function meterSelectGreyscaleSeries(value){
@@ -2768,7 +2768,7 @@ async function meterSelectSeries(type,points,opts){
    meterRestoreActiveSeriesControls();
    return false;
   }
- const ok=await meterShowChoiceModal({title:'Switch series?',body:'Leave the current series and cancel the running series read?',acceptLabel:'Switch',cancelLabel:'Stay'});
+ const ok=await meterShowChoiceModal({title:'Switch series?',body:'Leave the current series and cancel the running series read?',acceptLabel:'Switch series',cancelLabel:'Stay',destructive:true,tone:'caution'});
  if(!ok){meterRestoreActiveSeriesControls();return false;}
  }
  // Do not mutate tab-owned chart state until the running-series choice is
@@ -2914,7 +2914,9 @@ async function meterSelectSeries(type,points,opts){
    const hasReal=(Array.isArray(meterReadings)&&meterReadings.some(r=>meterReadingIsRealMeasurement(r)));
    if(!hasReal) showColorReadingDetail(null);
   }catch(e){}
- toast(meterSeriesLabelFromKey(key)+' loaded');
+ // Automatic loads (boot restore, tab switch) stay silent: the series picker
+ // and charts already show the result.
+ if(!opts.quiet) toast(meterSeriesLabelFromKey(key)+' loaded');
  try{ if(typeof meterSync3dLutTabChartVisibility==='function') meterSync3dLutTabChartVisibility(); }catch(e){}
   return true;
  }
@@ -2947,7 +2949,9 @@ async function meterSelectSeries(type,points,opts){
   const hasReal=(Array.isArray(meterReadings)&&meterReadings.some(r=>meterReadingIsRealMeasurement(r)));
   if(!hasReal) showColorReadingDetail(null);
  }catch(e){}
- toast(meterSeriesLabelFromKey(key)+' loaded');
+ // Automatic loads (boot restore, tab switch) stay silent: the series picker
+ // and charts already show the result.
+ if(!opts.quiet) toast(meterSeriesLabelFromKey(key)+' loaded');
  try{ if(typeof meterSync3dLutTabChartVisibility==='function') meterSync3dLutTabChartVisibility(); }catch(e){}
  return true;
 }
@@ -3945,7 +3949,7 @@ async function meterGreyAdjustCurrentStepChannel(channel,deltaStep){
 		  return true;
 	 }catch(e){
 	  meterLgGreyState={status:'error',picture:previousPicture,needsRepair:false,message:'Unable to reach the LG TV control API.'};
-	  toast('Unable to reach the LG TV control API.',true);
+	  toast('Couldn\u2019t reach the LG TV. Check that it is on and connected on the Display card, then try again.',true);
 	  return false;
 		}finally{
 		  if(targetStep){
@@ -4818,7 +4822,7 @@ function meterAutoCalSetOverlay(active,status){
  }
  if(uploadRetryCloseBtn) uploadRetryCloseBtn.style.display=showUploadRetry?'':'none';
  if(skipReportBtn&&showComplete) skipReportBtn.textContent='Close';
- if(postReportBtn&&postReportAvailable) postReportBtn.textContent='\uD83D\uDCC4 Generate Post-Cal Report';
+ if(postReportBtn&&postReportAvailable) postReportBtn.textContent='Generate Post-Cal Report';
  if(stopBtn) stopBtn.style.display=(showComplete||showUploadRetry)?'none':'';
  if(showUploadRetry) meterLg3dUploadRetryStatus=status;
  if(showComplete){
@@ -6711,6 +6715,19 @@ function meterFullAutoCalToneMapPeakLuminance(status){
 // =============================================================================
 const METER_HDR_TONEMAP_PROMPT_KEY='meterHdrToneMapPromptChoice';
 
+// Keeps Tab / Shift+Tab inside an open modal card. Call from a keydown
+// handler; returns true when it handled the key.
+function pgDialogTrapTab(card,ev){
+ if(!card||ev.key!=='Tab') return false;
+ const items=Array.prototype.filter.call(card.querySelectorAll('button,input,select,textarea,a[href],[tabindex]:not([tabindex="-1"])'),el=>!el.disabled&&el.getClientRects().length);
+ if(!items.length){ ev.preventDefault(); card.focus(); return true; }
+ const firstEl=items[0],lastEl=items[items.length-1],cur=document.activeElement;
+ if(!card.contains(cur)){ ev.preventDefault(); (ev.shiftKey?lastEl:firstEl).focus(); return true; }
+ if(ev.shiftKey&&(cur===firstEl||cur===card)){ ev.preventDefault(); lastEl.focus(); return true; }
+ if(!ev.shiftKey&&cur===lastEl){ ev.preventDefault(); firstEl.focus(); return true; }
+ return false;
+}
+
 function meterShowChoiceModal(options){
  const opts=options||{};
  return new Promise(resolve=>{
@@ -6720,12 +6737,21 @@ function meterShowChoiceModal(options){
   root.id='meterAutoCalChoiceModal';
   root.setAttribute('data-meter-autocal-choice','1');
   root.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,0.55);z-index:100001;display:flex;align-items:center;justify-content:center;padding:20px;box-sizing:border-box';
+  // Remember the opener so focus can return to it when the dialog closes.
+  const opener=document.activeElement;
   const card=document.createElement('div');
+  card.setAttribute('role','dialog');
+  card.setAttribute('aria-modal','true');
+  card.setAttribute('aria-labelledby','meterAutoCalChoiceTitle');
+  card.setAttribute('aria-describedby','meterAutoCalChoiceBody');
+  card.tabIndex=-1;
   card.style.cssText='background:var(--panel,#0f1320);border:1px solid var(--border,#1d2230);border-radius:10px;max-width:480px;width:100%;padding:20px;color:var(--text,#e3e6ef);box-shadow:0 18px 60px rgba(0,0,0,0.6);font-family:inherit';
   const title=document.createElement('div');
   title.style.cssText='font-size:1.0rem;font-weight:700;margin-bottom:10px;color:var(--text,#e3e6ef)';
   title.textContent=String(opts.title||'Confirm');
+  title.id='meterAutoCalChoiceTitle';
   const body=document.createElement('div');
+  body.id='meterAutoCalChoiceBody';
   body.style.cssText='font-size:.85rem;color:var(--text2,#a8b0c0);line-height:1.5;margin-bottom:14px;white-space:pre-line';
   body.textContent=String(opts.body||'');
   // Optional prebuilt content (e.g. release notes) below the body text.
@@ -6792,12 +6818,14 @@ function meterShowChoiceModal(options){
    radioHost.appendChild(group);
   });
   const row=document.createElement('div');
-  row.style.cssText='display:flex;gap:10px;justify-content:flex-end;flex-wrap:wrap';
+  row.className='btn-row btn-row-end';
   const cancelBtn=document.createElement('button');
   cancelBtn.className='btn btn-sm btn-secondary';
   cancelBtn.textContent=String(opts.cancelLabel||'Skip');
   const acceptBtn=document.createElement('button');
-  acceptBtn.className='btn btn-sm btn-primary';
+  // destructive:true uses the danger role; tone:'caution' (restarts, installs,
+  // interrupting a running read) uses the amber outline role instead.
+  acceptBtn.className='btn btn-sm '+(opts.tone==='caution'?'btn-warning':(opts.destructive?'btn-danger':'btn-primary'));
   acceptBtn.textContent=String(opts.acceptLabel||'OK');
   row.appendChild(cancelBtn);
   row.appendChild(acceptBtn);
@@ -6814,6 +6842,7 @@ function meterShowChoiceModal(options){
    resolved=true;
    try{ document.removeEventListener('keydown',onKey,true); }catch(e){}
    try{ root.remove(); }catch(e){}
+   try{ if(opener&&opener!==document.body&&opener.isConnected&&typeof opener.focus==='function') opener.focus(); }catch(e){}
    resolve(value);
   };
   acceptBtn.onclick=()=>{
@@ -6829,9 +6858,14 @@ function meterShowChoiceModal(options){
   };
   cancelBtn.onclick=()=>cleanup(false);
   root.onclick=(ev)=>{ if(ev.target===root) cleanup(false); };
-  function onKey(ev){ if(ev.key==='Escape') cleanup(false); }
+  function onKey(ev){
+   if(ev.key==='Escape'){ ev.preventDefault(); cleanup(false); return; }
+   pgDialogTrapTab(card,ev);
+  }
   document.addEventListener('keydown',onKey,true);
-  try{ acceptBtn.focus(); }catch(e){}
+  // Destructive confirms (reboot, power off, install, delete, discard) focus
+  // Cancel so a stray Enter never commits them.
+  try{ (opts.destructive?cancelBtn:acceptBtn).focus(); }catch(e){}
  });
 }
 
@@ -6999,11 +7033,11 @@ async function meterAutoCalPromptHdrToneMapUpload(status,source,options){
     choiceRecord={user_choice:'uploaded',peak_luminance:measuredPeak,in_loop_peak:inLoopPeak,source:source||'wizard',response};
     finalStatus={...(status||{}),hdr_tone_map_uploaded:true,hdr_tone_map_peak_luminance:measuredPeak,hdr20_1d_tonemap_uploaded:true,hdr20_1d_tonemap_peak_luminance:measuredPeak};
    }else{
-    toast((response&&response.message)||'HDR tone map upload failed',true);
+    toast(pgFailMsg('Couldn\u2019t upload the HDR tone map to the TV',response),true);
     choiceRecord={user_choice:'upload_failed',peak_luminance:measuredPeak,in_loop_peak:inLoopPeak,source:source||'wizard',response};
    }
   }catch(e){
-   toast('HDR tone map upload failed: '+e.message,true);
+   toast('Couldn\u2019t upload the HDR tone map to the TV. '+pgErrText(e),true);
    choiceRecord={user_choice:'upload_failed',peak_luminance:measuredPeak,in_loop_peak:inLoopPeak,source:source||'wizard',error:String(e&&e.message||e)};
   }
  }else{
@@ -8154,7 +8188,7 @@ async function meterFullAutoCalGeneratePostReport(){
    meterClearSeriesRunUiState();
    meterHideWorkflowProgress();
   }
-  if(btn){btn.disabled=false;btn.textContent='\uD83D\uDCC4 Generate Post-Cal Report';}
+  if(btn){btn.disabled=false;btn.textContent='Generate Post-Cal Report';}
   if(skipBtn) skipBtn.disabled=false;
   meterUpdateReadButtons();
  }
@@ -8166,8 +8200,8 @@ async function meterFullAutoCalSkipPostReport(){
 
 async function meterStartFullAutoCal(){
  if(meterBlockAutoCalForSimulation()) return;
- if(meterActionPending||meterAutoCalRunning||meterLg3dAutoCalRunning||meterFullAutoCalRunning){toast('Meter operation already in progress',true);return;}
- if(!(await meterEnsureDetected())){toast('No meter detected',true);return;}
+ if(meterActionPending||meterAutoCalRunning||meterLg3dAutoCalRunning||meterFullAutoCalRunning){toast('The meter is busy with another reading. Wait for it to finish, or stop it first.',true);return;}
+ if(!(await meterEnsureDetected())){toast('No meter detected. Plug in the meter, wait a few seconds for it to appear, then try again.',true);return;}
  if(!meterFullAutoCalAvailable()){toast('Connect an LG TV before starting Full Auto Cal',true);return;}
  if(!(await meterEnsureLgTvReadyForAutoCal('Full Auto Cal'))) return;
  if(!(await meterEnsureLgAutoCalTransport('Full Auto Cal'))) return;
@@ -10414,7 +10448,7 @@ function meterLg3dModalProfileSourceChanged(){
 function meterOpenLg3dAutoCalModal(){
  if(meterBlockAutoCalForSimulation()) return;
  if(meterActionPending||meterLg3dAutoCalRunning||meterAutoCalRunning||meterFullAutoCalRunning){
-  toast('Meter operation already in progress',true);
+  toast('The meter is busy with another reading. Wait for it to finish, or stop it first.',true);
   return;
  }
  const modal=document.getElementById('meterLg3dStartModal');
@@ -10548,7 +10582,7 @@ function meterLg3dSelectSeriesChanged(){
 }
 function meterOpenLg3dSelectSeriesModal(){
  if(meterActionPending||meterLg3dAutoCalRunning||meterAutoCalRunning||meterFullAutoCalRunning||meterSeriesRunning){
-  toast('Meter operation already in progress',true);
+  toast('The meter is busy with another reading. Wait for it to finish, or stop it first.',true);
   return;
  }
  const modal=meterEnsureModalOnBody(document.getElementById('meterLg3dSelectSeriesModal'));
@@ -11303,7 +11337,7 @@ async function meterStartLg3dAutoCal(options){
    : (signalMode==='hdr10'?'HDR10':'LG')+' 3D LUT AutoCal '
      +(meterLg3dIsVolumeMethod(method)?'profiles '+latticePatches.length+' patches ('+String(latticeSeries&&latticeSeries.name||method)+') and ':'')
      +'assumes the greyscale AutoCal has already been completed. Continue with color-only 3D LUT calibration from the current TV state?';
-  const accepted=await pgConfirm(message);
+  const accepted=await pgConfirm(message,{acceptLabel:method==='imported'?'Upload LUT':'Start 3D LUT',destructive:true,tone:'caution'});
   if(!accepted) return false;
  }
  // Save the preview .cube on the generator now (post-confirm) and resolve
@@ -11634,7 +11668,7 @@ function meterReadSeriesPrimaryAction(){
 let meterDesktop3dLutBuildAfterSelect=false;
 function meterDesktop3dLutBuildFlow(){
  if(!document.body.classList.contains('layout-desktop')) return meterReadSeriesPrimaryAction();
- if(meterActionPending||meterSeriesRunning){ toast('Meter operation already in progress',true); return false; }
+ if(meterActionPending||meterSeriesRunning){ toast('The meter is busy with another reading. Wait for it to finish, or stop it first.',true); return false; }
  // A custom lattice (or the built-in matrix profile) selected on the 3D LUT
  // workspace is already the operator's profiling choice. Start the normal
  // Build flow directly instead of reopening the method-selection wizard.
@@ -11779,7 +11813,7 @@ function meterSolveCubeSizeRadios(selected){
 // series, solve, then offer .cube / .3dl download on the completion modal.
 async function meterBuild3dLutSeries(){
  if(meterSeriesCacheDirtyKeys&&meterSeriesCacheDirtyKeys.size) meterFlushScheduledSeriesCache();
- if(meterActionPending){toast('Meter operation already in progress',true);return false;}
+ if(meterActionPending){toast('The meter is busy with another reading. Wait for it to finish, or stop it first.',true);return false;}
  if(!meterSeriesSteps||!meterActiveSeriesType){toast('Select a series first',true);return false;}
  const volume=(typeof meterActiveVolumeProfileSeries==='function')?meterActiveVolumeProfileSeries():null;
  const isMatrix=(typeof meterActiveMatrixProfileSeries==='function')&&meterActiveMatrixProfileSeries();
@@ -11830,8 +11864,8 @@ async function meterRunSeries(options){
  const requestedSelection=Array.isArray(options.selectionIndices)
   ? options.selectionIndices.filter(index=>Number.isInteger(index)&&index>=0).sort((a,b)=>a-b)
   : [];
- if(meterActionPending){toast('Meter operation already in progress',true);return false;}
- if(!(await meterEnsureDetected())){toast('No meter detected',true);return false;}
+ if(meterActionPending){toast('The meter is busy with another reading. Wait for it to finish, or stop it first.',true);return false;}
+ if(!(await meterEnsureDetected())){toast('No meter detected. Plug in the meter, wait a few seconds for it to appear, then try again.',true);return false;}
  if(!(await meterCalibrationRequirePatternProvider())) return false;
  if(!meterSeriesSteps||!meterActiveSeriesType){toast('Select a series first',true);return false;}
  if(!meterEnsureAppliedGeneratorSettings()) return false;
@@ -12085,7 +12119,7 @@ async function meterRunSeries(options){
 		   body:JSON.stringify(_seriesBody),_timeoutMs:10000});
 	  if(!r||r.status!=='started'){
    if(await recoverStartedSeries()) return true;
-	   toast(r&&r.message?r.message:'Failed to start series',true);
+	   toast(pgFailMsg('Couldn\u2019t start the series',r),true);
 	   meterSeriesRunning=false;
 	   meterSeriesBeepArmed=false;
 	   meterSeriesSelectionRunActive=false;
@@ -12109,7 +12143,7 @@ async function meterRunSeries(options){
 	  return true;
  }catch(e){
   if(await recoverStartedSeries()) return true;
-  toast((e&&e.message)?('Failed to start series: '+e.message):'Failed to start series',true);
+  toast('Couldn\u2019t start the series. '+pgErrText(e),true);
   meterSeriesRunning=false;
   meterSeriesBeepArmed=false;
   meterSeriesSelectionRunActive=false;
@@ -19028,7 +19062,7 @@ async function meterExportHcfrChc(){
   const bytes=chc.serializeHcfrChc(built.model);
   meterDownloadBlob(new Blob([bytes],{type:'application/octet-stream'}),filename);
   toast('HCFR CHC exported');
- }catch(e){toast('HCFR export failed: '+((e&&e.message)||e),true);}
+ }catch(e){toast('Couldn\u2019t export the HCFR session. '+pgErrText(e),true);}
 }
 
 function meterOpenHcfrImport(){const input=document.getElementById('meterHcfrImportInput');if(input){input.value='';input.click();}}
@@ -19102,7 +19136,7 @@ async function meterImportHcfrChcFile(input){
   meterPersistSeriesCache();
   if(keys.length)meterRestoreSeriesFromCache(keys[0],{signalMode:mode});
   toast('Imported '+parsed.validMeasurementCount+' HCFR measurements into '+keys.length+' preserved series');
- }catch(e){toast('HCFR import failed: '+((e&&e.message)||e),true);}finally{if(input)input.value='';}
+ }catch(e){toast('Couldn\u2019t import the HCFR session. Check that the file is a .chc saved by HCFR.',true,{detail:String((e&&e.message)||e||'')});}finally{if(input)input.value='';}
 }
 
 async function meterExportCSV(){
@@ -19277,7 +19311,7 @@ async function meterExportCSV(){
  });
  const blob=new Blob([csv],{type:'text/csv'});
    meterDownloadBlob(blob,filename);
- }catch(e){ toast('CSV export failed: '+((e&&e.message)?e.message:e),true); }
+ }catch(e){ toast('Couldn\u2019t export the CSV. '+pgErrText(e),true); }
 }
 
 let meterSharedSeriesId=null;
@@ -19430,7 +19464,7 @@ async function meterNewSession(){
   toast('Stop the active measurement first','err');
   return;
  }
- if(!await pgConfirm({title:'Start a new session?',body:'This clears all chart data and series.',acceptLabel:'New session'})) return;
+ if(!await pgConfirm({title:'Start a new session?',body:'This clears all chart data and series.',acceptLabel:'Clear & start new',destructive:true})) return;
  try{ meterClearResults(); }catch(e){}
  try{ if(typeof meterClearWorkflowProgress==='function') meterClearWorkflowProgress(); }catch(e){}
  toast('New session — charts cleared');
@@ -19744,9 +19778,9 @@ document.getElementById('ccssUploadBtn').addEventListener('click',async function
     ? ((r.message||'Meter profile saved')+' and selected for '+activeMeterLabel)
     : ((r.message||'Meter profile saved')+'. It is not compatible with the selected meter, so the current correction was left unchanged.'));
   } else {
-   status.textContent=r&&r.message?r.message:'Upload failed';
+   status.textContent=pgFailMsg('Couldn\u2019t upload the meter profile',r);
    status.style.color='var(--red)';
-   toast(r&&r.message?r.message:'Upload failed',true);
+   toast(pgFailMsg('Couldn\u2019t upload the meter profile',r),true);
   }
  }catch(e){
   status.textContent='Upload error';
@@ -20032,13 +20066,13 @@ async function ccssExportSelected(){
    toast('Downloaded '+filename);
   }else{
    const payload=await res.json().catch(()=>null);
-   const message=(payload&&payload.message)||'Export failed';
+   const message=pgFailMsg('Couldn\u2019t export the meter profile',payload,'PGenerator+ answered HTTP '+res.status+'. Try again.');
    ccssExportSetStatus(message,true);
    toast(message,true);
   }
  }catch(e){
-  ccssExportSetStatus('Export error: '+e.message,true);
-  toast('Export error: '+e.message,true);
+  ccssExportSetStatus('Couldn\u2019t export the meter profile. '+pgErrText(e),true);
+  toast('Couldn\u2019t export the meter profile. '+pgErrText(e),true);
  }finally{
   if(btn) btn.textContent=prevText;
   ccssExportSyncControls();
@@ -20840,7 +20874,7 @@ function meterDelayLoadValue(raw,explicit){
 }
 
 async function deleteCustomCcss(filename){
- if(!await pgConfirm({title:'Delete '+filename+'?',acceptLabel:'Delete'})) return false;
+ if(!await pgConfirm({title:'Delete '+filename+'?',acceptLabel:'Delete CCSS',destructive:true})) return false;
  try{
   const r=await fetchJSON('/api/ccss/delete/'+encodeURIComponent(filename),{method:'POST',_timeoutMs:5000});
   if(r&&r.status==='ok'){
@@ -20853,9 +20887,9 @@ async function deleteCustomCcss(filename){
    toast('Deleted');
    return true;
   }
-  toast(r&&r.message?r.message:'Delete failed',true);
+  toast(pgFailMsg('Couldn\u2019t delete the meter profile',r),true);
  }catch(e){
-  toast('Delete error: '+e.message,true);
+  toast('Couldn\u2019t delete the meter profile. '+pgErrText(e),true);
  }
  return false;
 }

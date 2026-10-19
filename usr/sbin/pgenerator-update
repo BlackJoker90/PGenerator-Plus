@@ -427,6 +427,14 @@ github_get() {
  esac
  if [ -s "$base.json" ] && [ "$code" != 404 ]; then
   log_file_only "GitHub answered HTTP ${code:-000} for $url; using the cached answer"
+  # Note the refusal for the caller ($$ is the main shell's PID even in the
+  # $(...) subshell this runs in): when the answer was last confirmed and,
+  # for a rate limit, when GitHub takes requests again.
+  reset=""
+  if { [ "$code" = 403 ] || [ "$code" = 429 ]; } && tr -d '\r' <"$hdr" | grep -qi '^x-ratelimit-remaining: *0$'; then
+   reset=$(tr -d '\r' <"$hdr" | sed -n 's/^[Xx]-[Rr]ate[Ll]imit-[Rr]eset: *//p' | tail -1)
+  fi
+  printf '%s %s %s\n' "$(stat -c %Y "$base.json" 2>/dev/null || echo 0)" "${reset:-0}" "${code:-000}" >"$GITHUB_CACHE_DIR/stale.$$" 2>/dev/null || true
   cat "$base.json"
   rm -f "$hdr" "$body"
   return 0
@@ -719,6 +727,8 @@ case "$cmd" in
   repo_json="$(json_escape "$UPDATE_REPO")"
   target_json="$(json_escape "$UPDATE_TARGET")"
   current=$(get_current_version)
+  rm -f "$GITHUB_CACHE_DIR/stale.$$"
+  find "$GITHUB_CACHE_DIR" -maxdepth 1 -name 'stale.*' -mmin +10 -delete 2>/dev/null || true
   release_json=$(get_latest_release)
   if [ -z "$release_json" ]; then
    printf '{"status":"error","repo":%s,"target":%s,"message":%s}\n' "$repo_json" "$target_json" "$(json_escape "Cannot reach GitHub")"
@@ -778,14 +788,29 @@ case "$cmd" in
    changelog="Release $latest has no OTA package for this device ($UPDATE_TARGET) in $UPDATE_REPO."
   fi
 
-  printf '{"status":"ok","repo":%s,"target":%s,"current":%s,"latest":%s,"update_available":%s,"published":%s,"changelog":%s,"asset_url":%s}\n' \
+  # GitHub refused and the answer came from the cache: tell the WebUI how old
+  # it is, so "no update" is not taken as current.
+  stale_fields=""
+  if [ -s "$GITHUB_CACHE_DIR/stale.$$" ]; then
+   read -r cached_at reset code <"$GITHUB_CACHE_DIR/stale.$$"
+   now=$(date +%s)
+   retry_minutes=0
+   [ "${reset:-0}" -gt "$now" ] && retry_minutes=$(( (reset - now + 59) / 60 ))
+   stale_reason="unreachable"
+   [ "${reset:-0}" -gt 0 ] && stale_reason="rate_limit"
+   stale_fields=$(printf ',"stale":true,"stale_reason":"%s","cached_at":%d,"retry_minutes":%d' "$stale_reason" "${cached_at:-0}" "$retry_minutes")
+  fi
+  rm -f "$GITHUB_CACHE_DIR/stale.$$"
+
+  printf '{"status":"ok","repo":%s,"target":%s,"current":%s,"latest":%s,"update_available":%s,"published":%s,"changelog":%s,"asset_url":%s%s}\n' \
    "$repo_json" "$target_json" \
    "$(json_escape "$current")" \
    "$(json_escape "$latest")" \
    "$update_available" \
    "$(json_escape "$published")" \
    "$(json_escape "$changelog")" \
-   "$(json_escape "$asset_url")"
+   "$(json_escape "$asset_url")" \
+   "$stale_fields"
   ;;
 
  list)

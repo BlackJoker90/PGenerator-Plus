@@ -3753,12 +3753,28 @@ async function checkUpdate(manual){
   document.getElementById('updateChangelog').textContent=r.changelog;
  }
  window._updateCheck=r;
+ // GitHub refused and the device answered from its cache: say how old the
+ // answer is instead of reporting it as the latest state.
+ let staleNote='';
+ if(r.stale){
+  const at=r.cached_at?new Date(r.cached_at*1000).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'}):'';
+  const why=r.stale_reason==='rate_limit'
+   ?'GitHub allows 60 requests per hour from your network without a login, and they are used up.'
+   :'GitHub could not be reached.';
+  staleNote=why+(at?' Showing the answer from '+at+'.':'')+
+   (r.retry_minutes>0?' Check again in '+r.retry_minutes+' min.':' Check again later.');
+ }
  if(r.update_available){
   document.getElementById('applyUpdateBtn').style.display='';
   document.getElementById('updateBtn').style.display='';
   document.getElementById('updateBtn').classList.add('update-pulse');
-  setUpdateStatus('\u2b07 Version v'+r.latest+' is available — click Install Update.','warn');
+  setUpdateStatus('\u2b07 Version v'+r.latest+' is available — click Install Update.'+(staleNote?' '+staleNote:''),'warn');
   if(manual) toast('Update available: v'+r.latest);
+ } else if(staleNote){
+  document.getElementById('applyUpdateBtn').style.display='none';
+  document.getElementById('updateBtn').style.display='none';
+  setUpdateStatus('\u26a0 Could not check for updates. '+staleNote,'warn');
+  if(manual) toast('Could not check for updates: '+staleNote,true);
  } else {
   document.getElementById('applyUpdateBtn').style.display='none';
   document.getElementById('updateBtn').style.display='none';

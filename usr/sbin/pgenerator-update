@@ -77,9 +77,11 @@ get_current_version() {
 }
 
 # ── Log with timestamp ──
+# Optional third argument: progress of the phase in percent (0-100), written as
+# a fourth line; empty when unknown. Readers that expect three lines ignore it.
 set_update_state() {
  UPDATE_PHASE="$1"
- printf '%s\n%s\n%s\n' "$(date +%s)" "$1" "${2:-}" > "$UPDATE_STATE_FILE.tmp" 2>/dev/null \
+ printf '%s\n%s\n%s\n%s\n' "$(date +%s)" "$1" "${2:-}" "${3:-}" > "$UPDATE_STATE_FILE.tmp" 2>/dev/null \
   && chmod 644 "$UPDATE_STATE_FILE.tmp" 2>/dev/null \
   && mv -f "$UPDATE_STATE_FILE.tmp" "$UPDATE_STATE_FILE" 2>/dev/null || true
 }
@@ -525,7 +527,7 @@ release_field() {
   my $rel = eval { decode_json($json) };
   exit 1 if(!$rel || ref($rel) ne "HASH");
   my $value = "";
-  if($key eq "asset_url") {
+  if($key eq "asset_url" || $key eq "asset_size") {
    # Pick ONLY the tarball built for this device target; a release may carry
    # both. No match means no asset (never fall back to another target).
    #   pi4-biasi:          pgenerator-plus-<ver>.tar.gz (optional -pi4-biasi)
@@ -545,7 +547,12 @@ release_field() {
        && $name !~ /pi5/i);
      }
      if($match) {
-      $value = $url;
+      if($key eq "asset_size") {
+       my $size = $asset->{size} // "";
+       $value = ($size =~ /^[0-9]+$/ && $size > 0) ? $size : "";
+      } else {
+       $value = $url;
+      }
       last;
      }
     }
@@ -907,12 +914,32 @@ case "$cmd" in
   log_msg "Downloading $latest from $asset_url"
   mkdir -p "$UPDATE_DIR"
   tarball="$UPDATE_DIR/pgenerator-plus-${latest}.tar.gz"
-  set_update_state downloading "Downloading $latest"
-  if ! curl -f $CURL_DOWNLOAD_OPTS -H "$GITHUB_UA" -o "$tarball" "$asset_url" 2>/dev/null; then
+  # The size GitHub lists for the asset turns the bytes on disk into a
+  # percentage for the WebUI; without it the percentage stays empty.
+  asset_size=$(release_field asset_size 2>/dev/null || true)
+  case "$asset_size" in ''|*[!0-9]*) asset_size="";; esac
+  rm -f "$tarball"
+  set_update_state downloading "Downloading $latest" "${asset_size:+0}"
+  curl -f $CURL_DOWNLOAD_OPTS -H "$GITHUB_UA" -o "$tarball" "$asset_url" 2>/dev/null &
+  curl_pid=$!
+  while kill -0 "$curl_pid" 2>/dev/null; do
+   if [ -n "$asset_size" ] && [ -f "$tarball" ]; then
+    got=$(wc -c 2>/dev/null <"$tarball" || echo 0)
+    got=$(printf '%s' "$got" | tr -cd '0-9')
+    pct=$(( ${got:-0} * 100 / asset_size ))
+    if [ "$pct" -gt 100 ]; then pct=100; fi
+    set_update_state downloading "Downloading $latest" "$pct"
+   fi
+   sleep 1
+  done
+  curl_rc=0
+  wait "$curl_pid" || curl_rc=$?
+  if [ "$curl_rc" != "0" ]; then
    log_msg "ERROR: Download failed"
    echo "ERROR: Download failed"
    exit 1
   fi
+  if [ -n "$asset_size" ]; then set_update_state downloading "Downloading $latest" 100; fi
 
   if [ ! -s "$tarball" ]; then
    log_msg "ERROR: Download failed or empty file"

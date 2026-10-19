@@ -1964,15 +1964,17 @@ sub webui_handle_request (@) {
     print $client "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: $len\r\n$cors\r\n$result";
    }
    elsif($path eq "/api/update/status") {
-    # Phase written by pgenerator-update ("<epoch>\n<phase>\n<message>").
-    my ($ts,$phase,$message)=(0,"","");
+    # Phase written by pgenerator-update ("<epoch>\n<phase>\n<message>"),
+    # optionally followed by the phase progress in percent (empty: unknown).
+    my ($ts,$phase,$message,$progress)=(0,"","","");
     if(open(my $fh,"<","/tmp/pgenerator-update.state")) {
-     ($ts,$phase,$message)=map { defined($_) ? s/\r?\n$//r : "" } (scalar(<$fh>),scalar(<$fh>),scalar(<$fh>));
+     ($ts,$phase,$message,$progress)=map { defined($_) ? s/\r?\n$//r : "" } (scalar(<$fh>),scalar(<$fh>),scalar(<$fh>),scalar(<$fh>));
      close($fh);
     }
     $ts=0 if($ts!~/^\d+$/);
     $phase="" if($phase!~/^[a-z]+$/);
-    my $r=sprintf('{"status":"ok","ts":%d,"now":%d,"phase":"%s","message":"%s","version":"%s"}',$ts,time(),$phase,&_webui_json_escape($message),&_webui_json_escape($version));
+    $progress=($progress=~/^\d{1,3}$/) ? ($progress>100 ? 100 : $progress+0) : "null";
+    my $r=sprintf('{"status":"ok","ts":%d,"now":%d,"phase":"%s","message":"%s","progress":%s,"version":"%s"}',$ts,time(),$phase,&_webui_json_escape($message),$progress,&_webui_json_escape($version));
     print $client "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: ".length($r)."\r\n$cors\r\n$r";
    }
    elsif($path eq "/api/update/releases") {

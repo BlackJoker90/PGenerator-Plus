@@ -633,7 +633,7 @@ font-weight:600;transition:all .2s;display:flex;align-items:center;gap:4px;white
 .btn-push-end{margin-left:auto}
 /* Action button inside a card heading, pushed to the end before the collapse chevron. */
 .card h2 .card-h2-action{margin-left:auto}
-.card h2:has(.card-h2-action)::after{margin-left:0}
+.card:not(.collapsed) h2:has(.card-h2-action)::after{margin-left:0}
 /* One keyboard ring for buttons and header icon buttons, from the theme's focus token. */
 .btn:focus-visible,.icon-btn:focus-visible{outline:2px solid var(--focus-ring);outline-offset:2px}
 .btn:disabled{cursor:not-allowed;opacity:.55}

@@ -262,8 +262,6 @@ body.layout-desktop #uiSettingsCard .ui-settings-zoom{display:block}
    available as a keyboard/hover tooltip and remains part of the button's
    accessible name. Desktop keeps the spacious selection tiles. */
 body.layout-tablet .dashboard > [data-widget="info"]{order:-300}
-body.layout-tablet #displaySettingsCard{order:-200;grid-column:1}
-body.layout-tablet #hdrCard{order:-199;grid-column:2}
 body.layout-tablet #uiSettingsCard{grid-column:auto}
 body.layout-tablet .ui-settings-sections{grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
 body.layout-tablet .ui-choice-list{gap:5px}

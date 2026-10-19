@@ -4127,6 +4127,17 @@ const PG_WIDGET_ORDER_KEY='pg_widget_order_v3';
  let lastTarget=null;
  let lastBefore=true;
 
+ // HDR Metadata, Dolby Vision and the Apply bar belong to Display Settings
+ // (they are not widgets of their own) and always follow it.
+ function keepOutputGroup(){
+  const display=document.getElementById('displaySettingsCard');
+  if(!display||display.parentNode!==dash) return;
+  let ref=display;
+  ['hdrCard','dvCard','applyBar'].forEach(id=>{
+   const el=document.getElementById(id);
+   if(el&&el.parentNode===dash){ dash.insertBefore(el,ref.nextSibling); ref=el; }
+  });
+ }
  function saveOrder(){
   try{
    localStorage.setItem(PG_WIDGET_ORDER_KEY,JSON.stringify(widgets().map(w=>w.dataset.widget)));
@@ -4153,6 +4164,7 @@ const PG_WIDGET_ORDER_KEY='pg_widget_order_v3';
     const end=dash.querySelector('.toast')||null;
     PG_DEFAULT_WIDGET_ORDER.forEach(id=>{ if(map[id]) dash.insertBefore(map[id],end); });
     if(map.info) dash.insertBefore(map.info,dash.firstElementChild);
+    keepOutputGroup();
     return;
    }
    const map={}; widgets().forEach(w=>{ map[w.dataset.widget]=w; });
@@ -4162,6 +4174,7 @@ const PG_WIDGET_ORDER_KEY='pg_widget_order_v3';
    // draggable. Put that newly introduced widget at the default end once;
    // the next drag save includes it and preserves the operator's placement.
    if((uiSettings&&order.indexOf('ui_settings')<0)||(session&&order.indexOf('session')<0)) placeBottomPair();
+   keepOutputGroup();
   }catch(e){}
  }
  function clearDragState(){
@@ -4234,6 +4247,7 @@ const PG_WIDGET_ORDER_KEY='pg_widget_order_v3';
   } else {
    if(target.nextElementSibling===dragEl||dragEl.previousElementSibling===target) moved=true;
   }
+  keepOutputGroup();
  }
 
  function onPointerDown(e){

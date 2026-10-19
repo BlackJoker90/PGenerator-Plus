@@ -4659,8 +4659,8 @@ function pgUpdateRender(d){
   li.querySelector('.sr-only').textContent={done:', done',current:', in progress',failed:', failed',stalled:', not finished',pending:''}[st];
  });
  const note=c.querySelector('.upd-note');
- const noteText=d.result==='failed'?(d.startFailed?'':'The previous version was kept. Try again; if it fails again, send the logs with Submit Logs.')
-  :(d.result==='timeout'?'Reload the page to see which version is running now. If it is still the old one, send the logs with Submit Logs.':'');
+ const noteText=d.result==='failed'?(d.startFailed?'':'The previous version was kept. Try again. If it fails again, download the logs with Download Logs and attach them to an issue on GitHub (BlackJoker90/PGenerator-Plus).')
+  :(d.result==='timeout'?'Reload the page to see which version is running now. If it is still the old one, download the logs with Download Logs and attach them to an issue on GitHub (BlackJoker90/PGenerator-Plus).':'');
  note.textContent=noteText;
  note.hidden=!noteText;
  if(d.actionsFor!==d.result){
@@ -4671,7 +4671,7 @@ function pgUpdateRender(d){
   let focus=null;
   if(run) mk('Hide','btn-secondary',()=>pgUpdateHide(d));
   else if(d.result==='failed'){
-   const logs=mk('Submit Logs','btn-secondary ico-logs',async()=>{ logs.disabled=true; try{ await submitLogs(); }finally{ logs.disabled=false; } });
+   const logs=mk('Download Logs','btn-secondary ico-logs',async()=>{ logs.disabled=true; try{ await submitLogs(); }finally{ logs.disabled=false; } });
    focus=mk('Close','btn-primary',()=>pgUpdateClose(d));
   } else if(d.result==='timeout'){
    mk('Close','btn-secondary',()=>pgUpdateClose(d));
@@ -4706,7 +4706,7 @@ function pgUpdateRender(d){
   }
  } else if(d.result==='done') setUpdateStatus(title+'. Reloading the page\u2026','ok');
  else if(d.result==='timeout') setUpdateStatus('The update has not finished after 15 minutes. Reload the page to see which version is running now.','warn');
- else setUpdateStatus(d.startFailed?d.message:'The update didn\u2019t install'+(d.message?': '+d.message.replace(/([^.!?])$/,'$1.'):'.')+' The previous version was kept. Try again; if it fails again, send the logs with Submit Logs.','error');
+ else setUpdateStatus(d.startFailed?d.message:'The update didn\u2019t install'+(d.message?': '+d.message.replace(/([^.!?])$/,'$1.'):'.')+' The previous version was kept. Try again. If it fails again, download the logs with Download Logs and attach them to an issue on GitHub (BlackJoker90/PGenerator-Plus).','error');
 }
 async function runUpdate(version,info){
  // One install at a time: the buttons are disabled too, this guards the rest.
@@ -4767,7 +4767,7 @@ async function submitLogs(){
    toast(j?j.message:'Failed to collect logs','error');
   }
  }catch(e){toast('Error: '+e.message,'error');}
- btn.disabled=false;btn.textContent='Submit Logs';
+ btn.disabled=false;btn.textContent='Download Logs';
 }
 
 function systemBackupSetStatus(message,isError){

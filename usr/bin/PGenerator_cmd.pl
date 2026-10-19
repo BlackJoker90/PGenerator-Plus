@@ -1187,6 +1187,9 @@ sub pgenerator_conf_set_pair (@) {
   $paired_value = "4" if($value eq "2");
   $paired_value = "2" if($paired_value eq "");
  }
+ # dv_metadata=0 (Dolby Vision off) has no map mode: keep the stored
+ # dv_map_mode for the next DV session instead of deleting it.
+ $paired_var = "" if($paired_value eq "");
  my $out = "";
  for(split(/\n/,$content)) {
   next if(/^$var_to_set=/);

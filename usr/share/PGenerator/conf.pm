@@ -90,7 +90,9 @@ sub sync_pattern_bits_default (@) {
  # Standard Dolby Vision uses the 8-bit RGB tunnel, so BITS remains 8 even
  # though its shader consumes 12-bit source codes via SOURCE_MAX=4095.
  # Dedicated WebUI and Calman paths declare that source precision separately.
- if(int($pgenerator_conf{"dv_status"} || 0) == 1) {
+ # Low-latency DV is YCbCr 4:2:2 from the 10-bit framebuffer: it takes the
+ # 10-bit codes below (8 rounded every code to 8 bit, then 1023/255).
+ if(int($pgenerator_conf{"dv_status"} || 0) == 1 && int($pgenerator_conf{"is_std_dovi"} || 0) == 1) {
   $bits_default=8;
   return;
  }

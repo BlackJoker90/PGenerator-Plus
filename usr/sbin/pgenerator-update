@@ -546,7 +546,7 @@ release_field() {
    $value = $rel->{body} // "";
    $value =~ s/\r\n/\n/g;
    $value =~ s/\r/\n/g;
-   $value = substr($value,0,500);
+   $value = substr($value,0,8000);
   } else {
    $value = $rel->{$key} // "";
   }

@@ -2369,6 +2369,7 @@ async function pgConfirm(opts){
   opts=cut>0?{title:text.slice(0,cut),body:text.slice(cut+2)}:{title:text};
  }
  const choice=await meterShowChoiceModal({title:opts.title,body:opts.body||'',
+  bodyNode:opts.bodyNode,wide:opts.wide,
   acceptLabel:opts.acceptLabel||'OK',cancelLabel:opts.cancelLabel||'Cancel'});
  return !!choice;
 }
@@ -3751,6 +3752,7 @@ async function checkUpdate(manual){
  if(r.changelog){
   document.getElementById('updateChangelog').textContent=r.changelog;
  }
+ window._updateCheck=r;
  if(r.update_available){
   document.getElementById('applyUpdateBtn').style.display='';
   document.getElementById('updateBtn').style.display='';
@@ -3772,8 +3774,64 @@ function showUpdateCard(){
  document.getElementById('updateCard').scrollIntoView({behavior:'smooth'});
  if(!_updateChecked) checkUpdate();
 }
+// Release notes (GitHub Markdown) as DOM nodes: headings, bullet lists,
+// paragraphs, **bold** and `code`. Text only, never parsed as HTML.
+function pgReleaseNotesNode(markdown){
+ const box=document.createElement('div');
+ box.className='release-notes';
+ const inline=(el,text)=>{
+  text=text.replace(/\[([^\]]+)\]\([^)]*\)/g,'$1');
+  text.split(/(\*\*[^*]+\*\*|`[^`]+`)/).forEach(part=>{
+   if(!part) return;
+   let node;
+   if(/^\*\*[^*]+\*\*$/.test(part)){ node=document.createElement('strong'); node.textContent=part.slice(2,-2); }
+   else if(/^`[^`]+`$/.test(part)){ node=document.createElement('code'); node.textContent=part.slice(1,-1); }
+   else node=document.createTextNode(part);
+   el.appendChild(node);
+  });
+ };
+ let list=null,para=null;
+ String(markdown||'').split('\n').forEach(raw=>{
+  const line=raw.trim();
+  if(/^\S*\s*Generated with \[Claude Code\]/.test(line)) return;
+  if(!line){ list=null; para=null; return; }
+  const h=line.match(/^#{1,6}\s+(.*)$/);
+  const li=line.match(/^[-*]\s+(.*)$/);
+  if(h){
+   list=null; para=null;
+   const el=document.createElement('div'); el.className='release-notes-h'; inline(el,h[1]); box.appendChild(el);
+  }else if(li){
+   para=null;
+   if(!list){ list=document.createElement('ul'); box.appendChild(list); }
+   const el=document.createElement('li'); inline(el,li[1]); list.appendChild(el);
+  }else if(/:$/.test(line)&&line.length<60){
+   list=null; para=null;
+   const el=document.createElement('div'); el.className='release-notes-h'; inline(el,line.slice(0,-1)); box.appendChild(el);
+  }else{
+   list=null;
+   if(para) para.appendChild(document.createTextNode(' '));
+   else { para=document.createElement('p'); box.appendChild(para); }
+   inline(para,line);
+  }
+ });
+ return box;
+}
+
 async function applyUpdate(){
- if(!await pgConfirm({title:'Install update now?',body:'PGenerator+ will restart. Stop any running measurement or session first.',acceptLabel:'Install'}))return;
+ const r=window._updateCheck||{};
+ const wrap=document.createElement('div');
+ if(r.changelog){
+  const meta=document.createElement('div');
+  meta.className='release-notes-meta';
+  meta.textContent='v'+(r.current||'?')+' \u2192 v'+(r.latest||'?')+(r.published?' \u00b7 published '+r.published.split('T')[0]:'');
+  wrap.appendChild(meta);
+  wrap.appendChild(pgReleaseNotesNode(r.changelog));
+ }
+ const warn=document.createElement('div');
+ warn.className='release-notes-warn';
+ warn.textContent='PGenerator+ will restart. Stop any running measurement or session first. Your settings stay.';
+ wrap.appendChild(warn);
+ if(!await pgConfirm({title:r.latest?'Install v'+r.latest+'?':'Install update now?',bodyNode:wrap,wide:true,acceptLabel:'Install'}))return;
  await runUpdate('');
 }
 

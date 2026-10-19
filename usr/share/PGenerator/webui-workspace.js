@@ -6728,6 +6728,13 @@ function meterShowChoiceModal(options){
   const body=document.createElement('div');
   body.style.cssText='font-size:.85rem;color:var(--text2,#a8b0c0);line-height:1.5;margin-bottom:14px;white-space:pre-line';
   body.textContent=String(opts.body||'');
+  // Optional prebuilt content (e.g. release notes) below the body text.
+  if(opts.bodyNode){
+   body.style.whiteSpace='normal';
+   if(!opts.body) body.textContent='';
+   body.appendChild(opts.bodyNode);
+  }
+  if(opts.wide){ card.style.maxWidth='640px'; card.style.maxHeight='calc(100vh - 40px)'; card.style.overflowY='auto'; }
   const checks=Array.isArray(opts.checkboxes)?opts.checkboxes:[];
   const checkInputs={};
   const checkHost=document.createElement('div');

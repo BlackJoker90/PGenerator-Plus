@@ -257,8 +257,8 @@ __PG_LOGO_DARK__
       <div class="diag-pattern-title">Calman G1 plates &middot; SDR only</div>
       <div class="pat-grid pat-grid-16x9">
         <button class="pat-btn" onclick="diagPlayG1Pattern('basic_alignment',event)"><span class="pat-thumb" data-thumb="g1_basic_alignment" aria-hidden="true"></span><span class="pat-label">Basic Alignment</span></button>
-        <button class="pat-btn" onclick="diagPlayG1Pattern('brightness',event)"><span class="pat-thumb" data-thumb="g1_brightness" aria-hidden="true"></span><span class="pat-label">Brightness</span></button>
         <button class="pat-btn" onclick="diagPlayG1Pattern('warmup',event)"><span class="pat-thumb" data-thumb="g1_warmup" aria-hidden="true"></span><span class="pat-label">Warm-Up</span></button>
+        <button class="pat-btn" onclick="diagPlayG1Pattern('granger',event)"><span class="pat-thumb" data-thumb="g1_granger" aria-hidden="true"></span><span class="pat-label">Granger Rainbow</span></button>
       </div>
       <label class="sr-only" for="diagG1Select">More Calman G1 plates</label>
       <select id="diagG1Select" class="inline-select diag-select diag-g1-more" onchange="diagPlayG1Pattern()">
@@ -268,9 +268,9 @@ __PG_LOGO_DARK__
        <option value="checker_4i">ANSI Checkerboard 4x4 Inverted</option>
        <option value="checker_5n">ANSI Checkerboard 5x5</option>
        <option value="checker_5i">ANSI Checkerboard 5x5 Inverted</option>
+       <option value="brightness">Brightness</option>
        <option value="color_bars">Color Bars</option>
        <option value="contrast">Contrast</option>
-       <option value="granger">Granger Rainbow</option>
        <option value="stair21">Grayscale Steps 21</option>
        <option value="stair51">Grayscale Steps 51</option>
        <option value="ramp">Horizontal Ramp</option>

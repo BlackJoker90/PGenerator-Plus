@@ -22,9 +22,9 @@ use warnings;
 use Exporter qw(import);
 use POSIX qw(floor);
 
-our @EXPORT_OK=qw(g1_pattern_key g1_pattern_render g1_pattern_keys g1_pattern_level);
+our @EXPORT_OK=qw(g1_pattern_key g1_pattern_render g1_pattern_keys g1_pattern_level g1_pattern_has_10bit);
 
-our $VERSION="1";
+our $VERSION="2";
 
 # Calman token (SPECIALTY:<token> or IMAGE:<token>) -> pattern key.
 my %TOKEN=(
@@ -94,6 +94,9 @@ sub g1_pattern_key {
 #       ip     => address shown on the Warm-Up box
 #       photo  => {w,h,buf} at $w x $h for Skintones (optional)
 #       logo   => {w,h,buf} for Screensaver (optional)
+#       bits   => 10 for the 10-bit Brightness/Contrast plates (see
+#                 g1_pattern_has_10bit); their img has depth=>16 and a
+#                 buf of 16-bit big-endian samples carrying 10-bit codes
 # Returns {frames => [{img=>{w,h,buf}, ms=>N, x=>X, y=>Y}, ...], bg=>[r,g,b]}
 # or undef for an unknown key. A frame with x/y set is drawn at that offset
 # over a background filled with bg (used for the moving patterns).
@@ -120,7 +123,28 @@ sub _img {
  return {w => $w, h => $h, buf => pack("C3",@$c) x ($w*$h)};
 }
 
+# 10-bit plate: colours are 10-bit codes, stored as 16-bit samples
+# round(code * 65535 / 1023) so a renderer that reads the sample as
+# sample / 65535 and writes it to a 10-bit plane gets the code back exactly.
+sub _img10 {
+ my ($w,$h,$c)=@_;
+ return {w => $w, h => $h, depth => 16, buf => _px($c,16) x ($w*$h)};
+}
+
 sub _clamp8 { my $v=int(shift); return $v < 0 ? 0 : ($v > 255 ? 255 : $v); }
+
+sub _s16 {
+ my $v=int(shift);
+ $v=0 if($v < 0); $v=1023 if($v > 1023);
+ return int($v*65535/1023+0.5);
+}
+
+# One packed pixel for an 8-bit or 16-bit image.
+sub _px {
+ my ($c,$depth)=@_;
+ return pack("n3",map { _s16($_) } @$c) if(($depth || 8) == 16);
+ return pack("C3",@$c);
+}
 
 # Fill [x1,x2) x [y1,y2).
 sub _fill {
@@ -128,11 +152,12 @@ sub _fill {
  $x1=0 if($x1 < 0); $y1=0 if($y1 < 0);
  $x2=$im->{w} if($x2 > $im->{w}); $y2=$im->{h} if($y2 > $im->{h});
  return if($x2 <= $x1 || $y2 <= $y1);
- my $row=pack("C3",@$c) x ($x2-$x1);
+ my $bpp=(($im->{depth} || 8) == 16) ? 6 : 3;
+ my $row=_px($c,$im->{depth}) x ($x2-$x1);
  my $len=length($row);
- my $stride=$im->{w}*3;
+ my $stride=$im->{w}*$bpp;
  for(my $y=$y1;$y<$y2;$y++) {
-  substr($im->{buf},$y*$stride+$x1*3,$len,$row);
+  substr($im->{buf},$y*$stride+$x1*$bpp,$len,$row);
  }
 }
 
@@ -267,13 +292,18 @@ sub _border_t { my $h=shift; my $t=int($h/270+0.5); return $t < 2 ? 2 : $t; }
 
 # Shared layout of Brightness, Contrast, Tint and Sharpness: a border, a
 # block of three bars left and right, an optional centre panel and a
-# 12-column step grid.
+# 12-column step grid. Colours are listed left to right.
+#
+# Deliberately centred, unlike the G1 capture: the G1 puts the left block
+# 40 px and the right block 50 px from the edge and its step grid at
+# 488-1428 (centre 958). Here both blocks sit 40 px from the edge and the
+# grid spans 490-1430, mirror-symmetric about the centre of the screen.
 sub _plate {
- my ($w,$h,$bg,$border,$left,$right,$panel)=@_;
- my $im=_img($w,$h,$bg);
+ my ($w,$h,$bg,$border,$left,$right,$panel,$depth)=@_;
+ my $im=(($depth || 8) == 16) ? _img10($w,$h,$bg) : _img($w,$h,$bg);
  _frame($im,_border_t($h),$border);
  my @lx=(40,140,240,340);
- my @rx=(1570,1670,1770,1870);
+ my @rx=(1580,1680,1780,1880);
  for my $i (0..2) {
   _fill($im,_sx($w,$lx[$i]),_sy($h,140),_sx($w,$lx[$i+1]),_sy($h,940),$left->[$i]);
   _fill($im,_sx($w,$rx[$i]),_sy($h,140),_sx($w,$rx[$i+1]),_sy($h,940),$right->[$i]);
@@ -282,41 +312,67 @@ sub _plate {
  return $im;
 }
 
-sub _step_col { my ($w,$col)=@_; return (_sx($w,488+80*$col),_sx($w,548+80*$col)); }
+sub _step_col { my ($w,$col)=@_; return (_sx($w,490+80*$col),_sx($w,550+80*$col)); }
 
-# 2 rows x 12 bars (8-bit layout) with centred labels.
+# Step rows in reference units: 2 tall rows for the 8-bit plates (24 steps),
+# 8 rows for the 10-bit plates (96 steps), as on the G1.
+my @STEP_ROWS_8=([155,525],[555,925]);
+my @STEP_ROWS_10=map { [155+100*$_,225+100*$_] } 0..7;
+
+# Step bars, 12 per row, each labelled with its code and centred.
 sub _steps {
- my ($im,$w,$h,$first,$mark,$label_c,$mark_c)=@_;
- my @rows=([155,525],[555,925]);
- my $s=int($h/540+0.5); $s=1 if($s < 1);
- for my $i (0..23) {
+ my ($im,$w,$h,$first,$mark,$label_c,$mark_c,$rows,$label_div)=@_;
+ my $s=int($h/$label_div+0.5); $s=1 if($s < 1);
+ for my $i (0..(12*scalar(@$rows)-1)) {
   my $v=$first+$i;
   my ($x1,$x2)=_step_col($w,$i % 12);
-  my ($y1,$y2)=(_sy($h,$rows[int($i/12)][0]),_sy($h,$rows[int($i/12)][1]));
+  my ($y1,$y2)=(_sy($h,$rows->[int($i/12)][0]),_sy($h,$rows->[int($i/12)][1]));
   _fill($im,$x1,$y1,$x2,$y2,[$v,$v,$v]);
   _text_center($im,"$v",($x1+$x2)/2,($y1+$y2)/2,$s,$v == $mark ? $mark_c : $label_c);
  }
 }
 
+# 8-bit plate codes on the 10-bit plates: times 4, and 255 (peak white)
+# becomes 1023 like the top step of the 10-bit Contrast plate.
+sub _c10 { return [map { $_ >= 255 ? 1023 : 4*$_ } @{$_[0]}]; }
+
 sub _brightness {
  my ($w,$h,$o)=@_;
  # Step codes are the labelled values in both ranges; the plate around them
- # follows the same raw codes as the G1 capture.
+ # follows the same raw codes as the G1 capture. The right block is the
+ # mirror of the left one (the G1 repeats it unmirrored), so the visible
+ # bars sit symmetrically about the centre.
  my @dark=([0,0,0],[15,15,15],[31,31,31]);
- my $im=_plate($w,$h,[0,0,0],[63,63,63],\@dark,\@dark,undef);
- _steps($im,$w,$h,0,16,[63,63,63],[180,16,16]);
+ if(($o->{bits} || 8) == 10) {
+  # 96 steps 0-95, marker at 64 (black on a 10-bit link).
+  my @dark10=map { _c10($_) } @dark;
+  my $im=_plate($w,$h,[0,0,0],_c10([63,63,63]),\@dark10,[reverse @dark10],undef,16);
+  _steps($im,$w,$h,0,64,_c10([63,63,63]),_c10([180,16,16]),\@STEP_ROWS_10,1080);
+  return $im;
+ }
+ my $im=_plate($w,$h,[0,0,0],[63,63,63],\@dark,[reverse @dark],undef);
+ _steps($im,$w,$h,0,16,[63,63,63],[180,16,16],\@STEP_ROWS_8,540);
  return $im;
 }
 
 sub _contrast {
  my ($w,$h,$o)=@_;
- my $im=_plate($w,$h,[63,63,63],[255,255,255],
-  [[0,0,0],[15,15,15],[31,31,31]],
-  [[224,224,224],[240,240,240],[255,255,255]],
-  [255,255,255]);
- _steps($im,$w,$h,232,235,[128,128,128],[200,16,16]);
+ my @left=([0,0,0],[15,15,15],[31,31,31]);
+ my @right=([224,224,224],[240,240,240],[255,255,255]);
+ if(($o->{bits} || 8) == 10) {
+  # 96 steps 928-1023, marker at 940 (reference white on a 10-bit link).
+  my $im=_plate($w,$h,_c10([63,63,63]),_c10([255,255,255]),
+   [map { _c10($_) } @left],[map { _c10($_) } @right],_c10([255,255,255]),16);
+  _steps($im,$w,$h,928,940,_c10([128,128,128]),_c10([200,16,16]),\@STEP_ROWS_10,1080);
+  return $im;
+ }
+ my $im=_plate($w,$h,[63,63,63],[255,255,255],\@left,\@right,[255,255,255]);
+ _steps($im,$w,$h,232,235,[128,128,128],[200,16,16],\@STEP_ROWS_8,540);
  return $im;
 }
+
+# Plates with their own 10-bit layout on 10-bit links.
+sub g1_pattern_has_10bit { my $k=shift // ""; return ($k eq "brightness" || $k eq "contrast") ? 1 : 0; }
 
 sub _tint {
  my ($w,$h,$o)=@_;
@@ -347,14 +403,16 @@ sub _sharpness {
   [$black,_lc($o,29,29,29),_lc($o,43,43,43)],
   [_lc($o,208,208,208),_lc($o,222,222,222),_lc($o,235,235,235)],
   $gray);
- my ($gx1,$gx2,$gy1,$gy2)=(_sx($w,488),_sx($w,1428),_sy($h,159),_sy($h,921));
+ # Grid 490-1430 (centred; the G1 draws it at 488-1428), and every line is
+ # centred on its position rather than starting there.
+ my ($gx1,$gx2,$gy1,$gy2)=(_sx($w,490),_sx($w,1430),_sy($h,159),_sy($h,921));
  my @widths=(1,2,2,4,8);
  my $unit=$h/576;
  my (@vx,@hy);
  for my $i (0..4) {
   my $t=int($widths[$i]*$unit+0.5); $t=1 if($t < 1);
-  my $x=_sx($w,660+150*$i);
-  my $y=_sy($h,319+110.6*$i);
+  my $x=_sx($w,660+150*$i)-int($t/2);
+  my $y=_sy($h,319+110.6*$i)-int($t/2);
   _fill($im,$x,$gy1,$x+$t,$gy2,$black);
   _fill($im,$gx1,$y,$gx2,$y+$t,$black);
   push(@vx,[$x,$x+$t]);

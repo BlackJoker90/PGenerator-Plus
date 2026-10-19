@@ -607,7 +607,7 @@ sub calman_render_rgb_pattern (@) {
 ###############################################
 #     Portrait Displays G1 specialty patterns  #
 ###############################################
-use PGG1Patterns qw(g1_pattern_key g1_pattern_render g1_pattern_level);
+use PGG1Patterns qw(g1_pattern_key g1_pattern_render g1_pattern_level g1_pattern_has_10bit);
 
 # Rendered plates are kept across patterns (clean_pattern_files() empties
 # running/ on every pattern) and dropped when the pattern code changes.
@@ -631,9 +631,14 @@ sub calman_g1_save_image (@) {
  return 0 if(!$img || !$convert || !-x $convert);
  my @resize=();
  @resize=("-filter","Triangle","-resize","${out_w}x${out_h}!") if($out_w && ($out_w != $img->{w} || $out_h != $img->{h}));
+ # 10-bit plates carry their codes in 16-bit samples: PNG48, never resized.
+ # The buffer is big-endian (pack "n"); raw rgb: input defaults to the
+ # host order, which swapped the bytes on the Pi.
+ my $depth=(($img->{depth} || 8) == 16) ? 16 : 8;
+ @resize=() if($depth == 16);
  my $tmp="$file.tmp.png";
  unlink($tmp);
- return 0 if(!open(my $fh,"|-",$convert,"-size",$img->{w}."x".$img->{h},"-depth","8","rgb:-",@resize,"PNG24:$tmp"));
+ return 0 if(!open(my $fh,"|-",$convert,"-size",$img->{w}."x".$img->{h},"-depth",$depth,"-endian","MSB","rgb:-",@resize,($depth == 16 ? "PNG48:$tmp" : "PNG24:$tmp")));
  binmode($fh);
  my $buf=$img->{buf};
  utf8::downgrade($buf,1);
@@ -641,6 +646,15 @@ sub calman_g1_save_image (@) {
  $ok=0 if(!close($fh));
  return 0 if(!$ok || !-f $tmp);
  return rename($tmp,$file) ? 1 : 0;
+}
+
+# Bit depth of the HDMI link in SDR, as drm_override.so forces it from the
+# conf: 10 and 12 bpc run at 10 bit outside Dolby Vision, YCbCr 4:2:2 at
+# least 10. The G1 shows its 10-bit Brightness/Contrast plates there.
+sub calman_g1_wire_bits (@) {
+ return 8 if(int($pgenerator_conf{"is_hdr"} || 0) || int($pgenerator_conf{"dv_status"} || 0));
+ return 10 if(int($pgenerator_conf{"max_bpc"} || 8) >= 10 || int($pgenerator_conf{"color_format"} || 0) == 2);
+ return 8;
 }
 
 # Convert a picture file to a PNG of $w x $h (Skintones photo, logo).
@@ -711,6 +725,11 @@ sub calman_render_g1_pattern (@) {
   (my $ip_tag=$opt{ip})=~s/[^0-9A-Za-z]+/-/g;
   $tag.="_$ip_tag";
  }
+ my $bits=(&g1_pattern_has_10bit($key) && &calman_g1_wire_bits() == 10) ? 10 : 8;
+ if($bits == 10) {
+  $opt{bits}=10;
+  $tag.="_10bit";
+ }
  if($key eq "screensaver") {
   my $logo=&calman_g1_logo($h,$range);
   $opt{logo}=$logo if($logo);
@@ -761,7 +780,7 @@ sub calman_render_g1_pattern (@) {
  &clean_pattern_files();
  # A PATTERN_NAME marks the plate as chosen in the WebUI, so its idle
  # refresh leaves it on screen.
- my $ps=(defined $pattern_name ? "PATTERN_NAME=$pattern_name\n" : "")."MOVIE_NAME=TestPattern\nBITS=8\n";
+ my $ps=(defined $pattern_name ? "PATTERN_NAME=$pattern_name\n" : "")."MOVIE_NAME=TestPattern\nBITS=$bits\n";
  for(my $i=0;$i<scalar(@frames);$i++) {
   my $f=$frames[$i];
   $ps.="DRAW=IMAGE\nDIM=$f->{w},$f->{h}\nRGB=0,0,0\nBG=$bg_str\nPOSITION=$f->{x},$f->{y}\nIMAGE=$f->{file}\nEND=1\n";
@@ -769,7 +788,7 @@ sub calman_render_g1_pattern (@) {
  }
  &create_tmp_file($ps,$source_range);
  &load_new_pattern_file("calman");
- &log("Calman G1: $key ${w}x${h} range=$range frames=".scalar(@frames).(scalar(@frames) > 1 ? " hz=".($opt{hz} || "default") : ""));
+ &log("Calman G1: $key ${w}x${h} range=$range bits=$bits frames=".scalar(@frames).(scalar(@frames) > 1 ? " hz=".($opt{hz} || "default") : ""));
  return 1;
 }
 

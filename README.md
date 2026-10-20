@@ -93,7 +93,7 @@ mDNS answers AAAA queries with an NSEC record, so clients do not wait for an IPv
 <td valign="top">
 
 ### 🧪 Signal self-test
-One button in **System** runs nine signal modes (SDR RGB Limited/Full and YCbCr 4:2:2/4:4:4, HDR10 YCbCr 4:2:2/4:4:4, Dolby Vision Standard and Low Latency). In each mode it draws known codes, **reads back what the Pi scans out** and checks the link depth and AVI infoframe. Your signal settings come back afterwards; a quick check covers three modes in about 40 s.
+One button in **System** runs ten signal modes (SDR RGB Limited/Full and YCbCr 4:2:2/4:4:4, HDR10 RGB Limited and YCbCr 4:2:2/4:4:4, Dolby Vision Standard and Low Latency). In each mode it draws known codes, **reads back what the Pi scans out** and checks the link depth and AVI infoframe. Your signal settings come back afterwards; a quick check covers three modes in about 40 s.
 
 </td>
 <td valign="top">
@@ -141,8 +141,11 @@ Press **OK or Menu on the TV remote** and a menu of every pattern appears on the
 <tr>
 <td valign="top"><img src="screenshots/webui-settings.png" alt="Settings workspace with theme picker, GPU memory and software update"/><br/><p align="center"><sub>Settings: themes, GPU memory, OTA update and backup in one place</sub></p></td>
 </tr>
+<tr>
+<td colspan="2" valign="top"><img src="screenshots/webui-selftest.png" alt="Signal self-test in System: bit-exact in 10 of 10 modes, with link details and the drawn swatches per mode"/><br/><p align="center"><sub>Signal self-test: every mode read back from the scanout on a real Pi 4, bit-exact in 10 of 10</sub></p></td>
+</tr>
 </table>
-<p align="center"><sub>Right: the same playlists on a phone, with a bottom tab bar</sub></p>
+<p align="center"><sub>Top right: the same playlists on a phone, with a bottom tab bar</sub></p>
 
 ---
 

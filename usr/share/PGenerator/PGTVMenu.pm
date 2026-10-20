@@ -158,4 +158,37 @@ sub menu_action {
  return ("","");
 }
 
+# The menu is an sRGB-style 8-bit picture. In HDR the same codes are read as
+# PQ or HLG signal, so they are re-encoded first: SDR display light (gamma
+# 2.4) with white at the BT.2408 graphics white of 203 cd/m2 (HLG: 75 %
+# signal). A picture the renderer takes as Limited RGB wire codes (SOURCE_RANGE
+# =LIMITED on an RGB Limited link) gets 16-235. Returns the 256 output codes
+# for transfer "sdr", "pq" or "hlg".
+our $GRAPHICS_WHITE = 203;
+
+sub signal_fraction {
+ my ($v,$transfer)=@_;
+ my $e=$v / 255;
+ return $e if($transfer eq "sdr");
+ my $light=$e ** 2.4;
+ if($transfer eq "hlg") {
+  # Scene light that the HLG OETF puts at 75 %.
+  my $s=$light * 0.264962;
+  return sqrt(3 * $s) if($s <= 1/12);
+  my ($a,$b,$c)=(0.17883277,0.28466892,0.55991073);
+  return $a * log(12 * $s - $b) + $c;
+ }
+ my ($m1,$m2,$c1,$c2,$c3)=(2610/16384,2523/4096*128,3424/4096,2413/4096*32,2392/4096*32);
+ my $y=($light * $GRAPHICS_WHITE / 10000) ** $m1;
+ return (($c1 + $c2 * $y) / (1 + $c3 * $y)) ** $m2;
+}
+
+sub signal_lut {
+ my ($transfer,$limited)=@_;
+ return map {
+  my $f=signal_fraction($_,$transfer);
+  $limited ? 16 + int($f * 219 + 0.5) : int($f * 255 + 0.5);
+ } 0..255;
+}
+
 1;

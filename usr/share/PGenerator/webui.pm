@@ -11821,13 +11821,19 @@ sub webui_tvmenu_base (@) {
 sub webui_tvmenu_view_job (@) {
  my ($entries,$sel,$msg,$lay,$base,$hash)=@_;
  my $signal_mode=&webui_pattern_signal_mode("");
- # HDR and Dolby Vision read the 8-bit picture as PQ/HLG codes: white text
- # would be far brighter than in SDR, so the menu is dimmed there.
- my $dim=($signal_mode eq "sdr") ? 0 : 1;
+ # HDR and Dolby Vision read the 8-bit picture as PQ/HLG signal: it is
+ # re-encoded with white at 203 cd/m2 (PGTVMenu::signal_lut). The renderer
+ # takes picture codes as video levels (YCbCr: Y = code x 4) except on RGB
+ # with a Full source range, so everywhere else the picture gets 16-235
+ # (read back: SDR YCbCr white was Y=1020, black 59).
+ my $transfer=($signal_mode eq "sdr") ? "sdr" : ($signal_mode eq "hlg") ? "hlg" : "pq";
+ my $full_rgb=($signal_mode ne "dv" && ($pgenerator_conf{"color_format"} // "0") eq "0" && &webui_preferred_rgb_quant_range() == 2);
+ my $limited=$full_rgb ? 0 : 1;
+ my $tone=$transfer.($limited ? "l" : "f");
  my ($w,$h)=(int($w_s) || 1920,int($h_s) || 1080);
  $msg="" if(!defined($msg));
  require Digest::MD5;
- my $file="$_tvmenu_view_dir/view-$hash-$sel-${w}x$h-$dim-".substr(Digest::MD5::md5_hex($msg),0,6).".bmp";
+ my $file="$_tvmenu_view_dir/view-$hash-$sel-${w}x$h-$tone-".substr(Digest::MD5::md5_hex($msg),0,6).".bmp";
  my $off=PGTVMenu::view_offset($sel,$lay);
  my $p=$lay->{pos}{$sel};
  my $e=$entries->[$sel];
@@ -11849,9 +11855,25 @@ sub webui_tvmenu_view_job (@) {
  push(@args,"-fill","#7d8590","-pointsize","24","-gravity","NorthEast",
       "-annotate","+$PGTVMenu::MARGIN_X+".($fy+31),"Arrows: move     OK: show     Back: close","-gravity","NorthWest");
  push(@args,"-resize","${w}x$h!") if($w != $vw || $h != $vh);
- push(@args,"-evaluate","multiply","0.5") if($dim);
+ if($tone ne "sdrf") {
+  my $lut=&webui_tvmenu_lut_file($transfer,$limited);
+  push(@args,$lut,"-clut") if($lut ne "");
+ }
  return ($file,[$convert,$base,"-crop","${vw}x$vh+0+$off","+repage","-background",$_tvmenu_bg,"-extent","${vw}x$vh",
   "-font",$_tvmenu_font,@args,"-depth","8","-type","TrueColor"]);
+}
+
+# 256x1 grey picture of PGTVMenu::signal_lut for "convert ... lut -clut".
+sub webui_tvmenu_lut_file (@) {
+ my ($transfer,$limited)=@_;
+ my $file="$_tvmenu_view_dir/lut-$transfer".($limited ? "l" : "f")."-v1.ppm";
+ return $file if(-s $file);
+ mkdir($_tvmenu_view_dir) if(!-d $_tvmenu_view_dir);
+ open(my $fh,">","$file.$$") or return "";
+ binmode($fh);
+ print $fh "P6\n256 1\n255\n",join("",map { chr($_) x 3 } PGTVMenu::signal_lut($transfer,$limited));
+ close($fh);
+ return rename("$file.$$",$file) ? $file : "";
 }
 
 # Keep the newest menu pictures only (6 MB each in RAM).
@@ -12649,6 +12671,19 @@ sub webui_pattern_scale_value (@) {
  return int($value/$input_max*$target_max + 0.5);
 }
 
+# Named colours (black, white, primaries, 50 % grey, backgrounds) as 8-bit
+# full-range levels. With SOURCE_RANGE=LIMITED the renderer takes codes as
+# video levels, so they are mapped to 16-235 (64-940 at 10 bit): code 0
+# put Y=0 on a YCbCr wire and RGB 0 on a passthrough Limited link.
+sub webui_pattern_named_triplet (@) {
+ my ($r,$g,$b,$bits,$limited)=@_;
+ return &webui_pattern_scale_triplet($r,$g,$b,255,$bits) if(!$limited);
+ my $shift=($bits == 12) ? 4 : ($bits == 10) ? 2 : 0;
+ my $min=16 << $shift;
+ my $span=219 << $shift;
+ return join(",",map { $min + int(($_ * $span + 127) / 255) } ($r,$g,$b));
+}
+
 sub webui_pattern_scale_triplet (@) {
  my $r=shift;
  my $g=shift;
@@ -13388,15 +13423,15 @@ sub webui_pattern (@) {
   return '{"status":"error","message":"Failed to render G1 pattern"}' if(!&calman_render_g1_pattern($g1_key,$name));
   return '{"status":"ok","pattern":"'.$name.'"}';
  }
- my $white_rgb=($signal_mode eq "dv") ? "3760,3760,3760" : &webui_pattern_scale_triplet(255,255,255,255,$pat_bits);
- my $black_rgb=($signal_mode eq "dv") ? "256,256,256" : &webui_pattern_scale_triplet(0,0,0,255,$pat_bits);
- my $red_rgb=($signal_mode eq "dv") ? "3760,256,256" : &webui_pattern_scale_triplet(255,0,0,255,$pat_bits);
- my $green_rgb=($signal_mode eq "dv") ? "256,3760,256" : &webui_pattern_scale_triplet(0,255,0,255,$pat_bits);
- my $blue_rgb=($signal_mode eq "dv") ? "256,256,3760" : &webui_pattern_scale_triplet(0,0,255,255,$pat_bits);
- my $cyan_rgb=($signal_mode eq "dv") ? "256,3760,3760" : &webui_pattern_scale_triplet(0,255,255,255,$pat_bits);
- my $magenta_rgb=($signal_mode eq "dv") ? "3760,256,3760" : &webui_pattern_scale_triplet(255,0,255,255,$pat_bits);
- my $yellow_rgb=($signal_mode eq "dv") ? "3760,3760,256" : &webui_pattern_scale_triplet(255,255,0,255,$pat_bits);
- my $gray50_rgb=($signal_mode eq "dv") ? "2008,2008,2008" : &webui_pattern_scale_triplet(128,128,128,255,$pat_bits);
+ my $white_rgb=($signal_mode eq "dv") ? "3760,3760,3760" : &webui_pattern_named_triplet(255,255,255,$pat_bits,$source_range eq "LIMITED");
+ my $black_rgb=($signal_mode eq "dv") ? "256,256,256" : &webui_pattern_named_triplet(0,0,0,$pat_bits,$source_range eq "LIMITED");
+ my $red_rgb=($signal_mode eq "dv") ? "3760,256,256" : &webui_pattern_named_triplet(255,0,0,$pat_bits,$source_range eq "LIMITED");
+ my $green_rgb=($signal_mode eq "dv") ? "256,3760,256" : &webui_pattern_named_triplet(0,255,0,$pat_bits,$source_range eq "LIMITED");
+ my $blue_rgb=($signal_mode eq "dv") ? "256,256,3760" : &webui_pattern_named_triplet(0,0,255,$pat_bits,$source_range eq "LIMITED");
+ my $cyan_rgb=($signal_mode eq "dv") ? "256,3760,3760" : &webui_pattern_named_triplet(0,255,255,$pat_bits,$source_range eq "LIMITED");
+ my $magenta_rgb=($signal_mode eq "dv") ? "3760,256,3760" : &webui_pattern_named_triplet(255,0,255,$pat_bits,$source_range eq "LIMITED");
+ my $yellow_rgb=($signal_mode eq "dv") ? "3760,3760,256" : &webui_pattern_named_triplet(255,255,0,$pat_bits,$source_range eq "LIMITED");
+ my $gray50_rgb=($signal_mode eq "dv") ? "2008,2008,2008" : &webui_pattern_named_triplet(128,128,128,$pat_bits,$source_range eq "LIMITED");
  # Complex patterns are rendered directly into a temporary image (DRAW=IMAGE),
  # because PGeneratord clears the entire frame for each DRAW=RECTANGLE entry.
  # Prefer PNG for renderer compatibility; fall back to raw PPM only if convert
@@ -13444,7 +13479,7 @@ sub webui_pattern (@) {
  }
 elsif($pat eq "" && $name eq "tv_menu") {
  # On-screen menu picture drawn by webui_tvmenu_view.
- my ($file)=$body=~/"file"\s*:\s*"(view-[0-9a-f]+-\d+-\d+x\d+-[01]-[0-9a-f]+\.bmp)"/;
+ my ($file)=$body=~/"file"\s*:\s*"(view-[0-9a-f]+-\d+-\d+x\d+-[a-z]+-[0-9a-f]+\.bmp)"/;
  return '{"status":"error","message":"Menu picture not found"}' if(!defined($file) || !-f "$_tvmenu_view_dir/$file");
  $pat=&webui_pattern_image_pattern($w,$h,"$_tvmenu_view_dir/$file");
  $pat_bits=&webui_pattern_effective_bits("IMAGE",$signal_mode);

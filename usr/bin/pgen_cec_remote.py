@@ -67,9 +67,11 @@ IDLE_LIMIT = 2 * 3600
 # A menu left on screen closes after ten minutes (OLED panels).
 MENU_IDLE = 600
 ANNOUNCE_FILE = "/tmp/pgen-cec-announce"
-# A held key repeats <User Control Pressed> every 200-500 ms without a
-# <User Control Released> in between; only a release or a longer gap starts
-# a new press.
+# A held key repeats <User Control Pressed> every 200-500 ms, with or
+# without a <User Control Released> in between (LG sends both). Navigation
+# keys step on every repeat, like a TV menu; the other keys act once per
+# press, and the same key again within REPEAT_GAP counts as held.
+REPEATING = ("up", "down", "left", "right", "next", "prev")
 REPEAT_GAP = 0.6
 LOCK_FILE = "/tmp/pgen-cec-remote.lock"
 
@@ -195,6 +197,18 @@ def receive(fd, timeout_ms):
     return list(msg[32:32 + min(length, 16)])
 
 
+def answer(fd, la, msg):
+    """Replies to the TV's menu and power queries; True if msg was one."""
+    src, opcode = msg[0] >> 4, msg[1]
+    if opcode == OP_MENU_REQUEST:
+        transmit(fd, la, src, OP_MENU_STATUS, [0x00])
+    elif opcode == OP_GIVE_POWER:
+        transmit(fd, la, src, OP_REPORT_POWER, [0x00])
+    else:
+        return False
+    return True
+
+
 running = True
 
 
@@ -315,26 +329,38 @@ def serve():
             break
         if not msg or len(msg) < 2:
             continue
-        src, opcode = msg[0] >> 4, msg[1]
-        if opcode == OP_MENU_REQUEST:
-            transmit(fd, la, src, OP_MENU_STATUS, [0x00])
-        elif opcode == OP_GIVE_POWER:
-            transmit(fd, la, src, OP_REPORT_POWER, [0x00])
-        elif opcode == OP_USER_CONTROL_RELEASED:
+        if answer(fd, la, msg):
+            continue
+        opcode = msg[1]
+        if opcode == OP_USER_CONTROL_RELEASED:
             released = True
         elif opcode == OP_USER_CONTROL_PRESSED and len(msg) >= 3:
             key = msg[2]
             now = time.time()
-            # One step per press: a repeat of a held key is ignored.
-            if key == last_key and not released and now - last_at < REPEAT_GAP:
+            name = KEYS.get(key)
+            if name not in REPEATING and key == last_key and (not released or now - last_at < REPEAT_GAP):
                 last_at = now
                 continue
             last_key, last_at, last_press, released = key, now, now, False
-            name = KEYS.get(key)
             if not name:
                 continue
             write_status(last_key=NAMES.get(name, name), last_key_at=int(now))
             api_key(name)
+            # The daemon answers once the new picture is up. Keys that came in
+            # meanwhile are dropped, so a held key stops on release instead of
+            # working off a queue; releases and TV requests still count.
+            while True:
+                msg = receive(fd, 1)
+                if not msg or len(msg) < 2:
+                    break
+                if answer(fd, la, msg):
+                    continue
+                if msg[1] == OP_USER_CONTROL_RELEASED:
+                    released = True
+                elif msg[1] == OP_USER_CONTROL_PRESSED and len(msg) >= 3:
+                    released = False
+                    if msg[2] == last_key:
+                        last_at = time.time()
     os.close(fd)
     # Keep a reason written above (idle limit, read error); clear the rest.
     if status.get("message") == "Listening for the TV remote.":

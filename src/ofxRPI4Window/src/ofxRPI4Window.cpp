@@ -3111,8 +3111,18 @@ void ofxRPI4Window::update()
 
    if (current_bit_depth != bit_depth)
 		flip = 1;
-	if (colorspace_status != colorspace_on) 
-		flip = 1;
+	/* Image <-> drawn pattern (colorspace_on) needs a new window only for
+	   standard DV, which swaps the image and pattern packer shaders. The
+	   YCbCr shader is built by every window setup (also the first one) and
+	   stays. Elsewhere the setup only repeated the modeset: the infoframes
+	   went out again and an LG OLED in HDR blanked for about 1.5 s, e.g.
+	   between the TV menu and a window pattern. */
+	if (colorspace_status != colorspace_on) {
+		if (is_std_DoVi)
+			flip = 1;
+		else
+			colorspace_status = colorspace_on;
+	}
     coreEvents.notifyUpdate();
 	if (flip) {
 		if (!colorspace_on && !initial_bit_depth) colorspace_on = 0;

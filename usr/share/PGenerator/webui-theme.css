@@ -623,6 +623,8 @@ body.layout-tablet .meter-live-primary-values{flex-wrap:nowrap!important;overflo
 :root{--btn-gap:8px;--btn-h-sm:28px}
 .btn-row{display:flex;gap:var(--btn-gap);flex-wrap:wrap;align-items:center}
 .btn-row-end{justify-content:flex-end}
+/* Modal dialogs (confirm, prompt) centre their footer under the centred card. */
+[aria-modal="true"]>.btn-row-end{justify-content:center}
 .btn-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,var(--btn-grid-min,160px)),1fr));gap:var(--btn-gap)}
 .btn-grid-sm{--btn-grid-min:120px}
 .btn-grid-lg{--btn-grid-min:200px}
@@ -976,13 +978,16 @@ cursor:pointer;user-select:none;display:flex;align-items:center;gap:4px}
 .custom-series-patch-drag:active{cursor:grabbing}
 body.is-custom-series-patch-dragging{cursor:grabbing!important;user-select:none!important}
 #meterCustomSeriesEditorBody tr.is-patch-dragging{outline:2px solid var(--accent);outline-offset:-2px;background:var(--selected-bg)}
-.update-btn{display:inline-flex;align-items:center;gap:5px;padding:6px 10px;border:1px solid var(--accent-fill);border-radius:7px;
-background:var(--accent-fill);color:var(--on-accent);font-size:.7rem;font-weight:600;line-height:1.2}
-.update-btn:hover{background:color-mix(in srgb,var(--accent-fill) 88%,#000)}
-[data-palette^="natrium"] .update-btn{color:var(--text-inverse)}
+/* Update available: its own status colour (not the accent, which also marks
+   the active layout switch), tinted like the header power buttons, and as
+   tall as the layout switch next to it. */
+.update-btn{--upd:var(--status-success);display:inline-flex;align-items:center;gap:5px;min-height:0;padding:7px 10px;border:0;border-radius:7px;
+background:color-mix(in srgb,var(--upd) 14%,transparent);box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--upd) 45%,transparent);
+color:var(--upd);font-size:.7rem;font-weight:600;line-height:1.2}
+.update-btn:hover{background:color-mix(in srgb,var(--upd) 24%,transparent)}
 .update-pulse{animation:updatePulse 2s ease-out infinite}
 @media (prefers-reduced-motion:reduce){.update-pulse{animation:none}}
-@keyframes updatePulse{0%{box-shadow:0 0 0 0 color-mix(in srgb,var(--accent) 65%,transparent)}70%{box-shadow:0 0 0 7px color-mix(in srgb,var(--accent) 0%,transparent)}100%{box-shadow:0 0 0 0 color-mix(in srgb,var(--accent) 0%,transparent)}}
+@keyframes updatePulse{0%{box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--upd) 45%,transparent),0 0 0 0 color-mix(in srgb,var(--upd) 55%,transparent)}70%{box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--upd) 45%,transparent),0 0 0 7px color-mix(in srgb,var(--upd) 0%,transparent)}100%{box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--upd) 45%,transparent),0 0 0 0 color-mix(in srgb,var(--upd) 0%,transparent)}}
 @keyframes thumbPulse{0%,100%{box-shadow:inset 0 0 0 3px #5b7fff}50%{box-shadow:inset 0 0 0 3px color-mix(in srgb,var(--accent) 25%,transparent)}}
 @keyframes meterProgressShimmer{0%{transform:translateX(-115%)}100%{transform:translateX(115%)}}
 #meterCard.meter-patterns-only #meterLiveReading,

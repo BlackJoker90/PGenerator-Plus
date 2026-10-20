@@ -2996,6 +2996,7 @@ const SELFTEST_MODES=[
  {id:'sdr_rgb_full_10',group:'SDR',label:'RGB Full',depth:10,quick:false},
  {id:'sdr_ycc422_10',group:'SDR',label:'YCbCr 4:2:2',depth:10,quick:false},
  {id:'sdr_ycc444_10',group:'SDR',label:'YCbCr 4:4:4',depth:10,quick:true},
+ {id:'hdr10_rgb_lim_10',group:'HDR10',label:'RGB Limited',depth:10,quick:false},
  {id:'hdr10_ycc422_10',group:'HDR10',label:'YCbCr 4:2:2',depth:10,quick:false},
  {id:'hdr10_ycc444_10',group:'HDR10',label:'YCbCr 4:4:4',depth:10,quick:true},
  {id:'dv_std_rgb_8',group:'Dolby Vision',label:'Standard',depth:8,quick:false},
@@ -3115,7 +3116,7 @@ function selftestPoll(delay){
 async function selftestStart(set){
  const quick=set==='quick';
  const ok=await pgConfirm({title:quick?'Run a quick check?':'Run the full self-test?',
-  body:(quick?'Three modes, about 40 seconds.':'Nine modes, about three minutes.')+' The display switches through SDR, HDR10'+(quick?'':' and Dolby Vision')+' and shows dim test windows. Calibration software must stay disconnected until it finishes. Your signal settings come back afterwards.',
+  body:(quick?'Three modes, about 40 seconds.':'Ten modes, about three minutes.')+' The display switches through SDR, HDR10'+(quick?'':' and Dolby Vision')+' and shows dim test windows. Calibration software must stay disconnected until it finishes. Your signal settings come back afterwards.',
   acceptLabel:quick?'Run quick check':'Run full test',tone:'caution'});
  if(!ok) return;
  selftestOpen={};

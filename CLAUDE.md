@@ -30,7 +30,7 @@ Run what applies and say what was and was not checked:
 - WebUI changes: look at the rendered page at phone (~390 px), tablet and
   desktop widths; the impeccable detector on changed UI files
 - Signal, renderer or pattern changes: on the Pi at the HDMI output
-  (`/verify` skill, the Signal Self-Test in System, or `pgen_scanout`).
+  (`/verify` skill, the Signal Self-Test in Output, or `pgen_scanout`).
   Deploy scripts are not verification.
 
 ## Rules that bite

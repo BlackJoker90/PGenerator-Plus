@@ -21,7 +21,7 @@
 </p>
 
 <p align="center">
-  <img src="screenshots/webui-patterns.png" alt="PGenerator+ Web UI: Patterns workspace with Calman G1 plates, test images and the playlist deck" width="900"/>
+  <img src="screenshots/webui-patterns.png" alt="PGenerator+ Web UI in the Volt theme: Patterns workspace with Calman G1 plates, test images and playlists" width="900"/>
 </p>
 
 ---
@@ -71,7 +71,7 @@ Without a display, the renderer waits instead of failing. The UI says so in a ba
 <td valign="top">
 
 ### 🖥️ A reworked Web UI
-**10 colour themes** (dark, light, OLED, Natrium …) and workspace navigation. The UI shows the measured HDMI link depth and clock. It is served compressed with an ETag, pauses polling in hidden tabs and uses its own dialogs instead of browser pop-ups. Toasts appear only for warnings and errors.
+**13 colour themes** (dark, light, OLED, Natrium, the lime Volt …) and workspace navigation. The UI shows the measured HDMI link depth and clock. It is served compressed with an ETag, pauses polling in hidden tabs and uses its own dialogs instead of browser pop-ups. Toasts appear only for warnings and errors.
 
 </td>
 </tr>
@@ -118,7 +118,7 @@ Press **OK or Menu on the TV remote** and a menu of every pattern appears on the
 | Calman YCbCr 4:2:0 request | no defined answer | clean NAK, current format kept, WebUI notice |
 | Calman G1 specialty patterns | – | rendered on the Pi, also in the WebUI |
 | No display connected | renderer started anyway | waits for a display, banner in the UI, saved mode kept |
-| WebUI themes | dark / light / system | **10 themes** incl. Natrium dark & light |
+| WebUI themes | dark / light / system | **13 themes** incl. Natrium dark & light and Volt, Scope, Ultraviolet |
 | HDMI link readout | – | measured link depth and clock |
 | OTA | latest release only | release notes, progress, **reinstall / rollback**, ~20 % smaller packages |
 | Self-test of the HDMI output | – | **built in**: scanout readback, link depth and AVI per mode |
@@ -139,10 +139,10 @@ Press **OK or Menu on the TV remote** and a menu of every pattern appears on the
 <td align="center"><sub>Playlists: the deck follows the TV remote; Start, duplicate or edit from the library</sub></td>
 </tr>
 <tr>
-<td valign="top"><img src="screenshots/webui-settings.png" alt="Settings workspace with theme picker, GPU memory and software update"/><br/><p align="center"><sub>Settings: themes, GPU memory, OTA update and backup in one place</sub></p></td>
+<td valign="top"><img src="screenshots/webui-settings.png" alt="Settings workspace with the theme picker (Volt selected), GPU memory and software update"/><br/><p align="center"><sub>Settings: 13 themes, GPU memory, OTA update and backup in one place</sub></p></td>
 </tr>
 <tr>
-<td colspan="2" valign="top"><img src="screenshots/webui-selftest.png" alt="Signal self-test in System: bit-exact in 10 of 10 modes, with link details and the drawn swatches per mode"/><br/><p align="center"><sub>Signal self-test: every mode read back from the scanout on a real Pi 4, bit-exact in 10 of 10</sub></p></td>
+<td colspan="2" valign="top"><img src="screenshots/webui-selftest.png" alt="Signal self-test in Output: bit-exact in 10 of 10 modes, with link details and the drawn swatches per mode"/><br/><p align="center"><sub>Signal self-test, right below Display Settings: every mode read back from the scanout on a real Pi 4, bit-exact in 10 of 10</sub></p></td>
 </tr>
 </table>
 <p align="center"><sub>Top right: the same playlists on a phone, with a bottom tab bar</sub></p>
@@ -264,16 +264,15 @@ Served on **port 80** at `http://pgenerator.local`. It has a **Desktop** layout 
 
 | Workspace | What's in it |
 |---|---|
-| **Output** | Signal mode (SDR / HDR10 / HLG / Dolby Vision), resolution from the EDID, bit depth, colour format, colorimetry, range, and HDR10 and DV metadata. Shows a banner while no display is connected. |
+| **Output** | Signal mode (SDR / HDR10 / HLG / Dolby Vision), resolution from the EDID, bit depth, colour format, colorimetry, range, and HDR10 and DV metadata. Shows a banner while no display is connected. Below it the **Signal Self-Test**: draws known codes in every signal mode and reads the scanout back, next to link depth, range CSC and AVI infoframe |
 | **Patterns** | Calman G1 plates (favourites Basic Alignment, Warm-Up, Granger Rainbow, plus all others), the test images White Clipping, Black Clipping and Overscan, your own uploaded images and videos, and **playlists** you step through with the TV remote; "Show menu on TV" opens the on-screen pattern menu |
 | **Calibration** | Meter detection, single and continuous reads, series runs (Greyscale 21/11, Colors 30, Saturation 24), charts, and session export |
 | **Meter Profiler** | Meter correction (CCSS) editor and preview |
 | **3D LUT · Display Profiler** | LUT handling, MHC2 / KDE HDR profile building |
-| **LG Display** | LG pairing, AutoCal (greyscale, 3D LUT, HDR tone map, Shadow Fix) |
-| **Connectivity** | Wi-Fi client, access point and Bluetooth in one Network card, plus the Resolve client |
-| **System** | Device info (CPU, memory, temperature, interfaces, uptime) and the **Signal Self-Test** |
+| **Connectivity** | Wi-Fi client, access point and Bluetooth in one Network card, LG TV control (pairing, AutoCal: greyscale, 3D LUT, HDR tone map, Shadow Fix) and the Resolve client |
+| **System** | Device info (CPU, memory, temperature, interfaces, uptime) |
 | **Live Information** (right-hand drawer) | Active signal, the infoframe decoder (AVI and DRM), the measured HDMI link depth and clock, and HDMI-CEC status |
-| **Settings** | Layout, zoom, **10 themes**, GPU memory, software update (with notes, progress, rollback), Download Logs, and settings backup and restore |
+| **Settings** | Layout, zoom, **13 themes**, GPU memory, software update (with notes, progress, rollback), Download Logs, and settings backup and restore |
 
 The header shows the connection, HDMI display, calibration software, meter and temperature at a glance. Restart and power-off are one tap away.
 

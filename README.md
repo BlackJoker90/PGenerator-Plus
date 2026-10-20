@@ -51,7 +51,7 @@ Changing signal mode takes **~3.5–4.5 s instead of ~10 s**. Format changes go 
 <td valign="top">
 
 ### 🎛️ Calman that just works
-The UPGCI handshake now has proper ACKs and the settings format Calman actually parses. `GET_SETTINGS` works. Codes are rounded to the output depth, with a notice when a code is not exact. YCbCr 4:2:0 requests are refused cleanly with a NAK instead of breaking the link. The Portrait Displays **G1 specialty patterns** are rendered on the Pi.
+The UPGCI handshake now has proper ACKs and the settings format Calman actually parses. `GET_SETTINGS` works. Codes are rounded to the output depth, with a notice when a code is not exact. YCbCr 4:2:0 requests are refused cleanly with a NAK instead of breaking the link. Calman can also **connect to PGenerator+ as a G1** and control it completely. All 19 **G1 specialty patterns** are rendered on the Pi; you start them from Calman or from the WebUI.
 
 </td>
 <td valign="top">
@@ -116,7 +116,8 @@ Press **OK or Menu on the TV remote** and a menu of every pattern appears on the
 | Low Latency Dolby Vision | TV did not switch into DV | 12-bit, TV switches into DV |
 | Calman UPGCI | settings replies Calman could not parse | ACK + parseable settings, `GET_SETTINGS` |
 | Calman YCbCr 4:2:0 request | no defined answer | clean NAK, current format kept, WebUI notice |
-| Calman G1 specialty patterns | – | rendered on the Pi, also in the WebUI |
+| Calman connection as G1 | – | **full control** from Calman (patches, signal modes, G1 patterns) |
+| Calman G1 specialty patterns | – | all 19 rendered on the Pi, started from Calman or the WebUI |
 | No display connected | renderer started anyway | waits for a display, banner in the UI, saved mode kept |
 | WebUI themes | dark / light / system | **13 themes** incl. Natrium dark & light and Volt, Scope, Ultraviolet |
 | HDMI link readout | – | measured link depth and clock |
@@ -232,7 +233,8 @@ PGenerator+ is a free, open-source display calibration suite for the Raspberry P
   - *Windows and APL:* fixed, custom and gray-surround APL windows (`RGB_S`, `RGB_A`, `CommandRGB`, `10_SIZE`, `11_APL`). With limited range, window backgrounds are drawn at black.
   - *Unsupported formats:* a YCbCr 4:2:0 request gets a NAK, and the WebUI shows a notice. The current format stays.
   - *Session safety:* pattern state is cleared on session start, shutdown and disconnect.
-  - *Compatibility note:* some Calman builds can also connect through the generator entry normally used for the G1. PGenerator+ is an independent community project, not affiliated with or endorsed by Portrait Displays. Make sure your Calman license and workflow comply with the vendor's terms.
+  - *Connect as G1:* Calman can also connect through **Find Source → Portrait Displays G1** and controls PGenerator+ completely that way: patches, signal modes and every G1 specialty pattern (Basic Alignment, Warm-Up, Granger Rainbow, Brightness, Contrast, Color Bars, SMPTE, ANSI checkerboards and the rest). The same 19 patterns are in the WebUI under Patterns.
+  - *Compatibility note:* PGenerator+ is an independent community project, not affiliated with or endorsed by Portrait Displays. Make sure your Calman license and workflow comply with the vendor's terms.
   - *License note:* Portrait Displays removed UPGCI from Calman **Home** licenses starting with 5.15.x (2024). Home users need 5.14.x or older, a professional tier, or other software (ColourSpace, HCFR).
 
 **2. ColourSpace / LightSpace CMS**

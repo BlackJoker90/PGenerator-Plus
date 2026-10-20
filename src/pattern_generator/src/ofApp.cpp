@@ -90,18 +90,24 @@ inline bool usesDolbyVisionTransport() {
 }
 
 /*
- * An 8-bit SDR pattern on a 10 bpc link (G1 plates, diagnostic images):
+ * An 8-bit pattern on a 10 or 12 bpc link (G1 plates, diagnostic images):
  * an 8-bit plane leaves the 8 -> 10 bit step to the HVS, which replicates
  * the top bits (235 -> 943, 128 -> 514). Draw it in the 10-bit framebuffer
  * instead, with the codes the 8-bit pattern has on an 8 bpc link times 4.
- * HDR and Dolby Vision keep their own surfaces.
+ * This holds for SDR, HDR10/HLG and Low Latency DV (12 bpc wire, 10-bit
+ * surface). Standard DV tunnels 8-bit RGB and keeps its own surface.
  */
 inline int effectivePatternBits(int bits) {
- if(bits != 8 || ofxRPI4Window::wire_bpc != 10)
+ if(bits != 8 || ofxRPI4Window::wire_bpc < 10)
   return bits;
- if(ofxRPI4Window::isHDR || usesDolbyVisionTransport())
+ if(ofxRPI4Window::is_std_DoVi)
   return bits;
  return 10;
+}
+
+// 8-bit pattern promoted to the 10-bit framebuffer by effectivePatternBits().
+inline bool promotedEightBitPattern(int arr_bits) {
+ return arr_bits == 8 && ofxRPI4Window::bit_depth == 10 && !ofxRPI4Window::is_std_DoVi;
 }
 
 inline bool usesLowLatencyDoVi422Transport() {
@@ -336,12 +342,15 @@ void ofApp::draw(){
  if(n_draw[i] > 0) {
   string return_file=tmp_dir+ofToString("/running/return");
   const char * return_file_char = return_file.c_str();
+  /* A new pattern is parsed by the next update(). This frame still draws
+     the current one: returning without drawing put a cleared (black)
+     frame on screen for as long as the next pattern took to load (about
+     0.3 s for a full-screen image). */
   if (access(return_file_char, F_OK) == 0) {
    i=0;
    open_file=1;
    save_images=0;
    unlink(return_file_char);
-   return;
   }
  }
  for(to_draw=0;to_draw<n_draw[i];to_draw++) {
@@ -580,7 +589,9 @@ void ofApp::text() {
  * 8-bit ofImage would cut those to 8 bits.
  */
 bool ofApp::usesFloatImage() {
- if (ofxRPI4Window::avi_info.max_bpc == 10 && ofxRPI4Window::isHDR)
+ /* 8-bit HDR images stay on the 8-bit texture and take the texel * 4
+    tint in image(), like SDR. */
+ if (ofxRPI4Window::avi_info.max_bpc == 10 && ofxRPI4Window::isHDR && arr_bits[i][to_draw] != 8)
   return true;
  return arr_bits[i][to_draw] == 10 && !usesDolbyVisionTransport();
 }
@@ -621,9 +632,8 @@ void ofApp::image() {
      shader encodes them as studio-range codes: an 8-bit texel in the
      10-bit framebuffer must become texel * 4 (white tint gives
      texel * 1023 / 255, 235 -> 943). */
-  if (ofxRPI4Window::bit_depth == 10 &&
-      (ofxRPI4Window::rgbLimitedPassthrough() ||
-       (ofxRPI4Window::avi_info.output_format != 0 && !ofxRPI4Window::isHDR && !usesDolbyVisionTransport())))
+  if (ofxRPI4Window::bit_depth == 10 && !ofxRPI4Window::is_std_DoVi &&
+      (ofxRPI4Window::rgbLimitedPassthrough() || ofxRPI4Window::avi_info.output_format != 0))
    ofSet10bitColor(1020,1020,1020,1023);
   else
    ofSetColor(255,255,255,255);
@@ -759,7 +769,11 @@ void ofApp::setColor(int red, int green, int blue) {
  * Dolby Vision keeps its source codes for the tunnel shader.
  */
 int ofApp::scaleSourceToBitDepth(int value) {
- if(ofxRPI4Window::isDoVi || ofxRPI4Window::is_std_DoVi)
+ if(ofxRPI4Window::is_std_DoVi)
+  return value;
+ /* Low Latency DV keeps its source codes, except for an 8-bit pattern
+    promoted to the 10-bit framebuffer (handled below). */
+ if(ofxRPI4Window::isDoVi && !promotedEightBitPattern(arr_bits[i][to_draw]))
   return value;
  int source_max=arr_source_max[i][to_draw];
  int target_max=(ofxRPI4Window::bit_depth == 10) ? 1023 : 255;

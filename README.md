@@ -37,7 +37,7 @@ Everything the original does is still here: patterns over TCP for Calman, Colour
 <td width="50%" valign="top">
 
 ### 🎯 Bit-exact output
-10-bit pattern codes reach the GPU **without 8-bit quantisation**. **RGB Limited is bit-exact**: a patched vc4 module skips the kernel's compression CSC. HDR10/HLG at 12 bpc goes out as bit-exact 10 bpc instead of crashing the renderer. **8-bit patterns on a 10 bpc link** go out as exactly code × 4 (126 → 504), in SDR, HDR10 and LLDV. The G1 Brightness and Contrast plates switch to **10-bit steps** (0–95, 928–1023) on a 10 bpc link. Scanout readback on the Pi checks the codes; nobody has to eyeball them.
+10-bit pattern codes reach the GPU **without 8-bit quantisation**. **RGB Limited is bit-exact**: a patched vc4 module skips the kernel's compression CSC. HDR10/HLG at 12-bit goes out as bit-exact 10-bit instead of crashing the renderer. **8-bit patterns on a 10-bit link** go out as exactly code × 4 (126 → 504), in SDR, HDR10 and LLDV. The G1 Brightness and Contrast plates switch to **10-bit steps** (0–95, 928–1023) on a 10-bit link. Scanout readback on the Pi checks the codes; nobody has to eyeball them.
 
 </td>
 <td width="50%" valign="top">
@@ -57,7 +57,7 @@ The UPGCI handshake now has proper ACKs and the settings format Calman actually 
 <td valign="top">
 
 ### 🌈 Dolby Vision, fixed
-Low Latency DV renders at **12 bpc** and really switches the TV into DV, with pattern codes sent at 10 bit. Leaving DV signals "DV off" properly and gives back the format, range and depth you had before DV, and the SDR colorimetry. Calman DV consistently runs as standard DV.
+Low Latency DV renders at **12-bit** and really switches the TV into DV, with pattern codes sent at 10-bit. Leaving DV signals "DV off" properly and gives back the format, range and depth you had before DV, and the SDR colorimetry. Calman DV consistently runs as standard DV.
 
 </td>
 </tr>
@@ -111,9 +111,9 @@ Press **OK or Menu on the TV remote** and a menu of every pattern appears on the
 |---|---|---|
 | 10-bit pattern codes | quantised through 8 bit on the way to the GPU | **sent at full 10-bit precision** |
 | RGB Limited output | kernel compression CSC after the framebuffer | **bit-exact** (patched vc4, verified by scanout readback) |
-| HDR10 / HLG at 12 bpc | renderer crashed | bit-exact 10 bpc |
+| HDR10 / HLG at 12-bit | renderer crashed | bit-exact 10-bit |
 | Signal-mode switch | ~10 s | **~3.5–4.5 s** |
-| Low Latency Dolby Vision | TV did not switch into DV | 12 bpc, TV switches into DV |
+| Low Latency Dolby Vision | TV did not switch into DV | 12-bit, TV switches into DV |
 | Calman UPGCI | settings replies Calman could not parse | ACK + parseable settings, `GET_SETTINGS` |
 | Calman YCbCr 4:2:0 request | no defined answer | clean NAK, current format kept, WebUI notice |
 | Calman G1 specialty patterns | – | rendered on the Pi, also in the WebUI |
@@ -313,10 +313,10 @@ On-device closed-loop calibration of LG TVs through the webOS calibration API. L
 
 | Mode | Description |
 |---|---|
-| **SDR** | Rec.709, 8 or 10 bpc, RGB Full / Limited or YCbCr |
-| **HDR10** | PQ (ST.2084), full DRM InfoFrame metadata, 10 bpc (12 bpc requests go out as bit-exact 10 bpc) |
-| **HLG** | Hybrid Log-Gamma, 10 bpc |
-| **Dolby Vision** | Standard (TV-led, 8-bit RGB tunnel; used for Calman DV) or Low Latency (LLDV, 12 bpc) |
+| **SDR** | Rec.709, 8- or 10-bit, RGB Full / Limited or YCbCr |
+| **HDR10** | PQ (ST.2084), full DRM InfoFrame metadata, 10-bit (12-bit requests go out as bit-exact 10-bit) |
+| **HLG** | Hybrid Log-Gamma, 10-bit |
+| **Dolby Vision** | Standard (TV-led, 8-bit RGB tunnel; used for Calman DV) or Low Latency (LLDV, 12-bit) |
 
 The Pi 4's KMS driver sets the HDMI InfoFrames directly:
 

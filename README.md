@@ -105,7 +105,9 @@ Press **OK or Menu on the TV remote** and a menu of every pattern appears on the
 </tr>
 </table>
 
-## At a glance: fork vs. original
+<a id="at-a-glance-fork-vs-original"></a>
+
+## ⚖️ At a glance: fork vs. original
 
 | | Original ([BigShoots](https://github.com/BigShoots/PGenerator-Plus) 2.12.1) | **This fork (2.13.x)** |
 |---|---|---|

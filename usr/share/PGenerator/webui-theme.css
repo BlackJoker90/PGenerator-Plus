@@ -854,9 +854,11 @@ body.dv-profile-done-error #dvProfileDoneStatus{color:#e08184}
 .upd-meta{display:flex;justify-content:space-between;gap:12px;margin:4px 0 18px;font-size:.75rem;color:var(--text2);font-variant-numeric:tabular-nums}
 .upd-bar{position:relative;height:8px;border-radius:4px;background:var(--surface-inset);box-shadow:inset 0 0 0 1px var(--border);overflow:hidden}
 .upd-bar-fill{position:absolute;top:0;bottom:0;left:0;width:0;border-radius:inherit;background:var(--accent-fill);transition:width .6s cubic-bezier(.16,1,.3,1),background-color .3s}
-.upd-bar-seek{position:absolute;top:0;bottom:0;left:0;width:60%;display:none;background:linear-gradient(90deg,transparent,color-mix(in srgb,var(--accent-fill) 80%,transparent),transparent) no-repeat;background-size:45% 100%;animation:upd-seek 1.8s cubic-bezier(.45,0,.55,1) infinite}
+/* The sweep spans the whole track: a 40 % wide glow starts fully left of it and leaves fully right of it */
+.upd-bar-seek{position:absolute;inset:0;display:none;background:linear-gradient(90deg,transparent,color-mix(in srgb,var(--accent-fill) 80%,transparent),transparent) no-repeat;background-size:40% 100%;animation:upd-seek 1.8s cubic-bezier(.45,0,.55,1) infinite}
 .upd-bar.is-indeterminate .upd-bar-seek{display:block}
-@keyframes upd-seek{from{background-position:-90% 0}to{background-position:190% 0}}
+/* background-position p% puts the glow at p x (100 % - 40 %): -66.7 % = -40 % (outside left), 166.7 % = 100 % (outside right) */
+@keyframes upd-seek{from{background-position:-66.7% 0}to{background-position:166.7% 0}}
 .upd-card.is-done .upd-bar-fill{background:var(--success-fill)}
 .upd-card.is-failed .upd-bar-fill{background:var(--danger-fill)}
 .upd-card.is-timeout .upd-bar-fill{background:var(--warning-text)}

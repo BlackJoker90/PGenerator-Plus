@@ -75,5 +75,13 @@ Run what applies and say what was and was not checked:
 - Releases are OTA packages (`tools/release-ota.sh`); a flashable image
   only for boot/base-system changes. The release script refuses untracked
   runtime files: `git add` new files first.
+- README follows the product without being asked: when something
+  fundamental is added or changed (a new setting, workspace, card, endpoint,
+  signal mode or behaviour a user would notice), update `README.md` in the
+  same piece of work: the fork-vs-original table, the workspace table, the
+  API list, and new or retaken screenshots (`screenshots/`, Volt theme,
+  1280x800, Desktop layout, GET-only, no real reboots or setting POSTs).
+  It reaches GitHub with the release that ships the feature, so the README
+  never describes something users cannot install yet.
 - Commits, pushes, releases, reboots and deploys need the maintainer's OK.
 - Code comments, commit messages and repo docs are in English.

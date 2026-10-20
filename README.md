@@ -21,14 +21,14 @@
 </p>
 
 <p align="center">
-  <img src="screenshots/webui-patterns.png" alt="PGenerator+ Web UI: Patterns workspace with Calman G1 plates and test images" width="900"/>
+  <img src="screenshots/webui-patterns.png" alt="PGenerator+ Web UI: Patterns workspace with Calman G1 plates, test images and the playlist deck" width="900"/>
 </p>
 
 ---
 
 ## Why this fork
 
-This is **BlackJoker90's fork** of [BigShoots/PGenerator-Plus](https://github.com/BigShoots/PGenerator-Plus). It branched from upstream 2.12.1 in September 2026 and has had **110+ commits and 23 releases** since then (2.12.2 → 2.13.x). Upstream has nothing newer that the fork lacks.
+This is **BlackJoker90's fork** of [BigShoots/PGenerator-Plus](https://github.com/BigShoots/PGenerator-Plus). It branched from upstream 2.12.1 in September 2026 and has had **115+ commits and 24 releases** since then (2.12.2 → 2.13.x). Upstream has nothing newer that the fork lacks.
 
 Everything the original does is still here: patterns over TCP for Calman, ColourSpace, HCFR and Resolve; on-Pi meter workflows; LG AutoCal; profile building. The fork's focus is the **signal on the HDMI cable** and the **day-to-day experience**:
 
@@ -37,7 +37,7 @@ Everything the original does is still here: patterns over TCP for Calman, Colour
 <td width="50%" valign="top">
 
 ### 🎯 Bit-exact output
-10-bit pattern codes reach the GPU **without 8-bit quantisation**. **RGB Limited is bit-exact**: a patched vc4 module skips the kernel's compression CSC. HDR10/HLG at 12 bpc goes out as bit-exact 10 bpc instead of crashing the renderer. Scanout readback on the Pi checks the codes; nobody has to eyeball them.
+10-bit pattern codes reach the GPU **without 8-bit quantisation**. **RGB Limited is bit-exact**: a patched vc4 module skips the kernel's compression CSC. HDR10/HLG at 12 bpc goes out as bit-exact 10 bpc instead of crashing the renderer. **8-bit patterns on a 10 bpc link** go out as exactly code × 4 (126 → 504), in SDR, HDR10 and LLDV. The G1 Brightness and Contrast plates switch to **10-bit steps** (0–95, 928–1023) on a 10 bpc link. Scanout readback on the Pi checks the codes; nobody has to eyeball them.
 
 </td>
 <td width="50%" valign="top">
@@ -57,7 +57,7 @@ The UPGCI handshake now has proper ACKs and the settings format Calman actually 
 <td valign="top">
 
 ### 🌈 Dolby Vision, fixed
-Low Latency DV renders at **12 bpc** and really switches the TV into DV. Leaving DV signals "DV off" properly and restores the SDR colorimetry. Calman DV consistently runs as standard DV.
+Low Latency DV renders at **12 bpc** and really switches the TV into DV, with pattern codes sent at 10 bit. Leaving DV signals "DV off" properly and gives back the format, range and depth you had before DV, and the SDR colorimetry. Calman DV consistently runs as standard DV.
 
 </td>
 </tr>
@@ -79,13 +79,27 @@ Without a display, the renderer waits instead of failing. The UI says so in a ba
 <td valign="top">
 
 ### 📦 Safer OTA updates
-Updates come from **this fork's releases**. The dialog shows the release notes and download progress. You can **reinstall or roll back** to an earlier release. Update checks are cached (gentle on the GitHub API), and cross-site requests to the WebUI are refused.
+Updates come from **this fork's releases**. The dialog shows the release notes and download progress. You can **reinstall or roll back** to an earlier release. Packages are about **20 % smaller** (stripped binaries, no duplicate files, unused Python modules dropped). Update checks are cached (gentle on the GitHub API), and cross-site requests to the WebUI are refused.
 
 </td>
 <td valign="top">
 
 ### 🧹 Small things that add up
 mDNS answers AAAA queries with an NSEC record, so clients do not wait for an IPv6 address that never comes. `/api/lg/status` answers in milliseconds instead of ~4 s. The boot splash shows once, early. **Download Logs** replaces the old log upload.
+
+</td>
+</tr>
+<tr>
+<td valign="top">
+
+### 🧪 Signal self-test
+One button in **System** runs nine signal modes (SDR RGB Limited/Full and YCbCr 4:2:2/4:4:4, HDR10 YCbCr 4:2:2/4:4:4, Dolby Vision Standard and Low Latency). In each mode it draws known codes, **reads back what the Pi scans out** and checks the link depth and AVI infoframe. Your signal settings come back afterwards; a quick check covers three modes in about 40 s.
+
+</td>
+<td valign="top">
+
+### 📺 Pattern menu and playlists on the TV remote
+Press **OK or Menu on the TV remote** and a menu of every pattern appears on the TV: G1 plates, test images and playlists as thumbnails. Arrows move, OK shows the pattern, left/right step on, Back returns to the menu. No phone needed. It dims itself in HDR and Dolby Vision and closes after ten idle minutes (OLED). Playlists step the same way: right or down for next, left or up for back, a number key to jump, Exit to end. Three built-in playlists (Picture setup, Greyscale windows, Panel check), plus your own from G1 plates, test images, uploads and APL windows. A deck on the page shows where you are.
 
 </td>
 </tr>
@@ -106,7 +120,10 @@ mDNS answers AAAA queries with an NSEC record, so clients do not wait for an IPv
 | No display connected | renderer started anyway | waits for a display, banner in the UI, saved mode kept |
 | WebUI themes | dark / light / system | **10 themes** incl. Natrium dark & light |
 | HDMI link readout | – | measured link depth and clock |
-| OTA | latest release only | release notes, progress, **reinstall / rollback** |
+| OTA | latest release only | release notes, progress, **reinstall / rollback**, ~20 % smaller packages |
+| Self-test of the HDMI output | – | **built in**: scanout readback, link depth and AVI per mode |
+| Pattern playlists | – | **stepped with the TV remote** (HDMI-CEC), own playlists |
+| On-screen pattern menu | – | **every pattern on the TV**, picked with the remote |
 | Popups | success and error toasts | warnings and errors only |
 
 > The left column describes upstream behaviour as stated in the fork commits that changed it. Run `git log origin/main..main` in a clone with both remotes for the full list.
@@ -115,14 +132,17 @@ mDNS answers AAAA queries with an NSEC record, so clients do not wait for an IPv
 
 <table>
 <tr>
-<td width="68%" valign="top"><img src="screenshots/webui-settings.png" alt="Settings workspace with theme picker, GPU memory and software update"/></td>
-<td width="32%" valign="top"><img src="screenshots/webui-phone.png" alt="Web UI on a phone"/></td>
+<td width="68%" valign="top"><img src="screenshots/webui-playlists.png" alt="Playlist deck with the current pattern, a filmstrip of all steps and the playlist library"/></td>
+<td width="32%" rowspan="3" valign="top"><img src="screenshots/webui-phone.png" alt="Playlists on a phone"/></td>
 </tr>
 <tr>
-<td align="center"><sub>Settings: themes, GPU memory, OTA update and backup in one place</sub></td>
-<td align="center"><sub>Same UI on a phone, with a bottom tab bar</sub></td>
+<td align="center"><sub>Playlists: the deck follows the TV remote; Start, duplicate or edit from the library</sub></td>
+</tr>
+<tr>
+<td valign="top"><img src="screenshots/webui-settings.png" alt="Settings workspace with theme picker, GPU memory and software update"/><br/><p align="center"><sub>Settings: themes, GPU memory, OTA update and backup in one place</sub></p></td>
 </tr>
 </table>
+<p align="center"><sub>Right: the same playlists on a phone, with a bottom tab bar</sub></p>
 
 ---
 
@@ -242,13 +262,13 @@ Served on **port 80** at `http://pgenerator.local`. It has a **Desktop** layout 
 | Workspace | What's in it |
 |---|---|
 | **Output** | Signal mode (SDR / HDR10 / HLG / Dolby Vision), resolution from the EDID, bit depth, colour format, colorimetry, range, and HDR10 and DV metadata. Shows a banner while no display is connected. |
-| **Patterns** | Calman G1 plates (Basic Alignment, Brightness, Warm-Up, more), the test images White Clipping, Black Clipping and Overscan, and your own uploaded images and videos |
+| **Patterns** | Calman G1 plates (favourites Basic Alignment, Warm-Up, Granger Rainbow, plus all others), the test images White Clipping, Black Clipping and Overscan, your own uploaded images and videos, and **playlists** you step through with the TV remote; "Show menu on TV" opens the on-screen pattern menu |
 | **Calibration** | Meter detection, single and continuous reads, series runs (Greyscale 21/11, Colors 30, Saturation 24), charts, and session export |
 | **Meter Profiler** | Meter correction (CCSS) editor and preview |
 | **3D LUT · Display Profiler** | LUT handling, MHC2 / KDE HDR profile building |
 | **LG Display** | LG pairing, AutoCal (greyscale, 3D LUT, HDR tone map, Shadow Fix) |
 | **Connectivity** | Wi-Fi client, access point and Bluetooth in one Network card, plus the Resolve client |
-| **System** | Device info: CPU, memory, temperature, interfaces, uptime |
+| **System** | Device info (CPU, memory, temperature, interfaces, uptime) and the **Signal Self-Test** |
 | **Live Information** (right-hand drawer) | Active signal, the infoframe decoder (AVI and DRM), the measured HDMI link depth and clock, and HDMI-CEC status |
 | **Settings** | Layout, zoom, **10 themes**, GPU memory, software update (with notes, progress, rollback), Download Logs, and settings backup and restore |
 

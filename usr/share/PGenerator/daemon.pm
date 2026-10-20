@@ -39,6 +39,8 @@ sub fork_pattern_daemon (@) {
   threads->create(\&lg_startup_scan_worker)->detach();
   threads->create(\&webui_http)->detach();
   threads->create(\&webui_mdns)->detach();
+  # TV remote listener for the on-screen menu (setting on by default).
+  &webui_tvmenu_boot();
   &pattern_daemon();
   exit;
  }

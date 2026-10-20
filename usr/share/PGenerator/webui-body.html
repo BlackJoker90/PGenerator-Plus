@@ -49,7 +49,7 @@ __PG_LOGO_DARK__
     <svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 12a8.5 8.5 0 1 0 2.6-6.1L3.5 8.5"/><path d="M3.5 3.5v5h5"/><path d="M12 8.5v4"/></svg>
    </button>
    <button class="icon-btn power-btn offline" id="pwrBtn" aria-label="Power off Pi" title="Power off" onclick="shutdownDevice()">
-   <svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v8"/><path d="M6.6 6.6a8 8 0 1 0 10.8 0"/></svg>
+   <svg viewBox="0 -0.25 24 24" width="24" height="24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v8"/><path d="M6.6 6.6a8 8 0 1 0 10.8 0"/></svg>
    </button>
   </div>
  </div>
@@ -322,6 +322,72 @@ __PG_LOGO_DARK__
    </div>
   </div>
 
+ </div>
+
+<!-- Pattern playlists: step a set of setup patterns with the TV remote
+      (HDMI-CEC, pgen_cec_remote.py) or from here. webui-app.js playlist*. -->
+ <div class="card span2 playlist-card" id="playlistCard" data-widget="playlists" data-desktop-workspace="patterns" data-desktop-order="20" draggable="true">
+  <h2><span class="drag-handle">&#9776;</span>Playlists</h2>
+  <p class="playlist-lede">Step through setup patterns with the TV remote: right or down for the next pattern, left or up to go back, a number key to jump, Exit to end. Arrow keys on this page do the same. OK or Menu on the remote opens a menu of every pattern on the TV.</p>
+  <section class="playlist-deck" id="playlistDeck" hidden aria-labelledby="playlistDeckName">
+   <div class="playlist-deck-top">
+    <div class="playlist-deck-text">
+     <div class="playlist-deck-pl" id="playlistDeckPl"></div>
+     <div class="playlist-deck-name" id="playlistDeckName" role="status" aria-live="polite"></div>
+     <div class="playlist-deck-error" id="playlistDeckError" hidden></div>
+    </div>
+    <div class="playlist-deck-pos" id="playlistDeckPos" aria-hidden="true"></div>
+   </div>
+   <ol class="playlist-rail" id="playlistRail" aria-label="Patterns in this playlist"></ol>
+   <div class="playlist-deck-bar">
+    <div class="playlist-remote" id="playlistRemote" data-state="off">
+     <svg class="playlist-remote-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M8.5 2.5h7a1.5 1.5 0 0 1 1.5 1.5v16a1.5 1.5 0 0 1-1.5 1.5h-7A1.5 1.5 0 0 1 7 20V4a1.5 1.5 0 0 1 1.5-1.5zM12 6.2v.1M10 10h4M12 8v4M10.2 15.5h.1M13.8 15.5h.1M10.2 18h.1M13.8 18h.1" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+     <span id="playlistRemoteText">TV remote</span>
+    </div>
+    <div class="playlist-transport">
+     <button type="button" class="btn btn-secondary playlist-step" id="playlistPrevBtn" onclick="playlistStep('prev')" aria-label="Previous pattern"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg><span>Previous</span></button>
+     <button type="button" class="btn btn-primary playlist-step" id="playlistNextBtn" onclick="playlistStep('next')" aria-label="Next pattern"><span>Next</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5l7 7-7 7" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+     <button type="button" class="btn btn-secondary" id="playlistStopBtn" onclick="playlistStop()">End playlist</button>
+    </div>
+   </div>
+  </section>
+  <ul class="playlist-library" id="playlistLibrary" aria-label="Playlists"></ul>
+  <div class="playlist-library-foot" id="playlistLibraryFoot">
+   <button type="button" class="btn btn-secondary btn-sm" onclick="playlistEdit(null)"><svg class="playlist-btn-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>New playlist</button>
+   <div class="tvmenu-bar">
+    <label class="tvmenu-listen"><input type="checkbox" id="tvMenuListen" onchange="tvMenuSetListen(this.checked)"> Open the menu with the TV remote</label>
+    <button type="button" class="btn btn-secondary btn-sm" id="tvMenuBtn" onclick="tvMenuToggle()"><svg class="playlist-btn-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3.5 5.5h17v11h-17zM8 20h8M5.5 9h2M5.5 12.5h2M10 9h8.5M10 12.5h6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg><span id="tvMenuBtnText">Show menu on TV</span></button>
+   </div>
+  </div>
+  <section class="playlist-editor" id="playlistEditor" hidden aria-labelledby="playlistEditorTitle">
+   <div class="playlist-editor-head">
+    <h3 class="card-section-title" id="playlistEditorTitle">New playlist</h3>
+    <label class="playlist-name-field"><span class="sr-only">Playlist name</span><input type="text" id="playlistNameInput" class="ccss-input" maxlength="48" placeholder="Playlist name" autocomplete="off"></label>
+   </div>
+   <div class="playlist-editor-grid">
+    <div class="playlist-editor-pane">
+     <div class="playlist-pane-title">Add patterns</div>
+     <div class="playlist-catalog" id="playlistCatalog"></div>
+     <div class="playlist-window-add">
+      <label for="playlistWindowLevel">Window</label>
+      <input type="number" id="playlistWindowLevel" class="ccss-input" min="0" max="100" step="5" value="50" inputmode="numeric">
+      <span class="playlist-unit">% level,</span>
+      <input type="number" id="playlistWindowSize" class="ccss-input" min="1" max="100" step="1" value="10" inputmode="numeric" aria-label="Window size in percent of the screen">
+      <span class="playlist-unit">% size</span>
+      <button type="button" class="btn btn-secondary btn-sm" onclick="playlistAddWindow()">Add</button>
+     </div>
+    </div>
+    <div class="playlist-editor-pane">
+     <div class="playlist-pane-title">Order <span class="playlist-count" id="playlistEditCount"></span></div>
+     <ol class="playlist-order" id="playlistOrder"></ol>
+    </div>
+   </div>
+   <div class="playlist-editor-actions">
+    <span class="playlist-editor-msg" id="playlistEditorMsg" role="alert"></span>
+    <button type="button" class="btn btn-secondary" onclick="playlistEditCancel()">Cancel</button>
+    <button type="button" class="btn btn-primary" id="playlistSaveBtn" onclick="playlistEditSave()">Save playlist</button>
+   </div>
+  </section>
  </div>
 
 <!-- Calibration -->
@@ -1626,6 +1692,36 @@ __PG_LOGO_DARK__
    </div>
   </div>
   <div class="info-grid" id="infoGrid"></div>
+ </div>
+
+ <!-- Signal Self-Test: pgen_selftest.pl walks the output through the signal
+      modes and reads back the scanned-out codes (webui-app.js selftest*). -->
+ <div class="card span2 selftest-card" id="selftestCard" data-widget="selftest" data-desktop-workspace="system" data-desktop-order="20" draggable="true">
+  <h2><span class="drag-handle">&#9776;</span>Signal Self-Test</h2>
+  <p class="selftest-lede">Draws known codes in every signal mode and reads back what the Pi scans out, next to the link depth, range CSC and AVI infoframe. The display shows dim test windows for about three minutes; your signal settings come back afterwards.</p>
+  <div class="selftest-verdict" id="selftestVerdict" data-state="idle">
+   <span class="selftest-mark" aria-hidden="true">
+    <svg class="selftest-mark-icon" data-icon="idle" viewBox="0 0 24 24"><path d="M3 12h3l2.5-6 4 12 3-9 2 3H21" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    <svg class="selftest-mark-icon" data-icon="running" viewBox="0 0 24 24"><path d="M12 3a9 9 0 1 1-9 9" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+    <svg class="selftest-mark-icon" data-icon="passed" viewBox="0 0 24 24"><path d="m5 12.5 4.5 4.5L19 7.5" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    <svg class="selftest-mark-icon" data-icon="failed" viewBox="0 0 24 24"><path d="M12 7v6.5M12 17.2v.1" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg>
+   </span>
+   <div class="selftest-verdict-text" role="status" aria-live="polite">
+    <div class="selftest-title" id="selftestTitle">Not run yet</div>
+    <div class="selftest-sub" id="selftestSub">Run the test with a display connected and no calibration software attached.</div>
+   </div>
+   <div class="selftest-actions">
+    <button type="button" class="btn btn-secondary" id="selftestQuickBtn" onclick="selftestStart('quick')">Quick check</button>
+    <button type="button" class="btn btn-primary" id="selftestRunBtn" onclick="selftestStart('full')">Run full test</button>
+    <button type="button" class="btn btn-secondary" id="selftestStopBtn" onclick="selftestCancel()" hidden>Stop test</button>
+   </div>
+   <div class="selftest-progress" aria-hidden="true"><div class="selftest-progress-fill" id="selftestProgress"></div></div>
+  </div>
+  <ol class="selftest-modes" id="selftestModes" aria-label="Signal modes in the self-test"></ol>
+  <div class="selftest-foot" id="selftestFoot" hidden>
+   <span class="selftest-foot-note" id="selftestFootNote"></span>
+   <button type="button" class="btn btn-secondary btn-sm" id="selftestCopyBtn" onclick="selftestCopyReport()">Copy report</button>
+  </div>
  </div>
 
  <!-- Network: WiFi Client, WiFi Access Point and Bluetooth PAN in one card.

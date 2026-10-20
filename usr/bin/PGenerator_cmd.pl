@@ -113,11 +113,25 @@ $root_video_pid_file="/tmp/PGenerator_video.pid";
 &bt_restart_pan()         if($action eq "BT_RESTART_PAN");
 &bt_remove_device()       if($action eq "BT_REMOVE_DEVICE");
 &bt_set_agent()           if($action eq "BT_SET_AGENT");
+&scanout_probe()          if($action eq "SCANOUT_PROBE");
 
 
 #
 # functions 
 #
+
+# Signal self-test: read back the scanned-out framebuffer (root only, GETFB2
+# hides the buffer handle from other users). Arguments are a region x y w h.
+sub scanout_probe(@) {
+ my @region=@ARGV[1..4];
+ for(@region) {
+  if(!defined($_) || $_!~/^\d{1,5}$/) { print "ERR bad region\n"; exit 1; }
+ }
+ my $probe="/usr/bin/pgen_scanout";
+ if(!-x $probe) { print "ERR $probe missing\n"; exit 1; }
+ system($probe,@region);
+ exit(0);
+}
 
 sub pgen_cmd_exists(@) {
  my $cmd=shift;

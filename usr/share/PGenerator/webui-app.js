@@ -44,11 +44,11 @@ function toast(msg,err,opts){
  if(act){act.hidden=!toastActionFn;act.textContent=toastActionFn?(o.action.label||'Retry'):'';}
  const close=t.querySelector('.toast-close');
  if(close) close.tabIndex=0;
- // Warnings clear after 8 s, errors stay 12 s (20 s with an action); both can
+ // Warnings clear after 5 s, errors stay 7 s (12 s with an action); both can
  // be dismissed with a click or the close button. Hover/focus pauses the
  // timer (toastHold below). Resetting the shared timer prevents an older
  // toast from hiding a newer one.
- toastHideMs=warn?8000:(toastActionFn?20000:12000);
+ toastHideMs=warn?5000:(toastActionFn?12000:7000);
  toastHideTimer=setTimeout(toastHide,toastHideMs);
 }
 function toastRunAction(ev){
@@ -193,7 +193,7 @@ function toastHold(hold){
  const t=document.getElementById('toast');
  if(!t||!t.classList.contains('show')) return;
  if(toastHideTimer)clearTimeout(toastHideTimer);
- toastHideTimer=hold?0:setTimeout(toastHide,Math.max(4000,toastHideMs/2));
+ toastHideTimer=hold?0:setTimeout(toastHide,Math.max(2500,toastHideMs/2));
 }
 function toastHide(){
  if(toastHideTimer)clearTimeout(toastHideTimer);
@@ -2711,6 +2711,459 @@ async function pgConfirm(opts,extra){
   acceptLabel:opts.acceptLabel||'OK',cancelLabel:opts.cancelLabel||'Cancel'});
  return !!choice;
 }
+
+// Pattern playlists (Patterns workspace). The Pi keeps the playlists and the
+// running position (PGPlaylists.pm); the TV remote steps it over HDMI-CEC
+// through pgen_cec_remote.py, this card through /api/playlist/step.
+let playlistData=null;
+let playlistPollTimer=null;
+let playlistBusy=false;
+let playlistDraft=null;
+const PLAYLIST_THUMB={black_clipping:'black',white_clipping:'white',overscan:'overscan'};
+function playlistEsc(v){ return selftestEsc(v); }
+function playlistThumb(item,cls){
+ cls=cls||'';
+ if(!item) return '<span class="pat-thumb '+cls+'" aria-hidden="true"></span>';
+ if(item.type==='window'){
+  const lvl=Math.round(255*Math.max(0,Math.min(100,item.level))/100);
+  const side=Math.round(Math.sqrt(Math.max(1,Math.min(100,item.size||10))/100)*100);
+  return '<span class="pat-thumb playlist-thumb-window '+cls+'" aria-hidden="true"><span style="width:'+side+'%;height:'+side+'%;background:rgb('+lvl+','+lvl+','+lvl+')"></span></span>';
+ }
+ if(item.type==='image') return '<span class="pat-thumb playlist-thumb-image '+cls+'" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 5h16v14H4zM4 16l5-5 4 4 2-2 5 5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg></span>';
+ const key=PLAYLIST_THUMB[item.name]||item.name;
+ return '<span class="pat-thumb '+cls+'" data-thumb="'+playlistEsc(key)+'" aria-hidden="true"></span>';
+}
+function playlistActive(){ return playlistData&&playlistData.active?playlistData.active:null; }
+function playlistById(id){ return ((playlistData&&playlistData.playlists)||[]).find(p=>p.id===id)||null; }
+function playlistNeedsSdr(pl){ return (pl.items||[]).some(it=>it.type==='pattern'&&/^g1_/.test(it.name)); }
+function playlistRemoteText(remote,active){
+ if(!remote||!remote.available) return {state:'off',text:'No HDMI-CEC adapter: step from this page.'};
+ if(remote.listening){
+  const ago=remote.last_key_at?Math.max(0,Math.round(Date.now()/1000-remote.last_key_at)):-1;
+  return {state:'on',text:remote.last_key&&ago>=0&&ago<30?'TV remote: '+remote.last_key:'TV remote is listening'};
+ }
+ if(remote.message&&active) return {state:'warn',text:remote.message};
+ return {state:'off',text:active?'Connecting to the TV remote':'TV remote'};
+}
+function playlistRender(){
+ const card=document.getElementById('playlistCard');
+ if(!card||!playlistData) return;
+ const active=playlistActive();
+ const deck=document.getElementById('playlistDeck');
+ deck.hidden=!active;
+ card.classList.toggle('is-playing',!!active);
+ if(active){
+  const pl=playlistById(active.id);
+  document.getElementById('playlistDeckPl').textContent=active.name;
+  document.getElementById('playlistDeckName').textContent=active.label||'';
+  document.getElementById('playlistDeckPos').innerHTML='<span class="playlist-pos-now">'+(active.index+1)+'</span><span class="playlist-pos-of">/ '+active.count+'</span>';
+  const err=document.getElementById('playlistDeckError');
+  err.hidden=!active.error; err.textContent=active.error||'';
+  const rail=document.getElementById('playlistRail');
+  rail.innerHTML=(pl?pl.items:[]).map((it,i)=>'<li class="playlist-rail-step'+(i===active.index?' is-current':'')+(i<active.index?' is-done':'')+'"'+(i===active.index?' aria-current="step"':'')+'>'+
+   '<button type="button" onclick="playlistStep(\''+(i+1)+'\')" aria-label="Show '+playlistEsc(it.label)+'">'+playlistThumb(it)+'<span class="playlist-rail-num">'+(i+1)+'</span><span class="playlist-rail-label">'+playlistEsc(it.label)+'</span></button></li>').join('');
+  const cur=rail.querySelector('.is-current');
+  if(cur&&rail.scrollWidth>rail.clientWidth){
+   const target=cur.offsetLeft-(rail.clientWidth-cur.offsetWidth)/2;
+   if(Math.abs(rail.scrollLeft-target)>4) rail.scrollTo({left:target,behavior:window.matchMedia('(prefers-reduced-motion: reduce)').matches?'auto':'smooth'});
+  }
+  document.getElementById('playlistPrevBtn').disabled=playlistBusy||active.index<=0;
+  document.getElementById('playlistNextBtn').disabled=playlistBusy||active.index>=active.count-1;
+  const rt=playlistRemoteText(playlistData.remote,true);
+  const remote=document.getElementById('playlistRemote');
+  remote.setAttribute('data-state',rt.state);
+  document.getElementById('playlistRemoteText').textContent=rt.text;
+ }
+ const lib=document.getElementById('playlistLibrary');
+ const sdr=(playlistData.signal_mode||'sdr')==='sdr';
+ lib.innerHTML=(playlistData.playlists||[]).map(pl=>{
+  const isActive=active&&active.id===pl.id;
+  const blocked=!sdr&&playlistNeedsSdr(pl);
+  const strip=(pl.items||[]).slice(0,6).map(it=>playlistThumb(it,'playlist-mini')).join('')+((pl.items||[]).length>6?'<span class="playlist-more">+'+((pl.items||[]).length-6)+'</span>':'');
+  return '<li class="playlist-row'+(isActive?' is-active':'')+'">'+
+   '<div class="playlist-row-main"><div class="playlist-row-name">'+playlistEsc(pl.name)+(pl.builtin?'':'<span class="playlist-tag">Yours</span>')+'</div>'+
+   '<div class="playlist-row-desc">'+playlistEsc(pl.description||((pl.items||[]).map(it=>it.label).join(', ')))+'</div>'+
+   (blocked?'<div class="playlist-row-note">Uses G1 plates: switch the output to SDR first.</div>':'')+'</div>'+
+   '<div class="playlist-row-strip" aria-hidden="true">'+strip+'</div>'+
+   '<div class="playlist-row-count">'+(pl.items||[]).length+' patterns</div>'+
+   '<div class="playlist-row-actions">'+
+    (isActive?'<span class="playlist-row-live"><span class="playlist-live-dot" aria-hidden="true"></span>On screen</span>':
+     '<button type="button" class="btn btn-sm playlist-start" onclick="playlistStart(\''+pl.id+'\')" aria-label="Start '+playlistEsc(pl.name)+'"'+(blocked||playlistBusy?' disabled':'')+'><svg viewBox="0 0 12 12" aria-hidden="true"><path d="M2.5 1.4v9.2L10.3 6z" fill="currentColor"/></svg>Start</button>')+
+    '<button type="button" class="icon-btn playlist-icon-btn" onclick="playlistEdit(\''+pl.id+'\','+(pl.builtin?'true':'false')+')" aria-label="'+(pl.builtin?'Duplicate and edit ':'Edit ')+playlistEsc(pl.name)+'" title="'+(pl.builtin?'Duplicate and edit':'Edit')+'">'+
+     (pl.builtin?'<svg viewBox="0 0 24 24"><path d="M9 9h10v10H9zM5 15V5h10" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg>':'<svg viewBox="0 0 24 24"><path d="M4 20h4L19 9l-4-4L4 16zM13.5 6.5l4 4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg>')+'</button>'+
+    (pl.builtin?'':'<button type="button" class="icon-btn playlist-icon-btn is-danger" onclick="playlistDelete(\''+pl.id+'\')" aria-label="Delete '+playlistEsc(pl.name)+'" title="Delete"><svg viewBox="0 0 24 24"><path d="M5 7h14M10 7V4.5h4V7M7 7l1 13h8l1-13M10.5 11v5M13.5 11v5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></button>')+
+   '</div></li>';
+ }).join('');
+ const editing=!!playlistDraft;
+ document.getElementById('playlistEditor').hidden=!editing;
+ lib.hidden=editing;
+ document.getElementById('playlistLibraryFoot').hidden=editing;
+ tvMenuRender();
+}
+// On-screen pattern menu (PGTVMenu.pm): drawn on the TV, driven by the remote.
+function tvMenuRender(){
+ const tv=(playlistData&&playlistData.tvmenu)||{view:'',listen:true};
+ const cec=!!(playlistData&&playlistData.remote&&playlistData.remote.available);
+ const open=!!tv.view;
+ const btn=document.getElementById('tvMenuBtn');
+ if(!btn) return;
+ btn.setAttribute('aria-pressed',open?'true':'false');
+ btn.disabled=playlistBusy;
+ document.getElementById('tvMenuBtnText').textContent=open?'Close menu on TV':'Show menu on TV';
+ const box=document.getElementById('tvMenuListen');
+ box.checked=!!tv.listen;
+ box.disabled=!cec;
+ box.parentNode.setAttribute('data-disabled',cec?'false':'true');
+ box.parentNode.title=cec?'Keeps listening for the TV remote: OK or Menu opens the menu.':'No HDMI-CEC adapter on this Pi.';
+}
+async function tvMenuToggle(){
+ const open=!!(playlistData&&playlistData.tvmenu&&playlistData.tvmenu.view);
+ await playlistCall(open?'/api/tvmenu/close':'/api/tvmenu/open',{});
+}
+async function tvMenuSetListen(on){
+ const r=await fetchJSON('/api/tvmenu/settings',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({listen:!!on})});
+ if(!r||r.status!=='ok') toast((r&&r.message)||'The setting was not saved.','err');
+ await playlistLoad();
+}
+async function playlistLoad(){
+ const r=await fetchJSON('/api/playlists',{_quiet:true});
+ if(r&&r.status==='ok'){
+  const before=playlistActive();
+  playlistData=r;
+  const now=playlistActive();
+  // A remote press moved the playlist: name the new pattern in the header.
+  if(now&&(!before||before.index!==now.index||before.id!==now.id)&&typeof pgSetHeaderPattern==='function') pgSetHeaderPattern(now.label);
+  if(!now&&before&&typeof pgSetHeaderPattern==='function') pgSetHeaderPattern('');
+  playlistRender();
+ }
+ playlistSchedule();
+}
+function playlistSchedule(){
+ if(playlistPollTimer) clearTimeout(playlistPollTimer);
+ const visible=!document.hidden&&document.getElementById('playlistCard')&&document.getElementById('playlistCard').offsetParent!==null;
+ const active=playlistActive()||(playlistData&&playlistData.tvmenu&&playlistData.tvmenu.view);
+ playlistPollTimer=setTimeout(playlistLoad,active?(visible?1500:5000):(visible?15000:60000));
+}
+async function playlistCall(path,body,opts){
+ playlistBusy=true; playlistRender();
+ try{
+  const r=await fetchJSON(path,Object.assign({method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body||{}),_timeoutMs:70000},opts||{}));
+  if(r&&r.status==='error') toast(r.message||'The playlist did not respond.','err');
+  return r;
+ }finally{
+  playlistBusy=false;
+  await playlistLoad();
+ }
+}
+async function playlistStart(id){
+ const pl=playlistById(id);
+ if(!pl) return;
+ const r=await playlistCall('/api/playlist/start',{id});
+ if(r&&r.status==='ok'){
+  toast('Playlist '+pl.name+' started: '+r.label);
+  if(typeof pgSetHeaderPattern==='function') pgSetHeaderPattern(r.label);
+  const deck=document.getElementById('playlistDeck');
+  if(deck&&deck.scrollIntoView) deck.scrollIntoView({block:'nearest',behavior:'smooth'});
+ }
+}
+async function playlistStep(dir){
+ if(!playlistActive()||playlistBusy) return;
+ const r=await playlistCall('/api/playlist/step',{dir:String(dir)});
+ if(r&&r.status==='ok'&&!r.unchanged&&typeof pgSetHeaderPattern==='function') pgSetHeaderPattern(r.label);
+}
+async function playlistStop(){
+ await playlistCall('/api/playlist/stop',{});
+ if(typeof pgSetHeaderPattern==='function') pgSetHeaderPattern('');
+}
+async function playlistDelete(id){
+ const pl=playlistById(id);
+ if(!pl) return;
+ if(!await pgConfirm({title:'Delete '+pl.name+'?',body:'The playlist is removed from the Pi. The patterns themselves stay.',acceptLabel:'Delete playlist',destructive:true})) return;
+ const r=await playlistCall('/api/playlists/delete',{id});
+ if(r&&r.status==='ok') toast('Playlist deleted.');
+}
+// Editor: an inline panel in place of the library.
+function playlistEdit(id,duplicate){
+ const src=id?playlistById(id):null;
+ playlistDraft={id:src&&!duplicate?src.id:'',name:src?(duplicate?src.name+' (copy)':src.name):'',items:src?src.items.map(it=>Object.assign({},it)):[]};
+ document.getElementById('playlistEditorTitle').textContent=playlistDraft.id?'Edit playlist':(duplicate?'New playlist from '+src.name:'New playlist');
+ document.getElementById('playlistNameInput').value=playlistDraft.name;
+ document.getElementById('playlistEditorMsg').textContent='';
+ playlistRenderCatalog();
+ playlistRenderOrder();
+ playlistRender();
+ if(typeof diagLoadAssetCatalog==='function'&&!(diagCustomAssets.image||[]).length) diagLoadAssetCatalog('image').then(playlistRenderCatalog).catch(()=>{});
+ setTimeout(()=>{ const n=document.getElementById('playlistNameInput'); if(n){ n.focus(); n.select(); } },30);
+}
+function playlistRenderCatalog(){
+ const box=document.getElementById('playlistCatalog');
+ if(!box||!playlistData) return;
+ const groups={};
+ (playlistData.catalog||[]).forEach(c=>{ (groups[c.group]=groups[c.group]||[]).push({type:'pattern',name:c.name,label:c.label}); });
+ const images=(typeof diagCustomAssets!=='undefined'&&diagCustomAssets.image)||[];
+ if(images.length) groups['Your images']=images.map(f=>({type:'image',filename:f,label:f}));
+ box.innerHTML=Object.keys(groups).map(g=>'<div class="playlist-catalog-group"><div class="playlist-catalog-title">'+playlistEsc(g)+'</div><div class="playlist-catalog-items">'+
+  groups[g].map(it=>'<button type="button" class="playlist-chip" data-item="'+playlistEsc(JSON.stringify(it))+'">'+playlistThumb(it,'playlist-mini')+'<span>'+playlistEsc(it.label)+'</span><svg class="playlist-chip-add" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 6v12M6 12h12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></button>').join('')+'</div></div>').join('');
+}
+function playlistRenderOrder(){
+ const list=document.getElementById('playlistOrder');
+ if(!list||!playlistDraft) return;
+ const n=playlistDraft.items.length;
+ document.getElementById('playlistEditCount').textContent=n?'· '+n+(n===1?' pattern':' patterns'):'';
+ list.innerHTML=n?playlistDraft.items.map((it,i)=>'<li class="playlist-order-row">'+
+  '<span class="playlist-order-num">'+(i+1)+'</span>'+playlistThumb(it,'playlist-mini')+'<span class="playlist-order-label">'+playlistEsc(it.label)+'</span>'+
+  '<span class="playlist-order-tools">'+
+   '<button type="button" class="icon-btn playlist-icon-btn" data-move="'+i+':-1" aria-label="Move '+playlistEsc(it.label)+' up"'+(i===0?' disabled':'')+'><svg viewBox="0 0 24 24"><path d="M6 15l6-6 6 6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></button>'+
+   '<button type="button" class="icon-btn playlist-icon-btn" data-move="'+i+':1" aria-label="Move '+playlistEsc(it.label)+' down"'+(i===n-1?' disabled':'')+'><svg viewBox="0 0 24 24"><path d="M6 9l6 6 6-6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></button>'+
+   '<button type="button" class="icon-btn playlist-icon-btn is-danger" data-remove="'+i+'" aria-label="Remove '+playlistEsc(it.label)+'"><svg viewBox="0 0 24 24"><path d="M7 7l10 10M17 7 7 17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></button>'+
+  '</span></li>').join(''):'<li class="playlist-order-empty">Pick patterns on the left. They play in this order.</li>';
+}
+function playlistAddWindow(){
+ if(!playlistDraft) return;
+ const level=Math.max(0,Math.min(100,parseInt(document.getElementById('playlistWindowLevel').value,10)||0));
+ const size=Math.max(1,Math.min(100,parseInt(document.getElementById('playlistWindowSize').value,10)||10));
+ playlistDraft.items.push({type:'window',level,size,label:level+' % window'+(size===10?'':' ('+size+' %)')});
+ playlistRenderOrder();
+}
+function playlistEditCancel(){ playlistDraft=null; playlistRender(); }
+async function playlistEditSave(){
+ if(!playlistDraft) return;
+ playlistDraft.name=document.getElementById('playlistNameInput').value.trim();
+ const msg=document.getElementById('playlistEditorMsg');
+ if(!playlistDraft.name){ msg.textContent='Give the playlist a name.'; document.getElementById('playlistNameInput').focus(); return; }
+ if(!playlistDraft.items.length){ msg.textContent='Add at least one pattern.'; return; }
+ msg.textContent='';
+ const r=await fetchJSON('/api/playlists/save',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({playlist:playlistDraft})});
+ if(!r) return;
+ if(r.status!=='ok'){ msg.textContent=r.message||'The playlist was not saved.'; return; }
+ toast('Playlist '+playlistDraft.name+' saved.');
+ playlistDraft=null;
+ await playlistLoad();
+}
+document.addEventListener('click',function(ev){
+ const t=ev.target.closest&&ev.target.closest('#playlistEditor [data-item],#playlistEditor [data-move],#playlistEditor [data-remove]');
+ if(!t||!playlistDraft) return;
+ if(t.hasAttribute('data-item')){
+  if(playlistDraft.items.length>=40){ document.getElementById('playlistEditorMsg').textContent='A playlist holds up to 40 patterns.'; return; }
+  try{ playlistDraft.items.push(JSON.parse(t.getAttribute('data-item'))); }catch(e){ return; }
+ }else if(t.hasAttribute('data-move')){
+  const parts=t.getAttribute('data-move').split(':').map(Number);
+  const j=parts[0]+parts[1];
+  if(j<0||j>=playlistDraft.items.length) return;
+  const it=playlistDraft.items.splice(parts[0],1)[0];
+  playlistDraft.items.splice(j,0,it);
+ }else{
+  playlistDraft.items.splice(Number(t.getAttribute('data-remove')),1);
+ }
+ playlistRenderOrder();
+ if(t.hasAttribute('data-move')){
+  const again=document.querySelector('#playlistOrder [data-move="'+(Number(t.getAttribute('data-move').split(':')[0])+Number(t.getAttribute('data-move').split(':')[1]))+':'+t.getAttribute('data-move').split(':')[1]+'"]');
+  if(again&&!again.disabled) again.focus();
+ }
+});
+// Arrow keys step the running playlist when the focus is in its card, or on
+// the page itself while the card is in view; elsewhere they keep scrolling
+// and moving through other controls.
+document.addEventListener('keydown',function(ev){
+ if(!playlistActive()||ev.altKey||ev.ctrlKey||ev.metaKey) return;
+ const tag=(ev.target&&ev.target.tagName)||'';
+ if(/^(INPUT|TEXTAREA|SELECT)$/.test(tag)||(ev.target&&ev.target.isContentEditable)) return;
+ if(document.querySelector('[aria-modal="true"]')) return;
+ const card=document.getElementById('playlistCard');
+ if(!card||card.offsetParent===null) return;
+ const focus=document.activeElement;
+ if(focus&&focus!==document.body&&!card.contains(focus)) return;
+ if(!card.contains(focus)){
+  const r=card.getBoundingClientRect();
+  if(r.bottom<=0||r.top>=window.innerHeight) return;
+ }
+ const dir={ArrowRight:'next',ArrowDown:'next',PageDown:'next',ArrowLeft:'prev',ArrowUp:'prev',PageUp:'prev',Home:'first',End:'last'}[ev.key];
+ if(!dir) return;
+ ev.preventDefault();
+ playlistStep(dir);
+});
+document.addEventListener('visibilitychange',function(){ if(!document.hidden&&playlistData) playlistLoad(); });
+document.addEventListener('DOMContentLoaded',function(){
+ if(document.getElementById('playlistCard')) setTimeout(playlistLoad,1200);
+});
+
+// Signal Self-Test (System workspace). pgen_selftest.pl does the work; this
+// renders its JSON state. The mode list mirrors the script's scenarios so the
+// card shows what the test covers before the first run.
+const SELFTEST_MODES=[
+ {id:'sdr_rgb_lim_8',group:'SDR',label:'RGB Limited',depth:8,quick:false},
+ {id:'sdr_rgb_lim_10',group:'SDR',label:'RGB Limited',depth:10,quick:true},
+ {id:'sdr_rgb_full_10',group:'SDR',label:'RGB Full',depth:10,quick:false},
+ {id:'sdr_ycc422_10',group:'SDR',label:'YCbCr 4:2:2',depth:10,quick:false},
+ {id:'sdr_ycc444_10',group:'SDR',label:'YCbCr 4:4:4',depth:10,quick:true},
+ {id:'hdr10_ycc422_10',group:'HDR10',label:'YCbCr 4:2:2',depth:10,quick:false},
+ {id:'hdr10_ycc444_10',group:'HDR10',label:'YCbCr 4:4:4',depth:10,quick:true},
+ {id:'dv_std_rgb_8',group:'Dolby Vision',label:'Standard',depth:8,quick:false},
+ {id:'lldv_ycc422_12',group:'Dolby Vision',label:'Low Latency',depth:12,quick:false}
+];
+const SELFTEST_STATUS_TEXT={pending:'Waiting',running:'Testing',pass:'Bit-exact',fail:'Mismatch',skip:'Not provable'};
+let selftestState=null;
+let selftestPollTimer=null;
+let selftestOpen={};
+function selftestEsc(v){
+ return String(v==null?'':v).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+}
+// Swatch fill for a test window: the code's level on its own scale.
+function selftestSwatchColor(sw){
+ if(!sw) return 'transparent';
+ const scale=sw.max>=1023?4:1;
+ const lo=sw.full?0:16*scale, span=sw.full?sw.max:219*scale;
+ const lvl=v=>Math.round(Math.max(0,Math.min(1,(v-lo)/span))*255);
+ return 'rgb('+lvl(sw.r)+','+lvl(sw.g)+','+lvl(sw.b)+')';
+}
+function selftestLinkText(link){
+ if(!link||!link.format) return '';
+ const parts=[link.format];
+ // 4:2:2 always reads as the fixed 12-bit container, not a depth.
+ if(link.bpc&&!/4:2:2/.test(link.format)) parts.push(link.bpc+' bpc on the cable');
+ if(link.csc) parts.push(link.csc==='unity'?'CSC unity':'range CSC active');
+ if(link.fb) parts.push('framebuffer '+link.fb);
+ return parts.join(' · ');
+}
+function selftestModeRow(mode,result,running){
+ const r=result||{status:'pending',checks:[],passed:0,total:0};
+ const status=r.status||'pending';
+ const windows=(r.checks||[]).filter(c=>c.swatch);
+ const groupKey=mode.group==='SDR'?'sdr':mode.group==='HDR10'?'hdr':'dv';
+ const open=!!selftestOpen[mode.id]&&(r.checks||[]).length>0;
+ // Framebuffer channel order as the renderer stores it.
+ const fmt=(r.link&&r.link.format)||'';
+ const chans=' <span class="selftest-chans">'+(/4:4:4/.test(fmt)?'Cb Cr Y':/4:2:2/.test(fmt)?'Y Cb Cr':'R G B')+'</span>';
+ const strip=windows.length?windows.map(c=>'<span class="selftest-swatch'+(c.ok?'':' is-off')+'" style="background:'+selftestSwatchColor(c.swatch)+'" title="'+selftestEsc(c.label+': '+(c.ok?'exact':'expected '+c.expect+', read '+c.got))+'"></span>').join('')
+  :'<span class="selftest-strip-empty">'+(status==='pending'?(running?'Queued':'Not run'):'')+'</span>';
+ const score=r.total?r.passed+'/'+r.total:'';
+ const rows=(r.checks||[]).map(c=>'<tr class="'+(c.ok?'':'is-off')+'"><th scope="row">'+(c.swatch?'<span class="selftest-swatch" style="background:'+selftestSwatchColor(c.swatch)+'"></span>':'')+selftestEsc(c.label)+'</th><td>'+selftestEsc(c.expect)+'</td><td>'+selftestEsc(c.got)+'</td><td class="selftest-cell-state">'+(c.ok?(c.swatch?'Exact':'Match'):'Mismatch')+'</td></tr>').join('');
+ const detail=(r.checks||[]).length?
+  '<div class="selftest-detail" id="selftestDetail_'+mode.id+'"'+(open?'':' hidden')+'>'+
+   (r.link&&r.link.avi?'<p class="selftest-detail-meta">AVI infoframe <code>'+selftestEsc(r.link.avi)+'</code>'+(r.link.prop>=0?' · range property '+selftestEsc(r.link.prop):'')+'</p>':'')+
+   '<table class="selftest-table"><thead><tr><th scope="col">Check</th><th scope="col">Expected'+chans+'</th><th scope="col">Read back'+chans+'</th><th scope="col"><span class="sr-only">Result</span></th></tr></thead><tbody>'+rows+'</tbody></table>'+
+  '</div>':'';
+ return '<li class="selftest-mode" data-status="'+selftestEsc(status)+'" data-group="'+groupKey+'">'+
+  '<button type="button" class="selftest-mode-head"'+((r.checks||[]).length?' aria-expanded="'+open+'" aria-controls="selftestDetail_'+mode.id+'"':' disabled')+' data-mode="'+mode.id+'">'+
+   '<span class="selftest-mode-id"><span class="selftest-group">'+selftestEsc(mode.group)+'</span><span class="selftest-mode-name">'+selftestEsc(mode.label)+'</span><span class="selftest-depth">'+mode.depth+' bpc</span></span>'+
+   '<span class="selftest-mode-link">'+selftestEsc(r.note||selftestLinkText(r.link))+'</span>'+
+   '<span class="selftest-strip" aria-hidden="true">'+strip+'</span>'+
+   '<span class="selftest-score">'+score+'</span>'+
+   '<span class="selftest-state"><span class="selftest-dot" aria-hidden="true"></span>'+(SELFTEST_STATUS_TEXT[status]||status)+'</span>'+
+  '</button>'+detail+'</li>';
+}
+function selftestRender(st){
+ selftestState=st||{state:'idle'};
+ const card=document.getElementById('selftestCard');
+ if(!card) return;
+ const state=selftestState.state||'idle';
+ const running=state==='running';
+ const verdict=document.getElementById('selftestVerdict');
+ const title=document.getElementById('selftestTitle');
+ const sub=document.getElementById('selftestSub');
+ const results={};
+ (selftestState.scenarios||[]).forEach(r=>{ results[r.id]=r; });
+ const set=selftestState.set||'full';
+ const modes=SELFTEST_MODES.filter(m=>state==='idle'||set==='full'||m.quick||results[m.id]);
+ const passed=modes.filter(m=>results[m.id]&&results[m.id].status==='pass').length;
+ const failedModes=modes.filter(m=>results[m.id]&&results[m.id].status==='fail');
+ const vstate=running?'running':state==='passed'?'passed':(state==='failed'||state==='error')?'failed':'idle';
+ verdict.setAttribute('data-state',vstate);
+ if(running){
+  title.textContent=selftestState.current?'Testing '+selftestState.current:'Starting the self-test';
+ }else if(state==='passed'){
+  title.textContent='Bit-exact in '+passed+' of '+modes.length+' modes';
+ }else if(state==='failed'){
+  title.textContent=failedModes.length===1?'1 mode does not match':failedModes.length+' modes do not match';
+ }else if(state==='error'){
+  title.textContent='The self-test could not run';
+ }else if(state==='cancelled'){
+  title.textContent='Self-test stopped';
+ }else{
+  title.textContent='Not run yet';
+ }
+ sub.textContent=selftestState.message||'Run the test with a display connected and no calibration software attached.';
+ const pct=running&&selftestState.steps?Math.round(100*(selftestState.step||0)/selftestState.steps):(state==='idle'?0:100);
+ const fill=document.getElementById('selftestProgress');
+ if(fill) fill.style.transform='scaleX('+(pct/100)+')';
+ verdict.classList.toggle('has-progress',running);
+ document.getElementById('selftestRunBtn').hidden=running;
+ document.getElementById('selftestQuickBtn').hidden=running;
+ document.getElementById('selftestStopBtn').hidden=!running;
+ document.getElementById('selftestRunBtn').textContent=state==='idle'?'Run full test':'Run again';
+ const list=document.getElementById('selftestModes');
+ list.innerHTML=modes.map(m=>selftestModeRow(m,results[m.id],running)).join('');
+ const foot=document.getElementById('selftestFoot');
+ const done=!running&&(selftestState.scenarios||[]).length>0;
+ foot.hidden=!done;
+ if(done){
+  const when=selftestState.finished?new Date(selftestState.finished*1000):null;
+  document.getElementById('selftestFootNote').textContent=when?'Last run '+when.toLocaleString([],{dateStyle:'medium',timeStyle:'short'}):'';
+ }
+}
+function selftestPoll(delay){
+ if(selftestPollTimer) clearTimeout(selftestPollTimer);
+ selftestPollTimer=setTimeout(async()=>{
+  selftestPollTimer=null;
+  const st=await fetchJSON('/api/selftest/status',{_quiet:true});
+  if(st&&st.state) selftestRender(st);
+  // A missed poll (timeout, daemon busy) while a run is live: try again.
+  const live=st?st.state==='running':(selftestState&&selftestState.state==='running');
+  if(live) selftestPoll(document.hidden?4000:(st?1000:2500));
+ },delay||0);
+}
+async function selftestStart(set){
+ const quick=set==='quick';
+ const ok=await pgConfirm({title:quick?'Run a quick check?':'Run the full self-test?',
+  body:(quick?'Three modes, about 40 seconds.':'Nine modes, about three minutes.')+' The display switches through SDR, HDR10'+(quick?'':' and Dolby Vision')+' and shows dim test windows. Calibration software must stay disconnected until it finishes. Your signal settings come back afterwards.',
+  acceptLabel:quick?'Run quick check':'Run full test',tone:'caution'});
+ if(!ok) return;
+ selftestOpen={};
+ const r=await fetchJSON('/api/selftest/start',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({set:quick?'quick':'full'})});
+ if(!r) return;
+ if(r.status!=='started'){ toast(r.message||'The self-test did not start.','err'); return; }
+ selftestRender({state:'running',set:quick?'quick':'full',message:'Starting the self-test.',scenarios:[]});
+ selftestPoll(600);
+}
+async function selftestCancel(){
+ document.getElementById('selftestSub').textContent='Stopping after the current window and restoring your settings.';
+ await fetchJSON('/api/selftest/cancel',{method:'POST'});
+ selftestPoll(500);
+}
+async function selftestCopyReport(){
+ const st=selftestState;
+ if(!st||!st.scenarios) return;
+ const ver=(document.getElementById('verDisplay')||{}).textContent||'';
+ const lines=['PGenerator+ '+ver+' signal self-test: '+(st.state||'')+(st.finished?' ('+new Date(st.finished*1000).toISOString()+')':''),st.message||''];
+ st.scenarios.forEach(r=>{
+  lines.push('');
+  lines.push(r.group+' '+r.label+' '+r.depth+' bpc: '+(SELFTEST_STATUS_TEXT[r.status]||r.status)+(r.total?' '+r.passed+'/'+r.total:''));
+  if(r.note) lines.push('  '+r.note);
+  if(r.link&&r.link.avi) lines.push('  AVI '+r.link.avi+' | '+selftestLinkText(r.link));
+  (r.checks||[]).forEach(c=>lines.push('  '+(c.ok?'ok  ':'FAIL')+' '+c.label+': expected '+c.expect+', read '+c.got));
+ });
+ const text=lines.join('\n');
+ try{ await navigator.clipboard.writeText(text); toast('Self-test report copied.'); }
+ catch(e){
+  const ta=document.createElement('textarea'); ta.value=text; document.body.appendChild(ta); ta.select();
+  try{ document.execCommand('copy'); toast('Self-test report copied.'); }catch(_e){ toast('Copying failed; select the report text manually.','err'); }
+  ta.remove();
+ }
+}
+document.addEventListener('click',function(ev){
+ const head=ev.target.closest&&ev.target.closest('.selftest-mode-head');
+ if(!head||head.disabled) return;
+ const id=head.getAttribute('data-mode');
+ selftestOpen[id]=!selftestOpen[id];
+ const detail=document.getElementById('selftestDetail_'+id);
+ if(detail) detail.hidden=!selftestOpen[id];
+ head.setAttribute('aria-expanded',String(!!selftestOpen[id]));
+});
+document.addEventListener('DOMContentLoaded',function(){
+ if(!document.getElementById('selftestCard')) return;
+ selftestRender({state:'idle'});
+ selftestPoll(1500);
+});
 
 async function confirmReboot(){
  if(!await pgConfirm({title:'Reboot device?',body:'PGenerator+ restarts and the WebUI is unreachable for about a minute.',acceptLabel:'Reboot Pi',destructive:true})) return;

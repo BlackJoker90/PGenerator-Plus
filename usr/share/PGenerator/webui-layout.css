@@ -407,7 +407,6 @@ body.layout-tablet .tablet-jump-nav.is-compact:not([hidden]){justify-content:str
 .tablet-more-item:focus-visible{outline:2px solid var(--focus-ring);outline-offset:-2px}
 @media(hover:hover) and (pointer:fine){.tablet-more-item:hover{background:var(--hover-bg);color:var(--text-primary)}}
 body.has-tablet-nav{padding-bottom:calc(62px + env(safe-area-inset-bottom))}
-body.has-tablet-nav .toast{bottom:calc(74px + env(safe-area-inset-bottom))}
 body.layout-tablet .dashboard > .card[tabindex="-1"]:focus{outline:none}
 body.layout-tablet .dashboard > .card[tabindex="-1"]:focus-visible{outline:2px solid var(--focus-ring);outline-offset:2px}
 body.layout-tablet .dashboard > .card[data-desktop-workspace]{scroll-margin-top:calc(var(--pg-header-height,61px) + 8px)}

@@ -18,6 +18,8 @@ BEGIN {
  unshift @INC,$module_dir if($module_dir ne "" && !grep { $_ eq $module_dir } @INC);
 }
 use PGMath ();
+use PGPlaylists ();
+use PGTVMenu ();
 use PGCalibrationMath qw(
  calibration_target_context saturation_stimulus_for_gamuts standard_gamut_records
 );
@@ -833,7 +835,9 @@ sub webui_route_is_concurrent_safe (@) {
  # Liveness probe: returns a literal. This is the one that matters most --
  # it is what the browser uses to decide the WebUI is up, so it must answer
  # even while the serialized device lane or compute lane is busy.
- return 1 if($path eq "/api/ping" || $path eq "/api/restart/status");
+ return 1 if($path eq "/api/ping" || $path eq "/api/restart/status" || $path eq "/api/selftest/status");
+ # Playlist list and remote state: reads two small JSON files.
+ return 1 if($method eq "GET" && ($path eq "/api/playlists" || $path eq "/api/tvmenu"));
  # Static assets: read a fixed file from disk and stream it.
  return 1 if($path eq "/favicon.ico" || $path eq "/pgen-logo-light.png" || $path eq "/assets/hcfr_chc.js"
   || $path eq "/assets/icc_profile.js" || $path eq "/assets/icc_profile.css");
@@ -950,6 +954,8 @@ sub webui_route_device_lane (@) {
  $method="" if(!defined($method));
  $path="" if(!defined($path));
  return "renderer" if($path eq "/api/pattern" && $method eq "POST");
+ return "renderer" if($path=~m{^/api/playlists?/(?:start|step|stop)$} && $method eq "POST");
+ return "renderer" if(($path eq "/api/remote/key" || $path=~m{^/api/tvmenu/(?:open|close)$}) && $method eq "POST");
  return "tv" if($path=~m{^/api/lg(?:/|$)} || $path=~m{^/api/cec(?:/|$)});
  return "meter" if($path=~m{^/api/meter(?:/|$)});
  return "";
@@ -1668,6 +1674,46 @@ sub webui_handle_request (@) {
        }
       }
      }
+   }
+   elsif($path eq "/api/playlists" && $method eq "GET") {
+    my $r=&webui_playlists_json();
+    my $len=length($r);
+    print $client "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nCache-Control: no-store\r\nContent-Length: $len\r\n$cors\r\n$r";
+   }
+   elsif($path=~m{^/api/playlists?/(save|delete|start|step|stop)$} && $method eq "POST") {
+    my $r=&webui_playlist_action($1,$body);
+    my $len=length($r);
+    print $client "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: $len\r\n$cors\r\n$r";
+   }
+   elsif($path eq "/api/tvmenu" && $method eq "GET") {
+    my $r=&webui_tvmenu_json();
+    my $len=length($r);
+    print $client "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nCache-Control: no-store\r\nContent-Length: $len\r\n$cors\r\n$r";
+   }
+   elsif($path=~m{^/api/tvmenu/(open|close|settings)$} && $method eq "POST") {
+    my $r=&webui_tvmenu_action($1,$body);
+    my $len=length($r);
+    print $client "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: $len\r\n$cors\r\n$r";
+   }
+   elsif($path eq "/api/remote/key" && $method eq "POST") {
+    my $r=&webui_remote_key($body);
+    my $len=length($r);
+    print $client "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: $len\r\n$cors\r\n$r";
+   }
+   elsif($path eq "/api/selftest/status" && $method eq "GET") {
+    my $r=&webui_selftest_status_json();
+    my $len=length($r);
+    print $client "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nCache-Control: no-store\r\nContent-Length: $len\r\n$cors\r\n$r";
+   }
+   elsif($path eq "/api/selftest/start" && $method eq "POST") {
+    my $r=&webui_selftest_start($body);
+    my $len=length($r);
+    print $client "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: $len\r\n$cors\r\n$r";
+   }
+   elsif($path eq "/api/selftest/cancel" && $method eq "POST") {
+    my $r=&webui_selftest_cancel();
+    my $len=length($r);
+    print $client "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: $len\r\n$cors\r\n$r";
    }
    elsif($path eq "/api/restart/status" && $method eq "GET") {
     my $r=&webui_renderer_restart_status_json($request_query);
@@ -7448,7 +7494,9 @@ sub _webui_meter_settings_write_json (@) {
  if($dir ne "" && !-d $dir) {
   system("mkdir -p '$dir' >/dev/null 2>&1");
  }
- my $tmp="$path.tmp";
+ # Unique per process and thread: workers on different lanes may write the
+ # same file at once.
+ my $tmp=$path.".".$$.".".threads->tid().".tmp";
  if(open(my $fh,">",$tmp)) {
   print $fh $json;
   close($fh);
@@ -9948,6 +9996,8 @@ sub webui_apply_config (@) {
   while($body=~/"(\w+)"\s*:\s*(?:"([^"]*)"|(-?\d+(?:\.\d+)?))/g) {
    $changes{$1}=defined $2 ? $2 : $3;
   }
+  # A marker from the self-test (read from $body below), not a setting.
+  delete $changes{"selftest"};
   my $requested_dv_transport=&pg_dv_transport_mode($changes{"dv_transport"} || $pgenerator_conf{"dv_transport"});
  # HDR10/HLG and DV force BT.2020 colorimetry below. Remember the SDR choice
  # when leaving SDR and give it back on the way in, else SDR kept signalling
@@ -9968,12 +10018,26 @@ sub webui_apply_config (@) {
  # "not chosen" too; a value the user changed is kept.
  if(defined $changes{"signal_mode"}) {
   my $to_dv=(lc($changes{"signal_mode"}) eq "dv");
-  if(!$dv_before && $to_dv) {
+  # The self-test (pgen_selftest.pl) marks its mode switches; they must not
+  # replace the user's own pre-DV values.
+  my $selftest_switch=($body=~/"selftest"\s*:\s*"?1/) ? 1 : 0;
+  if(!$dv_before && $to_dv && !$selftest_switch) {
    $changes{"pre_dv_rgb_quant_range"}=$pgenerator_conf{"rgb_quant_range"} || "2";
    $changes{"pre_dv_max_bpc"}=$pgenerator_conf{"max_bpc"} || "8";
+   $changes{"pre_dv_color_format"}=$pgenerator_conf{"color_format"} || "0";
   } elsif($dv_before && !$to_dv) {
    if(!defined $changes{"rgb_quant_range"} || $changes{"rgb_quant_range"} eq ($pgenerator_conf{"rgb_quant_range"} // "")) {
     $changes{"rgb_quant_range"}=$pgenerator_conf{"pre_dv_rgb_quant_range"} || "2";
+   }
+   # LLDV runs YCbCr 4:2:2; a leftover 4:2:2 would force 10 bpc below. Give
+   # the format from before DV back unless the caller chose another one. A
+   # deliberate 4:2:2 right on leaving LLDV cannot be told from the leftover
+   # (the form posts the DV value) and needs a second apply. Standard DV
+   # (RGB) keeps its format as before.
+   my $dv_format=&pg_dv_transport_color_format();
+   my $format=defined $changes{"color_format"} ? $changes{"color_format"} : ($pgenerator_conf{"color_format"} // "");
+   if(&pg_dv_transport_mode() eq "lldv" && $format eq $dv_format && $format ne ($pgenerator_conf{"pre_dv_color_format"} // "0")) {
+    $changes{"color_format"}=$pgenerator_conf{"pre_dv_color_format"} // "0";
    }
    # The WebUI sends the target mode's bpc; only a leftover LLDV 12 needs undoing.
    my $bpc=defined $changes{"max_bpc"} ? $changes{"max_bpc"} : ($pgenerator_conf{"max_bpc"} // "");
@@ -11350,6 +11414,723 @@ sub webui_hdmi_link_json (@) {
  return sprintf(",\"link\":{\"port\":\"HDMI-A-%d\",\"bpc\":%d,\"gcp\":%d,\"tmds_mhz\":%.3f,\"renderer\":%d}",$port,$bpc,$gcp,$tmds,$renderer);
 }
 
+#
+# Pattern playlists (PGPlaylists.pm). User playlists live in
+# $var_dir/playlists/user.json -- a subdirectory, because clean_files wipes the
+# files directly in $var_dir on every daemon start -- and the active one in
+# running/playlist-state.json (tmpfs, so a restart ends it). While a playlist
+# is active, usr/bin/pgen_cec_remote.py listens for the TV remote on
+# /dev/cec0 and steps it through POST /api/playlist/step.
+#
+our $_playlist_user_file="$var_dir/playlists/user.json";
+our $_playlist_state_file="$var_dir/running/playlist-state.json";
+our $_cec_remote_state_file="/tmp/pgen-cec-remote.json";
+
+sub _webui_json_pp (@) {
+ require JSON::PP;
+ return JSON::PP->new->utf8->canonical;
+}
+
+sub _webui_read_json_file (@) {
+ my $path=shift;
+ my $raw="";
+ if(open(my $fh,"<",$path)) { local $/; $raw=<$fh>; close($fh); }
+ return undef if(!defined($raw) || $raw eq "");
+ my $data=eval { &_webui_json_pp()->decode($raw) };
+ return $data;
+}
+
+sub webui_playlists_user (@) {
+ my $data=&_webui_read_json_file($_playlist_user_file);
+ return [] if(ref($data) ne "HASH" || ref($data->{playlists}) ne "ARRAY");
+ my @out;
+ foreach my $pl (@{$data->{playlists}}) {
+  my ($clean)=PGPlaylists::normalize_playlist($pl);
+  next if(!$clean || $clean->{id} eq "");
+  push(@out,$clean);
+ }
+ return \@out;
+}
+
+sub webui_playlist_find (@) {
+ my $id=shift || "";
+ foreach my $pl (PGPlaylists::builtin_playlists(),@{&webui_playlists_user()}) {
+  return $pl if($pl->{id} eq $id);
+ }
+ return undef;
+}
+
+sub webui_playlist_state (@) {
+ my $st=&_webui_read_json_file($_playlist_state_file);
+ return (ref($st) eq "HASH" && $st->{active}) ? $st : undef;
+}
+
+sub webui_playlist_state_write (@) {
+ my $st=shift;
+ return &_webui_meter_settings_write_json($_playlist_state_file,&_webui_json_pp()->encode($st));
+}
+
+sub webui_cec_remote_state (@) {
+ my $st=&_webui_read_json_file($_cec_remote_state_file);
+ $st={} if(ref($st) ne "HASH");
+ my $alive=($st->{pid} && "$st->{pid}"=~/^\d+$/ && -e "/proc/$st->{pid}") ? 1 : 0;
+ # List context: a scalar glob() is an iterator and alternates between a
+ # match and undef on successive calls.
+ my @cec=glob("/dev/cec*");
+ return {
+  available => (@cec ? JSON::PP::true() : JSON::PP::false()),
+  listening => ($alive && $st->{listening}) ? JSON::PP::true() : JSON::PP::false(),
+  last_key => $st->{last_key} || "",
+  last_key_at => $st->{last_key_at} || 0,
+  message => $st->{message} || "",
+ };
+}
+
+sub webui_cec_remote_start (@) {
+ my @cec=glob("/dev/cec*");
+ return if(!@cec || !-f "/usr/bin/pgen_cec_remote.py");
+ # Always launch: the listener takes /tmp/pgen-cec-remote.lock, so a second
+ # one exits while the first still serves the playlist, and one started right
+ # after a stop waits for the old listener to go. It stays while a playlist
+ # runs, the TV menu is open, or the "listen at all times" setting is on.
+ system("setsid /usr/bin/python3 /usr/bin/pgen_cec_remote.py $_playlist_state_file $_cec_remote_state_file $_tvmenu_state_file $_tvmenu_settings_file </dev/null >/tmp/pgen-cec-remote.log 2>&1 &");
+}
+
+sub webui_cec_remote_stop (@) {
+ # The listener posts the remote's keys itself (a stop from the remote must
+ # not kill it mid-request) and keeps listening when the setting says so.
+ return if($_tvmenu_drawing || &webui_tvmenu_settings()->{listen});
+ my $st=&_webui_read_json_file($_cec_remote_state_file);
+ return if(ref($st) ne "HASH" || !$st->{pid} || "$st->{pid}"!~/^\d+$/);
+ # Same user: the listener also exits on its own once the state file says
+ # the playlist is over.
+ kill('TERM',int($st->{pid})) if(-e "/proc/$st->{pid}");
+}
+
+sub webui_playlists_json (@) {
+ require JSON::PP;
+ my @catalog=map { { name=>$_->{name}, label=>$_->{label}, group=>$_->{group}, sdr=>($_->{sdr} ? JSON::PP::true() : JSON::PP::false()) } } @PGPlaylists::CATALOG;
+ my @lists=map { { %$_, builtin=>($_->{builtin} ? JSON::PP::true() : JSON::PP::false()) } } (PGPlaylists::builtin_playlists(),@{&webui_playlists_user()});
+ my $st=&webui_playlist_state();
+ my $active=undef;
+ if($st) {
+  my $pl=&webui_playlist_find($st->{id});
+  if($pl) {
+   my $count=scalar(@{$pl->{items}});
+   my $index=PGPlaylists::step_index($st->{index},$count,"");
+   $active={ id=>$pl->{id}, name=>$pl->{name}, index=>$index, count=>$count, label=>$pl->{items}[$index]{label},
+             error=>$st->{error} || "", changed=>$st->{changed} || 0 };
+  }
+ }
+ my $tv=&webui_tvmenu_state();
+ return &_webui_json_pp()->encode({ status=>"ok", playlists=>\@lists, catalog=>\@catalog, active=>$active,
+  remote=>&webui_cec_remote_state(), signal_mode=>&webui_pattern_signal_mode(""),
+  tvmenu=>{ view=>$tv->{view} || "", listen=>(&webui_tvmenu_settings()->{listen} ? JSON::PP::true() : JSON::PP::false()) } });
+}
+
+# Draw item $index of $pl through the normal WebUI pattern path.
+sub webui_playlist_show (@) {
+ my ($pl,$index)=@_;
+ my $item=$pl->{items}[$index];
+ my $body="";
+ if($item->{type} eq "pattern") {
+  if($item->{name}=~/^g1_/ && &webui_pattern_signal_mode("") ne "sdr") {
+   return '{"status":"error","message":"'.&_webui_json_escape($item->{label}).' is a Calman G1 plate and needs SDR output."}';
+  }
+  $body='{"name":"'.$item->{name}.'"}';
+ } elsif($item->{type} eq "window") {
+  my $ycc=int($pgenerator_conf{"color_format"} || 0) != 0;
+  my $limited=($ycc || int(&webui_preferred_rgb_quant_range() || 1) != 2) ? 1 : 0;
+  my $bits=int($pgenerator_conf{"max_bpc"} || 8) >= 10 ? 10 : 8;
+  my $code=PGPlaylists::window_code($item->{level},$bits,$limited);
+  my $max=$bits == 10 ? 1023 : 255;
+  $body='{"name":"patch","r":'.$code.',"g":'.$code.',"b":'.$code.',"size":'.int($item->{size}).',"input_max":'.$max.'}';
+ } elsif($item->{type} eq "image") {
+  $body='{"name":"uploaded_diag_image","filename":"'.&_webui_json_escape($item->{filename}).'"}';
+ }
+ return '{"status":"error","message":"This pattern cannot be shown."}' if($body eq "");
+ return &webui_pattern($body);
+}
+
+sub webui_playlist_action (@) {
+ my ($action,$body)=@_;
+ &webui_reload_pgenerator_conf();
+ my $req=eval { &_webui_json_pp()->decode($body || "{}") } || {};
+ $req={} if(ref($req) ne "HASH");
+ if($action eq "save") {
+  my ($pl,$err)=PGPlaylists::normalize_playlist($req->{playlist});
+  return '{"status":"error","message":"'.&_webui_json_escape($err).'"}' if(!$pl);
+  my $lists=&webui_playlists_user();
+  if($pl->{id} ne "") {
+   my $found=0;
+   foreach my $i (0..$#$lists) { if($lists->[$i]{id} eq $pl->{id}) { $lists->[$i]=$pl; $found=1; } }
+   $pl->{id}="" if(!$found);
+  }
+  if($pl->{id} eq "") {
+   return '{"status":"error","message":"You can keep up to '.$PGPlaylists::MAX_PLAYLISTS.' playlists. Delete one first."}' if(@$lists >= $PGPlaylists::MAX_PLAYLISTS);
+   $pl->{id}=PGPlaylists::new_id();
+   push(@$lists,$pl);
+  }
+  return '{"status":"error","message":"The playlist could not be saved on the Pi."}'
+   if(!&_webui_meter_settings_write_json($_playlist_user_file,&_webui_json_pp()->encode({version=>1,playlists=>$lists})));
+  return &_webui_json_pp()->encode({status=>"ok",id=>$pl->{id}});
+ }
+ if($action eq "delete") {
+  my $id=$req->{id} || "";
+  my $lists=&webui_playlists_user();
+  my @keep=grep { $_->{id} ne $id } @$lists;
+  return '{"status":"error","message":"That playlist does not exist."}' if(@keep == @$lists);
+  &_webui_meter_settings_write_json($_playlist_user_file,&_webui_json_pp()->encode({version=>1,playlists=>\@keep}));
+  my $st=&webui_playlist_state();
+  if($st && $st->{id} eq $id) { &webui_playlist_state_write({active=>0}); &webui_cec_remote_stop(); }
+  return '{"status":"ok"}';
+ }
+ if($action eq "stop") {
+  &webui_playlist_state_write({active=>0});
+  &webui_cec_remote_stop();
+  &webui_pattern('{"name":"stop"}') if(!$req->{keep_pattern});
+  return '{"status":"ok"}';
+ }
+ # start / step draw patterns: never over a calibration session or the self-test.
+ if($calibration_client_ip ne "") {
+  my $sw=&_webui_json_escape($calibration_client_software || "Calibration software");
+  return '{"status":"error","message":"'.$sw.' is connected and owns the patterns. Disconnect it to use a playlist."}';
+ }
+ return '{"status":"error","message":"The signal self-test is running."}' if(&webui_selftest_running());
+ my ($pl,$index);
+ if($action eq "start") {
+  $pl=&webui_playlist_find($req->{id} || "");
+  return '{"status":"error","message":"That playlist does not exist."}' if(!$pl);
+  $index=PGPlaylists::step_index(0,scalar(@{$pl->{items}}),defined($req->{index}) ? "".(int($req->{index})+1) : "first");
+ } else {
+  my $st=&webui_playlist_state();
+  return '{"status":"error","message":"No playlist is running."}' if(!$st);
+  $pl=&webui_playlist_find($st->{id});
+  return '{"status":"error","message":"The running playlist was deleted."}' if(!$pl);
+  my $dir=$req->{dir} || "next";
+  $dir="" if($dir!~/^(?:next|prev|first|last|\d{1,2})$/);
+  $index=PGPlaylists::step_index($st->{index},scalar(@{$pl->{items}}),$dir);
+  # A remote press past either end changes nothing on screen.
+  if($index == $st->{index} && $action eq "step" && ($dir eq "next" || $dir eq "prev")) {
+   return &_webui_json_pp()->encode({status=>"ok",index=>$index,count=>scalar(@{$pl->{items}}),unchanged=>JSON::PP::true()});
+  }
+ }
+ my $res=&webui_playlist_show($pl,$index);
+ my $ok=($res=~/"status"\s*:\s*"ok"/) ? 1 : 0;
+ my ($msg)=$res=~/"message"\s*:\s*"((?:[^"\\]|\\.)*)"/;
+ $msg="" if(!defined($msg) || $ok);
+ &webui_playlist_state_write({active=>1,id=>$pl->{id},index=>$index,error=>$msg,changed=>time(),
+                              source=>(($req->{source} || "") eq "cec" ? "cec" : "webui")});
+ if($action eq "start") {
+  # Started in the WebUI: the listener asks the TV to send its keys here.
+  &webui_tvmenu_announce() if(($req->{source} || "") ne "cec");
+  &webui_cec_remote_start();
+ }
+ return &_webui_json_pp()->encode({status=>($ok ? "ok" : "error"),index=>$index,count=>scalar(@{$pl->{items}}),
+                                   label=>$pl->{items}[$index]{label},($msg ne "" ? (message=>$msg) : ())});
+}
+
+#
+# On-screen pattern menu for the TV remote (PGTVMenu.pm). The remote listener
+# (usr/bin/pgen_cec_remote.py) posts every key to /api/remote/key; the
+# dispatcher below moves the selection, shows a pattern or a playlist, and
+# draws the menu as a full-screen IMAGE pattern. Thumbnails are rendered once
+# into $var_dir/tvmenu/thumbs (a subdirectory survives clean_files); the
+# menu images live in tmpfs under running/tvmenu, one file per selection.
+#
+our $_tvmenu_dir="$var_dir/tvmenu";
+# Menu pictures are uncompressed BMP (6 MB each: no PNG coding on either
+# side, and the renderer reads them fast, unlike PPM), too big for the 20 MB
+# running tmpfs: /dev/shm holds them.
+our $_tvmenu_view_dir=(-d "/dev/shm") ? "/dev/shm/pgen-tvmenu" : "$var_dir/running/tvmenu";
+our $_tvmenu_view_keep=40;
+our $_tvmenu_state_file="$var_dir/running/tvmenu-state.json";
+our $_tvmenu_settings_file="$var_dir/tvmenu/settings.json";
+our $_tvmenu_announce_file="/tmp/pgen-cec-announce";
+our $_tvmenu_font="/usr/share/fonts/omxplayer/FreeSans.ttf";
+our $_tvmenu_thumb_version="1";
+# Set while the dispatcher draws, so a pattern drawn from elsewhere (WebUI,
+# playlist step in the browser) can tell the menu it is no longer on screen.
+our $_tvmenu_drawing=0;
+
+sub webui_tvmenu_settings (@) {
+ my $s=&_webui_read_json_file($_tvmenu_settings_file);
+ $s={} if(ref($s) ne "HASH");
+ return { listen => (exists($s->{listen}) && !$s->{listen}) ? 0 : 1 };
+}
+
+sub webui_tvmenu_state (@) {
+ my $st=&_webui_read_json_file($_tvmenu_state_file);
+ $st={} if(ref($st) ne "HASH");
+ # A closed menu keeps its selection for the next open.
+ return { view => ($st->{view} || ""), sel => int($st->{sel} || 0), changed => int($st->{changed} || 0) };
+}
+
+sub webui_tvmenu_state_write (@) {
+ my $st=shift;
+ $st->{changed}=time();
+ return &_webui_meter_settings_write_json($_tvmenu_state_file,&_webui_json_pp()->encode($st));
+}
+
+# Called from webui_pattern for every pattern not drawn by the menu.
+sub webui_tvmenu_forget (@) {
+ return if($_tvmenu_drawing || !-e $_tvmenu_state_file);
+ my $st=&webui_tvmenu_state();
+ &webui_tvmenu_state_write({ view => "", sel => int($st->{sel} || 0) }) if($st->{view} ne "");
+}
+
+sub webui_tvmenu_entries (@) {
+ return PGTVMenu::build_entries([PGPlaylists::builtin_playlists(),@{&webui_playlists_user()}]);
+}
+
+# Text for convert -annotate: % starts an escape, a leading @ reads a file.
+sub _webui_tvmenu_text (@) {
+ my ($s,$max)=@_;
+ $s="" if(!defined($s));
+ $s=substr($s,0,$max-1)."..." if($max && length($s) > $max);
+ $s=~s/\\/\\\\/g;
+ $s=~s/%/%%/g;
+ $s=~s/^@/ @/;
+ return $s;
+}
+
+# Tile labels up to about 22 characters fit the tile width.
+sub _webui_tvmenu_label_size (@) {
+ return length(shift || "") > 18 ? "18" : "21";
+}
+
+# Small picture of a pattern or playlist item, cached by name. Returns the
+# file or "" (the tile then shows its label only).
+sub webui_tvmenu_thumb (@) {
+ my $item=shift;
+ return "" if(!$convert || !-x $convert);
+ my $dir="$_tvmenu_dir/thumbs";
+ for my $d ($_tvmenu_dir,$dir) { mkdir($d) if(!-d $d); }
+ my ($tw,$th)=($PGTVMenu::THUMB_W,$PGTVMenu::THUMB_H);
+ my ($sw,$sh)=(384,216);
+ my $type=$item->{type} || "pattern";
+ my $name=$item->{name} || "";
+ my $tag="";
+ my $photo=($name eq "g1_skintones") ? &calman_g1_skintones_photo() : "";
+ my $upload="";
+ if($type eq "window") {
+  $tag="window-".int($item->{level})."-".int($item->{size});
+ } elsif($type eq "image") {
+  (undef,$upload)=&_webui_diag_asset_resolve_path("image",$item->{filename} || "");
+  return "" if($upload eq "");
+  ($tag="image-".$item->{filename}."-".((stat($upload))[9] || 0))=~s/[^A-Za-z0-9_.-]+/_/g;
+ } else {
+  return "" if(!$PGPlaylists::CATALOG_BY_NAME{$name});
+  $tag=$name.($photo ne "" ? "-".((stat($photo))[9] || 0) : "");
+ }
+ my $file="$dir/v$_tvmenu_thumb_version-$tag.png";
+ return $file if(-f $file);
+ my $tmp="$dir/src-$$.png";
+ my @src=();
+ unlink($tmp);
+ if($type eq "window") {
+  # Grey window on black, at its size; the level as grey (kept dim).
+  my $g=int(40+$item->{level}*1.6);
+  my $s=sqrt(($item->{size} || 10)/100);
+  my ($ww,$wh)=(int($sw*$s),int($sh*$s));
+  my ($x0,$y0)=(int(($sw-$ww)/2),int(($sh-$wh)/2));
+  @src=("-size","${sw}x${sh}","xc:black","-fill","rgb($g,$g,$g)","-draw","rectangle $x0,$y0 ".($x0+$ww-1).",".($y0+$wh-1));
+ } elsif($type eq "image") {
+  @src=($upload."[0]","-resize","${sw}x${sh}!");
+ } elsif($photo ne "") {
+  @src=($photo,"-resize","${sw}x${sh}!");
+ } elsif($name=~/^g1_(.+)$/) {
+  my $key=$1;
+  my %opt=(range => "full", hz => 60);
+  $opt{ip}=&calman_g1_ip() if($key eq "warmup");
+  my $out=PGG1Patterns::g1_pattern_render($key,$sw,$sh,\%opt);
+  return "" if(!$out || !@{$out->{frames} || []});
+  my $f=$out->{frames}[0];
+  my $img=$f->{img};
+  return "" if(($img->{depth} || 8) != 8 || !&calman_g1_save_image($img,$tmp,$img->{w},$img->{h}));
+  my $bg=$out->{bg} || [0,0,0];
+  my ($x,$y)=(int($f->{x} // 0),int($f->{y} // 0));
+  $x=int(($sw-$img->{w})/2) if($x == -1);
+  $y=int(($sh-$img->{h})/2) if($y == -1);
+  @src=("-size","${sw}x${sh}","xc:rgb(".join(",",@$bg).")",$tmp,"-geometry",sprintf("%+d%+d",$x,$y),"-composite");
+ } elsif($name eq "black_clipping") {
+  return "" if(!&webui_pattern_render_black_clipping($tmp,$sw,$sh,"sdr",100));
+  @src=($tmp);
+ } elsif($name eq "white_clipping") {
+  return "" if(!&webui_pattern_render_white_clipping($tmp,$sw,$sh,"sdr",100));
+  @src=($tmp);
+ } elsif($name eq "overscan") {
+  return "" if(!&webui_pattern_render_overscan($tmp,$sw,$sh));
+  @src=($tmp);
+ }
+ return "" if(!@src);
+ my $part="$file.tmp.png";
+ system($convert,@src,"-filter","Triangle","-resize","${tw}x${th}!","-depth","8","PNG24:$part");
+ unlink($tmp);
+ return (-f $part && rename($part,$file)) ? $file : "";
+}
+
+our $_tvmenu_bg="#0d0f13";
+
+# Tall canvas with every tile; cached by its content.
+sub webui_tvmenu_base (@) {
+ my ($entries,$lay)=@_;
+ my @args=();
+ my @sig=();
+ for my $s (@{$lay->{sections}}) {
+  push(@args,"-fill","#7d8590","-pointsize","24","-annotate","+$PGTVMenu::MARGIN_X+".($s->{y}+30),&_webui_tvmenu_text(uc($s->{title})));
+ }
+ for my $i (0..$#$entries) {
+  my $e=$entries->[$i];
+  my $p=$lay->{pos}{$i};
+  my $thumb=&webui_tvmenu_thumb($e->{kind} eq "playlist" ? $e->{first} : { type => "pattern", name => $e->{name} });
+  my ($x1,$y1)=($p->{x}+$p->{w}-1,$p->{y}+$p->{h}-1);
+  push(@args,"-fill","#1a1e25","-stroke","#2b313b","-strokewidth","2","-draw","rectangle $p->{x},$p->{y} $x1,$y1","-stroke","none");
+  push(@args,$thumb,"-geometry","+$p->{x}+$p->{y}","-composite") if($thumb ne "");
+  push(@args,"-fill","#c9ced6","-pointsize",&_webui_tvmenu_label_size($e->{label}),"-annotate","+$p->{x}+".($p->{y}+$p->{h}+28),&_webui_tvmenu_text($e->{label},22));
+  if($e->{kind} eq "playlist") {
+   # Pattern count as a badge on the thumbnail.
+   my $badge=$e->{count}." patterns";
+   my ($bx,$by)=($p->{x}+8,$p->{y}+$p->{h}-34);
+   push(@args,"-fill","rgba(13,15,19,0.85)","-draw","roundrectangle $bx,$by ".($bx+118).",".($by+26)." 5,5",
+        "-fill","#dfe3e8","-pointsize","17","-annotate","+".($bx+10)."+".($by+19),&_webui_tvmenu_text($badge));
+  }
+  push(@sig,"$e->{kind}:$e->{label}:".($thumb ne "" ? (stat($thumb))[9] : 0));
+ }
+ require Digest::MD5;
+ my $hash=substr(Digest::MD5::md5_hex(join("|","v2",$lay->{height},@sig)),0,12);
+ # MPC is ImageMagick's own pixel cache: read back without decoding, which
+ # takes a menu step from 0.65 s to 0.2 s on the Pi.
+ my $file="$_tvmenu_view_dir/base-$hash.mpc";
+ return ($file,$hash) if(-f $file && -f "$_tvmenu_view_dir/base-$hash.cache");
+ mkdir($_tvmenu_view_dir) if(!-d $_tvmenu_view_dir);
+ # A new menu (playlist saved, photo replaced): drop the old images.
+ unlink(glob("$_tvmenu_view_dir/base-*"),glob("$_tvmenu_view_dir/view-*"));
+ my $part="$_tvmenu_view_dir/base-$hash.tmp";
+ system($convert,"-size","${PGTVMenu::W}x$lay->{height}","xc:$_tvmenu_bg","-font",$_tvmenu_font,
+  "-fill","#e3e6ea","-pointsize","46","-annotate","+$PGTVMenu::MARGIN_X+84","Patterns",
+  "-fill","#7d8590","-pointsize","24","-annotate","+".($PGTVMenu::MARGIN_X+214)."+84","PGenerator+",
+  @args,"-depth","8","MPC:$part.mpc");
+ return ("","") if(!-f "$part.mpc" || !-f "$part.cache" || !rename("$part.cache","$_tvmenu_view_dir/base-$hash.cache") || !rename("$part.mpc",$file));
+ return ($file,$hash);
+}
+
+# One screen of the menu with the selection drawn: the file name (unique per
+# content: the renderer may keep an image by name) and the convert command
+# that writes it.
+sub webui_tvmenu_view_job (@) {
+ my ($entries,$sel,$msg,$lay,$base,$hash)=@_;
+ my $signal_mode=&webui_pattern_signal_mode("");
+ # HDR and Dolby Vision read the 8-bit picture as PQ/HLG codes: white text
+ # would be far brighter than in SDR, so the menu is dimmed there.
+ my $dim=($signal_mode eq "sdr") ? 0 : 1;
+ my ($w,$h)=(int($w_s) || 1920,int($h_s) || 1080);
+ $msg="" if(!defined($msg));
+ require Digest::MD5;
+ my $file="$_tvmenu_view_dir/view-$hash-$sel-${w}x$h-$dim-".substr(Digest::MD5::md5_hex($msg),0,6).".bmp";
+ my $off=PGTVMenu::view_offset($sel,$lay);
+ my $p=$lay->{pos}{$sel};
+ my $e=$entries->[$sel];
+ my ($vw,$vh)=($PGTVMenu::W,$PGTVMenu::VIEW_H);
+ my $fy=$vh-$PGTVMenu::FOOTER;
+ my @args=("-fill","none","-stroke","#5b7fff","-strokewidth","5",
+  "-draw","roundrectangle ".($p->{x}-7).",".($p->{y}-$off-7)." ".($p->{x}+$p->{w}+6).",".($p->{y}-$off+$p->{h}+6)." 6,6",
+  "-stroke","none","-fill","#ffffff","-pointsize",&_webui_tvmenu_label_size($e->{label}),"-annotate","+$p->{x}+".($p->{y}-$off+$p->{h}+28),&_webui_tvmenu_text($e->{label},22),
+  "-fill",$_tvmenu_bg,"-draw","rectangle 0,$fy $vw,$vh",
+  "-fill","#2b313b","-draw","rectangle $PGTVMenu::MARGIN_X,$fy ".($vw-$PGTVMenu::MARGIN_X).",".($fy+1));
+ my $what=($e->{kind} eq "playlist") ? "Playlist, $e->{count} patterns" : $e->{group};
+ $what.=" - needs SDR output" if($e->{sdr} && $signal_mode ne "sdr");
+ if($msg ne "") {
+  push(@args,"-fill","#ff8a80","-pointsize","26","-annotate","+$PGTVMenu::MARGIN_X+".($fy+52),&_webui_tvmenu_text($msg,90));
+ } else {
+  push(@args,"-fill","#e3e6ea","-pointsize","28","-annotate","+$PGTVMenu::MARGIN_X+".($fy+52),&_webui_tvmenu_text($e->{label},40),
+       "-fill","#7d8590","-pointsize","24","-annotate","+".($PGTVMenu::MARGIN_X+560)."+".($fy+52),&_webui_tvmenu_text($what,50));
+ }
+ push(@args,"-fill","#7d8590","-pointsize","24","-gravity","NorthEast",
+      "-annotate","+$PGTVMenu::MARGIN_X+".($fy+31),"Arrows: move     OK: show     Back: close","-gravity","NorthWest");
+ push(@args,"-resize","${w}x$h!") if($w != $vw || $h != $vh);
+ push(@args,"-evaluate","multiply","0.5") if($dim);
+ return ($file,[$convert,$base,"-crop","${vw}x$vh+0+$off","+repage","-background",$_tvmenu_bg,"-extent","${vw}x$vh",
+  "-font",$_tvmenu_font,@args,"-depth","8","-type","TrueColor"]);
+}
+
+# Keep the newest menu pictures only (6 MB each in RAM).
+sub webui_tvmenu_view_prune (@) {
+ my @v=sort { (stat($b))[9] <=> (stat($a))[9] } glob("$_tvmenu_view_dir/view-*.bmp");
+ unlink(@v[$_tvmenu_view_keep..$#v]) if(@v > $_tvmenu_view_keep);
+}
+
+sub webui_tvmenu_view (@) {
+ my ($entries,$sel,$msg)=@_;
+ return "" if(!$convert || !-x $convert || !-f $_tvmenu_font);
+ my $lay=PGTVMenu::layout($entries);
+ my ($base,$hash)=&webui_tvmenu_base($entries,$lay);
+ return "" if($base eq "");
+ my ($file,$cmd)=&webui_tvmenu_view_job($entries,$sel,$msg,$lay,$base,$hash);
+ return $file if(-f $file);
+ my $part="$file.$$.tmp";
+ system(@$cmd,"BMP3:$part");
+ &webui_tvmenu_view_prune();
+ return (-s $part && rename($part,$file)) ? $file : "";
+}
+
+sub _webui_tvmenu_shq (@) {
+ my $v=shift;
+ $v=~s/'/'\\''/g;
+ return "'$v'";
+}
+
+# Draw the pictures one arrow press away in the background, so the next
+# step only hands a finished file to the renderer.
+sub webui_tvmenu_prerender (@) {
+ my ($entries,$sel)=@_;
+ my $lay=PGTVMenu::layout($entries);
+ my ($base,$hash)=&webui_tvmenu_base($entries,$lay);
+ return if($base eq "");
+ my %seen=($sel => 1);
+ my @jobs;
+ foreach my $key ("right","left","down","up") {
+  my $n=PGTVMenu::navigate($sel,$key,$lay,scalar(@$entries));
+  next if($seen{$n}++);
+  my ($file,$cmd)=&webui_tvmenu_view_job($entries,$n,"",$lay,$base,$hash);
+  next if(-f $file);
+  my $part="$file.bg.tmp";
+  push(@jobs,"[ -f "._webui_tvmenu_shq($file)." ] || { ".join(" ",map { _webui_tvmenu_shq($_) } @$cmd,"BMP3:$part")." && mv -f "._webui_tvmenu_shq($part)." "._webui_tvmenu_shq($file)."; }");
+ }
+ return if(!@jobs);
+ system("setsid nice -n 10 sh -c "._webui_tvmenu_shq(join("; ",@jobs))." </dev/null >/dev/null 2>&1 &");
+}
+
+sub webui_tvmenu_show_menu (@) {
+ my ($entries,$sel,$msg)=@_;
+ my $file=&webui_tvmenu_view($entries,$sel,$msg);
+ return '{"status":"error","message":"The menu picture could not be drawn on the Pi."}' if($file eq "");
+ (my $base=$file)=~s{.*/}{};
+ local $_tvmenu_drawing=1;
+ my $res=&webui_pattern('{"name":"tv_menu","file":"'.$base.'"}');
+ return $res if($res!~/"status"\s*:\s*"ok"/);
+ &webui_tvmenu_state_write({ view => "menu", sel => $sel });
+ &webui_tvmenu_prerender($entries,$sel);
+ return '{"status":"ok","view":"menu"}';
+}
+
+# Error text out of a JSON reply, or "".
+sub _webui_tvmenu_error (@) {
+ my $res=shift || "";
+ return "" if($res=~/"status"\s*:\s*"ok"/);
+ my ($msg)=$res=~/"message"\s*:\s*"((?:[^"\\]|\\.)*)"/;
+ $msg="That did not work." if(!defined($msg) || $msg eq "");
+ $msg=~s/\\(.)/$1/g;
+ return $msg;
+}
+
+# Show menu entry $sel (a pattern or the start of a playlist).
+sub webui_tvmenu_open_entry (@) {
+ my ($entries,$sel)=@_;
+ my $e=$entries->[$sel];
+ local $_tvmenu_drawing=1;
+ if($e->{kind} eq "playlist") {
+  my $res=&webui_playlist_action("start",'{"id":"'.&_webui_json_escape($e->{id}).'","source":"cec"}');
+  my $err=&_webui_tvmenu_error($res);
+  return &webui_tvmenu_show_menu($entries,$sel,$err) if($err ne "");
+  &webui_tvmenu_state_write({ view => "playlist", sel => $sel });
+  return '{"status":"ok","view":"playlist"}';
+ }
+ if($e->{sdr} && &webui_pattern_signal_mode("") ne "sdr") {
+  return &webui_tvmenu_show_menu($entries,$sel,"$e->{label} is a Calman G1 plate and needs SDR output.");
+ }
+ my $res=&webui_pattern('{"name":"'.$e->{name}.'"}');
+ my $err=&_webui_tvmenu_error($res);
+ return &webui_tvmenu_show_menu($entries,$sel,$err) if($err ne "");
+ &webui_tvmenu_state_write({ view => "item", sel => $sel });
+ return '{"status":"ok","view":"item"}';
+}
+
+sub webui_tvmenu_close (@) {
+ &webui_tvmenu_state_write({ view => "", sel => int(&webui_tvmenu_state()->{sel} || 0) });
+ local $_tvmenu_drawing=1;
+ &webui_pattern('{"name":"stop"}');
+ return '{"status":"ok","view":""}';
+}
+
+# Ask the listener to make the Pi the TV's active source (WebUI actions only;
+# a key press means the TV already sends its keys here).
+sub webui_tvmenu_announce (@) {
+ if(open(my $fh,">",$_tvmenu_announce_file)) { close($fh); }
+}
+
+# POST /api/remote/key {"key":"up|down|left|right|ok|back|exit|menu|next|prev|0-9|timeout"}
+# and POST /api/tvmenu/open|close from the WebUI.
+sub webui_remote_key (@) {
+ my $body=shift;
+ &webui_reload_pgenerator_conf();
+ my $req=eval { &_webui_json_pp()->decode($body || "{}") } || {};
+ $req={} if(ref($req) ne "HASH");
+ my $key=lc($req->{key} || "");
+ return '{"status":"error","message":"Unknown key."}' if($key!~/^(?:up|down|left|right|ok|back|exit|menu|next|prev|[0-9]|timeout|open|close)$/);
+ my $st=&webui_tvmenu_state();
+ my $view=$st->{view} || "";
+ if($calibration_client_ip ne "") {
+  &webui_tvmenu_state_write({ view => "", sel => int($st->{sel} || 0) }) if($view ne "");
+  my $sw=&_webui_json_escape($calibration_client_software || "Calibration software");
+  return '{"status":"error","message":"'.$sw.' is connected and owns the patterns."}';
+ }
+ return '{"status":"error","message":"The signal self-test is running."}' if(&webui_selftest_running());
+ my $playlist_active=&webui_playlist_state() ? 1 : 0;
+ $view="" if($view eq "playlist" && !$playlist_active);
+ my $entries=&webui_tvmenu_entries();
+ my $count=scalar(@$entries);
+ return '{"status":"error","message":"There is nothing to show."}' if(!$count);
+ my $sel=int($st->{sel} || 0);
+ $sel=0 if($sel < 0 || $sel >= $count);
+ my ($act,$arg);
+ if($key eq "timeout") {
+  # Only a menu left alone: a pattern opened from it stays as long as wanted.
+  return '{"status":"ok","view":"'.$view.'"}' if($view ne "menu");
+  ($act,$arg)=("close","");
+ } elsif($key eq "open") {
+  ($act,$arg)=($playlist_active ? "playlist_menu" : "open_menu","");
+ } elsif($key eq "close") {
+  ($act,$arg)=($view eq "playlist" ? "playlist_close" : "close","");
+  return '{"status":"ok","view":""}' if($view eq "");
+ } else {
+  ($act,$arg)=PGTVMenu::menu_action($view,$key,$playlist_active);
+ }
+ return '{"status":"ok","view":"'.$view.'","unchanged":true}' if($act eq "");
+ if($act eq "move") {
+  my $lay=PGTVMenu::layout($entries);
+  my $new=PGTVMenu::navigate($sel,$arg,$lay,$count);
+  return '{"status":"ok","view":"menu","unchanged":true}' if($new == $sel);
+  return &webui_tvmenu_show_menu($entries,$new);
+ }
+ return &webui_tvmenu_open_entry($entries,$sel) if($act eq "open");
+ return &webui_tvmenu_show_menu($entries,$sel) if($act eq "menu" || $act eq "open_menu");
+ return &webui_tvmenu_close() if($act eq "close");
+ if($act eq "step") {
+  my $new=PGTVMenu::step_pattern($sel,$arg,$entries);
+  return '{"status":"ok","view":"item","unchanged":true}' if($new == $sel);
+  return &webui_tvmenu_open_entry($entries,$new);
+ }
+ local $_tvmenu_drawing=1;
+ if($act eq "playlist") {
+  return &webui_playlist_action("step",'{"dir":"'.$arg.'","source":"cec"}');
+ }
+ if($act eq "playlist_menu") {
+  &webui_playlist_action("stop",'{"keep_pattern":true}');
+  return &webui_tvmenu_show_menu($entries,$sel);
+ }
+ if($act eq "playlist_close") {
+  &webui_playlist_action("stop",'{}');
+  &webui_tvmenu_state_write({ view => "", sel => $sel });
+  return '{"status":"ok","view":""}';
+ }
+ return '{"status":"ok","view":"'.$view.'","unchanged":true}';
+}
+
+sub webui_tvmenu_json (@) {
+ my $st=&webui_tvmenu_state();
+ return &_webui_json_pp()->encode({ status => "ok", view => $st->{view} || "",
+  listen => (&webui_tvmenu_settings()->{listen} ? JSON::PP::true() : JSON::PP::false()),
+  remote => &webui_cec_remote_state() });
+}
+
+sub webui_tvmenu_action (@) {
+ my ($action,$body)=@_;
+ if($action eq "settings") {
+  my $req=eval { &_webui_json_pp()->decode($body || "{}") } || {};
+  return '{"status":"error","message":"Send listen as true or false."}' if(ref($req) ne "HASH" || !exists($req->{listen}));
+  mkdir($_tvmenu_dir) if(!-d $_tvmenu_dir);
+  my $on=$req->{listen} ? 1 : 0;
+  return '{"status":"error","message":"The setting could not be saved on the Pi."}'
+   if(!&_webui_meter_settings_write_json($_tvmenu_settings_file,&_webui_json_pp()->encode({ listen => ($on ? JSON::PP::true() : JSON::PP::false()) })));
+  # Off: the listener sees it and exits once no playlist or menu needs it.
+  &webui_cec_remote_start() if($on);
+  return &webui_tvmenu_json();
+ }
+ if($action eq "open") {
+  &webui_tvmenu_announce();
+  my $res=&webui_remote_key('{"key":"open"}');
+  &webui_cec_remote_start();
+  return $res;
+ }
+ return &webui_remote_key('{"key":"close"}') if($action eq "close");
+ return '{"status":"error","message":"Unknown action."}';
+}
+
+# Daemon start: keep the remote listening when the setting is on.
+sub webui_tvmenu_boot (@) {
+ unlink($_tvmenu_state_file);
+ &webui_cec_remote_start() if(&webui_tvmenu_settings()->{listen});
+}
+
+#
+# Signal self-test (usr/bin/pgen_selftest.pl). The script runs detached as the
+# daemon user, walks the output through the test modes and writes its state
+# to $_selftest_state_file; these subs start it, report it and stop it.
+#
+our $_selftest_state_file="/tmp/pgen-selftest.json";
+our $_selftest_cancel_file="/tmp/pgen-selftest.cancel";
+
+sub webui_selftest_read_state (@) {
+ my $json="";
+ if(open(my $fh,"<",$_selftest_state_file)) { local $/; $json=<$fh>; close($fh); }
+ return $json;
+}
+
+sub webui_selftest_running (@) {
+ my $json=&webui_selftest_read_state();
+ return 0 if($json!~/"state"\s*:\s*"running"/);
+ my ($pid)=$json=~/"pid"\s*:\s*(\d+)/;
+ # Just started: the script writes its pid within a moment. Count the run as
+ # live meanwhile, so a second start or a cancel is not lost.
+ if(!$pid) {
+  my $mtime=(stat($_selftest_state_file))[9] || 0;
+  return (time()-$mtime < 5) ? 1 : 0;
+ }
+ return (-e "/proc/$pid") ? 1 : 0;
+}
+
+sub webui_selftest_status_json (@) {
+ my $json=&webui_selftest_read_state();
+ return '{"state":"idle"}' if($json eq "");
+ if($json=~/"state"\s*:\s*"running"/ && !&webui_selftest_running()) {
+  # The launcher needs a moment before the script writes its own pid.
+  my @st=stat($_selftest_state_file);
+  if(@st && time()-$st[9] >= 5) {
+   $json=~s/"state"\s*:\s*"running"/"state":"error"/;
+   $json=~s/"message"\s*:\s*"(?:[^"\\]|\\.)*"/"message":"The self-test stopped unexpectedly. Check the signal settings in Output."/;
+  }
+ }
+ return $json;
+}
+
+sub webui_selftest_start (@) {
+ my $body=shift || "";
+ return '{"status":"error","message":"A self-test is already running."}' if(&webui_selftest_running());
+ if($calibration_client_ip ne "") {
+  my $sw=&_webui_json_escape($calibration_client_software || "Calibration software");
+  return '{"status":"error","message":"'.$sw.' is connected. Disconnect it before running the self-test."}';
+ }
+ return '{"status":"error","message":"A measurement series is running. Wait for it to finish."}' if(&webui_meter_series_alive());
+ return '{"status":"error","message":"No display is connected. Connect a display first."}' if(!&webui_hdmi_connected());
+ my $set=($body=~/"set"\s*:\s*"quick"/) ? "quick" : "full";
+ unlink($_selftest_cancel_file);
+ if(open(my $fh,">",$_selftest_state_file)) {
+  print $fh '{"state":"running","message":"Starting the self-test.","set":"'.$set.'","step":0,"steps":0,"scenarios":[]}';
+  close($fh);
+ }
+ system("setsid /usr/bin/perl /usr/bin/pgen_selftest.pl $_selftest_state_file $set </dev/null >/tmp/pgen-selftest.log 2>&1 &");
+ &log("WebUI: signal self-test started ($set)");
+ return '{"status":"started","set":"'.$set.'"}';
+}
+
+sub webui_selftest_cancel (@) {
+ return '{"status":"ok","running":false}' if(!&webui_selftest_running());
+ if(open(my $fh,">",$_selftest_cancel_file)) { close($fh); }
+ &log("WebUI: signal self-test cancel requested");
+ return '{"status":"ok","running":true}';
+}
+
 sub webui_infoframes_json (@) {
  # The kernel log keeps the infoframes of every earlier modeset. Without a
  # display nothing is sent, so none of them is current. With a display only
@@ -12561,6 +13342,7 @@ sub webui_pattern (@) {
    $name="stop";
   }
  }
+ &webui_tvmenu_forget() if($name ne "tv_menu");
  my $stabilization_stimulus=25;
  my $stabilization_size=100;
  if($name eq "stop") {
@@ -12660,6 +13442,13 @@ sub webui_pattern (@) {
   $pat=&webui_pattern_image_pattern($w,$h,$img);
   $pat_bits=&webui_pattern_effective_bits("IMAGE",$signal_mode);
  }
+elsif($pat eq "" && $name eq "tv_menu") {
+ # On-screen menu picture drawn by webui_tvmenu_view.
+ my ($file)=$body=~/"file"\s*:\s*"(view-[0-9a-f]+-\d+-\d+x\d+-[01]-[0-9a-f]+\.bmp)"/;
+ return '{"status":"error","message":"Menu picture not found"}' if(!defined($file) || !-f "$_tvmenu_view_dir/$file");
+ $pat=&webui_pattern_image_pattern($w,$h,"$_tvmenu_view_dir/$file");
+ $pat_bits=&webui_pattern_effective_bits("IMAGE",$signal_mode);
+}
 elsif($pat eq "" && $name eq "uploaded_diag_image") {
  my $requested_filename="";
  $requested_filename=$1 if($body =~ /"filename"\s*:\s*"([^"]{1,240})"/);

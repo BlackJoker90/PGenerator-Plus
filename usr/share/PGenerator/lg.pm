@@ -3638,7 +3638,7 @@ sub webui_lg_init_js (@) {
  # Saved TVs render immediately; the full first-start scan runs in a sibling
  # daemon thread and is consumed asynchronously without blocking meter status.
  # History is not loaded on init — only when the operator opens History (tablet)
- # or enters the LG Display workspace (desktop).
+ # or enters the Connectivity workspace (desktop).
  return 'lgBindDisplayModeControl();lgDisplayControlRender();setTimeout(()=>loadLgStatus(),750);setTimeout(()=>lgLoadSavedTvs(),1200);setTimeout(()=>lgStartupAutoDetect(),1400);';
 }
 

@@ -728,6 +728,10 @@ case "$cmd" in
   ;;
 
  check)
+  # "check --fresh" (Check for Updates in the WebUI) skips the cache window
+  # and asks GitHub now (conditional, ETag); a refusal still falls back to
+  # the cached answer.
+  [ "${2:-}" = "--fresh" ] && GITHUB_CACHE_TTL=0
   resolve_update_repo
   detect_update_target
   log_file_only "Update check: repo $UPDATE_REPO (from $UPDATE_REPO_SOURCE), target $UPDATE_TARGET"

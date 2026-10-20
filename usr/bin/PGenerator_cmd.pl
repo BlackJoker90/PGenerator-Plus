@@ -1302,7 +1302,8 @@ sub bash_cmd(@) {
   }
  }
  if($cmd eq "PGPLUS_CHECK") {
-  my $out=`/usr/sbin/pgenerator-update check 2>/dev/null`;
+  my $fresh=(defined($argument) && $argument eq "fresh") ? " --fresh" : "";
+  my $out=`/usr/sbin/pgenerator-update check$fresh 2>/dev/null`;
   chomp($out);
   print $out;
  }

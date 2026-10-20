@@ -54,11 +54,43 @@
 /* Natrium: port of the T3 Code theme of the same name (dark + light variant). */
 [data-palette="natrium"]{--accent-fill:#f9cd4c;--accent-fill2:#f6a14f;--on-accent:#1f180f;--danger-fill:#ed695e;--on-danger:#1f180f;--warning-text:#f6a14f;--bg:#181613;--card:#1f1d1a;--panel:#1f1d1a;--border:#2e2b27;--divider:#2e2b27;--accent:#f9cd4c;--accent2:#f6a14f;--text:#e8e4dd;--text2:#9f9b95;--red:#ed695e;--orange:#f6a14f;--status-error:#ed695e;--status-warning:#f6a14f;--status-calibration:#f9cd4c;--surface-page:#181613;--surface-header:#13110e;--surface-sidebar:#110f0d;--surface-card:#1f1d1a;--surface-drawer:#13110e;--surface-modal:#1f1d1a;--surface-popover:#272420;--surface-inset:#110f0d;--surface-field:#13110e;--text-primary:#e8e4dd;--text-secondary:#9f9b95;--text-muted:#97938d;--text-disabled:#726e68;--text-inverse:#1f180f;--focus-ring:#f9cd4c;--selected-bg:#382c14;--hover-bg:#1d1b17;--chart-bg:#110f0d;--chart-grid:#25221f;--chart-axis:#393632;--chart-label:#9f9b95;--chart-tooltip:#272420;--chart-empty:#726e68;--meter-bar-track:#201e1a;--scroll-track:#110f0d;--scroll-thumb:#35322e;--scroll-thumb-border:#504c47;--scroll-thumb-hover:#504c47}
 [data-palette="natrium-light"]{--accent-fill:#9b5f00;--accent-fill2:#9d521a;--on-accent:#fdfaf4;--danger-fill:#d33b36;--warning-text:#8a4510;--bg:#f5f2ec;--card:#fbfaf6;--panel:#fbfaf6;--border:#dcd9d2;--divider:#dcd9d2;--accent:#9b5f00;--accent2:#9d521a;--text:#231f19;--text2:#66615a;--red:#c0302b;--orange:#a3530f;--status-error:#c0302b;--status-warning:#a3530f;--status-calibration:#9b5f00;--surface-page:#f5f2ec;--surface-header:#fbfaf6;--surface-sidebar:#f2efe8;--surface-card:#fbfaf6;--surface-drawer:#fbfaf6;--surface-modal:#fbfaf6;--surface-popover:#efebe4;--surface-inset:#f1eee8;--surface-field:#f9f7f2;--text-primary:#231f19;--text-secondary:#66615a;--text-muted:#66615a;--text-disabled:#7c7670;--text-inverse:#fdfaf4;--focus-ring:#9b5f00;--selected-bg:#f8ebbe;--hover-bg:#ebe7dd;--chart-bg:#f3f0ea;--chart-grid:#e1ded7;--chart-axis:#cecac2;--chart-label:#66615a;--chart-tooltip:#efebe4;--chart-empty:#7c7670;--meter-bar-track:#f1eee8;--scroll-track:#f2efe8;--scroll-thumb:#cdcac3;--scroll-thumb-border:#b4b1a9;--scroll-thumb-hover:#b4b1a9}
+/* Secondaries: three dark themes on the colours a pattern generator sends
+   besides R, G and B. Accents are bright, so text on them is dark, and the
+   status hues are moved off each accent (success is never the accent). */
+/* Volt: lime on near-black, pill buttons. */
+[data-palette="volt"]{--bg:#0a0b09;--card:#121410;--panel:#121410;--border:#262a21;--divider:#262a21;--accent:#c8f135;--accent2:#a6d92e;--accent-fill:#c8f135;--accent-fill2:#b4e22f;--on-accent:#0d1205;--text-inverse:#0d1205;
+--text:#eef0e8;--text2:#a0a696;--text-primary:#eef0e8;--text-secondary:#a0a696;--text-muted:#979d8d;--text-disabled:#6f7568;
+--green:#3ddc97;--red:#ff5f56;--orange:#ffb547;--dv:#b9a1ff;--status-success:#3ddc97;--status-warning:#ffb547;--status-error:#ff5f56;--status-dv:#b9a1ff;--status-calibration:#c8f135;--success-fill:#1d7a52;--on-success:#fff;--danger-fill:#ff5f56;--on-danger:#170705;--warning-text:#ffb547;
+--surface-page:#0a0b09;--surface-header:#0d0f0b;--surface-sidebar:#0b0c0a;--surface-card:#121410;--surface-drawer:#0d0f0b;--surface-modal:#121410;--surface-popover:#1a1d16;--surface-inset:#0d0f0b;--surface-field:#080907;
+--focus-ring:#c8f135;--selected-bg:#1e2611;--hover-bg:rgba(200,241,53,.05);--shadow:rgba(0,0,0,.5);
+--chart-bg:#0b0c0a;--chart-grid:#1b1e17;--chart-axis:#353a2e;--chart-label:#a0a696;--chart-tooltip:#1a1d16;--chart-empty:#6f7568;--meter-bar-track:#12140f;
+--scroll-track:#0b0c0a;--scroll-thumb:#31362a;--scroll-thumb-border:#464c3d;--scroll-thumb-hover:#464c3d}
+/* Scope: vectorscope cyan on blue-black. */
+[data-palette="scope"]{--bg:#060a0d;--card:#0d151b;--panel:#0d151b;--border:#1c2a33;--divider:#1c2a33;--accent:#3be3ff;--accent2:#22b8e6;--accent-fill:#3be3ff;--accent-fill2:#29c4ee;--on-accent:#021218;--text-inverse:#021218;
+--text:#e3f1f6;--text2:#8fa6b0;--text-primary:#e3f1f6;--text-secondary:#8fa6b0;--text-muted:#879ea8;--text-disabled:#5f7580;
+--green:#4ade80;--red:#ff5c7a;--orange:#ffb020;--dv:#c4a5ff;--status-success:#4ade80;--status-warning:#ffb020;--status-error:#ff5c7a;--status-dv:#c4a5ff;--status-calibration:#3be3ff;--success-fill:#1f7a45;--on-success:#fff;--danger-fill:#ff5c7a;--on-danger:#1a0509;--warning-text:#ffb020;
+--surface-page:#060a0d;--surface-header:#081016;--surface-sidebar:#070c10;--surface-card:#0d151b;--surface-drawer:#081016;--surface-modal:#0d151b;--surface-popover:#132029;--surface-inset:#081016;--surface-field:#05090c;
+--focus-ring:#3be3ff;--selected-bg:#0e2a33;--hover-bg:rgba(59,227,255,.05);--shadow:rgba(0,0,0,.5);
+--chart-bg:#070c10;--chart-grid:#13202a;--chart-axis:#2a3d49;--chart-label:#8fa6b0;--chart-tooltip:#132029;--chart-empty:#5f7580;--meter-bar-track:#0b1319;
+--scroll-track:#070c10;--scroll-thumb:#243540;--scroll-thumb-border:#344a57;--scroll-thumb-hover:#344a57}
+/* Ultraviolet: magenta on violet-black. */
+[data-palette="ultraviolet"]{--bg:#0b0810;--card:#15101d;--panel:#15101d;--border:#2b2238;--divider:#2b2238;--accent:#ff5ad1;--accent2:#c64dff;--accent-fill:#ff5ad1;--accent-fill2:#e055f0;--on-accent:#1a0516;--text-inverse:#1a0516;
+--text:#f2eaf7;--text2:#a597b3;--text-primary:#f2eaf7;--text-secondary:#a597b3;--text-muted:#9d8fab;--text-disabled:#6f6380;
+--green:#4ade80;--red:#ff6b6b;--orange:#ffb347;--dv:#9db4ff;--status-success:#4ade80;--status-warning:#ffb347;--status-error:#ff6b6b;--status-dv:#9db4ff;--status-calibration:#ff5ad1;--success-fill:#1f7a45;--on-success:#fff;--danger-fill:#ff6b6b;--on-danger:#1a0606;--warning-text:#ffb347;
+--surface-page:#0b0810;--surface-header:#0f0b16;--surface-sidebar:#0d0913;--surface-card:#15101d;--surface-drawer:#0f0b16;--surface-modal:#15101d;--surface-popover:#1d1628;--surface-inset:#0f0b16;--surface-field:#09070d;
+--focus-ring:#ff5ad1;--selected-bg:#2d1330;--hover-bg:rgba(255,90,209,.05);--shadow:rgba(0,0,0,.5);
+--chart-bg:#0d0913;--chart-grid:#1e1729;--chart-axis:#3a2f4a;--chart-label:#a597b3;--chart-tooltip:#1d1628;--chart-empty:#6f6380;--meter-bar-track:#130e1a;
+--scroll-track:#0d0913;--scroll-thumb:#352a45;--scroll-thumb-border:#4a3d5e;--scroll-thumb-hover:#4a3d5e}
+[data-palette="volt"] .btn,[data-palette="volt"] .update-btn{border-radius:999px}
 [data-palette="contrast"] .btn-secondary{box-shadow:inset 0 0 0 1px var(--border)}
 [data-palette="nord"] #hdmiWarnBadge{color:var(--red)}
-/* Natrium accents are light, so text on them uses the theme foreground. */
-[data-palette^="natrium"] .btn-primary,[data-palette^="natrium"] .layout-switch-btn[aria-pressed="true"]{color:var(--text-inverse)}
-[data-palette^="natrium"] .desktop-nav-btn[aria-current="page"]{color:var(--text-primary)}
+/* Natrium and the secondaries have light accents: text on them uses the dark foreground. */
+[data-palette^="natrium"] .btn-primary,[data-palette^="natrium"] .layout-switch-btn[aria-pressed="true"],
+[data-palette="volt"] .btn-primary,[data-palette="volt"] .layout-switch-btn[aria-pressed="true"],
+[data-palette="scope"] .btn-primary,[data-palette="scope"] .layout-switch-btn[aria-pressed="true"],
+[data-palette="ultraviolet"] .btn-primary,[data-palette="ultraviolet"] .layout-switch-btn[aria-pressed="true"]{color:var(--text-inverse)}
+[data-palette^="natrium"] .desktop-nav-btn[aria-current="page"],[data-palette="volt"] .desktop-nav-btn[aria-current="page"],
+[data-palette="scope"] .desktop-nav-btn[aria-current="page"],[data-palette="ultraviolet"] .desktop-nav-btn[aria-current="page"]{color:var(--text-primary)}
 body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
 background:var(--bg);color:var(--text);min-height:100vh;padding:0}
 body.modal-open{position:fixed;left:0;right:0;width:100%;overflow:hidden;overscroll-behavior:none}
@@ -345,9 +377,6 @@ display:flex;align-items:center;gap:6px;cursor:pointer;user-select:none}
 .card.collapsed > *:not(h2){display:none !important}
 .card.collapsed h2 .lg-card-title-actions,.card.collapsed h2 .card-h2-action{display:none!important}
 /* Status badges sit right before the chevron so they line up from card to card. */
-body.layout-tablet [data-widget="resolve"] > h2{gap:8px}
-body.layout-tablet #resolveStatusBadge{margin-left:auto!important}
-body.layout-tablet [data-widget="resolve"] > h2::after{margin-left:0}
 body.layout-tablet .dashboard > .card > h2 > .pg-switch{margin-left:auto}
 body.layout-tablet .dashboard > .card > h2:has(> .pg-switch){gap:8px}
 body.layout-tablet .dashboard > .card > h2:has(> .pg-switch)::after{margin-left:0}
@@ -356,6 +385,13 @@ body.layout-tablet .dashboard > .card > h2:has(> .pg-switch)::after{margin-left:
 .card-section-title{display:flex;align-items:center;gap:8px;margin:0;font-size:.9rem;font-weight:600;color:var(--text-primary);letter-spacing:normal;text-transform:none}
 .card-section-icon{flex:0 0 18px;width:18px;height:18px;color:var(--accent)}
 body.layout-tablet .card-section-head{min-height:44px}
+/* RGB primaries icon: three overlapping circles in the accent like every section icon */
+.rgb-icon circle{fill:none;stroke:currentColor;stroke-width:1.8}
+/* Connection state chip in a section head, where the others have a switch */
+.conn-badge{--conn:var(--text2);display:inline-flex;align-items:center;gap:6px;flex:0 1 auto;min-width:0;padding:3px 10px;border-radius:999px;font-size:.72rem;font-weight:600;line-height:1.3;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:color-mix(in oklab,var(--conn) 58%,var(--text-primary));background:color-mix(in srgb,var(--conn) 16%,transparent);box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--conn) 38%,transparent)}
+.conn-badge::before{content:"";flex:0 0 6px;width:6px;height:6px;border-radius:50%;background:var(--conn)}
+.conn-badge[data-state="on"]{--conn:var(--status-success)}
+.conn-badge[data-state="warn"]{--conn:var(--status-warning)}
 .pg-switch{position:relative;display:inline-flex;align-items:center;cursor:pointer;flex:0 0 auto;user-select:none}
 .pg-switch input{position:absolute;opacity:0;width:0;height:0;margin:0}
 .pg-switch-track{display:inline-block;position:relative;width:34px;height:18px;border-radius:9px;background:var(--text2);transition:background .2s}
@@ -788,7 +824,11 @@ body.dv-profile-done-error #dvProfileDoneStatus{color:#e08184}
 /* Software Update card: status right under the versions, notes behind a
    disclosure, then "Previous versions" as a titled section. Backup is its own
    card section below. */
-.update-status{margin-top:10px;font-size:.75rem;color:var(--text2)}
+.update-status{margin-top:6px;font-size:.7rem;color:var(--text2)}
+/* Check result: a banner as wide as its sentence, not the whole card */
+.update-status[data-tone]{--tone:var(--green);display:flex;align-items:center;gap:6px;width:fit-content;max-width:min(100%,72ch);box-sizing:border-box;margin-top:8px;padding:7px 12px;border-radius:8px;font-size:.8rem;font-weight:600;line-height:1.35;color:var(--tone);border:1px solid var(--tone);background:color-mix(in srgb,var(--tone) 12%,transparent)}
+.update-status[data-tone="warn"]{--tone:var(--orange)}
+.update-status[data-tone="error"]{--tone:var(--red)}
 .update-status:empty{display:none}
 .update-notes{margin-top:10px}
 .update-notes>summary{display:inline-flex;align-items:center;gap:6px;cursor:pointer;font-size:.78rem;font-weight:600;color:var(--accent);list-style:none;user-select:none}
@@ -1063,10 +1103,17 @@ cursor:pointer;animation:updatePulse 2s ease-in-out infinite}
 .site-footer-inner{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:12px 14px;
 display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap}
 .site-footer-note{font-size:.7rem;color:var(--text2);line-height:1.4;max-width:70%}
-.btn-coffee{background:#ffdd00;color:#111;border:1px solid rgba(0,0,0,.18)}
-.btn-coffee:hover{background:#ffd200;color:#111;transform:translateY(-1px)}
-.site-footer-links{margin-left:auto;justify-content:flex-end}
-@media(max-width:700px){.site-footer-note{max-width:100%}.site-footer-inner{justify-content:center;text-align:center}.site-footer-links{margin:0 auto;justify-content:center}}
+/* GitHub and Buy Me a Coffee as their marks, in the theme accent */
+.site-footer-links{display:flex;align-items:center;gap:4px;margin-left:auto;justify-content:flex-end}
+.site-footer-icon{display:inline-flex;align-items:center;justify-content:center;width:34px;height:34px;border-radius:8px;color:var(--accent);transition:background-color .15s ease,color .15s ease}
+.site-footer-icon svg{width:20px;height:20px;display:block}
+.site-footer-icon:hover{background:color-mix(in srgb,var(--accent) 14%,transparent)}
+.site-footer-icon:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+/* The hit area is wider than the mark: pull the row out so the last glyph meets the content edge */
+.site-footer-links{margin-right:-7px}
+body.layout-tablet .site-footer-icon{width:44px;height:44px}
+body.layout-tablet .site-footer-links{margin-right:-12px}
+@media(max-width:700px){.site-footer-note{max-width:100%}.site-footer-inner{justify-content:center;text-align:center}.site-footer-links,body.layout-tablet .site-footer-links{margin:0 auto;justify-content:center}}
 /* Desktop workspace layout. Tablet remains the baseline; these rules only
    apply when the layout controller has confirmed there is room for a sidebar. */
 .layout-switch{display:inline-flex;align-items:center;padding:2px;background:var(--surface-inset);border:1px solid var(--border);border-radius:7px}
@@ -1197,7 +1244,7 @@ background:linear-gradient(135deg,var(--sw-bg) 0 50%,var(--sw-card) 50% 100%)}
 [data-palette] .wifi-item:hover,[data-palette] .wifi-item.is-selected{background:var(--selected-bg)}
 @media (hover:hover) and (pointer:fine){[data-palette] .pat-btn:hover{background:var(--hover-bg)}}
 .pg-dd-menu.no-stagger .pg-dd-item,.pg-dd-menu.no-stagger .pg-dd-group,.pg-dd-menu.no-stagger .pg-dd-mark{transition-delay:0s!important}
-/* Signal Self-Test (System). The verdict carries the header power-button tint: status colour at 14 % with a 30 % ring. */
+/* Signal Self-Test (Output). The verdict carries the header power-button tint: status colour at 14 % with a 30 % ring. */
 .selftest-lede{max-width:72ch;margin:0 0 14px;font-size:.78rem;line-height:1.5;color:var(--text2)}
 .selftest-verdict{--st:var(--text2);position:relative;display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:center;gap:16px;padding:16px 18px;border:1px solid var(--border);border-radius:12px;background:var(--surface-inset);overflow:hidden;transition:border-color .3s ease-out}
 .selftest-verdict[data-state="running"]{--st:var(--accent)}
@@ -1218,18 +1265,32 @@ background:linear-gradient(135deg,var(--sw-bg) 0 50%,var(--sw-card) 50% 100%)}
 .selftest-verdict.has-progress .selftest-progress{opacity:1}
 .selftest-progress-fill{height:100%;background:var(--st);transform:scaleX(0);transform-origin:left;transition:transform .7s cubic-bezier(.16,1,.3,1)}
 .selftest-modes{list-style:none;margin:14px 0 0;padding:0;border-top:1px solid var(--border)}
+/* One column grid for the whole list (rows are subgrids): group, mode, depth,
+   link and result line up in every row whatever the chip or label width. */
+@supports (grid-template-columns:subgrid){
+.selftest-modes{display:grid;grid-template-columns:auto auto auto minmax(0,1fr) auto auto auto;column-gap:14px}
+.selftest-modes .selftest-mode,.selftest-modes .selftest-mode-head{grid-column:1/-1;display:grid;grid-template-columns:subgrid}
+.selftest-modes .selftest-mode-id,.selftest-modes .selftest-mode-title{display:contents}
+.selftest-modes .selftest-detail{grid-column:1/-1}
+.selftest-modes .selftest-group,.selftest-modes .selftest-bits{justify-self:stretch;text-align:center}
+}
 .selftest-mode{border-bottom:1px solid var(--border)}
-.selftest-mode-head{display:grid;grid-template-columns:minmax(230px,1fr) minmax(0,1.4fr) 236px 52px 112px;align-items:center;gap:16px;width:100%;min-height:48px;padding:10px 6px;border:0;background:none;color:inherit;font:inherit;text-align:left;cursor:pointer;border-radius:6px;transition:background .15s ease-out}
+.selftest-mode-head{display:grid;grid-template-columns:auto auto auto minmax(0,1fr) auto auto auto;align-items:center;column-gap:14px;width:100%;min-height:48px;padding:10px 6px;border:0;background:none;color:inherit;font:inherit;text-align:left;cursor:pointer;border-radius:6px;transition:background .15s ease-out}
 .selftest-mode-head:hover:not(:disabled){background:var(--hover-bg)}
 .selftest-mode-head:disabled{cursor:default}
 .selftest-mode[data-status="running"] .selftest-mode-head{background:var(--selected-bg)}
 .selftest-mode-head:focus-visible{outline:2px solid var(--focus-ring);outline-offset:-2px}
 .selftest-mode-id{display:flex;align-items:baseline;gap:8px;min-width:0}
-.selftest-group{--grp:var(--text2);flex:0 0 auto;padding:2px 7px;border-radius:999px;font-size:.6rem;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--grp);background:color-mix(in srgb,var(--grp) 14%,transparent)}
+.selftest-group{--grp:var(--text2);justify-self:start;flex:0 0 auto;padding:2px 7px;border-radius:999px;font-size:.6rem;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--grp);background:color-mix(in srgb,var(--grp) 14%,transparent)}
 .selftest-mode[data-group="hdr"] .selftest-group{--grp:var(--status-warning)}
 .selftest-mode[data-group="dv"] .selftest-group{--grp:var(--status-dv)}
 .selftest-mode-name{font-size:.86rem;font-weight:600;color:var(--text-primary);white-space:nowrap}
-.selftest-depth{font-size:.74rem;color:var(--text2);font-variant-numeric:tabular-nums;white-space:nowrap}
+/* Link depth chip: one hue per depth, kept apart from the group chips (grey,
+   HDR orange, DV violet) and the result colours; the text mixes towards the
+   theme's text colour so it stays legible on light and dark themes. */
+.selftest-bits{--bits:#3aa99f;justify-self:start;flex:0 0 auto;padding:2px 8px;border-radius:999px;font-size:.66rem;font-weight:700;font-variant-numeric:tabular-nums;white-space:nowrap;color:color-mix(in oklab,var(--bits) 58%,var(--text-primary));background:color-mix(in srgb,var(--bits) 16%,transparent);box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--bits) 38%,transparent)}
+.selftest-bits[data-bits="10"]{--bits:#4f8ff0}
+.selftest-bits[data-bits="12"]{--bits:#d062b8}
 .selftest-mode-link{min-width:0;font-size:.72rem;color:var(--text2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .selftest-mode[data-status="fail"] .selftest-mode-link{color:var(--status-error);white-space:normal}
 .selftest-strip{display:flex;align-items:center;justify-content:flex-end;gap:3px;min-height:16px}
@@ -1265,8 +1326,17 @@ background:linear-gradient(135deg,var(--sw-bg) 0 50%,var(--sw-card) 50% 100%)}
 .selftest-verdict{grid-template-columns:auto minmax(0,1fr)}
 .selftest-actions{grid-column:1/-1;justify-content:stretch}
 .selftest-actions .btn{flex:1 1 0;min-height:44px;justify-content:center}
-.selftest-mode-head{grid-template-columns:minmax(0,1fr) auto;justify-content:stretch;grid-template-areas:"id state" "link score" "strip strip";row-gap:6px;column-gap:12px}
-.selftest-mode-id{grid-area:id}.selftest-state{grid-area:state;justify-self:end}.selftest-mode-link{grid-area:link}.selftest-score{grid-area:score}.selftest-strip{grid-area:strip;justify-content:flex-start}
+/* Phones: three lines per mode on the same shared columns (group | mode and
+   depth | result), so the group chips and mode names still line up. */
+.selftest-modes{grid-template-columns:auto minmax(0,1fr) auto;column-gap:10px}
+.selftest-modes .selftest-mode-head{row-gap:6px}
+.selftest-modes .selftest-group{grid-column:1;grid-row:1}
+.selftest-modes .selftest-mode-title{grid-column:2;grid-row:1;display:flex;align-items:center;gap:8px;min-width:0}
+.selftest-modes .selftest-bits{justify-self:start}
+.selftest-modes .selftest-state{grid-column:3;grid-row:1;justify-self:end}
+.selftest-modes .selftest-mode-link{grid-column:1/3;grid-row:2}
+.selftest-modes .selftest-score{grid-column:3;grid-row:2}
+.selftest-modes .selftest-strip{grid-column:1/-1;grid-row:3;justify-content:flex-start}
 .selftest-table{display:block;overflow-x:auto}
 }
 @media(prefers-reduced-motion:reduce){.selftest-verdict[data-state="running"] [data-icon="running"],.selftest-mode[data-status="running"] .selftest-dot{animation:none}.selftest-progress-fill{transition:none}}
@@ -1322,7 +1392,8 @@ background:linear-gradient(135deg,var(--sw-bg) 0 50%,var(--sw-card) 50% 100%)}
 .playlist-row-actions .btn{min-width:76px;min-height:32px;justify-content:center;font-weight:600}
 /* Row Start is tonal: the library lists several, the deck transport keeps the one filled primary. */
 .playlist-start{gap:6px;background:color-mix(in srgb,var(--accent) 16%,transparent);color:var(--accent);box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--accent) 34%,transparent);transition:background .15s ease-out,box-shadow .15s ease-out,color .15s ease-out}
-.playlist-start svg{width:12px;height:12px;flex:0 0 12px}
+/* viewBox is cropped to the triangle, so icon + gap + text centre as one group */
+.playlist-start svg{width:7.8px;height:9.2px;flex:0 0 7.8px}
 .playlist-start:hover:not(:disabled){background:linear-gradient(135deg,var(--accent-fill),var(--accent-fill2));color:var(--on-accent);box-shadow:none}
 .playlist-start:disabled{background:transparent;color:var(--text2);box-shadow:inset 0 0 0 1px var(--border)}
 .playlist-row-live{display:inline-flex;align-items:center;gap:7px;min-width:72px;font-size:.74rem;font-weight:600;color:var(--accent)}

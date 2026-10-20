@@ -1701,12 +1701,12 @@ async function loadInfo(quiet){
   const isResolve=info.calibration&&info.calibration.connected&&info.calibration.software==='Resolve';
   if(isResolve){
    rBadge.textContent='Connected ('+info.calibration.ip+')';
-   rBadge.style.background='var(--green)';
+   rBadge.dataset.state='on';
    rConn.style.display='none';
    rDisc.style.display='';
   }else{
    rBadge.textContent='Disconnected';
-   rBadge.style.background='var(--badge-neutral)';
+   rBadge.dataset.state='off';
    rConn.style.display='';
    rDisc.style.display='none';
   }
@@ -2788,7 +2788,7 @@ function playlistRender(){
    '<div class="playlist-row-count">'+(pl.items||[]).length+' patterns</div>'+
    '<div class="playlist-row-actions">'+
     (isActive?'<span class="playlist-row-live"><span class="playlist-live-dot" aria-hidden="true"></span>On screen</span>':
-     '<button type="button" class="btn btn-sm playlist-start" onclick="playlistStart(\''+pl.id+'\')" aria-label="Start '+playlistEsc(pl.name)+'"'+(blocked||playlistBusy?' disabled':'')+'><svg viewBox="0 0 12 12" aria-hidden="true"><path d="M2.5 1.4v9.2L10.3 6z" fill="currentColor"/></svg>Start</button>')+
+     '<button type="button" class="btn btn-sm playlist-start" onclick="playlistStart(\''+pl.id+'\')" aria-label="Start '+playlistEsc(pl.name)+'"'+(blocked||playlistBusy?' disabled':'')+'><svg viewBox="2.5 1.4 7.8 9.2" aria-hidden="true"><path d="M2.5 1.4v9.2L10.3 6z" fill="currentColor"/></svg>Start</button>')+
     '<button type="button" class="icon-btn playlist-icon-btn" onclick="playlistEdit(\''+pl.id+'\','+(pl.builtin?'true':'false')+')" aria-label="'+(pl.builtin?'Duplicate and edit ':'Edit ')+playlistEsc(pl.name)+'" title="'+(pl.builtin?'Duplicate and edit':'Edit')+'">'+
      (pl.builtin?'<svg viewBox="0 0 24 24"><path d="M9 9h10v10H9zM5 15V5h10" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg>':'<svg viewBox="0 0 24 24"><path d="M4 20h4L19 9l-4-4L4 16zM13.5 6.5l4 4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg>')+'</button>'+
     (pl.builtin?'':'<button type="button" class="icon-btn playlist-icon-btn is-danger" onclick="playlistDelete(\''+pl.id+'\')" aria-label="Delete '+playlistEsc(pl.name)+'" title="Delete"><svg viewBox="0 0 24 24"><path d="M5 7h14M10 7V4.5h4V7M7 7l1 13h8l1-13M10.5 11v5M13.5 11v5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></button>')+
@@ -2987,7 +2987,7 @@ document.addEventListener('DOMContentLoaded',function(){
  if(document.getElementById('playlistCard')) setTimeout(playlistLoad,1200);
 });
 
-// Signal Self-Test (System workspace). pgen_selftest.pl does the work; this
+// Signal Self-Test (Output, below Display Settings). pgen_selftest.pl does the work; this
 // renders its JSON state. The mode list mirrors the script's scenarios so the
 // card shows what the test covers before the first run.
 const SELFTEST_MODES=[
@@ -3021,7 +3021,7 @@ function selftestLinkText(link){
  if(!link||!link.format) return '';
  const parts=[link.format];
  // 4:2:2 always reads as the fixed 12-bit container, not a depth.
- if(link.bpc&&!/4:2:2/.test(link.format)) parts.push(link.bpc+' bpc on the cable');
+ if(link.bpc&&!/4:2:2/.test(link.format)) parts.push(link.bpc+'-bit on the cable');
  if(link.csc) parts.push(link.csc==='unity'?'CSC unity':'range CSC active');
  if(link.fb) parts.push('framebuffer '+link.fb);
  return parts.join(' · ');
@@ -3046,7 +3046,7 @@ function selftestModeRow(mode,result,running){
   '</div>':'';
  return '<li class="selftest-mode" data-status="'+selftestEsc(status)+'" data-group="'+groupKey+'">'+
   '<button type="button" class="selftest-mode-head"'+((r.checks||[]).length?' aria-expanded="'+open+'" aria-controls="selftestDetail_'+mode.id+'"':' disabled')+' data-mode="'+mode.id+'">'+
-   '<span class="selftest-mode-id"><span class="selftest-group">'+selftestEsc(mode.group)+'</span><span class="selftest-mode-name">'+selftestEsc(mode.label)+'</span><span class="selftest-depth">'+mode.depth+' bpc</span></span>'+
+   '<span class="selftest-mode-id"><span class="selftest-group">'+selftestEsc(mode.group)+'</span><span class="selftest-mode-title"><span class="selftest-mode-name">'+selftestEsc(mode.label)+'</span><span class="selftest-bits" data-bits="'+mode.depth+'">'+mode.depth+'-bit</span></span></span>'+
    '<span class="selftest-mode-link">'+selftestEsc(r.note||selftestLinkText(r.link))+'</span>'+
    '<span class="selftest-strip" aria-hidden="true">'+strip+'</span>'+
    '<span class="selftest-score">'+score+'</span>'+
@@ -3138,7 +3138,7 @@ async function selftestCopyReport(){
  const lines=['PGenerator+ '+ver+' signal self-test: '+(st.state||'')+(st.finished?' ('+new Date(st.finished*1000).toISOString()+')':''),st.message||''];
  st.scenarios.forEach(r=>{
   lines.push('');
-  lines.push(r.group+' '+r.label+' '+r.depth+' bpc: '+(SELFTEST_STATUS_TEXT[r.status]||r.status)+(r.total?' '+r.passed+'/'+r.total:''));
+  lines.push(r.group+' '+r.label+' '+r.depth+'-bit: '+(SELFTEST_STATUS_TEXT[r.status]||r.status)+(r.total?' '+r.passed+'/'+r.total:''));
   if(r.note) lines.push('  '+r.note);
   if(r.link&&r.link.avi) lines.push('  AVI '+r.link.avi+' | '+selftestLinkText(r.link));
   (r.checks||[]).forEach(c=>lines.push('  '+(c.ok?'ok  ':'FAIL')+' '+c.label+': expected '+c.expect+', read '+c.got));
@@ -3685,7 +3685,7 @@ const PG_METER_CONFIG_COLLAPSE_KEY='pgen.ui.meterConfigCollapsed';
 const PG_DESKTOP_MIN_WIDTH=1024;
 const PG_DESKTOP_WORKSPACES={
  output:'Output',patterns:'Patterns',calibration:'Calibration','3d-lut':'3D LUT','icc-profile':'Display Profiler','meter-profile':'Meter Profiler',
- 'display-control':'LG Display',connectivity:'Connectivity',system:'System',settings:'Settings'
+ connectivity:'Connectivity',system:'System',settings:'Settings'
 };
 let pgThemeMode='dark';
 let pgLayoutPreference='tablet';
@@ -3812,7 +3812,7 @@ function pgUpdateLayoutControls(){
 }
 // Theme ids: each one is a palette over one of the two base themes, so the
 // light-mode overrides and data-theme checks keep working for every palette.
-const PG_THEMES={dark:'dark',light:'light',oled:'dark',graphite:'dark',nord:'dark',amber:'dark',contrast:'dark',paper:'light',natrium:'dark','natrium-light':'light'};
+const PG_THEMES={dark:'dark',light:'light',oled:'dark',graphite:'dark',nord:'dark',amber:'dark',contrast:'dark',paper:'light',natrium:'dark','natrium-light':'light',volt:'dark',scope:'dark',ultraviolet:'dark'};
 let pgThemeId='dark';
 function pgReadThemeMode(){
  try{
@@ -4014,9 +4014,10 @@ function meterSync3dLutWorkspaceUi(){
   button.textContent=(meterSeriesRunning||meterActionPending)?'Building…':'Build 3D LUT';
  }
 }
-// Session moved into the Calibration card and UI Settings into Settings;
-// older links and calls land on the new homes.
-const PG_DESKTOP_WORKSPACE_ALIASES={session:'calibration','ui-settings':'settings'};
+// Session moved into the Calibration card, UI Settings into Settings and LG
+// Display into Connectivity, the Self-Test into Output; older links and calls
+// land on the new homes.
+const PG_DESKTOP_WORKSPACE_ALIASES={session:'calibration','ui-settings':'settings','display-control':'connectivity','self-test':'output'};
 function pgSelectDesktopWorkspace(workspace,options){
  if(PG_DESKTOP_WORKSPACE_ALIASES[workspace]) workspace=PG_DESKTOP_WORKSPACE_ALIASES[workspace];
  if(!Object.prototype.hasOwnProperty.call(PG_DESKTOP_WORKSPACES,workspace)) workspace='output';
@@ -4055,7 +4056,7 @@ function pgSelectDesktopWorkspace(workspace,options){
  if(workspaceChanged&&workspace==='calibration'&&document.body.classList.contains('layout-desktop')&&typeof meterRedrawActiveSeriesCharts==='function'){
   try{ meterRedrawActiveSeriesCharts(); }catch(e){}
  }
- // LG calibration history: only when entering LG Display, not on loadInfo poll.
+ // LG calibration history: only when entering Connectivity, not on loadInfo poll.
  try{ if(typeof lgMaybeRefreshCalHistoryForDesktopWorkspace==='function') lgMaybeRefreshCalHistoryForDesktopWorkspace(workspace,workspaceChanged); }catch(e){}
  pgRefreshVisibleWorkspace();
  if(options&&options.focus&&title){
@@ -4583,11 +4584,11 @@ async function loadInfoframes(){
  if(document.body.classList.contains('desktop-utility-open')) pgSyncDesktopUtilityDrawer();
 }
 
-// Device Info opens the page. Topic order: Signal (output, infoframes, patterns) · Measure (calibration,
-// session) · Display (LG, Resolve, CEC) · Device (network, system, UI, update).
+// Device Info opens the page. Topic order: Signal (output, self-test, infoframes, patterns) · Measure (calibration,
+// session, 3D LUT, Display Profiler) · CEC · Device (network, LG TV control, Resolve, system, UI, update).
 // The key carries a version so the new grouping replaces older saved drags once.
-const PG_DEFAULT_WIDGET_ORDER=['patterns','meter','lg','resolve','cec','wifi','settings'];
-const PG_WIDGET_ORDER_KEY='pg_widget_order_v3';
+const PG_DEFAULT_WIDGET_ORDER=['patterns','meter','cec','wifi','lg','resolve','settings'];
+const PG_WIDGET_ORDER_KEY='pg_widget_order_v5';
 // Widget reorder: POINTER drag on ☰ .drag-handle only (no HTML5 DnD).
 // Drop target = card under the cursor; insert before/after by midpoint.
 // Avoid setPointerCapture + moving the capture node (that combo was a no-op).
@@ -4626,9 +4627,9 @@ const PG_WIDGET_ORDER_KEY='pg_widget_order_v3';
    // orders from before that put it at the default end once.
    const settings=document.getElementById('settingsCard');
    if(!order||!Array.isArray(order)){
-    // Default order follows the sidebar groups (Signal, Measure, Display,
-    // Device) so the tablet scroll matches the jump bar. Infoframes pair
-    // with Dolby Vision in the Output row. A saved drag order still wins.
+    // Default order follows the sidebar groups (Signal, Measure, Device)
+    // so the tablet scroll matches the jump bar. Infoframes pair with Dolby
+    // Vision in the Output row. A saved drag order still wins.
     const map={}; widgets().forEach(w=>{ map[w.dataset.widget]=w; });
     const dv=document.getElementById('dvCard');
     if(map.infoframes&&dv&&dv.parentNode===dash) dash.insertBefore(map.infoframes,dv.nextSibling);
@@ -4636,6 +4637,9 @@ const PG_WIDGET_ORDER_KEY='pg_widget_order_v3';
     PG_DEFAULT_WIDGET_ORDER.forEach(id=>{ if(map[id]) dash.insertBefore(map[id],end); });
     if(map.info) dash.insertBefore(map.info,dash.firstElementChild);
     keepOutputGroup();
+    // The Self-Test follows Display Settings and its HDR/DV/Apply group.
+    const apply=document.getElementById('applyBar');
+    if(map.selftest&&apply&&apply.parentNode===dash) dash.insertBefore(map.selftest,apply.nextSibling);
     return;
    }
    const map={}; widgets().forEach(w=>{ map[w.dataset.widget]=w; });
@@ -4785,24 +4789,20 @@ function setUpdateStatus(text,tone,busy){
   spin.className='spinner';
   el.prepend(spin,' ');
  }
- const colour={ok:'var(--green)',warn:'var(--orange)',error:'var(--red)'}[tone];
- if(colour){
-  el.style.cssText='margin-top:8px;padding:8px 10px;border-radius:8px;font-size:.8rem;font-weight:600;'+
-   'color:'+colour+';border:1px solid '+colour+';background:color-mix(in srgb,'+colour+' 12%,transparent)';
- } else {
-  el.style.cssText='margin-top:6px;font-size:.7rem;color:var(--text2)';
- }
+ if(tone==='ok'||tone==='warn'||tone==='error') el.dataset.tone=tone;
+ else delete el.dataset.tone;
 }
-async function checkUpdate(manual){
+async function checkUpdate(manual,background){
  _updateChecked=true;
  // The release list is its own request (~1 s on the Pi): fetch it alongside
- // the check instead of after it.
- loadReleaseList();
+ // the check instead of after it. The background check on page load leaves
+ // it to the card.
+ if(!background) loadReleaseList();
  const btn=document.getElementById('checkUpdateBtn');
  if(btn) btn.disabled=true;
  setUpdateStatus('Checking GitHub for updates...','',true);
  let r=null;
- try{ r=await fetchJSON('/api/update/check',{_quiet:true,_timeoutMs:30000}); }
+ try{ r=await fetchJSON('/api/update/check'+(manual?'?fresh=1':''),{_quiet:true,_timeoutMs:30000}); }
  finally{ if(btn) btn.disabled=false; }
  const checkedAt=new Date().toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'});
  if(!r||r.status==='error'){
@@ -4860,8 +4860,12 @@ function pgWatchUpdateCard(){
   if(!entries.some(e=>e.isIntersecting)) return;
   io.disconnect();
   if(!_updateChecked) checkUpdate();
+  else if(!window._releaseList) loadReleaseList();
  },{rootMargin:'0px 0px 100% 0px'});
  io.observe(card);
+ // Once per page load, so the header shows an update without a visit to
+ // Settings. Started after the page's own requests.
+ setTimeout(()=>{ if(!_updateChecked) checkUpdate(false,true); },3000);
 }
 if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',pgWatchUpdateCard);
 else pgWatchUpdateCard();

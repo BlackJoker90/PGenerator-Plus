@@ -382,7 +382,7 @@ for(my $n=0;$n<@scenarios;$n++) {
  }
  $entry->{status}="running";
  $state{current}="$sc->{group} $sc->{label}";
- $state{message}="Switching to $sc->{group} $sc->{label}, ".($sc->{depth})." bpc.";
+ $state{message}="Switching to $sc->{group} $sc->{label}, ".($sc->{depth})."-bit.";
  &write_state();
 
  my $err=&apply_config($sc->{config});
@@ -430,7 +430,7 @@ for(my $n=0;$n<@scenarios;$n++) {
  }
  if($format ne "YCbCr 4:2:2") {
   my $want_bpc=$sc->{depth} > 10 ? 10 : $sc->{depth};
-  add_check($entry,"Link depth","$want_bpc bpc",$bpc ? "$bpc bpc" : "unknown",$bpc == $want_bpc);
+  add_check($entry,"Link depth","$want_bpc-bit",$bpc ? "$bpc-bit" : "unknown",$bpc == $want_bpc);
  }
  add_check($entry,"HDR metadata","DRM infoframe",$if->{drm} ? "DRM infoframe" : "none",$if->{drm}) if($sc->{drm});
 

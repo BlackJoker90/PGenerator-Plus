@@ -2001,8 +2001,11 @@ sub webui_handle_request (@) {
    }
    elsif($path eq "/api/update/check") {
     # Allow more time here: the first check after boot may need DNS/TLS setup
-    # or a one-time clock sync before GitHub responds.
-    my @args_b64=map { encode_base64($_,"") } ("BASH_CMD","PGPLUS_CHECK");
+    # or a one-time clock sync before GitHub responds. ?fresh=1 (Check for
+    # Updates) asks GitHub instead of answering from the 5-minute cache.
+    my @args=("BASH_CMD","PGPLUS_CHECK");
+    push(@args,"fresh") if($request_query=~/(?:^|&)fresh=1(?:&|$)/);
+    my @args_b64=map { encode_base64($_,"") } @args;
     my $result=`timeout 25 env $pg_cmd_env="@args_b64" $sudo_cmd 2>/dev/null`;
     chomp($result);
     $result='{"status":"error","message":"Update check timed out — please try again in a few seconds"}' if($result eq "" || $result!~/^\{/);

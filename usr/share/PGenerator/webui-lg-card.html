@@ -21,7 +21,7 @@
    </div>
   </div>
 	 </div>
-	 <div class="card" data-widget="lg" data-desktop-workspace="display-control" data-desktop-order="10" draggable="true">
+	 <div class="card" data-widget="lg" data-desktop-workspace="connectivity" data-desktop-order="20" draggable="true">
 	  <style>
 	   #lgDeviceList::-webkit-scrollbar{width:10px}
 	   #lgDeviceList{background:var(--surface-inset)!important;color:var(--text-primary)!important;scrollbar-color:var(--scroll-thumb) var(--scroll-track)}
@@ -34,21 +34,18 @@
 	   .lg-display-control-open-desktop{display:none}
 	   body.layout-desktop #lgDisplayControlOpenBtn{display:none}
 	   body.layout-desktop #lgCalHistoryOpenBtn{display:none}
-	   body.layout-desktop #lgCardTitle .lg-card-title-label{display:none}
 	   body.layout-desktop .lg-display-control-open-desktop{display:inline-flex;margin:0 0 8px}
 	   body.layout-desktop #lgCalHistoryDesktop{display:block}
 	   .lg-card-title-actions{margin-left:auto;display:inline-flex;gap:var(--btn-gap,8px);min-width:0}
 	   @media(max-width:600px){
 	    #lgCardTitle{flex-wrap:wrap}
 	    #lgCardTitle::after{order:2;margin-left:auto}
-	    #lgStatusBadge{margin-left:0!important}
 	    .lg-card-title-actions{order:3;display:grid;width:100%;grid-template-columns:repeat(2,minmax(0,1fr));margin-left:0}
 	    .lg-card-title-actions .btn{width:100%;min-width:0;justify-content:center;white-space:normal}
 	    body.layout-tablet .dashboard h2 .lg-card-title-actions .btn{min-height:44px}
 	   }
 	   body.layout-tablet #lgCardTitle{flex-wrap:wrap}
 	   body.layout-tablet #lgCardTitle::after{order:2;margin-left:0}
-	   body.layout-tablet #lgStatusBadge{margin-left:auto!important}
 	   body.layout-tablet .lg-card-title-actions{order:3;display:grid;width:100%;grid-template-columns:repeat(2,minmax(0,1fr));margin-left:0}
 	   body.layout-tablet .lg-card-title-actions .btn{width:100%;min-width:0;justify-content:center;white-space:normal}
 	   #lgCalHistoryDesktop{display:none;margin-top:14px;padding-top:12px;border-top:1px solid var(--border)}
@@ -91,7 +88,8 @@
 	   #lgDisplayControlPanel .lg-display-control-row select:disabled,#lgDisplayControlPanel .lg-display-control-row input:disabled{opacity:.65;cursor:not-allowed}
 	   .lg-current-input-value{display:flex;align-items:center;padding:6px 10px;box-sizing:border-box;background:var(--surface-inset);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:.82rem;line-height:normal}
 	  </style>
-	  <h2 id="lgCardTitle" style="gap:8px"><span class="drag-handle">&#9776;</span><span class="lg-card-title-label">LG Display</span><span id="lgStatusBadge" style="font-size:.7rem;padding:2px 8px;border-radius:4px;background:var(--badge-neutral);color:#000;margin-left:8px">Checking...</span><span class="lg-card-title-actions"><button class="btn btn-sm btn-secondary" id="lgCalHistoryOpenBtn" type="button" onclick="lgOpenCalHistoryModal()">History</button><button class="btn btn-sm btn-secondary" id="lgDisplayControlOpenBtn" type="button" onclick="lgOpenDisplayControl()">Display Control</button></span></h2>
+	  <h2 id="lgCardTitle" style="gap:8px"><span class="drag-handle">&#9776;</span><span class="lg-card-title-label">TV Control</span><span class="lg-card-title-actions"><button class="btn btn-sm btn-secondary" id="lgCalHistoryOpenBtn" type="button" onclick="lgOpenCalHistoryModal()">History</button><button class="btn btn-sm btn-secondary" id="lgDisplayControlOpenBtn" type="button" onclick="lgOpenDisplayControl()">Display Control</button></span></h2>
+  <div class="card-section-head"><h3 class="card-section-title"><svg class="card-section-icon" viewBox="182.978 -280.26 33.406 33.41" aria-hidden="true"><path transform="scale(1,-1)" fill="currentColor" fill-rule="evenodd" d="M 199.679,246.85 c 9.226,0 16.705,7.491 16.705,16.703 0,9.229 -7.479,16.707 -16.705,16.707 -9.225,0 -16.701,-7.478 -16.701,-16.707 0,-9.212 7.476,-16.703 16.701,-16.703 z M 199.006,270.894 l 0,-14.661 4.652,0 0,1.317 -3.307,0 0,13.344 -1.345,0 z M 194.342,266.886 c 1.103,0 2.011,0.896 2.011,2.002 0,1.112 -0.908,2.01 -2.011,2.01 -1.103,0 -2.005,-0.898 -2.005,-2.01 0,-1.106 0.902,-2.002 2.005,-2.002 z M 200.351,277.526 c -0.183,0.005 -0.5,0.005 -0.672,0.005 -7.711,0 -13.984,-6.26 -13.984,-13.975 0,-3.731 1.458,-7.246 4.091,-9.883 2.646,-2.643 6.149,-4.112 9.893,-4.112 3.736,0 7.244,1.469 9.888,4.112 2.633,2.637 4.083,6.152 4.083,9.883 l 0,0.639 -9.979,0 0,-1.298 8.655,0 c 0,-0.026 -0.006,-0.169 -0.006,-0.198 -0.426,-6.601 -5.948,-11.811 -12.641,-11.811 -3.38,0 -6.576,1.312 -8.965,3.699 -2.392,2.392 -3.717,5.583 -3.717,8.97 0,3.384 1.325,6.569 3.717,8.96 2.389,2.397 5.585,3.717 8.965,3.717 0.15,0 0.506,-0.008 0.672,-0.011 l 0,1.303 z"/></svg>LG Display</h3><span class="conn-badge" id="lgStatusBadge" data-state="off" role="status">Checking...</span></div>
   <button class="btn btn-sm btn-secondary lg-display-control-open-desktop" type="button" onclick="lgOpenDisplayControl()">Display Control</button>
   <div id="lgCommandStatus" style="display:none;align-items:center;gap:8px;font-size:.78rem;color:var(--text);background:#101522;border:1px solid var(--border);border-radius:6px;padding:7px 9px;margin-bottom:8px">
    <span class="spinner"></span>

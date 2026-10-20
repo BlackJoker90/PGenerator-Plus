@@ -1175,25 +1175,25 @@ function renderLgStatus(r){
 	 lgRenderCurrentInput();
 	 if(pinPending){
     badge.textContent=promptStyle==='controller-pin'?'Enter PIN':'Pairing';
-   badge.style.background='var(--orange)';
+   badge.dataset.state='warn';
 	 }else if(connected){
 	    badge.textContent='Connected';
-	  badge.style.background='var(--green)';
+	  badge.dataset.state='on';
 	 }else if(disconnected&&clientKeyPresent){
 	    badge.textContent='Disconnected';
-	  badge.style.background='var(--badge-neutral)';
+	  badge.dataset.state='off';
 	 }else if(paired||clientKeyPresent){
 	    badge.textContent='Paired';
-	  badge.style.background='var(--green)';
+	  badge.dataset.state='on';
  }else if(hasIp){
     badge.textContent='Ready to Pair';
-  badge.style.background='var(--orange)';
+  badge.dataset.state='warn';
  }else if(detected){
     badge.textContent='Detected';
-    badge.style.background='var(--orange)';
+    badge.dataset.state='warn';
  }else{
     badge.textContent='Needs IP';
-  badge.style.background='var(--text2)';
+  badge.dataset.state='off';
  }
 		 if(connectBtn) connectBtn.textContent=(paired||clientKeyPresent)?'Connect':'Pair With PIN';
 		 if(disconnectBtn) disconnectBtn.disabled=pinPending||!clientKeyPresent||!connected;
@@ -1952,9 +1952,9 @@ function lgCloseCalHistoryModal(){
  const m=document.getElementById('lgCalHistoryModal');
  if(m){ m.style.display='none'; m.setAttribute('aria-hidden','true'); }
 }
-// Desktop: load history only when entering the LG Display workspace.
+// Desktop: load history only when entering the Connectivity workspace.
 function lgMaybeRefreshCalHistoryForDesktopWorkspace(workspace,workspaceChanged){
- if(workspace!=='display-control') return;
+ if(workspace!=='connectivity') return;
  if(!workspaceChanged) return;
  if(!document.body.classList.contains('layout-desktop')) return;
  try{ lgRefreshCalHistory(); }catch(e){}
@@ -2069,5 +2069,5 @@ async function lgCalHistoryDownload(id){
 
 // Calibration history loads only on demand:
 // - tablet: History button -> lgOpenCalHistoryModal()
-// - desktop: navigating to LG Display workspace (pgSelectDesktopWorkspace)
+// - desktop: navigating to the Connectivity workspace (pgSelectDesktopWorkspace)
 

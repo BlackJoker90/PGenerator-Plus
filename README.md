@@ -26,7 +26,9 @@
 
 ---
 
-## Why this fork
+<a id="why-this-fork"></a>
+
+## ✨ Why this fork
 
 This is **BlackJoker90's fork** of [BigShoots/PGenerator-Plus](https://github.com/BigShoots/PGenerator-Plus). It branched from upstream 2.12.1 in September 2026 and has had **115+ commits and 24 releases** since then (2.12.2 → 2.13.x). Upstream has nothing newer that the fork lacks.
 
@@ -131,7 +133,7 @@ Press **OK or Menu on the TV remote** and a menu of every pattern appears on the
 
 > The left column describes upstream behaviour as stated in the fork commits that changed it. Run `git log origin/main..main` in a clone with both remotes for the full list.
 
-## Screenshots
+## 📸 Screenshots
 
 <table>
 <tr>
@@ -152,9 +154,11 @@ Press **OK or Menu on the TV remote** and a menu of every pattern appears on the
 
 ---
 
-## Get started
+<a id="get-started"></a>
 
-### New install: flash the image
+## 🚀 Get started
+
+### 💾 New install: flash the image
 
 1. Download the newest release that has image parts, from [Releases](https://github.com/BlackJoker90/PGenerator-Plus/releases) (`PGenerator_Plus_vX.Y.Z_pi4.img.xz.001` and `.002`).
    Image releases are rare by design. Most releases are OTA-only, so grab the latest image and update from there.
@@ -185,7 +189,7 @@ Press **OK or Menu on the TV remote** and a menu of every pattern appears on the
 
 </details>
 
-### Coming from the original project?
+### 🔀 Coming from the original project?
 
 OTA updates stay within one `MAJOR.MINOR` family. 2.13 needs a new kernel module, so a Pi on upstream 2.12.x cannot update to the fork over the air. To switch:
 
@@ -195,7 +199,7 @@ OTA updates stay within one `MAJOR.MINOR` family. 2.13 needs a new kernel module
 
 From then on the Pi follows this fork's releases. The update source is `usr/share/PGenerator/update-channel`, and an `update_repo=owner/repo` line in `PGenerator.conf` overrides it.
 
-### Updating
+### ⬆️ Updating
 
 - **Web UI:** **Settings → Software Update → Check for Updates → Install Update.** The dialog shows the release notes and download progress, then restarts the service. The release dropdown also lets you reinstall the current release or roll back to an earlier one.
 - **SSH** (`root` / `PGenerator!!$`):
@@ -207,7 +211,7 @@ From then on the Pi follows this fork's releases. The update source is `usr/shar
 
 ---
 
-## What PGenerator+ does
+## 🎨 What PGenerator+ does
 
 PGenerator+ is a free, open-source display calibration suite for the Raspberry Pi 4, built around a precision HDMI test pattern generator. It produces SDR, HDR10, HLG and Dolby Vision patterns. The calibration software on your laptop drives it over TCP/IP, or it runs closed-loop SDR and HDR workflows on the Pi itself with a USB colorimeter.
 
@@ -223,7 +227,9 @@ PGenerator+ is a free, open-source display calibration suite for the Raspberry P
 
 ---
 
-## Calibration software compatibility
+<a id="calibration-software-compatibility"></a>
+
+## 🤝 Calibration software compatibility
 
 **1. Calman (Portrait Displays)**
 
@@ -262,7 +268,7 @@ PGenerator+ is a free, open-source display calibration suite for the Raspberry P
 
 ---
 
-## Web UI tour
+## 🗺️ Web UI tour
 
 Served on **port 80** at `http://pgenerator.local`. It has a **Desktop** layout with a sidebar of workspaces and a **Tablet** layout with draggable, collapsible cards and a bottom tab bar on phones.
 
@@ -311,9 +317,11 @@ On-device closed-loop calibration of LG TVs through the webOS calibration API. L
 
 ---
 
-## Reference
+<a id="reference"></a>
 
-### Signal modes
+## 📚 Reference
+
+### 📡 Signal modes
 
 | Mode | Description |
 |---|---|
@@ -328,7 +336,7 @@ The Pi 4's KMS driver sets the HDMI InfoFrames directly:
 - **DRM:** EOTF, mastering primaries, max/min luminance, MaxCLL, MaxFALL
 - **Dolby Vision:** a DOVI output metadata blob from `PGeneratord.dv`, with DV capability detected from the EDID VSVDB
 
-### Architecture
+### 🏗️ Architecture
 
 ```
 Boot: /etc/init.d/rcPGenerator → /etc/init.d/PGenerator
@@ -378,7 +386,7 @@ PGenerator 1.6 treats this as a normal `GETSTATUS`. PGenerator+ also shows the s
 
 **Privilege separation:** the daemon runs as `pgenerator`. Privileged operations (config writes, service control, updates) go through `PGenerator_cmd.pl` via `sudo`, with base64-encoded environment arguments. The WebUI refuses cross-site requests.
 
-### Configuration
+### ⚙️ Configuration
 
 `/etc/PGenerator/PGenerator.conf`: flat `key=value`, no sections.
 
@@ -404,7 +412,7 @@ PGenerator 1.6 treats this as a normal `GETSTATUS`. PGenerator+ also shows the s
 
 **LUT correction:** `/etc/PGenerator/lut.txt` holds per-channel deltas (`R,G,B=R_delta,G_delta,B_delta`, plus an `ALL` wildcard). The daemon applies them before writing pattern files.
 
-### Hardware
+### 🍓 Hardware
 
 - **Raspberry Pi 4** (or Pi 400). This is required for HDR10/DV and the KMS driver. Other Pi models are not supported.
 - HDMI connection to the display
@@ -561,7 +569,7 @@ Sources: [BigShoots/PGenerator_Source](https://github.com/BigShoots/PGenerator_S
 
 ---
 
-## Credits
+## 🙏 Credits
 
 This fork stands on the shoulders of:
 
@@ -569,7 +577,7 @@ This fork stands on the shoulders of:
 - **[BigShoots/PGenerator-Plus](https://github.com/BigShoots/PGenerator-Plus)**: the original PGenerator+, with the Web UI, HDR/DV configuration, meter workflows, LG AutoCal, profile building and OTA. This fork continues from its 2.12.1.
 - **[docdude/ofxRPI4WindowHDR](https://github.com/docdude/ofxRPI4WindowHDR)**, **[ArgyllCMS](https://www.argyllcms.com/)** and **[HCFR](https://github.com/hcfr/hcfr)**.
 
-## Support the project
+## ☕ Support the project
 
 If this fork saves you time on your calibration bench, a coffee keeps the work going:
 
@@ -577,6 +585,6 @@ If this fork saves you time on your calibration bench, a coffee keeps the work g
   <a href="https://buymeacoffee.com/fabioelia9r"><img src="https://img.shields.io/badge/Buy%20me%20a%20coffee-fabioelia9r-ffdd00?style=for-the-badge&logo=buymeacoffee&logoColor=black" alt="Buy me a coffee"/></a>
 </p>
 
-## License
+## 📜 License
 
 GNU General Public License v3.0. See [COPYING](COPYING).

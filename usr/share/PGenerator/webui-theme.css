@@ -786,7 +786,8 @@ body.dv-profile-done-error #dvProfileDoneStatus{color:#e08184}
 .release-notes code{font-size:.75rem;padding:1px 4px;border-radius:4px;background:color-mix(in srgb,var(--text) 10%,transparent)}
 .release-notes-warn{margin-top:12px;font-size:.78rem;color:var(--text2)}
 /* Software Update card: status right under the versions, notes behind a
-   disclosure, then "Other versions" and "Backup" as titled sections. */
+   disclosure, then "Previous versions" as a titled section. Backup is its own
+   card section below. */
 .update-status{margin-top:10px;font-size:.75rem;color:var(--text2)}
 .update-status:empty{display:none}
 .update-notes{margin-top:10px}

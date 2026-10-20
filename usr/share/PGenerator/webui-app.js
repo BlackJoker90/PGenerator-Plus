@@ -4795,6 +4795,9 @@ function setUpdateStatus(text,tone,busy){
 }
 async function checkUpdate(manual){
  _updateChecked=true;
+ // The release list is its own request (~1 s on the Pi): fetch it alongside
+ // the check instead of after it.
+ loadReleaseList();
  const btn=document.getElementById('checkUpdateBtn');
  if(btn) btn.disabled=true;
  setUpdateStatus('Checking GitHub for updates...','',true);
@@ -4811,7 +4814,10 @@ async function checkUpdate(manual){
  document.getElementById('updateCurrent').textContent='v'+r.current;
  document.getElementById('updateLatest').textContent='v'+r.latest;
  document.getElementById('updatePublished').textContent=r.published?r.published.split('T')[0]:'-';
- pgSetReleaseNotes('updateChangelog',r.update_available?pgReleaseNotesText({notes:r.changelog}):'','What\u2019s new in v'+r.latest);
+ // Notes of the latest release: what an update brings, or what the installed
+ // build changed when it is the latest.
+ pgSetReleaseNotes('updateChangelog',pgReleaseNotesText({notes:r.changelog}),
+  r.update_available?'What\u2019s new in v'+r.latest:'Release notes \u00b7 v'+r.latest);
  window._updateCheck=r;
  // GitHub refused and the device answered from its cache: say how old the
  // answer is instead of reporting it as the latest state.
@@ -4841,9 +4847,24 @@ async function checkUpdate(manual){
   setUpdateStatus('\u2713 No update available — v'+r.current+' is the latest version (checked '+checkedAt+').','ok');
   if(manual) toast('No update available — v'+r.current+' is the latest version.');
  }
- loadReleaseList();
 }
 let _updateChecked=false;
+// Fill the update card (versions, notes, previous versions) the first time
+// it is on screen, not only after "Check for Updates". The device caches
+// GitHub's answer (5 min, then ETag), so this costs no rate limit.
+function pgWatchUpdateCard(){
+ const card=document.getElementById('updateCard');
+ if(!card||!('IntersectionObserver' in window)) return;
+ // Start a screen ahead, so the answers are in when the card scrolls in.
+ const io=new IntersectionObserver(entries=>{
+  if(!entries.some(e=>e.isIntersecting)) return;
+  io.disconnect();
+  if(!_updateChecked) checkUpdate();
+ },{rootMargin:'0px 0px 100% 0px'});
+ io.observe(card);
+}
+if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',pgWatchUpdateCard);
+else pgWatchUpdateCard();
 function showUpdateCard(){
  document.getElementById('updateCard').style.display='';
  if(document.body.classList.contains('layout-desktop')) pgSelectDesktopWorkspace('settings');
@@ -4925,8 +4946,18 @@ async function loadReleaseList(){
  const row=document.getElementById('releaseRow');
  const sel=document.getElementById('releaseSelect');
  if(!row||!sel) return;
+ const btn=document.getElementById('installReleaseBtn');
+ const loading=!window._releaseList;
+ if(loading){
+  sel.innerHTML='<option>Loading releases\u2026</option>';
+  sel.disabled=true;
+  if(btn) btn.disabled=true;
+  row.style.display='';
+ }
  const r=await fetchJSON('/api/update/releases',{_quiet:true,_timeoutMs:30000});
- if(!r||r.status!=='ok'||!Array.isArray(r.releases)||!r.releases.length){row.style.display='none';return;}
+ sel.disabled=false;
+ if(btn&&!(_pgUpd&&_pgUpd.result==='running')) btn.disabled=false;
+ if(!r||r.status!=='ok'||!Array.isArray(r.releases)||!r.releases.length){ if(!window._releaseList) row.style.display='none'; return; }
  window._releaseList=r.releases;
  window._releaseCurrent=r.current;
  sel.innerHTML='';

@@ -1939,7 +1939,7 @@ __PG_LOGO_DARK__
    <div style="margin-top:6px;font-size:.7rem;color:var(--text2)" id="gpuMemNote">Changes require a reboot. Increase if calibration software reports insufficient GPU memory.</div>
   </section>
   <section class="card-section" id="updateCard" aria-labelledby="setTitle_update">
-   <div class="card-section-head"><h3 class="card-section-title" id="setTitle_update"><svg class="card-section-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 12a8 8 0 1 1-2.3-5.6M20 4v4.5h-4.5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><path d="M12 8v5l3 2" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>Software Update</h3></div>
+   <div class="card-section-head"><h3 class="card-section-title" id="setTitle_update"><svg class="card-section-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 18a4.5 4.5 0 0 1-.6-8.96A6 6 0 0 1 17.6 8.3 4 4 0 0 1 17 18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><path d="M12 11v9M8.5 16.5 12 20l3.5-3.5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>Software Update</h3></div>
    <div id="updateContent">
     <div class="info-grid">
      <div class="info-item"><div class="label">Current</div><div class="value" id="updateCurrent">-</div></div>
@@ -1954,7 +1954,7 @@ __PG_LOGO_DARK__
      <button class="btn btn-sm btn-secondary ico-logs" id="submitLogsBtn" onclick="submitLogs()" title="Download a diagnostic report to attach to a GitHub issue">Download Logs</button>
     </div>
     <section class="update-section" id="releaseRow" style="display:none" aria-labelledby="releaseRowTitle">
-     <div class="update-section-title" id="releaseRowTitle">Other versions</div>
+     <div class="update-section-title" id="releaseRowTitle">Previous versions</div>
      <label class="update-field-label" for="releaseSelect">Install a release</label>
      <div class="release-pick">
       <select id="releaseSelect" onchange="onReleaseSelectChange()"></select>
@@ -1962,8 +1962,10 @@ __PG_LOGO_DARK__
      </div>
      <details class="update-notes" id="releaseNotesWrap" hidden><summary id="releaseNotesSummary">Release notes</summary><div id="releaseNotes"></div></details>
     </section>
-    <section class="update-section" aria-labelledby="backupSectionTitle">
-    <div class="update-section-title" id="backupSectionTitle">Backup</div>
+   </div>
+  </section>
+  <section class="card-section" id="backupCard" aria-labelledby="setTitle_backup">
+   <div class="card-section-head"><h3 class="card-section-title" id="setTitle_backup"><svg class="card-section-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="4.5" rx="1" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><path d="M5 8.5V18a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8.5M10 12.5h4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>Backup</h3></div>
     <div class="btn-grid btn-grid-lg">
      <button class="btn btn-sm btn-secondary ico-export" id="exportSystemSettingsBtn" onclick="exportSystemSettings()" title="Download PGenerator+ settings, profiles, calibration history and custom diagnostic media">Export System Settings</button>
      <button class="btn btn-sm btn-secondary ico-import" id="importSystemSettingsBtn" onclick="selectSystemSettingsImport()" title="Restore PGenerator+ settings, profiles, calibration history and custom diagnostic media">Import System Settings</button>
@@ -1971,8 +1973,6 @@ __PG_LOGO_DARK__
     </div>
     <div id="systemBackupStatus" style="margin-top:6px;font-size:.7rem;color:var(--text2)"></div>
     <div class="update-hint">System exports include PGenerator+ configuration, custom series, custom meter and ICC profiles, calibration history, LUTs, Dolby Vision configurations, reports, and user-added diagnostic images and videos. Built-in media, caches, logs, hardware identity, and Companion pairing data are excluded.</div>
-    </section>
-   </div>
   </section>
  </section>
 

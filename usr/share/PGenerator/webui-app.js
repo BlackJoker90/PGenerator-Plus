@@ -101,21 +101,40 @@ function pgHelpTipPrepare(el){
  pgHelpTipText(el);
 }
 function pgHelpTipPlace(el,pop){
- const m=8,r=el.getBoundingClientRect(),vw=document.documentElement.clientWidth;
+ // Rects are in viewport pixels; left/top/max-height are CSS pixels, which
+ // Desktop Zoom (zoom on <html>) scales. Measure in viewport pixels and
+ // divide by the zoom when writing the style.
+ const m=8,r=el.getBoundingClientRect(),vw=window.innerWidth;
  // Stay clear of the fixed header and the phone/tablet bottom bar.
  const nav=document.getElementById('tabletJumpNav'),hdr=document.querySelector('.header');
  const navTop=nav&&!nav.hidden&&nav.getClientRects().length?nav.getBoundingClientRect().top:window.innerHeight;
  const hdrBottom=hdr&&getComputedStyle(hdr).position!=='static'?Math.max(0,hdr.getBoundingClientRect().bottom):0;
  const minTop=Math.min(hdrBottom,r.top)+m,maxBottom=Math.max(navTop,r.bottom)-m;
- const below=maxBottom-(r.bottom+6),above=(r.top-6)-minTop;
- pop.style.maxHeight='';pop.style.left='0px';pop.style.top='0px';
- const w=pop.offsetWidth;
- let left=Math.min(Math.max(m,r.left+r.width/2-w/2),vw-w-m);
- let h=pop.offsetHeight,top;
- if(h<=below||below>=above){h=Math.min(h,below);top=r.bottom+6;}
- else{h=Math.min(h,above);top=r.top-6-h;}
- pop.style.maxHeight=Math.max(60,Math.floor(h))+'px';
- pop.style.left=Math.round(left)+'px';pop.style.top=Math.round(top)+'px';
+ const gap=8,below=maxBottom-(r.bottom+gap),above=(r.top-gap)-minTop;
+ pop.style.maxHeight='none';pop.style.maxWidth='';pop.style.left='0px';pop.style.top='0px';
+ const z=pop.offsetWidth?pop.getBoundingClientRect().width/pop.offsetWidth:1;
+ let pr=pop.getBoundingClientRect();
+ // A long text that fits neither side gets a wider card before it would scroll.
+ if(pr.height>Math.max(below,above)){
+  pop.style.maxWidth=Math.floor(Math.min(560*z,vw-2*m)/z)+'px';
+  pr=pop.getBoundingClientRect();
+ }
+ const w=pr.width;
+ let h=pr.height,top,side;
+ // Open where the whole text fits. A text taller than both sides is placed
+ // freely between header and bottom bar (over the tip) rather than cut.
+ let freeTop=hdrBottom+m,freeBottom=navTop-m;
+ // Still too tall: let it cover header and bottom bar too (it sits above both).
+ if(h>freeBottom-freeTop&&h>Math.max(below,above)){freeTop=m;freeBottom=window.innerHeight-m;}
+ if(h<=below){top=r.bottom+gap;side='below';}
+ else if(h<=above){top=r.top-gap-h;side='above';}
+ else if(h<=freeBottom-freeTop){top=Math.min(Math.max(freeTop,r.bottom+gap-h/2),freeBottom-h);side='free';}
+ else{h=freeBottom-freeTop;top=freeTop;side='free';}
+ const left=Math.min(Math.max(m,r.left+r.width/2-w/2),vw-w-m);
+ pop.dataset.side=side;
+ // Round up: a cap a fraction of a pixel short of the text shows a scrollbar.
+ pop.style.maxHeight=h>=pr.height?'none':Math.max(60,Math.floor(h/z))+'px';
+ pop.style.left=Math.round(left/z)+'px';pop.style.top=Math.round(top/z)+'px';
 }
 function pgHelpTipShow(el,pinned){
  const pop=document.getElementById('helpTipPop');
@@ -1067,6 +1086,7 @@ function updateModeVisibility(){
 	 document.getElementById(id).addEventListener('change',updateDropdowns);
 	});
 document.getElementById('mode_idx').addEventListener('change',updateModeSelectLabel);
+document.getElementById('max_bpc').addEventListener('change',function(){ pgSyncRangeLabels(); });
 
 function meterDefaultTargetGamutForMode(){
  const sm=(document.getElementById('signal_mode')||{}).value||'sdr';
@@ -1333,6 +1353,26 @@ function updateModeSelectLabel(){
  const opt=sel.options[sel.selectedIndex];
  label.textContent=opt?opt.textContent:'';
  label.title=opt?(opt.title||opt.textContent):'';
+ pgSyncModeSelectEmpty();
+}
+
+// Without a display the mode list is empty: say so in the field instead of
+// showing a blank select, and lock it until modes arrive.
+function pgSyncModeSelectEmpty(){
+ const sel=document.getElementById('mode_idx');
+ const label=document.getElementById('mode_idx_text');
+ if(!sel||!label)return;
+ const wrap=sel.closest('.mode-select-wrap');
+ const field=sel.closest('.field');
+ const empty=!sel.options.length;
+ const noDisplay=empty&&pgHdmiConnected===false;
+ sel.disabled=empty;
+ if(wrap){wrap.classList.toggle('is-empty',empty);wrap.classList.toggle('is-no-display',noDisplay);}
+ if(field) field.classList.toggle('is-no-display',noDisplay);
+ if(empty){
+  label.textContent=noDisplay?'No display detected':'Reading display modes\u2026';
+  label.title=noDisplay?'Plug in an HDMI display; its resolutions appear here':'';
+ }
 }
 
 function setModeSelectValue(value){
@@ -1492,8 +1532,12 @@ function updateDropdowns(){
   if(!allowedBpc.includes(bpcSel.value)) bpcSel.value=dvTransport.max_bpc;
   const rngSel=document.getElementById('rgb_quant_range');
   const targetRange=dvTransport.rgb_quant_range;
-  Array.from(rngSel.options).forEach(function(o){o.disabled=o.value!==targetRange;o.style.display=o.value===targetRange?'':'none';});
   rngSel.value=targetRange;
+  Array.from(rngSel.options).forEach(function(o){
+   if(o.value==='0') return;
+   pgSetOptionUnavailable(o,o.value===targetRange?'':'Set by Dolby Vision');
+  });
+  pgSyncRangeDefaultOption(rngSel);
   // The platform DV transport uses its configured TMDS bandwidth.
   const maxTmds=(caps&&caps.max_tmds)?caps.max_tmds*1000:600000;
   let curModeValid=false;
@@ -1547,6 +1591,7 @@ function updateDropdowns(){
  if(validBpc.indexOf(curBpc)<0&&validBpc.length>0){
   bpcSel.value=String(validBpc[0]);
  }
+ uiEnforceQuantRangeForColorFormat();
  checkSettingsChanged();
 }
 
@@ -1636,24 +1681,33 @@ async function loadInfo(quiet){
   document.getElementById('updateCurrent').textContent='v'+info.version;
  }
  const g=document.getElementById('infoGrid');
+ // GPU memory and scaling type are live selects: keep their tiles, rebuild the rest
+ const ctl=id=>document.getElementById(id);
+ const ctlTiles=['gpuMemField','cmaMemField','governorField'].map(ctl).filter(Boolean);
+ ctlTiles.forEach(t=>t.remove());
  g.innerHTML='';
- addInfo(g,'Hostname',info.hostname);
- addInfo(g,'Resolution',info.resolution);
- addInfo(g,'Uptime',formatUptime(info.uptime),'deviceInfoUptime');
- addInfo(g,'Temp',info.temperature+'\u00B0C','deviceInfoTemperature');
- if(info.total_ram) addInfo(g,'RAM',info.total_ram+'MB');
- if(info.gpu_mem) addInfo(g,'GPU Mem',info.gpu_mem);
- // Update GPU Memory card readout
- // On a Pi 5 the card shows the CMA pool (loadMemory); the firmware split
- // in /api/info is a fixed 8M there and must not overwrite that readout.
- if(info.gpu_mem&&memoryModel!=='cma'){
-  const gi=document.getElementById('gpuMemInfo');
-  if(gi){gi.innerHTML='';addInfo(gi,'Current',info.gpu_mem);}
+ // The two settings lead, so they share the first row at every column count
+ // (the number of interface tiles after them varies)
+ ctlTiles.forEach(t=>g.appendChild(t));
+ if(info.model){
+  // "Raspberry Pi 4 Model B Rev 1.5" is too long for a tile; the full name stays in the tooltip
+  addDeviceFact(g,'board','Board',String(info.model).replace(/^Raspberry\s+/,''));
+  g.lastElementChild.querySelector('.value').title=info.model;
  }
+ addDeviceFact(g,'host','Hostname',info.hostname);
+ addDeviceFact(g,'display','Resolution',info.resolution);
+ addDeviceFact(g,'clock','Uptime',formatUptime(info.uptime),'deviceInfoUptime');
+ if(info.temperature) pgSetDeviceTemperature(Number(info.temperature));
+ if(info.total_ram) addDeviceFact(g,'ram','RAM',info.total_ram+' MB');
+ // Pi 4: the firmware split is small on purpose; graphics run from the CMA pool
+ const gpuTip=ctl('gpuMemTip');
+ if(gpuTip) pgSetTipSuffix(gpuTip,info.cma_mb?' CMA pool on this Pi: '+info.cma_mb+' MB.':'');
  if(info.interfaces){
   Object.entries(info.interfaces).forEach(([iface,ip])=>{
+   if(iface==='usb0') return;
    const name=IFACE_NAMES[iface]||iface;
-   addInfo(g,name,ip,iface==='ap0'?'deviceInfoApAddress':'');
+   const icon=iface==='ap0'?'ap':/^wlan/.test(iface)?'wifi':/^bnep/.test(iface)?'bt':iface==='usb0'?'usb':'eth';
+   addDeviceFact(g,icon,name,ip,iface==='ap0'?'deviceInfoApAddress':'');
   });
   pgSyncDeviceInfoAp();
  }
@@ -1898,6 +1952,7 @@ function pgUpdateNoHdmiBanner(connected){
  const changed=pgHdmiConnected!==null&&pgHdmiConnected!==connected;
  if(connected&&pgHdmiConnected===false&&typeof loadModes==='function') loadModes(true);
  pgHdmiConnected=connected;
+ pgSyncModeSelectEmpty();
  // Plugging or unplugging changes what is on the wire: re-read the infoframes.
  if(changed&&typeof loadInfoframes==='function') loadInfoframes();
  pgRenderHeaderSignal();
@@ -1996,11 +2051,11 @@ async function loadStats(quiet){
  const cpuVal=document.getElementById('cpuUsageValue');
  const memVal=document.getElementById('memUsageValue');
  if(cpuVal){
-  cpuVal.className='stat-value'+statToneClass(cpuPct);
+  cpuVal.className='stat-value devinfo-value'+statToneClass(cpuPct);
   cpuVal.textContent=isNaN(cpuPct)?'--%':cpuPct+'%';
  }
  if(memVal){
-  memVal.className='stat-value'+statToneClass(memPct);
+  memVal.className='stat-value devinfo-value'+statToneClass(memPct);
   memVal.textContent=isNaN(memPct)?'--%':memPct+'%';
  }
  setMeter('cpuUsageBar',cpuPct);
@@ -2018,14 +2073,9 @@ async function loadStats(quiet){
  const temperatureRaw=stats.temperature_c;
  const temperature=Number(temperatureRaw);
  if(temperatureRaw!==null&&temperatureRaw!==''&&Number.isFinite(temperature)){
-  const temperatureText=(Math.round(temperature*10)/10).toFixed(1).replace(/\.0$/,'')+'\u00B0C';
+  const temperatureText=pgSetDeviceTemperature(temperature);
   const headerTemperature=document.getElementById('tempDisplay');
-  const deviceTemperature=document.getElementById('deviceInfoTemperature');
   if(headerTemperature) headerTemperature.textContent=temperatureText;
-  if(deviceTemperature){
-   deviceTemperature.textContent=temperatureText;
-   deviceTemperature.title=temperatureText;
-  }
  }
  const uptime=Number(stats.uptime_seconds);
  const deviceUptime=document.getElementById('deviceInfoUptime');
@@ -2037,6 +2087,48 @@ async function loadStats(quiet){
 }
 function setSwitch(id,on){const e=document.getElementById(id);if(e)e.checked=!!on;}
 function switchBusy(id,busy){const e=document.getElementById(id);if(e)e.disabled=!!busy;}
+// Device Info: the SoC temperature as a vital. The bar spans 0-85 degC (the
+// hard limit); the tones follow the 80 degC throttle point.
+function pgSetDeviceTemperature(t){
+ const text=(Math.round(t*10)/10).toFixed(1).replace(/\.0$/,'')+'\u00B0C';
+ const v=document.getElementById('deviceInfoTemperature');
+ if(v){
+  v.textContent=text;v.title=text;
+  v.className='stat-value devinfo-value'+(t>=80?' bad':t>=75?' hot':t>=70?' warn':'');
+ }
+ setMeter('deviceTempBar',t/85*100);
+ return text;
+}
+// Line icons for the Device Info facts, drawn in the theme accent.
+const PG_DEVICE_FACT_ICONS={
+ board:'<rect x="3" y="5" width="18" height="14" rx="2"/><rect x="9.5" y="9.5" width="5" height="5" rx=".6"/><circle cx="6.5" cy="8.5" r=".8"/><circle cx="17.5" cy="8.5" r=".8"/><circle cx="6.5" cy="15.5" r=".8"/><circle cx="17.5" cy="15.5" r=".8"/>',
+ host:'<rect x="3.5" y="4" width="17" height="7" rx="1.5"/><rect x="3.5" y="13" width="17" height="7" rx="1.5"/><path d="M7.5 7.5h.01M7.5 16.5h.01"/>',
+ display:'<rect x="3" y="4" width="18" height="12" rx="1.5"/><path d="M8.5 20h7M12 16v4"/>',
+ clock:'<circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/>',
+ ram:'<rect x="3" y="7" width="18" height="9" rx="1.5"/><path d="M7 16v3M11 16v3M15 16v3M7 10.5v2M11 10.5v2M15 10.5v2"/>',
+ chip:'<rect x="6" y="6" width="12" height="12" rx="1.5"/><rect x="9.5" y="9.5" width="5" height="5" rx=".5"/><path d="M9 2.5V6M15 2.5V6M9 18v3.5M15 18v3.5M2.5 9H6M2.5 15H6M18 9h3.5M18 15h3.5"/>',
+ eth:'<path d="M3.5 5.5h17v10H16v3H8v-3H3.5z"/><path d="M8 9v2.5M12 9v2.5M16 9v2.5"/>',
+ usb:'<path d="M12 3.5v13"/><circle cx="12" cy="18.5" r="2"/><path d="M12 14.5l-4.5-2.5V9M12 12l4.5-2.5V7"/><circle cx="7.5" cy="8" r="1.2"/><path d="M15.5 5h2v2h-2z"/>',
+ wifi:'<path d="M2.5 9a14 14 0 0 1 19 0M5.5 12.3a9.6 9.6 0 0 1 13 0M8.6 15.5a5.2 5.2 0 0 1 6.8 0"/><circle cx="12" cy="19" r="1.3" fill="currentColor"/>',
+ ap:'<circle cx="12" cy="12" r="1.6"/><path d="M8.5 15.5a5 5 0 0 1 0-7M15.5 8.5a5 5 0 0 1 0 7M5.6 18.4a9 9 0 0 1 0-12.8M18.4 5.6a9 9 0 0 1 0 12.8"/>',
+ bt:'<path d="M7 7.5l10 9-5 4.5v-18l5 4.5-10 9"/>'
+};
+// Help tips keep their text in data-tip once the tooltip has taken over title
+function pgSetTipSuffix(tip,suffix){
+ const attr=tip.hasAttribute('data-tip')?'data-tip':'title';
+ if(tip.dataset.base==null) tip.dataset.base=tip.getAttribute(attr)||'';
+ tip.setAttribute(attr,tip.dataset.base+suffix);
+}
+function addDeviceFact(g,icon,label,value,valueId){
+ addInfo(g,label,value,valueId);
+ const d=g.lastElementChild;
+ d.classList.add('devinfo-fact');
+ const svg=document.createElementNS('http://www.w3.org/2000/svg','svg');
+ svg.setAttribute('class','devinfo-icon');svg.setAttribute('viewBox','0 0 24 24');svg.setAttribute('aria-hidden','true');
+ Object.entries({fill:'none',stroke:'currentColor','stroke-width':'1.8','stroke-linecap':'round','stroke-linejoin':'round'}).forEach(([k,v])=>svg.setAttribute(k,v));
+ svg.innerHTML=PG_DEVICE_FACT_ICONS[icon]||'';
+ d.insertBefore(svg,d.firstChild);
+}
 function addInfo(g,label,value,valueId){
  const d=document.createElement('div');d.className='info-item';
  const l=document.createElement('div');l.className='label';l.textContent=label;
@@ -3200,12 +3292,11 @@ function setPowerButtonState(online){
 let memoryModel='gpu_mem';
 async function loadMemory(){
  const m=await fetchJSON('/api/boot/memory',{_quiet:true});
- if(!m)return;
+ if(!m){loadGovernor();return;}
  memoryModel=(m.memory_model==='cma')?'cma':'gpu_mem';
  const gpuField=document.getElementById('gpuMemField');
  const cmaField=document.getElementById('cmaMemField');
- const note=document.getElementById('gpuMemNote');
- const g=document.getElementById('gpuMemInfo');
+ const cmaTip=document.getElementById('cmaMemTip');
  if(memoryModel==='cma'){
   if(gpuField)gpuField.style.display='none';
   if(cmaField)cmaField.style.display='';
@@ -3216,42 +3307,138 @@ async function loadMemory(){
     const o=document.createElement('option');o.value=configured;o.textContent=configured+' MB';sel.appendChild(o);
    }
    sel.value=configured;
+   sel.dataset.applied=configured;
   }
-  if(g){
-   g.innerHTML='';
-   addInfo(g,'CMA pool',(m.cma_total_mb!=null?m.cma_total_mb+' MB':'unknown')+(m.cma_free_mb!=null?' ('+m.cma_free_mb+' MB free)':''));
-   addInfo(g,'Configured',configured==='default'?'default (64 MB)':configured+' MB');
-   addInfo(g,'Firmware split',(m.gpu_mem||'8')+' MB (not used on Pi 5)');
+  if(cmaTip){
+   pgSetTipSuffix(cmaTip,' Now: '+(m.cma_total_mb!=null?m.cma_total_mb+' MB':'unknown')+(m.cma_free_mb!=null?', '+m.cma_free_mb+' MB free':'')+'; firmware split '+(m.gpu_mem||'8')+' MB (not used on Pi 5).');
   }
-  if(note)note.textContent='Changes require a reboot. The Pi 5 renderer allocates its scanout buffers from this pool; a 4K 10-bit buffer needs about 32 MB, so use 256 MB or more for 4K 10-bit patterns.';
  }else{
   if(gpuField)gpuField.style.display='';
   if(cmaField)cmaField.style.display='none';
   setVal('gpu_mem',m.gpu_mem||'128');
-  if(g){
-   g.innerHTML='';
-   addInfo(g,'Current',m.gpu_mem+'MB');
-  }
-  if(note)note.textContent='Changes require a reboot. Increase if calibration software reports insufficient GPU memory.';
+  const gsel=document.getElementById('gpu_mem');
+  if(gsel) gsel.dataset.applied=gsel.value;
  }
+ loadGovernor();
 }
 
+// Picking a new size in either memory select asks right away: the change
+// only takes effect after a reboot, so the dialog says so and reboots.
 async function applyMemory(){
- let body,prompt;
- if(memoryModel==='cma'){
-  const cma=getVal('cma_mb');
-  prompt='Set the CMA graphics memory pool to '+(cma==='default'?'the 64 MB default':cma+' MB')+' and reboot?';
-  body={cma_mb:cma};
- }else{
-  const gpu=getVal('gpu_mem');
-  prompt='Set GPU memory to '+gpu+'MB and reboot?';
-  body={gpu_mem:gpu};
- }
- if(!await pgConfirm({title:prompt,acceptLabel:'Apply & Reboot',destructive:true,tone:'caution'}))return;
+ const cma=memoryModel==='cma';
+ const sel=document.getElementById(cma?'cma_mb':'gpu_mem');
+ if(!sel) return;
+ const from=sel.dataset.applied||'',to=sel.value;
+ if(to===from) return;
+ const mb=v=>v==='default'?'64 MB':v+' MB';
+ const ok=await pgConfirmReboot({
+  title:cma?'Change the graphics memory pool?':'Change the GPU memory?',
+  from:from?mb(from):'',to:mb(to),
+  body:'PGenerator+ restarts the Pi to apply it. Patterns and calibration software disconnect until it is back; this page reconnects on its own.'
+ });
+ if(!ok){ sel.value=from||sel.value; return; }
  const r=await fetchJSON('/api/boot/memory',{method:'POST',
-  headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
- if(r&&r.status==='ok') toast(r.message);
- else toast(pgFailMsg('Couldn\u2019t change the GPU memory split',r),'err');
+  headers:{'Content-Type':'application/json'},body:JSON.stringify(cma?{cma_mb:to}:{gpu_mem:to})});
+ if(r&&r.status==='ok'){ sel.dataset.applied=to; toast(r.message); }
+ else{ sel.value=from||sel.value; toast(pgFailMsg('Couldn\u2019t change the GPU memory',r),'err'); }
+}
+
+// Reboot confirmation: a themed dialog that shows the change (old -> new)
+// and resolves true on "Apply & Reboot" (or o.acceptLabel; o.notesNode adds
+// scrolling release notes). Esc, Cancel or a backdrop click
+// resolve false. Focus starts on Cancel and stays inside the dialog.
+function pgConfirmReboot(o){
+ return new Promise(resolve=>{
+  const opener=document.activeElement;
+  const root=document.createElement('div');
+  root.className='pg-reboot-dialog';
+  root.innerHTML='<div class="pg-reboot-backdrop"></div>'
+   +'<div class="pg-reboot-card" role="alertdialog" aria-modal="true" aria-labelledby="pgRebootTitle" aria-describedby="pgRebootBody">'
+   +'<div class="pg-reboot-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 12a8 8 0 1 1-2.34-5.66"/><path d="M20 4v4.5h-4.5"/></svg></div>'
+   +'<h2 class="pg-reboot-title" id="pgRebootTitle"></h2>'
+   +'<div class="pg-reboot-change" aria-hidden="true"><span class="pg-reboot-from"></span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg><span class="pg-reboot-to"></span></div>'
+   +'<p class="pg-reboot-body" id="pgRebootBody"></p>'
+   +'<div class="pg-reboot-actions"><button type="button" class="btn btn-secondary pg-reboot-cancel">Cancel</button><button type="button" class="btn btn-warning pg-reboot-accept">Apply &amp; Reboot</button></div>'
+   +'</div>';
+  root.querySelector('.pg-reboot-title').textContent=o.title||'Reboot to apply?';
+  root.querySelector('.pg-reboot-body').textContent=o.body||'';
+  const accept0=root.querySelector('.pg-reboot-accept');
+  if(o.acceptLabel) accept0.textContent=o.acceptLabel;
+  if(o.acceptClass) accept0.className='btn '+o.acceptClass+' pg-reboot-accept';
+  // Optional node (release notes) between the change chips and the body text
+  if(o.notesNode){
+   const n=document.createElement('div');n.className='pg-reboot-notes';n.appendChild(o.notesNode);
+   root.querySelector('.pg-reboot-body').before(n);
+   root.querySelector('.pg-reboot-card').classList.add('has-notes');
+  }
+  const change=root.querySelector('.pg-reboot-change');
+  if(o.from&&o.to){
+   root.querySelector('.pg-reboot-from').textContent=o.from;
+   root.querySelector('.pg-reboot-to').textContent=o.to;
+   // The chips are visual; screen readers get the change as text in the body.
+   const sr=document.createElement('span');sr.className='sr-only';sr.textContent=o.from+' to '+o.to+'. ';
+   root.querySelector('.pg-reboot-body').prepend(sr);
+  }else change.remove();
+  const cancel=root.querySelector('.pg-reboot-cancel'),accept=root.querySelector('.pg-reboot-accept');
+  let done=false;
+  const close=val=>{
+   if(done) return; done=true;
+   document.removeEventListener('keydown',onKey,true);
+   root.classList.add('is-leaving');
+   const finish=()=>{root.remove();uiSyncBodyScrollLock();if(opener&&opener.focus&&opener.isConnected) opener.focus();};
+   const reduce=window.matchMedia&&window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+   if(reduce) finish(); else setTimeout(finish,180);
+   resolve(val);
+  };
+  const onKey=e=>{
+   if(e.key==='Escape'){e.preventDefault();e.stopPropagation();close(false);}
+   else if(e.key==='Tab'){
+    e.preventDefault();
+    (document.activeElement===cancel?accept:cancel).focus();
+   }
+  };
+  cancel.onclick=()=>close(false);
+  accept.onclick=()=>close(true);
+  root.querySelector('.pg-reboot-backdrop').onclick=()=>close(false);
+  document.addEventListener('keydown',onKey,true);
+  document.body.appendChild(root);
+  uiSyncBodyScrollLock();
+  requestAnimationFrame(()=>{root.classList.add('is-open');cancel.focus();});
+ });
+}
+
+// CPU frequency scaling governor, shown as "Scaling Type". Applies at once.
+const PG_GOVERNOR_LABELS={performance:'Performance \u26a1',ondemand:'On demand \ud83d\udcc8',
+ schedutil:'Scheduler-driven \ud83e\udde0',conservative:'Conservative \ud83d\udc22',powersave:'Power save \ud83d\udd0b'};
+let pgGovernorCurrent='';
+async function loadGovernor(){
+ const g=await fetchJSON('/api/system/governor',{_quiet:true});
+ const sel=document.getElementById('cpu_governor');
+ if(!g||!sel||!Array.isArray(g.available))return;
+ // userspace pins a frequency nobody sets here; leave it out
+ const list=g.available.filter(v=>v!=='userspace'||v===g.governor);
+ list.sort((a,b)=>(a==='performance'?-1:b==='performance'?1:0));
+ sel.innerHTML='';
+ list.forEach(v=>{const o=document.createElement('option');o.value=v;o.textContent=PG_GOVERNOR_LABELS[v]||v;
+  // The open dropdown flags it with a chip, like the installed release
+  if(v==='performance') o.dataset.pgBadge='Recommended';
+  sel.appendChild(o);});
+ sel.value=g.governor;
+ pgGovernorCurrent=g.governor;
+}
+
+async function applyGovernor(){
+ const sel=document.getElementById('cpu_governor');
+ if(!sel||sel.value===pgGovernorCurrent)return;
+ const r=await fetchJSON('/api/system/governor',{method:'POST',
+  headers:{'Content-Type':'application/json'},body:JSON.stringify({governor:sel.value})});
+ if(r&&r.status==='ok'&&r.governor===sel.value){
+  pgGovernorCurrent=r.governor;
+  toast('Scaling type set to '+(PG_GOVERNOR_LABELS[r.governor]||r.governor));
+ }else{
+  sel.value=pgGovernorCurrent;
+  toast(pgFailMsg('Couldn\u2019t change the scaling type',r),'err');
+ }
 }
 
 async function scanWifi(){
@@ -3680,6 +3867,10 @@ async function resolveDisconnect(){
 const PG_LAYOUT_STORAGE_KEY='pgen.ui.layoutMode';
 const PG_THEME_STORAGE_KEY='pgen.ui.themeMode';
 const PG_DESKTOP_ZOOM_STORAGE_KEY='pgen.ui.desktopZoom';
+// "Measure Workspaces: Hide" for pattern-only setups (browser-local, like the theme)
+const PG_MEASURE_STORAGE_KEY='pgen.ui.hideMeasure';
+const PG_MEASURE_WORKSPACES=['calibration','meter-profile','3d-lut','icc-profile'];
+let pgHideMeasure=false;
 const PG_DESKTOP_SIDEBAR_STORAGE_KEY='pgen.ui.desktopSidebarCollapsed';
 const PG_METER_CONFIG_COLLAPSE_KEY='pgen.ui.meterConfigCollapsed';
 const PG_DESKTOP_MIN_WIDTH=1024;
@@ -4021,6 +4212,7 @@ const PG_DESKTOP_WORKSPACE_ALIASES={session:'calibration','ui-settings':'setting
 function pgSelectDesktopWorkspace(workspace,options){
  if(PG_DESKTOP_WORKSPACE_ALIASES[workspace]) workspace=PG_DESKTOP_WORKSPACE_ALIASES[workspace];
  if(!Object.prototype.hasOwnProperty.call(PG_DESKTOP_WORKSPACES,workspace)) workspace='output';
+ if(pgHideMeasure&&PG_MEASURE_WORKSPACES.indexOf(workspace)>=0) workspace='output';
  const previousWorkspace=pgDesktopWorkspace;
  const workspaceChanged=pgDesktopWorkspace!==workspace;
  pgDesktopWorkspace=workspace;
@@ -4103,6 +4295,24 @@ function meterSyncGreyscaleDesktopLayout(){
  }else if(live.previousElementSibling!==home){
   home.insertAdjacentElement('afterend',live);
  }
+}
+function pgReadHideMeasure(){
+ try{ return localStorage.getItem(PG_MEASURE_STORAGE_KEY)==='1'; }catch(e){ return false; }
+}
+// body.pg-hide-measure hides the Measure nav group, its cards and the meter
+// status (CSS). The tablet bar is built from visible cards, so it follows.
+function pgApplyHideMeasure(){
+ document.body.classList.toggle('pg-hide-measure',pgHideMeasure);
+ document.querySelectorAll('.layout-switch-btn[data-measure-mode]').forEach(btn=>{
+  btn.setAttribute('aria-pressed',(btn.getAttribute('data-measure-mode')==='hidden')===pgHideMeasure?'true':'false');
+ });
+ if(pgHideMeasure&&PG_MEASURE_WORKSPACES.indexOf(pgDesktopWorkspace)>=0) pgSelectDesktopWorkspace('output');
+ pgScheduleTabletNavSync();
+}
+function pgSetHideMeasure(hide){
+ pgHideMeasure=!!hide;
+ try{ localStorage.setItem(PG_MEASURE_STORAGE_KEY,pgHideMeasure?'1':'0'); }catch(e){}
+ pgApplyHideMeasure();
 }
 function pgSetLayoutPreference(mode){
  pgLayoutPreference=mode==='desktop'?'desktop':'tablet';
@@ -4341,12 +4551,15 @@ function pgLayoutInit(){
  pgLayoutPreference=pgReadLayoutPreference();
  pgDesktopZoom=pgReadDesktopZoom();
  pgDesktopSidebarCollapsed=pgReadDesktopSidebarCollapsed();
+ pgHideMeasure=pgReadHideMeasure();
+ document.body.classList.toggle('pg-hide-measure',pgHideMeasure);
  pgLayoutEffective='tablet';
  pgDesktopWorkspace='output';
  pgLayoutViewportWidth=Math.round(window.innerWidth||0);
  pgLayoutViewportHeight=Math.round(window.innerHeight||0);
  pgUpdateHeaderOffset();
  pgApplyLayout({resetWorkspace:true});
+ pgApplyHideMeasure();
  meterSyncConfigurationCollapse();
  const header=document.querySelector('.header');
  if(header&&window.ResizeObserver){
@@ -4475,7 +4688,7 @@ function pgSyncDesktopUtilityDrawer(){
  const cecDevices=document.getElementById('cecDeviceList');
  const cecDevicesOut=document.getElementById('desktopUtilityCecDevices');
  pgUtilitySetText(cecDevicesOut,cecDevices?String(cecDevices.innerText||cecDevices.textContent||'Not scanned yet').trim():'Not scanned yet');
- const deviceRows=[['CPU Usage',String((document.getElementById('cpuUsageValue')||{}).textContent||'--%').trim()],['Memory Usage',String((document.getElementById('memUsageValue')||{}).textContent||'--%').trim()]];
+ const deviceRows=[['CPU Usage',String((document.getElementById('cpuUsageValue')||{}).textContent||'--%').trim()],['Memory Usage',String((document.getElementById('memUsageValue')||{}).textContent||'--%').trim()],['Temp',String((document.getElementById('deviceInfoTemperature')||{}).textContent||'--').trim()]];
  const info=document.getElementById('infoGrid');
  if(info){
   info.querySelectorAll('.info-item').forEach(item=>{
@@ -4792,6 +5005,32 @@ function setUpdateStatus(text,tone,busy){
  if(tone==='ok'||tone==='warn'||tone==='error') el.dataset.tone=tone;
  else delete el.dataset.tone;
 }
+// Result of a check on the Current tile: chip "Up to date" / "Update
+// available" and a short accent flash; no state hides the chip.
+function pgMarkCurrentTile(state,title){
+ const v=document.getElementById('updateCurrent');
+ const tile=v&&v.closest('.info-item');
+ const chip=document.getElementById('updateCurrentChip');
+ if(chip){
+  chip.hidden=!state;
+  chip.dataset.state=state||'';
+  chip.textContent=state==='available'?'Update available':'Up to date';
+ }
+ if(!tile) return;
+ tile.title=title||'';
+ tile.classList.remove('is-flash');
+ if(!state) return;
+ void tile.offsetWidth;
+ tile.classList.add('is-flash');
+ tile.addEventListener('animationend',()=>tile.classList.remove('is-flash'),{once:true});
+}
+// OTA package target ("pi4-biasi") as board and OS ("Pi 4 \u00b7 BiasiLinux")
+function pgUpdateTargetLabel(t){
+ const m=/^pi(\d+)-?(.*)$/.exec(t||'');
+ if(!m) return t||'-';
+ const os={biasi:'BiasiLinux',bookworm:'Bookworm'}[m[2]]||m[2];
+ return 'Pi '+m[1]+(os?' \u00b7 '+os:'');
+}
 async function checkUpdate(manual,background){
  _updateChecked=true;
  // The release list is its own request (~1 s on the Pi): fetch it alongside
@@ -4808,12 +5047,14 @@ async function checkUpdate(manual,background){
  if(!r||r.status==='error'){
   const msg=r&&r.message?r.message:'Couldn\u2019t reach GitHub. The Pi needs internet access to check for updates; check its network connection, then try again.';
   setUpdateStatus('\u26a0 '+msg,'error');
+  pgMarkCurrentTile(null);
   if(manual) toast(r&&r.message?'Couldn\u2019t check for updates: '+msg:msg,true,{action:{label:'Retry',run:()=>checkUpdate(true)}});
   return;
  }
  document.getElementById('updateCurrent').textContent='v'+r.current;
  document.getElementById('updateLatest').textContent='v'+r.latest;
  document.getElementById('updatePublished').textContent=r.published?r.published.split('T')[0]:'-';
+ document.getElementById('updateTarget').textContent=pgUpdateTargetLabel(r.target);
  // Notes of the latest release: what an update brings, or what the installed
  // build changed when it is the latest.
  pgSetReleaseNotes('updateChangelog',pgReleaseNotesText({notes:r.changelog}),
@@ -4834,17 +5075,20 @@ async function checkUpdate(manual,background){
   document.getElementById('applyUpdateBtn').style.display='';
   document.getElementById('updateBtn').style.display='';
   document.getElementById('updateBtn').classList.add('update-pulse');
-  setUpdateStatus('\u2b07 Version v'+r.latest+' is available — click Install Update.'+(staleNote?' '+staleNote:''),'warn');
+  setUpdateStatus(staleNote?'\u26a0 '+staleNote:'',staleNote?'warn':'');
+  pgMarkCurrentTile('available','v'+r.latest+' is available (checked '+checkedAt+')');
   if(manual) toast('Update available: v'+r.latest);
  } else if(staleNote){
   document.getElementById('applyUpdateBtn').style.display='none';
   document.getElementById('updateBtn').style.display='none';
   setUpdateStatus('\u26a0 Couldn\u2019t check for updates. '+staleNote,'warn');
+  pgMarkCurrentTile(null);
   if(manual) toast('Couldn\u2019t check for updates. '+staleNote,true);
  } else {
   document.getElementById('applyUpdateBtn').style.display='none';
   document.getElementById('updateBtn').style.display='none';
-  setUpdateStatus('\u2713 No update available — v'+r.current+' is the latest version (checked '+checkedAt+').','ok');
+  setUpdateStatus('');
+  pgMarkCurrentTile('latest','v'+r.current+' is the latest version (checked '+checkedAt+')');
   if(manual) toast('No update available — v'+r.current+' is the latest version.');
  }
 }
@@ -4950,17 +5194,14 @@ async function loadReleaseList(){
  const row=document.getElementById('releaseRow');
  const sel=document.getElementById('releaseSelect');
  if(!row||!sel) return;
- const btn=document.getElementById('installReleaseBtn');
  const loading=!window._releaseList;
  if(loading){
   sel.innerHTML='<option>Loading releases\u2026</option>';
   sel.disabled=true;
-  if(btn) btn.disabled=true;
   row.style.display='';
  }
  const r=await fetchJSON('/api/update/releases',{_quiet:true,_timeoutMs:30000});
- sel.disabled=false;
- if(btn&&!(_pgUpd&&_pgUpd.result==='running')) btn.disabled=false;
+ if(!(_pgUpd&&_pgUpd.result==='running')) sel.disabled=false;
  if(!r||r.status!=='ok'||!Array.isArray(r.releases)||!r.releases.length){ if(!window._releaseList) row.style.display='none'; return; }
  window._releaseList=r.releases;
  window._releaseCurrent=r.current;
@@ -4977,19 +5218,22 @@ async function loadReleaseList(){
   }
   sel.appendChild(o);
  });
- // Preselect the release before the installed one: the usual way back.
- const prev=r.releases.find(x=>pgVersionCmp(x.version,r.current)<0);
- sel.value=prev?prev.version:r.releases[0].version;
+ // The select rests on the installed release; picking another one asks
+ // in the dialog. A build that is not in the list gets its own entry.
+ if(!r.releases.some(x=>x.current)){
+  const o=document.createElement('option');
+  o.value='';o.textContent='v'+r.current+' (installed)';o.disabled=true;
+  sel.prepend(o);
+ }
+ sel.value=(r.releases.find(x=>x.current)||{version:''}).version;
+ sel.dataset.applied=sel.value;
  row.style.display='';
- onReleaseSelectChange();
 }
 function onReleaseSelectChange(){
  const sel=document.getElementById('releaseSelect');
- const btn=document.getElementById('installReleaseBtn');
- const rel=(window._releaseList||[]).find(x=>x.version===sel.value);
- const cmp=pgVersionCmp(sel.value,window._releaseCurrent||'0');
- if(btn){ btn.textContent=cmp<0?'Roll back':(cmp===0?'Reinstall':'Install'); btn.classList.toggle('btn-warning',cmp<=0); btn.classList.toggle('btn-primary',cmp>0); }
- pgSetReleaseNotes('releaseNotes',pgReleaseNotesText(rel),'Release notes \u00b7 v'+sel.value);
+ if(!sel) return;
+ if(sel.value===sel.dataset.applied) return;
+ installSelectedRelease();
 }
 // Release notes in the update card sit in a closed <details> (summary names the
 // version) rendered like the install dialog; empty notes hide the disclosure.
@@ -5006,27 +5250,29 @@ function pgSetReleaseNotes(id,markdown,summary){
  if(markdown) box.appendChild(pgReleaseNotesNode(markdown));
  wrap.hidden=!markdown;
 }
+// Picking a release opens the same dialog as GPU memory, with the notes of
+// the picked release; Cancel puts the select back on the installed one.
 async function installSelectedRelease(){
  const sel=document.getElementById('releaseSelect');
  const v=sel&&sel.value;
  if(!v) return;
- const cmp=pgVersionCmp(v,window._releaseCurrent||'0');
- const title=cmp<0?'Roll back to v'+v+'?':(cmp===0?'Reinstall v'+v+'?':'Install v'+v+'?');
- const wrap=document.createElement('div');
+ const back=()=>{ sel.value=sel.dataset.applied||''; };
+ if(_pgUpd&&_pgUpd.result==='running'){ back(); pgUpdateShow(); return; }
+ const cur=window._releaseCurrent||'';
+ const cmp=pgVersionCmp(v,cur||'0');
  const relNotes=pgReleaseNotesText((window._releaseList||[]).find(x=>x.version===v));
- if(relNotes){
-  const meta=document.createElement('div');
-  meta.className='release-notes-meta';
-  meta.textContent='v'+(window._releaseCurrent||'?')+' \u2192 v'+v;
-  wrap.append(meta,pgReleaseNotesNode(relNotes));
- }
- const warn=document.createElement('div');
- warn.className='release-notes-warn';
- warn.textContent='PGenerator+ will restart. Stop any running measurement or session first. Your settings stay. The current files are saved first and restored automatically if the installation fails.'
-  +(cmp<0?' Files added by newer versions stay on the device. To return, select the newer version here or use Check for Updates.':'');
- wrap.appendChild(warn);
- if(!await pgConfirm({title,bodyNode:wrap,wide:!!relNotes,acceptLabel:(cmp<0?'Roll back to v':(cmp===0?'Reinstall v':'Install v'))+v,destructive:cmp<=0,tone:cmp<=0?'caution':''}))return;
- await runUpdate(v,{mode:cmp<0?'rollback':(cmp===0?'reinstall':'install'),from:window._releaseCurrent,to:v});
+ const ok=await pgConfirmReboot({
+  title:cmp<0?'Roll back to v'+v+'?':(cmp===0?'Reinstall v'+v+'?':'Install v'+v+'?'),
+  from:cur?'v'+cur:'',to:'v'+v,
+  notesNode:relNotes?pgReleaseNotesNode(relNotes):null,
+  body:'PGenerator+ restarts; stop any running measurement or session first. Your settings stay, and the current files come back automatically if the installation fails.'
+   +(cmp<0?' Files added by newer versions stay on the device.':''),
+  acceptLabel:cmp<0?'Roll back':(cmp===0?'Reinstall':'Install'),
+  acceptClass:cmp>0?'btn-primary':'btn-warning'
+ });
+ back();
+ if(!ok) return;
+ await runUpdate(v,{mode:cmp<0?'rollback':(cmp===0?'reinstall':'install'),from:cur,to:v});
 }
 
 // Install progress dialog: follows pgenerator-update's phases
@@ -5096,7 +5342,7 @@ function pgUpdateClose(d){
  document.removeEventListener('keydown',d.onKey,true);
  d.root.remove();
  if(_pgUpd===d) _pgUpd=null;
- const back=[document.getElementById('applyUpdateBtn'),document.getElementById('installReleaseBtn'),d.opener].find(el=>el&&el.isConnected&&!el.disabled&&el.getClientRects().length);
+ const back=[document.getElementById('applyUpdateBtn'),document.getElementById('releaseSelect'),d.opener].find(el=>el&&el.isConnected&&!el.disabled&&el.getClientRects().length);
  if(back) back.focus();
 }
 function pgUpdateRender(d){
@@ -5199,7 +5445,7 @@ function pgUpdateRender(d){
 async function runUpdate(version,info){
  // One install at a time: the buttons are disabled too, this guards the rest.
  if(_pgUpd&&_pgUpd.result==='running'){ pgUpdateShow(); return; }
- const relBtn=document.getElementById('installReleaseBtn');
+ const relBtn=document.getElementById('releaseSelect');
  const setBusy=busy=>{ document.getElementById('applyUpdateBtn').disabled=busy; if(relBtn) relBtn.disabled=busy; };
  setBusy(true);
  const d=_pgUpd=pgUpdateDialog(Object.assign({mode:'install'},info||{}));
@@ -7222,28 +7468,62 @@ function meterIsLimitedRange(){
  return !meterOutputIsRgb();
 }
 
+// Marks a select option unavailable without hiding it: greyed out in the
+// menu with the reason on a second line (native select: tooltip).
+function pgSetOptionUnavailable(opt,reason){
+ if(!opt) return;
+ opt.hidden=false;
+ opt.style.display='';
+ opt.disabled=!!reason;
+ if(reason){ opt.dataset.pgNote=reason; opt.title=reason; }
+ else{ delete opt.dataset.pgNote; opt.removeAttribute('title'); }
+}
+
+// Default (0) is not offered: the dropdown lists the ranges that go on the
+// wire. It only stays visible while a legacy config still holds 0, so the
+// select never shows an empty value; picking Limited or Full hides it.
+function pgSyncRangeDefaultOption(sel){
+ sel=sel||document.getElementById('rgb_quant_range');
+ const defOpt=sel&&sel.querySelector('option[value="0"]');
+ if(!defOpt) return;
+ const keep=sel.value==='0';
+ defOpt.hidden=!keep;
+ defOpt.disabled=!keep;
+ defOpt.style.display=keep?'':'none';
+}
+
+// Range labels follow the bit depth: the codes shown are the ones on the
+// wire (Limited = 16-235 scaled by 2^(bits-8), Full = 0..2^bits-1).
+function pgSyncRangeLabels(sel){
+ sel=sel||document.getElementById('rgb_quant_range');
+ if(!sel) return;
+ const bits=[8,10,12].indexOf(parseInt(getVal('max_bpc')))>=0?parseInt(getVal('max_bpc')):8;
+ const k=1<<(bits-8);
+ const full=sel.querySelector('option[value="2"]');
+ const lim=sel.querySelector('option[value="1"]');
+ if(full) full.textContent='Full (0-'+((1<<bits)-1)+')';
+ if(lim) lim.textContent='Limited ('+(16*k)+'-'+(235*k)+')';
+}
+
 // Quant-range rules for the selected colour format: YCbCr is always
-// Limited on the wire, so the Full option is REMOVED from the dropdown for
-// YCbCr (not merely greyed out) and a Full selection is coerced back to
-// Limited when switching to YCbCr. The Default option label reflects what it
-// resolves to.
+// Limited on the wire, so Full stays in the list but is locked with the
+// reason, and a Full selection is coerced back to Limited when switching
+// to YCbCr.
 function uiEnforceQuantRangeForColorFormat(){
  const fmtEl=document.getElementById('color_format');
  const sel=document.getElementById('rgb_quant_range');
  if(!fmtEl||!sel) return;
+ pgSyncRangeLabels(sel);
  const isYcc=fmtEl.value==='1'||fmtEl.value==='2';
- const fullOpt=sel.querySelector('option[value="2"]');
- if(fullOpt){
-  fullOpt.hidden=isYcc;
-  fullOpt.disabled=isYcc;
-  fullOpt.style.display=isYcc?'none':'';
- }
- const defOpt=sel.querySelector('option[value="0"]');
- if(defOpt) defOpt.textContent=isYcc?'Default (Limited)':'Default';
+ // Dolby Vision: the transport owns the range (see the DV branch of the option filter)
+ if(getVal('signal_mode')==='dv'){ pgSyncRangeDefaultOption(sel); return; }
+ pgSetOptionUnavailable(sel.querySelector('option[value="1"]'),'');
+ pgSetOptionUnavailable(sel.querySelector('option[value="2"]'),isYcc?'RGB only; YCbCr is always Limited':'');
  if(isYcc&&sel.value==='2'){
   sel.value='1';
   try{ sel.dispatchEvent(new Event('change',{bubbles:true})); }catch(e){}
  }
+ pgSyncRangeDefaultOption(sel);
 }
 
 function meterOutputFormatValue(){
@@ -21715,6 +21995,14 @@ function meterCloseLutTools(){
    const label=document.createElement('span');
    label.className='pg-dd-label';
    label.textContent=opt.dataset.pgLabel||opt.label||opt.text;
+   // data-pg-note: one muted line under the label, e.g. why an option is unavailable
+   if(opt.dataset.pgNote){
+    const note=document.createElement('span');
+    note.className='pg-dd-note';
+    note.textContent=opt.dataset.pgNote;
+    label.classList.add('has-note');
+    label.appendChild(note);
+   }
    li.append(mark,label);
    if(opt.dataset.pgBadge){
     const badge=document.createElement('span');

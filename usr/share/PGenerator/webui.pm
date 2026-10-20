@@ -2105,6 +2105,30 @@ sub webui_handle_request (@) {
      }
     }
    }
+   elsif($path eq "/api/system/governor") {
+    # CPU frequency scaling governor ("Scaling Type" in the WebUI). Applies
+    # at once and is kept in /etc/default/rcPGenerator for the next boot.
+    my $available=&pgenerator_cmd("GET_SCALING_GOVERNOR_AVAILABLE"); chomp($available);
+    my %allowed=map { $_ => 1 } grep { /^[a-z]+$/ } split(" ",$available);
+    my $r; my $code="200 OK";
+    if($method eq "POST") {
+     my ($gov)=$body=~/"governor"\s*:\s*"([a-z]+)"/;
+     if(defined $gov && $allowed{$gov}) {
+      &pgenerator_cmd("SET_SCALING_GOVERNOR:$gov");
+     } else {
+      $code="400 Bad Request";
+      $r='{"status":"error","message":"Unknown scaling type"}';
+     }
+    }
+    if(!defined $r) {
+     my $current=&pgenerator_cmd("GET_SCALING_GOVERNOR"); chomp($current); $current=~s/\s//g;
+     my $freq=&pgenerator_cmd("GET_SCALING_GOVERNOR_CUR_FREQ"); chomp($freq); $freq=~s/\D//g;
+     $r="{\"status\":\"ok\",\"governor\":\"$current\",\"available\":[".join(",",map { "\"$_\"" } sort keys %allowed)."]"
+      .",\"cur_freq_khz\":".($freq ne "" ? $freq : "null")."}";
+    }
+    my $len=length($r);
+    print $client "HTTP/1.1 $code\r\nContent-Type: application/json\r\nContent-Length: $len\r\n$cors\r\n$r";
+   }
    elsif($path eq "/api/meter/status") {
     my $result=&webui_meter_status();
     my $len=length($result);
@@ -10368,13 +10392,20 @@ sub webui_info_json (@) {
  my $gpu_mem=&read_from_file("$info_dir/GET_GPU_MEMORY.info");
  chomp($gpu_mem);
  $gpu_mem=~s/\s//g;
+ # The kernel CMA pool holds the display and 3D buffers (vc4/v3d); the
+ # firmware split only serves the VideoCore firmware itself.
+ my ($cma_total)=&webui_cma_pool_mb();
  if(&webui_boot_memory_model() eq "cma") {
   # Pi 5: the firmware split is a fixed 8M and not what the renderer uses.
-  my ($cma_total)=&webui_cma_pool_mb();
   $gpu_mem="CMA ${cma_total}M" if(defined $cma_total);
  }
+ my $cma_json=defined $cma_total ? $cma_total : "null";
  my $hdmi_port_json=&webui_hdmi_port_status();
- return "{\"hostname\":\"$hostname\",\"version\":\"$ver\",\"temperature\":\"$temp\",\"uptime\":\"$uptime\",\"resolution\":\"$resolution\",\"interfaces\":$ip_json,\"wifi\":{\"ssid\":\"$wifi_ssid\",\"freq\":\"$wifi_freq\",\"band\":\"$wifi_band\",\"signal\":\"$wifi_signal\",\"state\":\"$wifi_state\"},\"calibration\":{\"connected\":$cal_conn,\"ip\":\"$cal_ip\",\"software\":\"$cal_sw\"},\"total_ram\":\"$total_ram\",\"gpu_mem\":\"$gpu_mem\",\"hdmi_port\":$hdmi_port_json}";
+ # Board model for Device Info; the device-tree string ends in a NUL
+ my $model=&read_from_file($proc_device_model);
+ $model="" if(!defined $model);
+ $model=~s/[\x00\r\n]+//g; $model=~s/["\\]//g;
+ return "{\"hostname\":\"$hostname\",\"model\":\"$model\",\"version\":\"$ver\",\"temperature\":\"$temp\",\"uptime\":\"$uptime\",\"resolution\":\"$resolution\",\"interfaces\":$ip_json,\"wifi\":{\"ssid\":\"$wifi_ssid\",\"freq\":\"$wifi_freq\",\"band\":\"$wifi_band\",\"signal\":\"$wifi_signal\",\"state\":\"$wifi_state\"},\"calibration\":{\"connected\":$cal_conn,\"ip\":\"$cal_ip\",\"software\":\"$cal_sw\"},\"total_ram\":\"$total_ram\",\"gpu_mem\":\"$gpu_mem\",\"cma_mb\":$cma_json,\"hdmi_port\":$hdmi_port_json}";
 }
 
 sub _webui_log_ipv4_class (@) {

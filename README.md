@@ -124,7 +124,9 @@ Press **OK or Menu on the TV remote** and a menu of every pattern appears on the
 | Calman G1 specialty patterns | – | all 19 rendered on the Pi, started from Calman or the WebUI |
 | No display connected | renderer started anyway | waits for a display, banner in the UI, saved mode kept |
 | WebUI themes | dark / light / system | **13 themes** incl. Natrium dark & light and Volt, Scope, Ultraviolet |
+| Measurement workspaces | – | **can be hidden** in Settings for pattern-only setups (Calman, HCFR) |
 | HDMI link readout | – | measured link depth and clock |
+| CPU scaling governor | fixed in `/etc/default/rcPGenerator` | **Scaling Type in the WebUI**, applies without a reboot |
 | OTA | latest release only | release notes, progress, **reinstall / rollback**, ~20 % smaller packages |
 | Self-test of the HDMI output | – | **built in**: scanout readback, link depth and AVI per mode |
 | Pattern playlists | – | **stepped with the TV remote** (HDMI-CEC), own playlists |
@@ -144,7 +146,10 @@ Press **OK or Menu on the TV remote** and a menu of every pattern appears on the
 <td align="center"><sub>Playlists: the deck follows the TV remote; Start, duplicate or edit from the library</sub></td>
 </tr>
 <tr>
-<td valign="top"><img src="screenshots/webui-settings.png" alt="Settings workspace with the theme picker (Volt selected), GPU memory and software update"/><br/><p align="center"><sub>Settings: 13 themes, GPU memory, OTA update and backup in one place</sub></p></td>
+<td valign="top"><img src="screenshots/webui-settings.png" alt="Settings workspace with the theme picker (Volt selected) and the Software Update tiles"/><br/><p align="center"><sub>Settings: 13 themes, OTA update and backup in one place</sub></p></td>
+</tr>
+<tr>
+<td colspan="2" valign="top"><img src="screenshots/webui-system.png" alt="System workspace: Device Info with CPU, memory and temperature meters and tiles for board, hostname, resolution, uptime, RAM and network, plus the GPU Memory and Scaling Type selects"/><br/><p align="center"><sub>System: CPU, memory and temperature at a glance, the device facts, and GPU memory and CPU Scaling Type set right in their tiles</sub></p></td>
 </tr>
 <tr>
 <td colspan="2" valign="top"><img src="screenshots/webui-selftest.png" alt="Signal self-test in Output: bit-exact in 10 of 10 modes, with link details and the drawn swatches per mode"/><br/><p align="center"><sub>Signal self-test, right below Display Settings: every mode read back from the scanout on a real Pi 4, bit-exact in 10 of 10</sub></p></td>
@@ -280,9 +285,9 @@ Served on **port 80** at `http://pgenerator.local`. It has a **Desktop** layout 
 | **Meter Profiler** | Meter correction (CCSS) editor and preview |
 | **3D LUT · Display Profiler** | LUT handling, MHC2 / KDE HDR profile building |
 | **Connectivity** | Wi-Fi client, access point and Bluetooth in one Network card, LG TV control (pairing, AutoCal: greyscale, 3D LUT, HDR tone map, Shadow Fix) and the Resolve client |
-| **System** | Device info (CPU, memory, temperature, interfaces, uptime) |
+| **System** | Device info: CPU, memory and temperature with meters, plus board, hostname, resolution, uptime, RAM and the network interfaces; GPU memory (asks before the required reboot) and CPU **Scaling Type** (Performance ⚡ recommended, applies at once) are set in their tiles |
 | **Live Information** (right-hand drawer) | Active signal, the infoframe decoder (AVI and DRM), the measured HDMI link depth and clock, and HDMI-CEC status |
-| **Settings** | Layout, zoom, **13 themes**, GPU memory, software update (with notes, progress, rollback), Download Logs, and settings backup and restore |
+| **Settings** | Layout, zoom, **13 themes**, Show/Hide for the Measure workspaces, software update (with notes, progress, rollback), Download Logs, and settings backup and restore |
 
 The header shows the connection, HDMI display, calibration software, meter and temperature at a glance. Restart and power-off are one tap away.
 
@@ -446,6 +451,7 @@ All endpoints are on port 80 and return JSON.
 | POST | `/api/update/apply` | Start the OTA download and install |
 | GET | `/api/update/status` | OTA progress |
 | GET / POST | `/api/boot/memory` | Read / set the GPU memory split (POST reboots) |
+| GET / POST | `/api/system/governor` | Read / set the CPU scaling governor (`{"governor":"performance"}`), no reboot |
 
 **Meter & CCSS**
 

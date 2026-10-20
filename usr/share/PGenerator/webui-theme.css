@@ -459,6 +459,17 @@ body.layout-desktop .meter-card-header-row .meter-xyz-gear{width:30px;height:30p
 #meterCard.meter-patterns-only .meter-header-label{display:none}
 .card.span2{grid-column:span 2}
 .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:8px}
+/* Display Settings as tiles (like Device Info): icon square, label, select.
+   Three per row, two in a medium card, one on a phone. */
+#displaySettingsCard{container-type:inline-size}
+.grid.setting-tiles{grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+.setting-tiles>.field{display:grid;grid-template-columns:36px minmax(0,1fr);grid-template-rows:auto auto;column-gap:12px;row-gap:6px;align-items:center;padding:12px 14px;border-radius:12px;background:var(--surface-inset);border:1px solid color-mix(in srgb,var(--text-primary) 6%,transparent);min-width:0}
+.setting-tiles>.field>.setting-icon{grid-row:span 2;box-sizing:border-box;width:36px;height:36px;padding:8px;border-radius:10px;color:var(--accent);background:color-mix(in srgb,var(--accent) 13%,transparent)}
+.setting-tiles>.field>label{font-size:.62rem;letter-spacing:.06em;align-self:end}
+.setting-tiles>.field>select,.setting-tiles>.field>.mode-select-wrap{grid-column:2;width:100%;min-width:0}
+.setting-tiles>.field select{background-color:var(--surface-card,var(--surface-field));font-weight:600}
+@container (max-width:720px){.grid.setting-tiles{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@container (max-width:420px){.grid.setting-tiles{grid-template-columns:minmax(0,1fr)}}
 .grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
 .field{display:flex;flex-direction:column;gap:3px}
 .field label{font-size:.65rem;color:var(--text2);text-transform:uppercase;letter-spacing:.5px}
@@ -479,6 +490,15 @@ background-repeat:no-repeat;background-position:right 8px center;padding-right:2
 .mode-select-wrap{position:relative;width:100%;min-width:0}
 .mode-select-wrap select{width:100%;min-width:0;color:transparent}
 .mode-select-wrap select option{color:var(--text);background:var(--surface-inset)}
+/* Empty mode list (no display yet): dashed, muted field with a status line instead of a blank select */
+.mode-select-wrap.is-empty select{border-style:dashed;background-color:transparent!important;background-image:none!important;cursor:not-allowed;opacity:1}
+.mode-select-wrap.is-empty .mode-select-value{right:10px;color:var(--text2);font-weight:500;font-style:italic}
+.mode-select-wrap.is-no-display select{border-color:color-mix(in srgb,var(--orange) 45%,var(--border))}
+.mode-select-wrap.is-no-display .mode-select-value{padding-left:15px}
+.mode-select-wrap.is-no-display .mode-select-value::before{content:"";position:absolute;left:1px;top:50%;width:7px;height:7px;margin-top:-3.5px;border-radius:50%;background:var(--orange);box-shadow:0 0 0 3px color-mix(in srgb,var(--orange) 22%,transparent);animation:pgNoDisplayPulse 2.4s ease-in-out infinite}
+@keyframes pgNoDisplayPulse{50%{box-shadow:0 0 0 1px color-mix(in srgb,var(--orange) 10%,transparent)}}
+@media (prefers-reduced-motion:reduce){.mode-select-wrap.is-no-display .mode-select-value::before{animation:none}}
+.setting-tiles>.field.is-no-display>.setting-icon{color:var(--orange);background:color-mix(in srgb,var(--orange) 13%,transparent)}
 .mode-select-value{position:absolute;left:10px;right:24px;top:50%;transform:translateY(-50%);
 pointer-events:none;color:var(--text);font-size:.82rem;line-height:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .inline-select{background-color:var(--surface-inset);border:1px solid var(--border);color:var(--text);
@@ -754,8 +774,49 @@ transition:opacity .18s ease-in,transform .22s ease-in;z-index:999;pointer-event
 .meter-help-tip{position:relative;flex:0 0 auto;vertical-align:middle}
 .meter-help-tip:hover,.meter-help-tip[aria-expanded="true"]{color:var(--text-primary);border-color:var(--accent)}
 .meter-help-tip:focus-visible{outline:2px solid var(--focus-ring);outline-offset:2px}
-.help-tip-pop{position:fixed;z-index:10050;max-width:min(340px,calc(100vw - 16px));max-height:min(60vh,420px);overflow:auto;padding:8px 10px;border:1px solid var(--border);border-radius:6px;background:var(--surface-popover);color:var(--text-primary);box-shadow:0 8px 22px var(--shadow);font-size:.78rem;font-weight:400;line-height:1.45;white-space:pre-line;text-align:left;text-transform:none;letter-spacing:normal}
+/* Frosted card in the theme: popover surface at 82 % over a light blur,
+   an accent-tinted edge, and a short rise from the tip's side. */
+.help-tip-pop{position:fixed;z-index:10050;box-sizing:border-box;width:max-content;max-width:min(320px,calc(100vw - 16px));overflow:auto;overscroll-behavior:contain;padding:11px 14px;border:1px solid color-mix(in srgb,var(--accent) 32%,var(--border));border-radius:10px;background:color-mix(in srgb,var(--surface-popover) 82%,transparent);-webkit-backdrop-filter:blur(14px) saturate(1.3);backdrop-filter:blur(14px) saturate(1.3);color:var(--text-primary);box-shadow:0 1px 0 color-mix(in srgb,var(--text-primary) 6%,transparent) inset,0 12px 32px -8px var(--shadow),0 2px 8px var(--shadow);font-size:.8rem;font-weight:400;line-height:1.55;white-space:pre-line;overflow-wrap:break-word;text-align:left;text-transform:none;letter-spacing:normal;animation:help-tip-in .16s cubic-bezier(.2,.7,.3,1)}
+.help-tip-pop[data-side="above"]{--tip-rise:4px}
+/* No scrollbar chrome: the card is sized to its text; the rare overlong one still scrolls by wheel or touch */
+.help-tip-pop{scrollbar-width:none}
+.help-tip-pop::-webkit-scrollbar{display:none}
+@keyframes help-tip-in{from{opacity:0;transform:translateY(var(--tip-rise,-4px))}to{opacity:1;transform:none}}
+@media(prefers-reduced-motion:reduce){.help-tip-pop{animation:none}}
+/* High Contrast keeps a solid surface and a full-strength edge */
+[data-palette="contrast"] .help-tip-pop{background:var(--surface-popover);border-color:var(--text-primary)}
+/* Without backdrop-filter the surface stays opaque so the text stays legible */
+@supports not ((backdrop-filter:blur(1px)) or (-webkit-backdrop-filter:blur(1px))){.help-tip-pop{background:var(--surface-popover)}}
 .help-tip-pop[hidden]{display:none}
+/* Reboot confirmation (memory changes): blurred backdrop, a card that
+   rises in, the change as two chips, Cancel focused first. */
+.pg-reboot-dialog{position:fixed;inset:0;z-index:100002;display:flex;align-items:center;justify-content:center;padding:20px}
+.pg-reboot-backdrop{position:absolute;inset:0;background:color-mix(in srgb,var(--surface-page,#000) 62%,transparent);-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px);opacity:0;transition:opacity .22s ease-out}
+.pg-reboot-card{position:relative;box-sizing:border-box;width:min(420px,100%);padding:26px 24px 20px;border-radius:16px;background:var(--surface-modal);border:1px solid color-mix(in srgb,var(--status-warning) 28%,var(--border));box-shadow:0 24px 64px -16px var(--shadow),0 4px 14px var(--shadow);color:var(--text-primary);text-align:center;opacity:0;transform:translateY(14px) scale(.97);transition:opacity .22s ease-out,transform .32s cubic-bezier(.16,1,.3,1)}
+.pg-reboot-dialog.is-open .pg-reboot-backdrop{opacity:1}
+.pg-reboot-dialog.is-open .pg-reboot-card{opacity:1;transform:none}
+.pg-reboot-dialog.is-leaving .pg-reboot-backdrop{opacity:0;transition-duration:.16s}
+.pg-reboot-dialog.is-leaving .pg-reboot-card{opacity:0;transform:translateY(8px) scale(.98);transition-duration:.16s}
+.pg-reboot-icon{width:52px;height:52px;margin:0 auto 14px;border-radius:50%;display:grid;place-items:center;color:var(--status-warning);background:color-mix(in srgb,var(--status-warning) 14%,transparent)}
+.pg-reboot-icon svg{width:26px;height:26px}
+.pg-reboot-dialog.is-open .pg-reboot-icon svg{animation:pg-reboot-spin .9s cubic-bezier(.16,1,.3,1) .12s both}
+@keyframes pg-reboot-spin{from{transform:rotate(-140deg);opacity:0}to{transform:none;opacity:1}}
+.pg-reboot-title{margin:0 0 14px;font-size:1.1rem;font-weight:700;line-height:1.3;color:var(--text-primary);text-wrap:balance}
+.pg-reboot-change{display:flex;align-items:center;justify-content:center;gap:10px;margin:0 0 14px}
+.pg-reboot-change span{padding:6px 12px;border-radius:999px;font-size:.9rem;font-weight:700;font-variant-numeric:tabular-nums}
+.pg-reboot-from{color:var(--text2);background:color-mix(in srgb,var(--text-primary) 7%,transparent);text-decoration:line-through;text-decoration-color:color-mix(in srgb,var(--text2) 60%,transparent)}
+.pg-reboot-to{color:var(--accent);background:color-mix(in srgb,var(--accent) 15%,transparent);box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--accent) 40%,transparent)}
+.pg-reboot-change svg{width:18px;height:18px;color:var(--text2);flex:none}
+.pg-reboot-body{margin:0 auto 20px;max-width:34ch;font-size:.84rem;line-height:1.55;color:var(--text2)}
+/* Release notes inside the dialog (install / roll back): wider card, notes scroll on their own */
+.pg-reboot-card.has-notes{width:min(540px,100%)}
+.pg-reboot-notes{margin:0 0 16px;text-align:left}
+.pg-reboot-notes .release-notes{max-height:min(38vh,320px);font-size:.8rem}
+.pg-reboot-card.has-notes .pg-reboot-body{max-width:none;font-size:.8rem}
+.pg-reboot-actions{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.pg-reboot-actions .btn{justify-content:center;min-height:40px}
+@media(pointer:coarse){.pg-reboot-actions .btn{min-height:44px}}
+@media(prefers-reduced-motion:reduce){.pg-reboot-backdrop,.pg-reboot-card{transition:none}.pg-reboot-dialog.is-open .pg-reboot-icon svg{animation:none}}
 /* Apply Settings modal: full-screen mask with a small centered card.
    Shown when the operator clicks "Apply & Restart" on the display-settings
    card. Replaces the prior 3-5s of silence (the corner toast only landed
@@ -840,9 +901,9 @@ body.dv-profile-done-error #dvProfileDoneStatus{color:#e08184}
 .update-section{margin-top:16px;padding-top:14px;border-top:1px solid var(--border)}
 .update-section-title{font-size:.72rem;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;font-weight:600;margin-bottom:8px}
 .update-field-label{display:block;font-size:.72rem;color:var(--text2);margin-bottom:4px}
-.release-pick{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:var(--btn-gap,8px);align-items:stretch;max-width:560px}
-.release-pick>select{width:100%;min-width:0}
-.release-pick>.btn{justify-content:center;min-width:110px}
+/* The select is as wide as its longest release, never wider than the card */
+.release-pick{display:flex;max-width:100%}
+.release-pick>select{width:auto;max-width:100%;min-width:0}
 .update-hint{margin-top:8px;font-size:.72rem;color:var(--text2);line-height:1.45}
 @media(prefers-reduced-motion:reduce){.update-notes>summary::before{transition:none}}
 /* Update install progress dialog (runUpdate): the choice dialog's overlay and card, one bar, five steps. */
@@ -917,6 +978,42 @@ body.apply-settings-success .apply-settings-actions{display:none}
 .stat-sub{font-size:.68rem;color:var(--text2);line-height:1.3}
 .meter{height:5px;background:#1d1d29;border-radius:999px;overflow:hidden;margin-bottom:4px}
 .meter-fill{height:100%;width:0;background:linear-gradient(135deg,var(--accent),var(--accent2));transition:width .35s ease}
+/* Device Info: three vitals as large readings split by hairlines, then the
+   system facts as an icon list on the card itself (no tiles inside the card). */
+/* Device Info and Software Update share the fact tiles; both size them by their own width */
+.devinfo-card,.facts-host{container:facts / inline-size}
+.devinfo-vitals{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));margin:6px 0 22px}
+.devinfo-vital{padding:4px 24px 0;min-width:0}
+.devinfo-vital:first-child{padding-left:0}
+.devinfo-vital:last-child{padding-right:0}
+.devinfo-vital+.devinfo-vital{border-left:1px solid var(--divider,var(--border))}
+.devinfo-vital-head{display:flex;align-items:center;gap:8px;font-size:.68rem;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:.07em}
+.devinfo-icon{width:18px;height:18px;flex:none;color:var(--accent)}
+.devinfo-card .devinfo-value{font-size:2.1rem;font-weight:700;line-height:1.05;letter-spacing:-.025em;margin:10px 0 12px;font-variant-numeric:tabular-nums;white-space:nowrap}
+.devinfo-meter{height:6px;border-radius:999px;overflow:hidden;background:color-mix(in srgb,var(--text-primary) 10%,transparent)}
+.devinfo-sub{margin-top:9px;font-size:.74rem;color:var(--text2);line-height:1.35;font-variant-numeric:tabular-nums}
+:is(.devinfo-card,.facts-host) .devinfo-facts{grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}
+:is(.devinfo-card,.facts-host) .devinfo-facts .info-item{display:grid;grid-template-columns:36px minmax(0,1fr);column-gap:12px;align-items:center;padding:12px 14px;border-radius:12px;background:var(--surface-inset);border:1px solid color-mix(in srgb,var(--text-primary) 6%,transparent)}
+:is(.devinfo-card,.facts-host) .devinfo-facts .devinfo-icon{grid-row:span 2;box-sizing:border-box;width:36px;height:36px;padding:8px;border-radius:10px;background:color-mix(in srgb,var(--accent) 13%,transparent)}
+:is(.devinfo-card,.facts-host) .devinfo-facts .label{font-size:.62rem;letter-spacing:.06em}
+:is(.devinfo-card,.facts-host) .devinfo-facts .value{font-size:.9rem;font-weight:600;margin-top:2px;font-variant-numeric:tabular-nums}
+/* Setting tiles (GPU memory, scaling type): the select takes the value's place, as in Output */
+.devinfo-facts .devinfo-control>.label{display:flex;align-items:center;gap:6px;margin:0;align-self:end}
+.devinfo-facts .devinfo-control>select{grid-column:2;width:100%;min-width:0;margin-top:6px;background-color:var(--surface-card,var(--surface-field));font-weight:600}
+/* Narrow card (phone, half-width tablet column): vitals stack, hairlines turn horizontal */
+@container facts (max-width:560px){
+ .devinfo-vitals{grid-template-columns:1fr;margin-bottom:16px}
+ .devinfo-vital,.devinfo-vital:first-child,.devinfo-vital:last-child{padding:14px 0}
+ .devinfo-vital:first-child{padding-top:2px}
+ .devinfo-vital+.devinfo-vital{border-left:0;border-top:1px solid var(--divider,var(--border))}
+ .devinfo-card .devinfo-value{font-size:1.8rem;margin:8px 0 10px}
+ :is(.devinfo-card,.facts-host) .devinfo-facts{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+ /* Two narrow tiles per row: the icon sits above the text so values keep the full width and may wrap */
+ :is(.devinfo-card,.facts-host) .devinfo-facts .info-item{grid-template-columns:minmax(0,1fr);align-content:start;padding:12px}
+ :is(.devinfo-card,.facts-host) .devinfo-facts .devinfo-icon{grid-row:auto;width:32px;height:32px;padding:7px;margin-bottom:10px}
+ :is(.devinfo-card,.facts-host) .devinfo-facts .value{white-space:normal;overflow:visible;text-overflow:clip}
+ .devinfo-facts .devinfo-control>select{grid-column:auto}
+}
 .wifi-list{max-height:150px;overflow-y:auto;margin:6px 0}
 .wifi-item{display:flex;justify-content:space-between;align-items:center;
 padding:6px 10px;border-radius:5px;cursor:pointer;transition:background .2s}
@@ -1028,6 +1125,20 @@ body.is-custom-series-patch-dragging{cursor:grabbing!important;user-select:none!
 background:color-mix(in srgb,var(--upd) 14%,transparent);box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--upd) 45%,transparent);
 color:var(--upd);font-size:.7rem;font-weight:600;line-height:1.2}
 .update-btn:hover{background:color-mix(in srgb,var(--upd) 24%,transparent)}
+/* Current tile after a check: a chip (up to date / update available) and a
+   short accent flash instead of a status line */
+.update-facts .info-item{position:relative}
+.update-facts .info-item{container:tile / inline-size}
+.fact-chip{grid-column:1 / -1;justify-self:start;max-width:100%;overflow:hidden;text-overflow:ellipsis;box-sizing:border-box;margin-top:8px;padding:3px 9px;border-radius:999px;font-size:.6rem;font-weight:700;letter-spacing:.05em;text-transform:uppercase;line-height:1.5;white-space:nowrap;color:var(--green);background:color-mix(in srgb,var(--green) 14%,transparent);box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--green) 35%,transparent)}
+.fact-chip[data-state="available"]{color:var(--on-accent);background:var(--accent-fill);box-shadow:none}
+.fact-chip[hidden]{display:none}
+/* Narrow tiles put the icon on top: the chip goes under the version instead */
+/* Wide tiles: the chip sits right, centred on the icon; narrow ones keep it under the version */
+@container tile (min-width:224px){.fact-chip[data-state="latest"]{position:absolute;top:50%;right:14px;transform:translateY(-50%);margin:0}}
+@container tile (min-width:264px){.fact-chip[data-state="available"]{position:absolute;top:50%;right:14px;transform:translateY(-50%);margin:0}}
+.info-item.is-flash::after{content:"";position:absolute;inset:-1px;border-radius:inherit;pointer-events:none;animation:factFlash 1.1s ease-out 2}
+@keyframes factFlash{0%{opacity:0;box-shadow:0 0 0 0 color-mix(in srgb,var(--accent) 0%,transparent)}30%{opacity:1;background:color-mix(in srgb,var(--accent) 12%,transparent);box-shadow:0 0 0 2px color-mix(in srgb,var(--accent) 55%,transparent)}100%{opacity:0;box-shadow:0 0 0 6px color-mix(in srgb,var(--accent) 0%,transparent)}}
+@media (prefers-reduced-motion:reduce){.info-item.is-flash::after{animation:none}}
 .update-pulse{animation:updatePulse 2s ease-out infinite}
 @media (prefers-reduced-motion:reduce){.update-pulse{animation:none}}
 @keyframes updatePulse{0%{box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--upd) 45%,transparent),0 0 0 0 color-mix(in srgb,var(--upd) 55%,transparent)}70%{box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--upd) 45%,transparent),0 0 0 7px color-mix(in srgb,var(--upd) 0%,transparent)}100%{box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--upd) 45%,transparent),0 0 0 0 color-mix(in srgb,var(--upd) 0%,transparent)}}
@@ -1198,9 +1309,11 @@ body.layout-desktop #meter3dLutWorkspaceCard #meterLutToolsModal>.meter-modal-sc
 /* Animated select menu (webui-app.js replaces the native popup). */
 select[data-pg-dd-open]{border-color:var(--accent)!important;outline:none}
 .pg-dd-menu{position:fixed;z-index:100100;margin:0;padding:6px;list-style:none;overflow-y:auto;overscroll-behavior:contain;
-background:var(--surface-popover);border:1px solid var(--border);border-radius:10px;box-shadow:0 14px 34px var(--shadow);
+background:color-mix(in srgb,var(--surface-popover) 80%,transparent);-webkit-backdrop-filter:blur(12px) saturate(1.3);backdrop-filter:blur(12px) saturate(1.3);
+border:1px solid var(--border);border-radius:10px;box-shadow:0 1px 0 color-mix(in srgb,var(--text-primary) 6%,transparent) inset,0 14px 34px var(--shadow);
 color:var(--text-primary);font-size:.8rem;line-height:1.25;transform-origin:top center;transform:scaleY(.55);opacity:0;
 transition:transform .24s cubic-bezier(.2,.9,.3,1.12),opacity .16s ease;scrollbar-width:thin;scrollbar-color:var(--scroll-thumb) transparent}
+@supports not ((backdrop-filter:blur(1px)) or (-webkit-backdrop-filter:blur(1px))){.pg-dd-menu{background:var(--surface-popover)}}
 .pg-dd-menu.is-up{transform-origin:bottom center}
 .pg-dd-menu.is-open{transform:scaleY(1);opacity:1}
 .pg-dd-menu.is-closing{transform:scaleY(.55);opacity:0;transition-duration:.14s,.12s;pointer-events:none}
@@ -1215,6 +1328,9 @@ transition:opacity .18s ease,transform .24s cubic-bezier(.2,.9,.3,1.25),backgrou
 .pg-dd-item[aria-selected="true"]{font-weight:600}
 .pg-dd-item[aria-disabled="true"]{color:var(--text-disabled);cursor:default}
 .pg-dd-label{min-width:0;overflow:hidden;text-overflow:ellipsis}
+.pg-dd-label.has-note{display:flex;flex-direction:column;gap:1px}
+.pg-dd-note{font-size:.72rem;font-weight:400;color:var(--text-muted);overflow:hidden;text-overflow:ellipsis}
+.pg-dd-item[aria-disabled="true"] .pg-dd-mark{border-style:dashed}
 .pg-dd-mark{position:relative;flex:0 0 auto;width:15px;height:15px;border-radius:50%;border:1px solid var(--border);transform:scale(0);
 transition:transform .28s cubic-bezier(.2,.9,.3,1.5);transition-delay:calc(var(--i,0)*22ms + 90ms)}
 .pg-dd-menu.is-open .pg-dd-mark{transform:scale(1)}
@@ -1231,6 +1347,10 @@ transition:transform .28s cubic-bezier(.2,.9,.3,1.5);transition-delay:calc(var(-
 .pg-dd-menu.no-motion .pg-dd-mark{transform:none}
 /* Theme picker */
 .ui-settings-sections .ui-settings-theme{grid-column:1/-1;order:1}
+/* Measure Workspaces: Hide (pattern-only setups) */
+body.pg-hide-measure .desktop-nav-group[aria-labelledby="desktopNavGroupMeasure"],
+body.pg-hide-measure .dashboard>.card:is([data-desktop-workspace="calibration"],[data-desktop-workspace="meter-profile"],[data-desktop-workspace="3d-lut"],[data-desktop-workspace="icc-profile"]),
+body.pg-hide-measure #meterStatusWrap,body.pg-hide-measure #meterUsbWarnBadge{display:none!important}
 .theme-swatch-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(136px,1fr));gap:8px}
 .theme-swatch-btn{display:flex;align-items:center;gap:8px;min-width:0;padding:7px 9px;border:1px solid var(--border);border-radius:8px;
 background:var(--surface-inset);color:var(--text-primary);font-size:.72rem;font-weight:600;text-align:left;cursor:pointer;transition:border-color .15s,background-color .15s}
@@ -1247,7 +1367,10 @@ background:linear-gradient(135deg,var(--sw-bg) 0 50%,var(--sw-card) 50% 100%)}
 @media (hover:hover) and (pointer:fine){[data-palette] .pat-btn:hover{background:var(--hover-bg)}}
 .pg-dd-menu.no-stagger .pg-dd-item,.pg-dd-menu.no-stagger .pg-dd-group,.pg-dd-menu.no-stagger .pg-dd-mark{transition-delay:0s!important}
 /* Signal Self-Test (Output). The verdict carries the header power-button tint: status colour at 14 % with a 30 % ring. */
-.selftest-lede{max-width:72ch;margin:0 0 14px;font-size:.78rem;line-height:1.5;color:var(--text2)}
+.selftest-lede{max-width:72ch;margin:0 0 8px;font-size:.78rem;line-height:1.5;color:var(--text2)}
+.selftest-note{display:flex;gap:7px;align-items:flex-start;max-width:72ch;margin:0 0 14px;font-size:.72rem;line-height:1.5;color:var(--text-muted)}
+.selftest-note svg{flex:0 0 auto;width:14px;height:14px;margin-top:2px}
+.selftest-note strong{color:var(--text2);font-weight:600}
 .selftest-verdict{--st:var(--text2);position:relative;display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:center;gap:16px;padding:16px 18px;border:1px solid var(--border);border-radius:12px;background:var(--surface-inset);overflow:hidden;transition:border-color .3s ease-out}
 .selftest-verdict[data-state="running"]{--st:var(--accent)}
 .selftest-verdict[data-state="passed"]{--st:var(--status-success);border-color:color-mix(in srgb,var(--status-success) 45%,var(--border))}

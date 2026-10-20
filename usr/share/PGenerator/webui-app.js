@@ -5164,19 +5164,17 @@ function pgReleaseNotesNode(markdown){
 
 async function applyUpdate(){
  const r=window._updateCheck||{};
- const wrap=document.createElement('div');
- if(r.changelog){
-  const meta=document.createElement('div');
-  meta.className='release-notes-meta';
-  meta.textContent='v'+(r.current||'?')+' \u2192 v'+(r.latest||'?')+(r.published?' \u00b7 published '+r.published.split('T')[0]:'');
-  wrap.appendChild(meta);
-  wrap.appendChild(pgReleaseNotesNode(pgReleaseNotesText({notes:r.changelog})));
- }
- const warn=document.createElement('div');
- warn.className='release-notes-warn';
- warn.textContent='PGenerator+ will restart. Stop any running measurement or session first. Your settings stay.';
- wrap.appendChild(warn);
- if(!await pgConfirm({title:r.latest?'Install v'+r.latest+'?':'Install update now?',bodyNode:wrap,wide:true,acceptLabel:r.latest?'Install v'+r.latest:'Install Update'}))return;
+ // Same dialog as installing a release from Previous Versions
+ const notes=r.changelog?pgReleaseNotesText({notes:r.changelog}):'';
+ const ok=await pgConfirmReboot({
+  title:r.latest?'Install v'+r.latest+'?':'Install update now?',
+  from:r.current?'v'+r.current:'',to:r.latest?'v'+r.latest:'',
+  notesNode:notes?pgReleaseNotesNode(notes):null,
+  body:'PGenerator+ restarts; stop any running measurement or session first. Your settings stay, and the current files come back automatically if the installation fails.',
+  acceptLabel:r.latest?'Install v'+r.latest:'Install Update',
+  acceptClass:'btn-primary'
+ });
+ if(!ok) return;
  await runUpdate('',{mode:'install',from:r.current,to:r.latest});
 }
 

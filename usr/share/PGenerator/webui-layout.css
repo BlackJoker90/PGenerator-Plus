@@ -16,7 +16,7 @@ body.layout-desktop #meter3dLutWorkspaceCard #meterSolvedLutList{background:var(
 .meter-solved-lut-name-date{display:block;margin-top:2px;color:var(--text2);font-size:.68rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 [data-theme="light"] .meter-solved-lut-name:hover{background:var(--hover-bg)}
 [data-theme="light"] .meter-solved-lut-name.is-selected{background:var(--selected-bg)}
-.meter-3dlut-measure-card{width:min(900px,calc(100vw - 36px));max-height:calc(100vh - 36px);display:flex;flex-direction:column;gap:10px;background:#111723;border:1px solid #2a3140;border-radius:10px;padding:14px;box-sizing:border-box}
+.meter-3dlut-measure-card{width:min(900px,calc(100vw - 36px));max-height:calc(100vh - 36px);display:flex;flex-direction:column;gap:10px;background:var(--surface-modal);border:1px solid var(--border);border-radius:10px;padding:14px;box-sizing:border-box}
 .meter-3dlut-measure-status{display:flex;align-items:center;justify-content:space-between;gap:12px;color:var(--text);font-size:.8rem}
 .meter-3dlut-measure-track{height:9px;border-radius:5px;background:#0d0f18;border:1px solid rgba(255,255,255,.12);overflow:hidden}
 .meter-3dlut-measure-fill{height:100%;width:0;background:var(--accent);transition:width .2s ease}

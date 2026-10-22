@@ -587,7 +587,9 @@ function lgRevealPinEntry(){
  // No modal -- if the legacy input is somehow still present (it isn't
  // in production), scroll/focus it as a last resort.
  const legacyInput=document.getElementById('lgPairPin');
- const card=(legacyInput&&legacyInput.closest('.card'))||document.querySelector('.card[data-widget="lg"]');
+ // On Tablet the TV Control body sits inside the Network card
+ const lgBody=document.getElementById('lgStatusBadge');
+ const card=(legacyInput&&legacyInput.closest('.card'))||(lgBody&&lgBody.closest('.card'))||document.querySelector('.card[data-widget="lg"]');
  if(card&&card.classList.contains('collapsed')){
   card.classList.remove('collapsed');
   try{

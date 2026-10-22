@@ -4268,6 +4268,7 @@ function pgApplyLayout(options){
  meterPlaceIccWorkspaceForLayout();
  uiSyncBodyScrollLock();
  meterSyncGreyscaleDesktopLayout();
+ pgPlaceConnectivityForLayout();
  pgSyncCardCollapseForLayout();
  pgUpdateLayoutControls();
  if(pgLayoutEffective==='desktop'){
@@ -4283,6 +4284,46 @@ function pgApplyLayout(options){
  }
  pgSyncTabletNav();
  try{ meterSyncConfigurationCollapse(); }catch(e){}
+}
+// Desktop shows Network, TV Control and Calibration Software as sections of
+// one Connectivity page. Tablet/phone gets the same: the TV Control and
+// Calibration Software bodies move into the Network card as sections; their
+// emptied cards stay in place (hidden), so card order and drag keep working,
+// and everything moves back for Desktop.
+const PG_NET_MERGED_WIDGETS=['lg','resolve'];
+function pgPlaceConnectivityForLayout(){
+ const net=document.querySelector('.dashboard > .card.net-card');
+ if(!net) return;
+ const merge=!document.body.classList.contains('layout-desktop');
+ PG_NET_MERGED_WIDGETS.forEach(id=>{
+  const card=document.querySelector('.dashboard > .card[data-widget="'+id+'"]');
+  if(!card) return;
+  const h2=[...card.children].find(el=>el.tagName==='H2');
+  const actions=h2&&h2.querySelector('.lg-card-title-actions');
+  let box=[...net.children].find(el=>el.classList.contains('net-merged')&&el.getAttribute('data-merged-from')===id);
+  if(merge){
+   if(box) return;
+   box=document.createElement('div');
+   box.className='net-merged';
+   box.setAttribute('data-merged-from',id);
+   [...card.children].forEach(el=>{ if(el!==h2) box.appendChild(el); });
+   if(actions){
+    const head=box.querySelector('.card-section-head');
+    if(head) head.insertAdjacentElement('afterend',actions); else box.insertBefore(actions,box.firstChild);
+   }
+   net.appendChild(box);
+   card.classList.add('net-merged-source');
+  }else{
+   if(!box) return;
+   // While merged the title actions sit in the box, not in the h2
+   const moved=box.querySelector('.lg-card-title-actions');
+   if(moved&&h2) h2.appendChild(moved);
+   [...box.children].forEach(el=>card.appendChild(el));
+   box.remove();
+   card.classList.remove('net-merged-source');
+  }
+ });
+ pgScheduleTabletNavSync();
 }
 function meterSyncGreyscaleDesktopLayout(){
  const live=document.getElementById('meterLiveReading');
@@ -5230,7 +5271,7 @@ async function loadReleaseList(){
 function onReleaseSelectChange(){
  const sel=document.getElementById('releaseSelect');
  if(!sel) return;
- if(sel.value===sel.dataset.applied) return;
+ // Picking the installed entry again (data-pg-repick) asks for a reinstall.
  installSelectedRelease();
 }
 // Release notes in the update card sit in a closed <details> (summary names the
@@ -16045,7 +16086,7 @@ function meterLiveWireRgbCodes(src){
 function meterLiveWireRgbMarkup(src){
  const wire=meterLiveWireRgbCodes(src);
  if(!wire) return '--';
- return '<span class="meter-live-rgb-triplet">'+meterLiveRgbMarkup(wire.codes)+'</span> <span style="color:#777;font-size:.85em">('+wire.bits+')</span>';
+ return '<span class="meter-live-rgb-triplet">'+meterLiveRgbMarkup(wire.codes)+'</span> <span style="color:var(--text-muted);font-size:.85em">('+wire.bits+')</span>';
 }
 
 function meterUpdateLiveReadingDetails(src,isMeasured){
@@ -20699,7 +20740,7 @@ function meterRenderGreyProfileEditor(){
  body.innerHTML=slots.map(slot=>{
   const entry=profile[stepsKey][String(slot)]||{slot:slot,stimulus:slot};
   const val=(entry&&entry.stimulus!=null)?entry.stimulus:slot;
-  return '<tr style="border-bottom:1px solid #1a1a28">'
+  return '<tr style="border-bottom:1px solid var(--divider)">'
    +'<td style="padding:6px">'+slot+'%</td>'
    +'<td style="padding:6px;color:#999">'+slot+'%</td>'
    +'<td style="padding:6px"><input type="number" min="0" max="100" step="0.1" data-grey-slot="'+slot+'" value="'+val+'" style="width:100%;background:var(--surface-inset);border:1px solid var(--border);border-radius:4px;color:var(--text-primary);padding:6px;box-sizing:border-box"></td>'
@@ -22167,7 +22208,10 @@ function meterCloseLutTools(){
   if(!byTouch) try{ select.focus({preventScroll:true}); }catch(e){}
   // The options may have been rebuilt by a poller while the menu was open.
   const target=select.contains(opt)?opt:Array.from(select.options).find(o=>o.value===opt.value);
-  if(!target||target.selected) return;
+  if(!target) return;
+  // data-pg-repick: picking the entry that is already selected still counts
+  // (the release list offers a reinstall of the installed version that way).
+  if(target.selected&&select.dataset.pgRepick!=='1') return;
   target.selected=true;
   select.dispatchEvent(new Event('input',{bubbles:true}));
   select.dispatchEvent(new Event('change',{bubbles:true}));

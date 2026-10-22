@@ -883,10 +883,10 @@ __PG_LOGO_DARK__
   </div>
 
   <div id="meterGreyProfileModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:10000;align-items:center;justify-content:center;padding:18px;box-sizing:border-box">
-   <div style="width:min(720px,100%);max-height:90vh;overflow:auto;background:#111723;border:1px solid #2a3140;border-radius:10px;padding:14px;box-sizing:border-box">
+   <div style="width:min(720px,100%);max-height:90vh;overflow:auto;background:var(--surface-modal);border:1px solid var(--border);border-radius:10px;padding:14px;box-sizing:border-box">
     <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:10px;flex-wrap:wrap">
     <div style="min-width:0">
-      <div style="font-size:.95rem;font-weight:700;color:#eee">Custom Greyscale Values</div>
+      <div style="font-size:.95rem;font-weight:700;color:var(--text-primary)">Custom Greyscale Values</div>
       <div id="meterGreyModalModeLabel" style="font-size:.68rem;color:var(--text2)">Current mode</div>
      </div>
      <div class="btn-row" style="margin:0">
@@ -900,9 +900,9 @@ __PG_LOGO_DARK__
     </label>
     <div style="font-size:.7rem;color:var(--text2);margin-bottom:10px">Edit the actual stimulus sent for each greyscale control point. Labels remain fixed at 0%, 5%, 10%, etc.</div>
     <div style="overflow:auto;margin-bottom:12px">
-     <table style="width:100%;border-collapse:collapse;font-size:12px;color:#ddd">
+     <table style="width:100%;border-collapse:collapse;font-size:12px;color:var(--text-primary)">
       <thead>
-       <tr style="border-bottom:1px solid #2a3140">
+       <tr style="border-bottom:1px solid var(--border)">
         <th style="text-align:left;padding:6px">Step</th>
         <th style="text-align:left;padding:6px">Default</th>
         <th style="text-align:left;padding:6px">Custom stimulus</th>
@@ -924,21 +924,21 @@ __PG_LOGO_DARK__
   </div>
 
   <div id="meterCustomSeriesModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:10000;align-items:center;justify-content:center;padding:18px;box-sizing:border-box">
-   <div class="meter-modal-scroll" style="width:min(1120px,96vw);max-height:90vh;overflow-y:auto;overflow-x:hidden;background:#111723;border:1px solid #2a3140;border-radius:10px;padding:14px;box-sizing:border-box">
+   <div class="meter-modal-scroll" style="width:min(1120px,96vw);max-height:90vh;overflow-y:auto;overflow-x:hidden;background:var(--surface-modal);border:1px solid var(--border);border-radius:10px;padding:14px;box-sizing:border-box">
     <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:10px;flex-wrap:wrap">
      <div style="min-width:0">
-      <div id="meterCustomSeriesModalTitle" style="font-size:.95rem;font-weight:700;color:#eee">Custom Series</div>
+      <div id="meterCustomSeriesModalTitle" style="font-size:.95rem;font-weight:700;color:var(--text-primary)">Custom Series</div>
       <div id="meterCustomSeriesModalModeLabel" style="font-size:.68rem;color:var(--text2)">Current mode</div>
      </div>
     </div>
     <div style="display:flex;gap:14px;flex-wrap:wrap;margin-bottom:10px;align-items:flex-end">
      <label style="font-size:.74rem;color:var(--text2);display:flex;flex-direction:column;gap:4px;flex:1 1 260px;max-width:340px">
       <span>Series name</span>
-      <input type="text" id="meterCustomSeriesNameInput" maxlength="96" style="background:var(--surface-inset);border:1px solid #2a3140;border-radius:4px;color:#eee;padding:6px;box-sizing:border-box">
+      <input type="text" id="meterCustomSeriesNameInput" maxlength="96" style="background:var(--surface-inset);border:1px solid var(--border);border-radius:4px;color:var(--text-primary);padding:6px;box-sizing:border-box">
      </label>
      <label style="font-size:.74rem;color:var(--text2);display:flex;flex-direction:column;gap:4px" title="The signal range these patch codes are authored for. The series is only offered while the display is outputting this range (Limited = legal/video codes, Full = PC range). Defaults to what you're outputting now.">
       <span>Range</span>
-      <select id="meterCustomSeriesRangeInput" style="background:var(--surface-inset);border:1px solid #2a3140;border-radius:4px;color:#eee;padding:6px;box-sizing:border-box">
+      <select id="meterCustomSeriesRangeInput" style="background:var(--surface-inset);border:1px solid var(--border);border-radius:4px;color:var(--text-primary);padding:6px;box-sizing:border-box">
        <option value="limited">Limited (legal)</option>
        <option value="full">Full</option>
       </select>
@@ -946,8 +946,8 @@ __PG_LOGO_DARK__
     </div>
     <div id="meterCustomSeriesEditorHint" style="font-size:.7rem;color:var(--text2);margin-bottom:10px">Enter either the 8-bit or 10-bit code; the other converts automatically.</div>
     <div style="overflow:auto;margin-bottom:12px">
-     <table style="width:100%;border-collapse:collapse;font-size:12px;color:#ddd">
-      <thead><tr id="meterCustomSeriesEditorHead" style="border-bottom:1px solid #2a3140"></tr></thead>
+     <table style="width:100%;border-collapse:collapse;font-size:12px;color:var(--text-primary)">
+      <thead><tr id="meterCustomSeriesEditorHead" style="border-bottom:1px solid var(--border)"></tr></thead>
       <tbody id="meterCustomSeriesEditorBody"></tbody>
      </table>
     </div>
@@ -969,9 +969,9 @@ __PG_LOGO_DARK__
   </div>
 
   <div id="meterCustomSeriesManagerModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:10000;align-items:center;justify-content:center;padding:18px;box-sizing:border-box">
-   <div style="width:min(940px,100%);max-height:90vh;overflow:auto;background:#111723;border:1px solid #2a3140;border-radius:10px;padding:14px;box-sizing:border-box">
+   <div style="width:min(940px,100%);max-height:90vh;overflow:auto;background:var(--surface-modal);border:1px solid var(--border);border-radius:10px;padding:14px;box-sizing:border-box">
     <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:10px;flex-wrap:wrap">
-     <div id="meterCustomSeriesManagerTitle" style="font-size:.95rem;font-weight:700;color:#eee">Custom Series</div>
+     <div id="meterCustomSeriesManagerTitle" style="font-size:.95rem;font-weight:700;color:var(--text-primary)">Custom Series</div>
      <button class="btn btn-sm btn-secondary" onclick="meterCloseCustomSeriesManager()">Close</button>
     </div>
     <div id="meterCustomSeriesManagerStatus" style="display:none;margin:0 0 10px;padding:8px 10px;border:1px solid var(--status-error);border-radius:6px;background:rgba(198,40,40,.12);color:var(--text-primary);font-size:.76rem;line-height:1.4"></div>
@@ -983,14 +983,14 @@ __PG_LOGO_DARK__
     </div>
     <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin:0 0 8px 0">
      <div id="meterCustomSeriesManagerScope" style="font-size:.72rem;color:var(--text2)"></div>
-     <label style="font-size:.74rem;color:#ddd;display:inline-flex;gap:5px;align-items:center;cursor:pointer" title="Off: only series that match the display you're driving right now (its signal mode and output range) are shown, because those are the only ones that will render correctly. On: show every custom series across all modes (SDR/HDR/DV) and ranges (Limited/Full).">
+     <label style="font-size:.74rem;color:var(--text-primary);display:inline-flex;gap:5px;align-items:center;cursor:pointer" title="Off: only series that match the display you're driving right now (its signal mode and output range) are shown, because those are the only ones that will render correctly. On: show every custom series across all modes (SDR/HDR/DV) and ranges (Limited/Full).">
       <input type="checkbox" id="meterCustomSeriesManagerShowAll" onchange="meterCustomSeriesManagerToggleShowAll(this.checked)"> Show all modes &amp; ranges
      </label>
     </div>
     <div style="overflow:auto;margin-bottom:12px">
-     <table style="width:100%;border-collapse:collapse;font-size:12px;color:#ddd">
+     <table style="width:100%;border-collapse:collapse;font-size:12px;color:var(--text-primary)">
       <thead>
-       <tr style="border-bottom:1px solid #2a3140">
+       <tr style="border-bottom:1px solid var(--border)">
         <th style="text-align:left;padding:6px">Name</th>
         <th style="text-align:left;padding:6px">Category</th>
         <th style="text-align:left;padding:6px">Mode</th>
@@ -1006,16 +1006,16 @@ __PG_LOGO_DARK__
   </div>
 
   <div id="meterImportWizardModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:10001;align-items:center;justify-content:center;padding:18px;box-sizing:border-box">
-   <div style="width:min(940px,100%);max-height:90vh;overflow:auto;background:#111723;border:1px solid #2a3140;border-radius:10px;padding:14px;box-sizing:border-box">
+   <div style="width:min(940px,100%);max-height:90vh;overflow:auto;background:var(--surface-modal);border:1px solid var(--border);border-radius:10px;padding:14px;box-sizing:border-box">
     <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:10px;flex-wrap:wrap">
-     <div style="font-size:.95rem;font-weight:700;color:#eee">Import Patch Series</div>
+     <div style="font-size:.95rem;font-weight:700;color:var(--text-primary)">Import Patch Series</div>
      <button class="btn btn-sm btn-secondary" onclick="meterCloseImportWizard()">Close</button>
     </div>
     <div style="font-size:.78rem;color:var(--text2);margin-bottom:8px">Choose the source format, pick the file, then review before importing. CalMAN CCFX files can hold many series — you pick which to import and set each one's name, bit depth and SDR/HDR.</div>
     <div class="btn-row" style="margin:0 0 10px 0;align-items:center;gap:10px;flex-wrap:wrap">
-     <label style="font-size:.8rem;color:#ddd;display:inline-flex;gap:4px;align-items:center;cursor:pointer"><input type="radio" name="meterImpFmt" value="calman_csv" checked onchange="meterImportWizardFormatChanged()"> CalMAN CSV</label>
-     <label style="font-size:.8rem;color:#ddd;display:inline-flex;gap:4px;align-items:center;cursor:pointer"><input type="radio" name="meterImpFmt" value="colourspace_csv" onchange="meterImportWizardFormatChanged()"> ColourSpace CSV</label>
-     <label style="font-size:.8rem;color:#ddd;display:inline-flex;gap:4px;align-items:center;cursor:pointer"><input type="radio" name="meterImpFmt" value="calman_ccfx" onchange="meterImportWizardFormatChanged()"> CalMAN CCFX (multiple series)</label>
+     <label style="font-size:.8rem;color:var(--text-primary);display:inline-flex;gap:4px;align-items:center;cursor:pointer"><input type="radio" name="meterImpFmt" value="calman_csv" checked onchange="meterImportWizardFormatChanged()"> CalMAN CSV</label>
+     <label style="font-size:.8rem;color:var(--text-primary);display:inline-flex;gap:4px;align-items:center;cursor:pointer"><input type="radio" name="meterImpFmt" value="colourspace_csv" onchange="meterImportWizardFormatChanged()"> ColourSpace CSV</label>
+     <label style="font-size:.8rem;color:var(--text-primary);display:inline-flex;gap:4px;align-items:center;cursor:pointer"><input type="radio" name="meterImpFmt" value="calman_ccfx" onchange="meterImportWizardFormatChanged()"> CalMAN CCFX (multiple series)</label>
     </div>
     <div class="btn-row" style="margin:0 0 12px 0;align-items:center;gap:8px;flex-wrap:wrap">
      <button class="btn btn-sm btn-primary" onclick="meterImportWizardChooseFile()">Choose file&hellip;</button>
@@ -1032,9 +1032,9 @@ __PG_LOGO_DARK__
   <!--__PG_ICC_PROFILE_HTML__-->
   <span id="meterLutToolsHome" hidden></span>
   <div id="meterLutToolsModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:10000;align-items:center;justify-content:center;padding:18px;box-sizing:border-box">
-   <div class="meter-modal-scroll" style="width:min(720px,100%);max-height:90vh;overflow-y:auto;overflow-x:hidden;background:#111723;border:1px solid #2a3140;border-radius:10px;padding:14px;box-sizing:border-box">
+   <div class="meter-modal-scroll" style="width:min(720px,100%);max-height:90vh;overflow-y:auto;overflow-x:hidden;background:var(--surface-modal);border:1px solid var(--border);border-radius:10px;padding:14px;box-sizing:border-box">
     <div class="meter-lut-tools-head" style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:10px;flex-wrap:wrap">
-     <div style="font-size:.95rem;font-weight:700;color:#eee">3D LUT Tools</div>
+     <div style="font-size:.95rem;font-weight:700;color:var(--text-primary)">3D LUT Tools</div>
      <button class="btn btn-sm btn-secondary meter-lut-tools-close" onclick="meterCloseLutTools()">Close</button>
     </div>
     <div class="btn-row meter-lut-tools-import" style="margin:0 0 12px 0">
@@ -1069,9 +1069,9 @@ __PG_LOGO_DARK__
   </div>
 
   <div id="lutSolveProgressModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:100050;align-items:center;justify-content:center;padding:18px;box-sizing:border-box">
-   <div style="width:min(440px,100%);background:#111723;border:1px solid #2a3140;border-radius:10px;padding:20px;box-sizing:border-box;text-align:center">
+   <div style="width:min(440px,100%);background:var(--surface-modal);border:1px solid var(--border);border-radius:10px;padding:20px;box-sizing:border-box;text-align:center">
     <div class="apply-settings-spinner" style="margin:0 auto 14px"></div>
-    <div id="lutSolveProgressTitle" style="font-size:.95rem;font-weight:700;color:#eee;margin-bottom:8px">Building 3D LUT</div>
+    <div id="lutSolveProgressTitle" style="font-size:.95rem;font-weight:700;color:var(--text-primary);margin-bottom:8px">Building 3D LUT</div>
     <div id="lutSolveProgressMsg" style="font-size:.8rem;color:var(--text2);line-height:1.5;margin-bottom:12px">Starting solve&hellip;</div>
     <div style="height:10px;border-radius:3px;background:#0d0f18;border:1px solid rgba(255,255,255,.12);overflow:hidden;text-align:left">
      <div id="lutSolveProgressFill" class="meter-workflow-progress-fill active" style="width:8%;height:100%"></div>
@@ -1093,8 +1093,8 @@ __PG_LOGO_DARK__
    </div>
   </div>
   <div id="lutSolveDoneModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:100050;align-items:center;justify-content:center;padding:18px;box-sizing:border-box">
-   <div style="width:min(520px,100%);background:#111723;border:1px solid #2a3140;border-radius:10px;padding:16px;box-sizing:border-box">
-    <div style="font-size:.95rem;font-weight:700;color:#eee;margin-bottom:8px">3D LUT solved</div>
+   <div style="width:min(520px,100%);background:var(--surface-modal);border:1px solid var(--border);border-radius:10px;padding:16px;box-sizing:border-box">
+    <div style="font-size:.95rem;font-weight:700;color:var(--text-primary);margin-bottom:8px">3D LUT solved</div>
     <div id="lutSolveDoneSummary" style="font-size:.8rem;color:var(--text2);margin-bottom:12px;line-height:1.5"></div>
     <div class="btn-row" style="margin:0">
      <button class="btn btn-sm btn-primary" id="lutSolveDoneDownloadCubeBtn" onclick="meterLutSolveDownload('cube')" title="Standard .cube (Resolve, madVR, LUT boxes)">Download .cube</button>
@@ -1105,11 +1105,11 @@ __PG_LOGO_DARK__
    </div>
   </div>
   <div id="meterLg3dStartModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:10001;align-items:center;justify-content:center;padding:18px;box-sizing:border-box">
-   <div style="width:min(620px,100%);max-height:90vh;overflow:auto;background:#111723;border:1px solid #2a3140;border-radius:10px;padding:16px;box-sizing:border-box">
-    <div style="font-size:1rem;font-weight:700;color:#eee;margin-bottom:8px">3D LUT AutoCal</div>
+   <div style="width:min(620px,100%);max-height:90vh;overflow:auto;background:var(--surface-modal);border:1px solid var(--border);border-radius:10px;padding:16px;box-sizing:border-box">
+    <div style="font-size:1rem;font-weight:700;color:var(--text-primary);margin-bottom:8px">3D LUT AutoCal</div>
     <div style="font-size:.78rem;color:var(--text2);line-height:1.45;margin-bottom:14px">Choose how the display is profiled before the 3D LUT is solved and uploaded. Greyscale / 1D should already be calibrated. Regardless of profiling method, the worker always generates and uploads a full 33&sup3; (35,937-node) 12-bit payload for the active picture mode. Patch counts below are the profile measurements only.</div>
     <label style="display:block;font-size:.72rem;color:var(--text2);margin-bottom:6px;text-transform:uppercase;letter-spacing:.04em">Profiling method</label>
-    <select id="meterLg3dModalProfileSource" onchange="meterLg3dModalProfileSourceChanged()" style="width:100%;max-width:100%;background:var(--surface-inset);border:1px solid #2a3140;border-radius:6px;color:#eee;padding:8px 10px;box-sizing:border-box;margin-bottom:10px">
+    <select id="meterLg3dModalProfileSource" onchange="meterLg3dModalProfileSourceChanged()" style="width:100%;max-width:100%;background:var(--surface-inset);border:1px solid var(--border);border-radius:6px;color:var(--text-primary);padding:8px 10px;box-sizing:border-box;margin-bottom:10px">
      <option value="matrix">Matrix (5-point) — 5 patches, fastest</option>
      <option value="skeleton">Skeleton (multi-level WRGB) — 45 patches</option>
      <option value="hybrid3" selected>Hybrid 3&sup3; — 63 patches (recommended)</option>
@@ -1120,15 +1120,15 @@ __PG_LOGO_DARK__
     </select>
     <div id="meterLg3dModalLatticeRow" style="display:none;margin-bottom:10px">
      <label style="display:block;font-size:.72rem;color:var(--text2);margin-bottom:6px">Lattice series</label>
-     <select id="meterLg3dModalLatticeSeries" onchange="meterLg3dModalProfileSourceChanged()" style="width:100%;background:var(--surface-inset);border:1px solid #2a3140;border-radius:6px;color:#eee;padding:8px 10px;box-sizing:border-box"></select>
+     <select id="meterLg3dModalLatticeSeries" onchange="meterLg3dModalProfileSourceChanged()" style="width:100%;background:var(--surface-inset);border:1px solid var(--border);border-radius:6px;color:var(--text-primary);padding:8px 10px;box-sizing:border-box"></select>
     </div>
     <div id="meterLg3dModalImportedRow" style="display:none;margin-bottom:10px">
      <label style="display:block;font-size:.72rem;color:var(--text2);margin-bottom:6px">.cube to upload</label>
-     <select id="meterLg3dModalImportedLut" style="width:100%;background:var(--surface-inset);border:1px solid #2a3140;border-radius:6px;color:#eee;padding:8px 10px;box-sizing:border-box"></select>
+     <select id="meterLg3dModalImportedLut" style="width:100%;background:var(--surface-inset);border:1px solid var(--border);border-radius:6px;color:var(--text-primary);padding:8px 10px;box-sizing:border-box"></select>
     </div>
-    <div id="meterLg3dModalExplain" style="font-size:.8rem;color:var(--text);line-height:1.5;background:var(--surface-inset);border:1px solid #2a3140;border-radius:8px;padding:12px;margin-bottom:10px;min-height:7.5em"></div>
+    <div id="meterLg3dModalExplain" style="font-size:.8rem;color:var(--text);line-height:1.5;background:var(--surface-inset);border:1px solid var(--border);border-radius:8px;padding:12px;margin-bottom:10px;min-height:7.5em"></div>
     <div id="meterLg3dModalCount" style="font-size:.75rem;color:var(--text2);margin-bottom:12px">&nbsp;</div>
-    <div style="margin-bottom:14px;padding:10px 12px;background:var(--surface-inset);border:1px solid #2a3140;border-radius:8px">
+    <div style="margin-bottom:14px;padding:10px 12px;background:var(--surface-inset);border:1px solid var(--border);border-radius:8px">
      <div style="font-size:.72rem;color:var(--text2);text-transform:uppercase;letter-spacing:.04em;margin-bottom:8px">Export cube size</div>
      <label style="display:flex;align-items:flex-start;gap:8px;font-size:.8rem;color:var(--text);cursor:pointer;line-height:1.4;margin-bottom:8px">
       <input type="radio" name="meterLg3dCubeSize" id="meterLg3dCubeSize17" value="17" checked style="margin-top:3px;accent-color:var(--accent,#5b7fff)">
@@ -1146,11 +1146,11 @@ __PG_LOGO_DARK__
    </div>
   </div>
   <div id="meterLg3dSelectSeriesModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:10001;align-items:center;justify-content:center;padding:18px;box-sizing:border-box">
-   <div style="width:min(620px,100%);max-height:90vh;overflow:auto;background:#111723;border:1px solid #2a3140;border-radius:10px;padding:16px;box-sizing:border-box">
-    <div style="font-size:1rem;font-weight:700;color:#eee;margin-bottom:8px">Select 3D LUT Series</div>
+   <div style="width:min(620px,100%);max-height:90vh;overflow:auto;background:var(--surface-modal);border:1px solid var(--border);border-radius:10px;padding:16px;box-sizing:border-box">
+    <div style="font-size:1rem;font-weight:700;color:var(--text-primary);margin-bottom:8px">Select 3D LUT Series</div>
     <div style="font-size:.78rem;color:var(--text2);line-height:1.45;margin-bottom:14px">Choose a profiling series to measure. It uses the same method chooser as the standalone 3D LUT AutoCal; the descriptions below note what each set samples.</div>
     <label style="display:block;font-size:.72rem;color:var(--text2);margin-bottom:6px;text-transform:uppercase;letter-spacing:.04em">Profiling method</label>
-    <select id="meterLg3dSelSeriesSource" onchange="meterLg3dSelectSeriesChanged()" style="width:100%;max-width:100%;background:var(--surface-inset);border:1px solid #2a3140;border-radius:6px;color:#eee;padding:8px 10px;box-sizing:border-box;margin-bottom:10px">
+    <select id="meterLg3dSelSeriesSource" onchange="meterLg3dSelectSeriesChanged()" style="width:100%;max-width:100%;background:var(--surface-inset);border:1px solid var(--border);border-radius:6px;color:var(--text-primary);padding:8px 10px;box-sizing:border-box;margin-bottom:10px">
      <option value="matrix">Matrix (5-point) — 5 patches, fastest</option>
      <option value="skeleton">Skeleton (multi-level WRGB) — 45 patches</option>
      <option value="hybrid3" selected>Hybrid 3&sup3; — 63 patches (recommended)</option>
@@ -1160,9 +1160,9 @@ __PG_LOGO_DARK__
     </select>
     <div id="meterLg3dSelSeriesLatticeRow" style="display:none;margin-bottom:10px">
      <label style="display:block;font-size:.72rem;color:var(--text2);margin-bottom:6px">Lattice series</label>
-     <select id="meterLg3dSelSeriesLattice" onchange="meterLg3dSelectSeriesChanged()" style="width:100%;background:var(--surface-inset);border:1px solid #2a3140;border-radius:6px;color:#eee;padding:8px 10px;box-sizing:border-box"></select>
+     <select id="meterLg3dSelSeriesLattice" onchange="meterLg3dSelectSeriesChanged()" style="width:100%;background:var(--surface-inset);border:1px solid var(--border);border-radius:6px;color:var(--text-primary);padding:8px 10px;box-sizing:border-box"></select>
     </div>
-    <div id="meterLg3dSelSeriesExplain" style="font-size:.8rem;color:var(--text);line-height:1.5;background:var(--surface-inset);border:1px solid #2a3140;border-radius:8px;padding:12px;margin-bottom:10px;min-height:7.5em"></div>
+    <div id="meterLg3dSelSeriesExplain" style="font-size:.8rem;color:var(--text);line-height:1.5;background:var(--surface-inset);border:1px solid var(--border);border-radius:8px;padding:12px;margin-bottom:10px;min-height:7.5em"></div>
     <div id="meterLg3dSelSeriesCount" style="font-size:.75rem;color:var(--text2);margin-bottom:14px">&nbsp;</div>
     <div class="btn-row btn-row-end">
      <button type="button" class="btn btn-sm btn-secondary" onclick="meterCloseLg3dSelectSeriesModal()">Cancel</button>
@@ -1171,36 +1171,36 @@ __PG_LOGO_DARK__
    </div>
   </div>
   <div id="meterLatticeGenModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:10001;align-items:center;justify-content:center;padding:18px;box-sizing:border-box">
-   <div style="width:min(560px,100%);max-height:90vh;overflow:auto;background:#111723;border:1px solid #2a3140;border-radius:10px;padding:14px;box-sizing:border-box">
-    <div id="meterLatticeGenTitle" style="font-size:.95rem;font-weight:700;color:#eee;margin-bottom:10px">Generate Lattice Series</div>
+   <div style="width:min(560px,100%);max-height:90vh;overflow:auto;background:var(--surface-modal);border:1px solid var(--border);border-radius:10px;padding:14px;box-sizing:border-box">
+    <div id="meterLatticeGenTitle" style="font-size:.95rem;font-weight:700;color:var(--text-primary);margin-bottom:10px">Generate Lattice Series</div>
     <div style="font-size:.7rem;color:var(--text2);margin-bottom:10px">Creates an N&times;N&times;N RGB cube patch sequence (plus optional greyscale ramp) for the current signal mode. Export it for CalMAN/ColourSpace or measure it here.</div>
     <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:10px">
      <label style="font-size:.72rem;color:var(--text2);display:flex;flex-direction:column;gap:4px">
       <span>Series name</span>
-      <input type="text" id="meterLatticeName" maxlength="48" style="width:180px;background:var(--surface-inset);border:1px solid #2a3140;border-radius:4px;color:#eee;padding:6px;box-sizing:border-box">
+      <input type="text" id="meterLatticeName" maxlength="48" style="width:180px;background:var(--surface-inset);border:1px solid var(--border);border-radius:4px;color:var(--text-primary);padding:6px;box-sizing:border-box">
      </label>
      <label style="font-size:.72rem;color:var(--text2);display:flex;flex-direction:column;gap:4px">
       <span>Cube size (per axis)</span>
-      <input type="number" id="meterLatticeSize" min="3" max="50" step="1" value="9" oninput="meterLatticeGenSyncReadout()" style="width:90px;background:var(--surface-inset);border:1px solid #2a3140;border-radius:4px;color:#eee;padding:6px;box-sizing:border-box">
+      <input type="number" id="meterLatticeSize" min="3" max="50" step="1" value="9" oninput="meterLatticeGenSyncReadout()" style="width:90px;background:var(--surface-inset);border:1px solid var(--border);border-radius:4px;color:var(--text-primary);padding:6px;box-sizing:border-box">
      </label>
      <label style="font-size:.72rem;color:var(--text2);display:flex;flex-direction:column;gap:4px">
       <span>Greyscale points (0 = off)</span>
-      <input type="number" id="meterLatticeGrey" min="0" max="101" step="1" value="0" oninput="meterLatticeGenSyncReadout()" style="width:110px;background:var(--surface-inset);border:1px solid #2a3140;border-radius:4px;color:#eee;padding:6px;box-sizing:border-box">
+      <input type="number" id="meterLatticeGrey" min="0" max="101" step="1" value="0" oninput="meterLatticeGenSyncReadout()" style="width:110px;background:var(--surface-inset);border:1px solid var(--border);border-radius:4px;color:var(--text-primary);padding:6px;box-sizing:border-box">
      </label>
      <label style="font-size:.72rem;color:var(--text2);display:flex;flex-direction:column;gap:4px">
       <span>Skip below luminance %</span>
-      <input type="number" id="meterLatticeThreshold" min="0" max="50" step="0.5" value="0" oninput="meterLatticeGenSyncReadout()" style="width:110px;background:var(--surface-inset);border:1px solid #2a3140;border-radius:4px;color:#eee;padding:6px;box-sizing:border-box">
+      <input type="number" id="meterLatticeThreshold" min="0" max="50" step="0.5" value="0" oninput="meterLatticeGenSyncReadout()" style="width:110px;background:var(--surface-inset);border:1px solid var(--border);border-radius:4px;color:var(--text-primary);padding:6px;box-sizing:border-box">
      </label>
      <label class="sel-stack">
       <span>Measurement order</span>
-      <select id="meterLatticeOrder" onchange="meterLatticeGenSyncReadout()" style="background:var(--surface-inset);border:1px solid #2a3140;border-radius:4px;color:#eee;padding:6px;box-sizing:border-box">
+      <select id="meterLatticeOrder" onchange="meterLatticeGenSyncReadout()" style="background:var(--surface-inset);border:1px solid var(--border);border-radius:4px;color:var(--text-primary);padding:6px;box-sizing:border-box">
        <option value="spread" selected>Spread (thermal-safe)</option>
        <option value="grid">Grid order</option>
       </select>
      </label>
      <label class="sel-stack">
       <span>Node spacing <span class="meter-help-tip" title="Signal-uniform: classic equal code steps. Light-uniform: node values spaced evenly in decoded LIGHT up to the mastering peak (corners still hit 100% signal). In HDR/PQ, signal-uniform mixes decode to near-primary light ratios and crowd the gamut edge — light-uniform fills the chroma interior with the same patch count." aria-label="Node spacing help">?</span></span>
-      <select id="meterLatticeSpacing" onchange="meterLatticeGenSyncReadout()" style="background:var(--surface-inset);border:1px solid #2a3140;border-radius:4px;color:#eee;padding:6px;box-sizing:border-box">
+      <select id="meterLatticeSpacing" onchange="meterLatticeGenSyncReadout()" style="background:var(--surface-inset);border:1px solid var(--border);border-radius:4px;color:var(--text-primary);padding:6px;box-sizing:border-box">
        <option value="signal" selected>Signal-uniform</option>
        <option value="light">Light-uniform</option>
       </select>
@@ -1220,16 +1220,16 @@ __PG_LOGO_DARK__
 
   <!-- CCSS create/editor: reparented to document.body on open so they beat the AutoCal mask (same trap as spectro setup when nested under .dashboard). -->
   <div id="meterCcssCreateModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:10050;align-items:center;justify-content:center;padding:18px;box-sizing:border-box">
-   <div style="width:min(580px,100%);max-height:90vh;overflow:auto;background:#111723;border:1px solid #2a3140;border-radius:10px;padding:14px;box-sizing:border-box">
+   <div style="width:min(580px,100%);max-height:90vh;overflow:auto;background:var(--surface-modal);border:1px solid var(--border);border-radius:10px;padding:14px;box-sizing:border-box">
     <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:10px;flex-wrap:wrap">
      <div>
-      <div id="meterCcssCreateTitle" style="font-size:.95rem;font-weight:700;color:#eee">Create Meter Profile</div>
+      <div id="meterCcssCreateTitle" style="font-size:.95rem;font-weight:700;color:var(--text-primary)">Create Meter Profile</div>
       <div id="meterCcssCreateIntro" style="font-size:.68rem;color:var(--text2);max-width:68ch;line-height:1.45"></div>
      </div>
     </div>
     <div style="margin-bottom:12px">
      <label style="font-size:.74rem;color:var(--text2);display:block;margin-bottom:6px">Profile Type</label>
-     <select id="meterCcssCreateFormat" onchange="meterCcssCreateFormatChanged()" style="width:100%;font-size:.8rem;padding:7px 8px;background:#12121e;border:1px solid #444;border-radius:4px;color:var(--text);box-sizing:border-box">
+     <select id="meterCcssCreateFormat" onchange="meterCcssCreateFormatChanged()" style="width:100%;font-size:.8rem;padding:7px 8px;background:var(--surface-field);border:1px solid var(--border);border-radius:4px;color:var(--text);box-sizing:border-box">
       <option value="ccss">CCSS - spectral display correction</option>
       <option value="ccmx">CCMX - meter correction matrix</option>
      </select>
@@ -1237,7 +1237,7 @@ __PG_LOGO_DARK__
     </div>
     <div id="meterCcssCreateMethodSection" style="display:none;margin-bottom:12px">
      <label style="font-size:.74rem;color:var(--text2);display:block;margin-bottom:6px">CCMX Creation Method</label>
-     <select id="meterCcssCreateMethod" onchange="meterCcssCreateMethodChanged()" style="width:100%;font-size:.8rem;padding:7px 8px;background:#12121e;border:1px solid #444;border-radius:4px;color:var(--text);box-sizing:border-box">
+     <select id="meterCcssCreateMethod" onchange="meterCcssCreateMethodChanged()" style="width:100%;font-size:.8rem;padding:7px 8px;background:var(--surface-field);border:1px solid var(--border);border-radius:4px;color:var(--text);box-sizing:border-box">
       <option value="measure">Measure with a reference meter</option>
       <option value="json">Import an XYZ correction matrix JSON</option>
       <option value="manual">Enter a 3x3 correction matrix</option>
@@ -1246,7 +1246,7 @@ __PG_LOGO_DARK__
     </div>
       <div style="margin-bottom:12px">
        <label style="font-size:.74rem;color:var(--text2);display:block;margin-bottom:6px">Display Technology</label>
-       <select id="meterCcssCreateDisplayType" onchange="meterCcssCreateUpdateStartState(true)" style="width:100%;font-size:.8rem;padding:7px 8px;background:#12121e;border:1px solid #444;border-radius:4px;color:var(--text);box-sizing:border-box"></select>
+       <select id="meterCcssCreateDisplayType" onchange="meterCcssCreateUpdateStartState(true)" style="width:100%;font-size:.8rem;padding:7px 8px;background:var(--surface-field);border:1px solid var(--border);border-radius:4px;color:var(--text);box-sizing:border-box"></select>
        <div id="meterCcssCreateDisplayHelp" style="font-size:.7rem;color:var(--text2);margin-top:6px;line-height:1.45"></div>
       </div>
     <div id="meterCcssCreateReferenceSection" style="margin-bottom:12px">
@@ -1288,7 +1288,7 @@ __PG_LOGO_DARK__
     </div>
     <div style="margin-bottom:12px">
      <label style="font-size:.74rem;color:var(--text2);display:block;margin-bottom:6px">Profile Name</label>
-    <input type="text" id="meterCcssCreateName" placeholder="Ex. LG G4 WRGB OLED" oninput="meterCcssCreateUpdateStartState(true)" style="width:100%;font-size:.8rem;padding:7px 8px;background:#12121e;border:1px solid #444;border-radius:4px;color:var(--text);box-sizing:border-box">
+    <input type="text" id="meterCcssCreateName" placeholder="Ex. LG G4 WRGB OLED" oninput="meterCcssCreateUpdateStartState(true)" style="width:100%;font-size:.8rem;padding:7px 8px;background:var(--surface-field);border:1px solid var(--border);border-radius:4px;color:var(--text);box-sizing:border-box">
     </div>
     <div id="meterCcssCreateProgress" style="font-size:.74rem;color:var(--text2);margin-bottom:12px;min-height:2.4em;line-height:1.45">Select a profile type and the required meter or meters, then start.</div>
     <div class="btn-row btn-row-end">
@@ -1362,7 +1362,7 @@ __PG_LOGO_DARK__
     <div style="background:var(--surface-inset);border-radius:6px;padding:10px;min-width:0">
      <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px">
       <div style="font-size:.65rem;color:var(--text2);text-transform:uppercase">Low RGB Balance</div>
-      <div id="meterTwoPointLowLabel" style="font-size:.72rem;color:#eee">Low</div>
+      <div id="meterTwoPointLowLabel" style="font-size:.72rem;color:var(--text-primary)">Low</div>
      </div>
      <canvas id="meterTwoPointLowCanvas" width="220" height="220" style="width:100%;height:220px;display:block"></canvas>
      <div id="meterTwoPointLowMeta" style="font-size:.72rem;color:var(--text2);line-height:1.5;margin-top:8px">No low-point reading yet.</div>
@@ -1370,14 +1370,14 @@ __PG_LOGO_DARK__
     <div style="background:var(--surface-inset);border-radius:6px;padding:10px;min-width:0">
      <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px">
       <div style="font-size:.65rem;color:var(--text2);text-transform:uppercase">High RGB Balance</div>
-      <div id="meterTwoPointHighLabel" style="font-size:.72rem;color:#eee">High</div>
+      <div id="meterTwoPointHighLabel" style="font-size:.72rem;color:var(--text-primary)">High</div>
      </div>
      <canvas id="meterTwoPointHighCanvas" width="220" height="220" style="width:100%;height:220px;display:block"></canvas>
      <div id="meterTwoPointHighMeta" style="font-size:.72rem;color:var(--text2);line-height:1.5;margin-top:8px">No high-point reading yet.</div>
     </div>
     </div>
     <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;background:var(--surface-inset);border-radius:6px;padding:10px 12px">
-    <div style="font-size:.72rem;color:var(--text2)">High Luminance: <strong id="meterTwoPointHighLuminance" style="color:#eee;font-size:.9rem">--</strong> cd/m&sup2;</div>
+    <div style="font-size:.72rem;color:var(--text2)">High Luminance: <strong id="meterTwoPointHighLuminance" style="color:var(--text-primary);font-size:.9rem">--</strong> cd/m&sup2;</div>
     <label style="font-size:.7rem;color:var(--text2);user-select:none;display:flex;align-items:center;gap:4px" title="Changes the Delta E calculation shown as the fourth bar in each two-point result.">
      Grey &Delta;E
      <select id="meterTwoPointDeltaEForm" class="inline-select" onchange="meterOnTwoPointDeltaEFormChange()">
@@ -1474,7 +1474,7 @@ __PG_LOGO_DARK__
      <canvas id="chartGammaValue" width="800" height="180" style="width:100%;min-width:100%;height:180px;background:var(--surface-inset);border-radius:6px"></canvas>
     </div>
     </div>
-    <div id="chartTooltip" style="display:none;position:fixed;pointer-events:none;z-index:9999;background:rgba(13,13,21,0.95);border:1px solid #555;border-radius:5px;padding:6px 10px;font-size:12px;color:#ddd;white-space:nowrap;box-shadow:0 2px 8px rgba(0,0,0,0.5)"></div>
+    <div id="chartTooltip" style="display:none;position:fixed;pointer-events:none;z-index:9999;background:var(--chart-tooltip);border:1px solid var(--border);border-radius:5px;padding:6px 10px;font-size:12px;color:var(--text-primary);white-space:nowrap;box-shadow:0 2px 8px rgba(0,0,0,0.5)"></div>
     <div id="meterEotfLuminanceGrid" style="display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:10px;margin-bottom:10px">
      <div id="meterEotfBlock">
       <div style="display:flex;align-items:center;gap:10px;margin-bottom:4px;flex-wrap:wrap">
@@ -1560,7 +1560,7 @@ __PG_LOGO_DARK__
        <div id="meterXYYColorLabel" style="font-size:.68rem;color:var(--text2);text-transform:none;letter-spacing:.06em;margin-bottom:8px;text-align:center">xyY</div>
        <canvas id="meterXYYCanvasColor" width="200" height="400" style="width:100%;flex:1;min-height:0;display:block"></canvas>
       </div>
-      <div id="colorReadingDetail" style="flex:0 0 205px;width:205px;height:450px;background:var(--surface-inset);border-radius:6px;padding:12px;font-size:12px;color:#888;box-sizing:border-box;overflow:auto">
+      <div id="colorReadingDetail" style="flex:0 0 205px;width:205px;height:450px;background:var(--surface-inset);border-radius:6px;padding:12px;font-size:12px;color:var(--text-muted);box-sizing:border-box;overflow:auto">
        <div id="colorDetailContent" style="text-align:center;padding:30px 0;color:var(--text-muted)">Select a color<br>to see details</div>
       </div>
      </div>
@@ -1595,8 +1595,8 @@ __PG_LOGO_DARK__
     <div id="colorSeriesAveragesWrap" style="margin-bottom:10px;display:none">
      <div style="font-size:.65rem;color:var(--text2);text-transform:uppercase;margin-bottom:4px">Series Averages</div>
      <div style="overflow-x:auto;border-radius:6px;background:var(--surface-inset)">
-      <table id="colorSeriesAveragesTable" style="width:100%;border-collapse:collapse;font-size:11px;color:#ccc;white-space:nowrap">
-       <thead><tr style="border-bottom:1px solid #333;color:#888;text-align:right">
+      <table id="colorSeriesAveragesTable" style="width:100%;border-collapse:collapse;font-size:11px;color:var(--text-primary);white-space:nowrap">
+       <thead><tr style="border-bottom:1px solid var(--border);color:var(--text-muted);text-align:right">
         <th style="text-align:left;padding:6px 8px">Group</th>
         <th style="padding:6px 6px">n</th>
         <th style="padding:6px 6px">Avg &Delta;x</th>
@@ -1612,8 +1612,8 @@ __PG_LOGO_DARK__
     <div id="colorReadingsTableWrap" style="margin-bottom:10px;display:none">
      <div style="font-size:.65rem;color:var(--text2);text-transform:uppercase;margin-bottom:4px">Color Readings</div>
      <div style="overflow-x:auto;border-radius:6px;background:var(--surface-inset)">
-      <table id="colorReadingsTable" style="width:100%;border-collapse:collapse;font-size:11px;color:#ccc;white-space:nowrap">
-       <thead><tr style="border-bottom:1px solid #333;color:#888;text-align:right">
+      <table id="colorReadingsTable" style="width:100%;border-collapse:collapse;font-size:11px;color:var(--text-primary);white-space:nowrap">
+       <thead><tr style="border-bottom:1px solid var(--border);color:var(--text-muted);text-align:right">
         <th style="text-align:left;padding:6px 8px">Color</th>
         <th style="padding:6px 6px">Tgt x</th><th style="padding:6px 6px">x</th>
         <th style="padding:6px 6px">Tgt y</th><th style="padding:6px 6px">y</th>
@@ -1979,7 +1979,7 @@ __PG_LOGO_DARK__
      <div class="update-section-title" id="releaseRowTitle">Previous versions</div>
      <label class="update-field-label" for="releaseSelect">Install a release</label>
      <div class="release-pick">
-      <select id="releaseSelect" onchange="onReleaseSelectChange()"></select>
+      <select id="releaseSelect" data-pg-repick="1" onchange="onReleaseSelectChange()"></select>
      </div>
     </section>
    </div>
@@ -2062,8 +2062,8 @@ __PG_LOGO_DARK__
 
   <!-- Spectro setup wizard: kept at body level (sibling of the AutoCal overlay) so its z-index beats the AutoCal mask; inside the Calibration card it was stacking-capped behind it. -->
   <div id="meterSpectroSetupModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.74);z-index:10001;align-items:center;justify-content:center;padding:18px;box-sizing:border-box">
-   <div style="width:min(460px,100%);background:#111723;border:1px solid #2a3140;border-radius:12px;padding:18px;box-sizing:border-box;box-shadow:0 18px 60px rgba(0,0,0,.45)">
-    <div id="meterSpectroSetupTitle" style="font-size:1rem;font-weight:700;color:#eee;margin-bottom:4px">Meter Setup</div>
+   <div style="width:min(460px,100%);background:var(--surface-modal);border:1px solid var(--border);border-radius:12px;padding:18px;box-sizing:border-box;box-shadow:0 18px 60px rgba(0,0,0,.45)">
+    <div id="meterSpectroSetupTitle" style="font-size:1rem;font-weight:700;color:var(--text-primary);margin-bottom:4px">Meter Setup</div>
     <div id="meterSpectroSetupStepLabel" style="font-size:.72rem;color:var(--text2);margin-bottom:10px">Step</div>
     <div id="meterSpectroSetupMessage" style="font-size:.86rem;color:var(--text);line-height:1.5;margin-bottom:16px;min-height:3em">Preparing the meter…</div>
     <div class="btn-row btn-row-end">

@@ -50,7 +50,7 @@ function meterRenderCustomSeriesManager(){
    ?('Lattice '+series.params.size+'³ ('+meterLatticeCountForParams(series.params)+' patches)')
    :(series.patches.length+' patches');
   const rangeLbl=isLattice?'Any':meterCustomSeriesRangeLabel(series.range);
-  return '<tr style="border-bottom:1px solid #1a1a28">'
+  return '<tr style="border-bottom:1px solid var(--divider)">'
    +'<td style="padding:6px">'+esc(series.name)+'</td>'
    +'<td style="padding:6px">'+(series.kind==='lattice'?'3D LUT':(series.category==='color'?'Color':'Greyscale'))+'</td>'
    +'<td style="padding:6px"><span style="font-size:.68rem;padding:2px 6px;border:1px solid var(--border);border-radius:4px">'+series.mode.toUpperCase()+'</span></td>'
@@ -672,7 +672,7 @@ function meterLutCubeDraw(){
  // wireframe
  const corners=[[0,0,0],[1,0,0],[0,1,0],[1,1,0],[0,0,1],[1,0,1],[0,1,1],[1,1,1]].map(c=>lutCubeProject(c[0],c[1],c[2],layout));
  const edges=[[0,1],[0,2],[0,4],[1,3],[1,5],[2,3],[2,6],[3,7],[4,5],[4,6],[5,7],[6,7]];
- ctx.strokeStyle='rgba(132,148,178,0.45)';ctx.lineWidth=1;
+ ctx.strokeStyle=pgThemeColor('--chart-axis','#3a3a4a');ctx.lineWidth=1;
  edges.forEach(e=>{ ctx.beginPath();ctx.moveTo(corners[e[0]].sx,corners[e[0]].sy);ctx.lineTo(corners[e[1]].sx,corners[e[1]].sy);ctx.stroke(); });
  ctx.font='10px sans-serif';ctx.textAlign='center';
  ctx.fillStyle='#ff7a7a';ctx.fillText('R',corners[1].sx+8,corners[1].sy+4);
@@ -1974,7 +1974,7 @@ function meterImportWizardRenderCsv(text,filename){
  const rg=meterImportDetectRangeFromCsv(text,filename);
  const inpStyle='background:var(--surface-inset);border:1px solid var(--border);border-radius:4px;color:var(--text-primary);padding:5px;box-sizing:border-box';
  const body=document.getElementById('meterImportWizardBody');
- body.innerHTML='<div style="display:grid;grid-template-columns:auto 1fr;gap:8px 10px;align-items:center;font-size:.8rem;color:#ddd;max-width:560px">'
+ body.innerHTML='<div style="display:grid;grid-template-columns:auto 1fr;gap:8px 10px;align-items:center;font-size:.8rem;color:var(--text-primary);max-width:560px">'
   +'<label>Series name</label><input type="text" id="meterImpCsvName" maxlength="96" value="'+esc(base)+'" style="'+inpStyle+';width:100%">'
   +'<label>Bit depth</label><select id="meterImpCsvBits" style="'+inpStyle+'">'+meterImportBitOptions(bits)+'</select>'
   +'<label>Mode</label><select id="meterImpCsvMode" style="'+inpStyle+'">'+meterImportModeOptions(md)+'</select>'
@@ -1992,7 +1992,7 @@ function meterImportWizardRenderCcfx(text,filename){
  const inpStyle='background:var(--surface-inset);border:1px solid var(--border);border-radius:4px;color:var(--text-primary);padding:4px;box-sizing:border-box';
  let rows='';
  sets.forEach((s,i)=>{
-  rows+='<tr style="border-bottom:1px solid #1a1a28">'
+  rows+='<tr style="border-bottom:1px solid var(--divider)">'
    +'<td style="padding:4px;text-align:center"><input type="checkbox" id="meterImpCk_'+i+'" checked></td>'
    +'<td style="padding:4px"><input type="text" id="meterImpNm_'+i+'" maxlength="96" value="'+esc(s.name)+'" style="'+inpStyle+';width:100%;min-width:220px"></td>'
    +'<td style="padding:4px"><select id="meterImpBd_'+i+'" style="'+inpStyle+'">'+meterImportBitOptions(meterImportDetectBits(s.name))+'</select></td>'
@@ -2003,10 +2003,10 @@ function meterImportWizardRenderCcfx(text,filename){
  });
  const body=document.getElementById('meterImportWizardBody');
  body.innerHTML='<div style="font-size:.76rem;color:var(--text2);margin-bottom:6px">'+sets.length+' series found. Check the ones to import; edit name / bit depth / mode / range as needed (auto-set from the set name).</div>'
-  +'<label style="font-size:.76rem;color:#ddd;display:inline-flex;gap:4px;align-items:center;cursor:pointer;margin-bottom:6px"><input type="checkbox" id="meterImpCkAll" checked onchange="meterImportToggleAll(this.checked)"> Select all</label>'
-  +'<div style="max-height:46vh;overflow:auto;border:1px solid #2a3140;border-radius:6px">'
-  +'<table style="width:100%;border-collapse:collapse;font-size:.74rem;color:#ddd">'
-  +'<thead><tr style="border-bottom:1px solid #2a3140;position:sticky;top:0;background:#111723">'
+  +'<label style="font-size:.76rem;color:var(--text-primary);display:inline-flex;gap:4px;align-items:center;cursor:pointer;margin-bottom:6px"><input type="checkbox" id="meterImpCkAll" checked onchange="meterImportToggleAll(this.checked)"> Select all</label>'
+  +'<div style="max-height:46vh;overflow:auto;border:1px solid var(--border);border-radius:6px">'
+  +'<table style="width:100%;border-collapse:collapse;font-size:.74rem;color:var(--text-primary)">'
+  +'<thead><tr style="border-bottom:1px solid var(--border);position:sticky;top:0;background:var(--surface-modal)">'
   +'<th style="padding:5px">Import</th><th style="text-align:left;padding:5px">Name</th><th style="padding:5px">Bit depth</th><th style="padding:5px">Mode</th><th style="padding:5px">Range</th><th style="padding:5px">Patches</th>'
   +'</tr></thead><tbody>'+rows+'</tbody></table></div>';
  const act=document.getElementById('meterImportWizardActions'); act.style.display='';
@@ -15580,13 +15580,13 @@ function drawColorReadingsTable(readings){
    const deCol=!hasDe?'#888':de<1?'#4caf50':de<3?'#ff9800':'#f44';
   const dxCol=dx==null?'#888':(Math.abs(dx)<0.005?'#4caf50':Math.abs(dx)<0.01?'#ff9800':'#f44');
   const dyCol=dy==null?'#888':(Math.abs(dy)<0.005?'#4caf50':Math.abs(dy)<0.01?'#ff9800':'#f44');
-  html+='<tr data-name=\"'+(rd.name||'').replace(/"/g,'&quot;')+'\" style=\"border-bottom:1px solid #1a1a28;cursor:pointer\" onclick=\"colorTableRowClick(this)\">';
+  html+='<tr data-name=\"'+(rd.name||'').replace(/"/g,'&quot;')+'\" style=\"border-bottom:1px solid var(--divider);cursor:pointer\" onclick=\"colorTableRowClick(this)\">';
   html+='<td style="padding:5px 8px;text-align:left"><span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:'+pc+';vertical-align:middle;margin-right:5px"></span>'+(rd.name||'')+'</td>';
-  html+='<td style="padding:5px 6px;text-align:right;color:#888">'+(tgt?tgt.x.toFixed(4):'--')+'</td>';
+  html+='<td style="padding:5px 6px;text-align:right;color:var(--text-muted)">'+(tgt?tgt.x.toFixed(4):'--')+'</td>';
   html+='<td style="padding:5px 6px;text-align:right">'+(measured?measured.x.toFixed(4):'--')+'</td>';
-  html+='<td style="padding:5px 6px;text-align:right;color:#888">'+(tgt?tgt.y.toFixed(4):'--')+'</td>';
+  html+='<td style="padding:5px 6px;text-align:right;color:var(--text-muted)">'+(tgt?tgt.y.toFixed(4):'--')+'</td>';
   html+='<td style="padding:5px 6px;text-align:right">'+(measured?measured.y.toFixed(4):'--')+'</td>';
-  html+='<td style="padding:5px 6px;text-align:right;color:#888">'+((targetXYZ&&targetXYZ.Y>0)?targetXYZ.Y.toFixed(1):'--')+'</td>';
+  html+='<td style="padding:5px 6px;text-align:right;color:var(--text-muted)">'+((targetXYZ&&targetXYZ.Y>0)?targetXYZ.Y.toFixed(1):'--')+'</td>';
   html+='<td style="padding:5px 6px;text-align:right">'+((rd.Y!=null?rd.Y:(rd.luminance||0)).toFixed(1))+'</td>';
   html+='<td style="padding:5px 6px;text-align:right;color:'+dxCol+'">'+(dx==null?'--':(dx>=0?'+':'')+dx.toFixed(4))+'</td>';
   html+='<td style="padding:5px 6px;text-align:right;color:'+dyCol+'">'+(dy==null?'--':(dy>=0?'+':'')+dy.toFixed(4))+'</td>';
@@ -15596,8 +15596,8 @@ function drawColorReadingsTable(readings){
  if(deCount>0){
   const avg=deSum/deCount;
   const avgCol=avg<1?'#4caf50':avg<3?'#ff9800':'#f44';
-  html+='<tr style="border-top:2px solid #333;font-weight:600">';
-  html+='<td style="padding:5px 8px;text-align:left;color:#aaa" colspan="9">Average</td>';
+  html+='<tr style="border-top:2px solid var(--border);font-weight:600">';
+  html+='<td style="padding:5px 8px;text-align:left;color:var(--text-secondary)" colspan="9">Average</td>';
   html+='<td style="padding:5px 6px;text-align:right;color:'+avgCol+'">'+avg.toFixed(2)+'</td>';
   html+='</tr>';
  }
@@ -15647,9 +15647,9 @@ function drawColorSeriesAverages(readings,colorRefMode){
   const aDx=avg(g.dx), aDy=avg(g.dy), aY=avg(g.Y);
   const c=!Number.isFinite(aDE)?'#888':aDE<1?'#4caf50':aDE<3?'#ff9800':'#f44';
   const cMax=!Number.isFinite(mDE)?'#888':mDE<1?'#4caf50':mDE<3?'#ff9800':'#f44';
-  let r='<tr'+(bold?' style="border-top:2px solid #333;font-weight:600"':' style="border-bottom:1px solid #1a1a28"')+'>';
+  let r='<tr'+(bold?' style="border-top:2px solid var(--border);font-weight:600"':' style="border-bottom:1px solid var(--divider)"')+'>';
   r+='<td style="padding:5px 8px;text-align:left"><span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:'+(g.color||'#666')+';vertical-align:middle;margin-right:5px"></span>'+label+'</td>';
-  r+='<td style="padding:5px 6px;text-align:right;color:#888">'+g.de.length+'</td>';
+  r+='<td style="padding:5px 6px;text-align:right;color:var(--text-muted)">'+g.de.length+'</td>';
   r+='<td style="padding:5px 6px;text-align:right">'+aDx.toFixed(4)+'</td>';
   r+='<td style="padding:5px 6px;text-align:right">'+aDy.toFixed(4)+'</td>';
   r+='<td style="padding:5px 6px;text-align:right">'+aY.toFixed(1)+'</td>';
@@ -15774,7 +15774,7 @@ function showColorReadingDetail(rd,opts){
  const el=document.getElementById('colorDetailContent');
  if(!el) return;
  if(!rd){
-  el.innerHTML='<div style="text-align:center;padding:30px 0;color:#666;font-size:13px;line-height:1.45">Select a color<br>to see details</div>';
+  el.innerHTML='<div style="text-align:center;padding:30px 0;color:var(--text-muted);font-size:13px;line-height:1.45">Select a color<br>to see details</div>';
   _selectedColorReadingName=null;
   _colorDetailPinned=false;
   return;
@@ -15828,24 +15828,24 @@ function showColorReadingDetail(rd,opts){
 
  let h='<div style="margin-bottom:10px;text-align:center">';
  h+='<span style="display:inline-block;width:18px;height:18px;border-radius:3px;background:'+targetColor+';vertical-align:middle;margin-right:6px"></span>';
- h+='<span style="color:#eee;font-weight:700;font-size:14px">'+(view.name||'')+'</span></div>';
+ h+='<span style="color:var(--text-primary);font-weight:700;font-size:14px">'+(view.name||'')+'</span></div>';
  h+='<div style="display:flex;gap:8px;margin-bottom:10px;justify-content:center">';
- h+='<div style="text-align:center"><div style="width:52px;height:32px;border-radius:4px;border:1px solid #333;background:'+targetColor+'"></div><div style="font-size:10px;color:#777;margin-top:2px">Target</div></div>';
- h+='<div style="text-align:center"><div style="width:52px;height:32px;border-radius:4px;border:1px solid #333;background:'+measuredColor+';'+(hasMeasuredXYZ?'':'opacity:.35')+'"></div><div style="font-size:10px;color:#777;margin-top:2px">Measured'+(isUnread?' (none)':'')+'</div></div></div>';
+ h+='<div style="text-align:center"><div style="width:52px;height:32px;border-radius:4px;border:1px solid var(--border);background:'+targetColor+'"></div><div style="font-size:10px;color:var(--text-muted);margin-top:2px">Target</div></div>';
+ h+='<div style="text-align:center"><div style="width:52px;height:32px;border-radius:4px;border:1px solid var(--border);background:'+measuredColor+';'+(hasMeasuredXYZ?'':'opacity:.35')+'"></div><div style="font-size:10px;color:var(--text-muted);margin-top:2px">Measured'+(isUnread?' (none)':'')+'</div></div></div>';
  h+='<table style="width:100%;font-size:12px;border-collapse:collapse">';
  const chartAxis=meterCieChartAxis();
- h+='<tr><td style="padding:3px 0;color:#777;white-space:nowrap" title="The exact per-channel codes the renderer emits for this patch, in the transport bit depth">Wire RGB</td><td style="text-align:right;padding:3px 0;color:#bbb;white-space:nowrap">'+((typeof meterLiveWireRgbMarkup==='function')?meterLiveWireRgbMarkup(view):'--')+'</td></tr>';
- h+='<tr><td style="padding:3px 0;color:#777">Target '+chartAxis.x+'</td><td style="text-align:right;padding:3px 0;color:#bbb">'+(tgt?tgt.x.toFixed(4):'--')+'</td></tr>';
- h+='<tr><td style="padding:3px 0;color:#777">Measured '+chartAxis.x+'</td><td style="text-align:right;padding:3px 0;color:#ddd">'+(mx!=null?mx.toFixed(4):'--')+'</td></tr>';
- h+='<tr style="border-top:1px solid #1a1a28"><td style="padding:3px 0;color:#777">Target '+chartAxis.y+'</td><td style="text-align:right;padding:3px 0;color:#bbb">'+(tgt?tgt.y.toFixed(4):'--')+'</td></tr>';
- h+='<tr><td style="padding:3px 0;color:#777">Measured '+chartAxis.y+'</td><td style="text-align:right;padding:3px 0;color:#ddd">'+(my!=null?my.toFixed(4):'--')+'</td></tr>';
- h+='<tr style="border-top:1px solid #1a1a28"><td style="padding:3px 0;color:#777">Target Y</td><td style="text-align:right;padding:3px 0;color:#bbb">'+(lumInfo.targetY!=null?Number(lumInfo.targetY).toFixed(1)+' cd/m\u00B2':'--')+'</td></tr>';
- h+='<tr><td style="padding:3px 0;color:#777">Measured Y</td><td style="text-align:right;padding:3px 0;color:#ddd">'+(lumInfo.measuredY!=null?Number(lumInfo.measuredY).toFixed(1)+' cd/m\u00B2':'--')+'</td></tr>';
- h+='<tr><td style="padding:3px 0;color:#777">\u0394Y</td><td style="text-align:right;padding:3px 0;color:'+dYCol+'">'+(lumInfo.deltaY==null?'--':(lumInfo.deltaY>=0?'+':'')+Number(lumInfo.deltaY).toFixed(1)+' cd/m\u00B2')+'</td></tr>';
- h+='<tr><td style="padding:3px 0;color:#777">\u0394Y %</td><td style="text-align:right;padding:3px 0;color:'+dYCol+'">'+(lumInfo.deltaPct==null?'--':(lumInfo.deltaPct>=0?'+':'')+Number(lumInfo.deltaPct).toFixed(1)+'%')+'</td></tr>';
- h+='<tr style="border-top:1px solid #1a1a28"><td style="padding:3px 0;color:#777">\u0394'+chartAxis.x+'</td><td style="text-align:right;padding:3px 0;color:'+dxCol+'">'+(dx==null?'--':(dx>=0?'+':'')+dx.toFixed(4))+'</td></tr>';
- h+='<tr><td style="padding:3px 0;color:#777">\u0394'+chartAxis.y+'</td><td style="text-align:right;padding:3px 0;color:'+dyCol+'">'+(dy==null?'--':(dy>=0?'+':'')+dy.toFixed(4))+'</td></tr>';
- h+='<tr style="border-top:1px solid #1a1a28"><td style="padding:3px 0;color:#888;font-weight:600;white-space:nowrap">'+deLabel+(colorInclLum?' + Y':'')+'</td><td style="text-align:right;padding:3px 0;color:'+deCol+';font-weight:700;font-size:16px">'+(hasDe?de.toFixed(2):'--')+'</td></tr>';
+ h+='<tr><td style="padding:3px 0;color:var(--text-muted);white-space:nowrap" title="The exact per-channel codes the renderer emits for this patch, in the transport bit depth">Wire RGB</td><td style="text-align:right;padding:3px 0;color:var(--text-primary);white-space:nowrap">'+((typeof meterLiveWireRgbMarkup==='function')?meterLiveWireRgbMarkup(view):'--')+'</td></tr>';
+ h+='<tr><td style="padding:3px 0;color:var(--text-muted)">Target '+chartAxis.x+'</td><td style="text-align:right;padding:3px 0;color:var(--text-primary)">'+(tgt?tgt.x.toFixed(4):'--')+'</td></tr>';
+ h+='<tr><td style="padding:3px 0;color:var(--text-muted)">Measured '+chartAxis.x+'</td><td style="text-align:right;padding:3px 0;color:var(--text-primary)">'+(mx!=null?mx.toFixed(4):'--')+'</td></tr>';
+ h+='<tr style="border-top:1px solid var(--divider)"><td style="padding:3px 0;color:var(--text-muted)">Target '+chartAxis.y+'</td><td style="text-align:right;padding:3px 0;color:var(--text-primary)">'+(tgt?tgt.y.toFixed(4):'--')+'</td></tr>';
+ h+='<tr><td style="padding:3px 0;color:var(--text-muted)">Measured '+chartAxis.y+'</td><td style="text-align:right;padding:3px 0;color:var(--text-primary)">'+(my!=null?my.toFixed(4):'--')+'</td></tr>';
+ h+='<tr style="border-top:1px solid var(--divider)"><td style="padding:3px 0;color:var(--text-muted)">Target Y</td><td style="text-align:right;padding:3px 0;color:var(--text-primary)">'+(lumInfo.targetY!=null?Number(lumInfo.targetY).toFixed(1)+' cd/m\u00B2':'--')+'</td></tr>';
+ h+='<tr><td style="padding:3px 0;color:var(--text-muted)">Measured Y</td><td style="text-align:right;padding:3px 0;color:var(--text-primary)">'+(lumInfo.measuredY!=null?Number(lumInfo.measuredY).toFixed(1)+' cd/m\u00B2':'--')+'</td></tr>';
+ h+='<tr><td style="padding:3px 0;color:var(--text-muted)">\u0394Y</td><td style="text-align:right;padding:3px 0;color:'+dYCol+'">'+(lumInfo.deltaY==null?'--':(lumInfo.deltaY>=0?'+':'')+Number(lumInfo.deltaY).toFixed(1)+' cd/m\u00B2')+'</td></tr>';
+ h+='<tr><td style="padding:3px 0;color:var(--text-muted)">\u0394Y %</td><td style="text-align:right;padding:3px 0;color:'+dYCol+'">'+(lumInfo.deltaPct==null?'--':(lumInfo.deltaPct>=0?'+':'')+Number(lumInfo.deltaPct).toFixed(1)+'%')+'</td></tr>';
+ h+='<tr style="border-top:1px solid var(--divider)"><td style="padding:3px 0;color:var(--text-muted)">\u0394'+chartAxis.x+'</td><td style="text-align:right;padding:3px 0;color:'+dxCol+'">'+(dx==null?'--':(dx>=0?'+':'')+dx.toFixed(4))+'</td></tr>';
+ h+='<tr><td style="padding:3px 0;color:var(--text-muted)">\u0394'+chartAxis.y+'</td><td style="text-align:right;padding:3px 0;color:'+dyCol+'">'+(dy==null?'--':(dy>=0?'+':'')+dy.toFixed(4))+'</td></tr>';
+ h+='<tr style="border-top:1px solid var(--divider)"><td style="padding:3px 0;color:var(--text-muted);font-weight:600;white-space:nowrap">'+deLabel+(colorInclLum?' + Y':'')+'</td><td style="text-align:right;padding:3px 0;color:'+deCol+';font-weight:700;font-size:16px">'+(hasDe?de.toFixed(2):'--')+'</td></tr>';
  h+='</table>';
  el.innerHTML=h;
  // Showing the latest measurement is informational. Do not paint it as a
@@ -16171,7 +16171,7 @@ function meterDrawMbFullLocusInset(ctx,geom){
  ctx.save();
  ctx.fillStyle=pgThemeColor('--chart-bg','#0d0d15');ctx.globalAlpha=.94;
  ctx.fillRect(ix,iy,iw,ih);ctx.globalAlpha=1;
- ctx.strokeStyle='rgba(132,148,178,.85)';ctx.lineWidth=1;ctx.strokeRect(ix+.5,iy+.5,iw-1,ih-1);
+ ctx.strokeStyle=pgThemeColor('--chart-label','#888898');ctx.lineWidth=1;ctx.strokeRect(ix+.5,iy+.5,iw-1,ih-1);
  ctx.beginPath();ctx.rect(ix,iy,iw,ih);ctx.clip();
  ctx.strokeStyle='rgba(176,190,220,.9)';ctx.lineWidth=1.1;ctx.lineJoin='round';ctx.lineCap='round';
  meterStrokeCieLocus2d(ctx,locus,tx,ty);
@@ -16905,7 +16905,7 @@ function meterDrawCubeViewNow(){
  // wireframe
  const corners=[[0,0,0],[1,0,0],[0,1,0],[1,1,0],[0,0,1],[1,0,1],[0,1,1],[1,1,1]].map(c=>cubeViewProject(c[0],c[1],c[2],layout));
  const edges=[[0,1],[0,2],[0,4],[1,3],[1,5],[2,3],[2,6],[3,7],[4,5],[4,6],[5,7],[6,7]];
- ctx.strokeStyle='rgba(132,148,178,0.45)';ctx.lineWidth=1;
+ ctx.strokeStyle=pgThemeColor('--chart-axis','#3a3a4a');ctx.lineWidth=1;
  edges.forEach(e=>{
   ctx.beginPath();ctx.moveTo(corners[e[0]].sx,corners[e[0]].sy);ctx.lineTo(corners[e[1]].sx,corners[e[1]].sy);ctx.stroke();
  });
@@ -17067,7 +17067,7 @@ function drawCIEChart3DLegacy(readings,opts){
   const a=cie3dProject(gx,bounds.yMin,0,layout);
   const b=cie3dProject(gx,bounds.yMax,0,layout);
   prims.push({z:(a.z+b.z)/2, draw:()=>{
-   ctx.strokeStyle='rgba(56,72,102,0.45)';ctx.lineWidth=1;
+   ctx.strokeStyle=pgThemeColor('--chart-grid','#1d1d29');ctx.lineWidth=1;
    ctx.beginPath();ctx.moveTo(a.sx,a.sy);ctx.lineTo(b.sx,b.sy);ctx.stroke();
   }});
  }
@@ -17076,7 +17076,7 @@ function drawCIEChart3DLegacy(readings,opts){
   const a=cie3dProject(bounds.xMin,gy,0,layout);
   const b=cie3dProject(bounds.xMax,gy,0,layout);
   prims.push({z:(a.z+b.z)/2, draw:()=>{
-   ctx.strokeStyle='rgba(56,72,102,0.45)';ctx.lineWidth=1;
+   ctx.strokeStyle=pgThemeColor('--chart-grid','#1d1d29');ctx.lineWidth=1;
    ctx.beginPath();ctx.moveTo(a.sx,a.sy);ctx.lineTo(b.sx,b.sy);ctx.stroke();
   }});
  }
@@ -17130,7 +17130,7 @@ function drawCIEChart3DLegacy(readings,opts){
  const ay=cie3dProject(0,bounds.yMax,0,layout);
  const aY=cie3dProject(0,0,yMax,layout);
  prims.push({z:Math.min(o.z,ax.z,ay.z,aY.z)-0.01, draw:()=>{
-  ctx.strokeStyle='rgba(132,148,178,0.95)';ctx.lineWidth=1.4;
+  ctx.strokeStyle=pgThemeColor('--chart-label','#888898');ctx.lineWidth=1.4;
   ctx.beginPath();ctx.moveTo(o.sx,o.sy);ctx.lineTo(ax.sx,ax.sy);ctx.stroke();
   ctx.beginPath();ctx.moveTo(o.sx,o.sy);ctx.lineTo(ay.sx,ay.sy);ctx.stroke();
   ctx.beginPath();ctx.moveTo(o.sx,o.sy);ctx.lineTo(aY.sx,aY.sy);ctx.stroke();
@@ -17150,7 +17150,7 @@ function drawCIEChart3DLegacy(readings,opts){
    const p=cie3dProject(0,0,yy,layout);
    const label=(yy>=100)?yy.toFixed(0):yy.toFixed(yy>=10?0:1);
    ctx.fillText(label,p.sx-6,p.sy+3);
-   ctx.strokeStyle='rgba(132,148,178,0.35)';ctx.lineWidth=1;
+   ctx.strokeStyle=pgThemeColor('--chart-axis','#3a3a4a');ctx.lineWidth=1;
    ctx.beginPath();ctx.moveTo(p.sx-3,p.sy);ctx.lineTo(p.sx+3,p.sy);ctx.stroke();
   }
  }});
@@ -17387,7 +17387,7 @@ function drawCIEChart3D(readings,opts){
   const a=cie3dProject(av,bounds.bMin,bounds.cMin,layout);
   const b=cie3dProject(av,bounds.bMax,bounds.cMin,layout);
   prims.push({z:(a.z+b.z)/2,draw:()=>{
-   ctx.strokeStyle='rgba(56,72,102,.45)';ctx.lineWidth=1;
+   ctx.strokeStyle=pgThemeColor('--chart-grid','#1d1d29');ctx.lineWidth=1;
    ctx.beginPath();ctx.moveTo(a.sx,a.sy);ctx.lineTo(b.sx,b.sy);ctx.stroke();
   }});
  }
@@ -17396,7 +17396,7 @@ function drawCIEChart3D(readings,opts){
   const a=cie3dProject(bounds.aMin,bv,bounds.cMin,layout);
   const b=cie3dProject(bounds.aMax,bv,bounds.cMin,layout);
   prims.push({z:(a.z+b.z)/2,draw:()=>{
-   ctx.strokeStyle='rgba(56,72,102,.45)';ctx.lineWidth=1;
+   ctx.strokeStyle=pgThemeColor('--chart-grid','#1d1d29');ctx.lineWidth=1;
    ctx.beginPath();ctx.moveTo(a.sx,a.sy);ctx.lineTo(b.sx,b.sy);ctx.stroke();
   }});
  }
@@ -17413,7 +17413,7 @@ function drawCIEChart3D(readings,opts){
  const ab=cie3dProject(bounds.aMin,bounds.bMax,bounds.cMin,layout);
  const ac=cie3dProject(bounds.aMin,bounds.bMin,bounds.cMax,layout);
  prims.push({z:Math.min(o.z,aa.z,ab.z,ac.z)-.01,draw:()=>{
-  ctx.strokeStyle='rgba(132,148,178,.95)';ctx.lineWidth=1.4;
+  ctx.strokeStyle=pgThemeColor('--chart-label','#888898');ctx.lineWidth=1.4;
   [[aa],[ab],[ac]].forEach(pair=>{
    const p=pair[0];ctx.beginPath();ctx.moveTo(o.sx,o.sy);ctx.lineTo(p.sx,p.sy);ctx.stroke();
   });
@@ -17718,13 +17718,13 @@ function drawCIEChart(readings){
  }catch(e){}
  meterCieDrawOpponentPolar(ctx,g);
  // Grid (step scales with zoom)
- ctx.strokeStyle='rgba(56,72,102,0.65)';ctx.lineWidth=1;
+ ctx.strokeStyle=pgThemeColor('--chart-grid','#1d1d29');ctx.lineWidth=1;
  if(!meterCieIsOpponentMode()){
   for(let x=x0;x<=xMax+1e-9;x+=xStep){ctx.beginPath();ctx.moveTo(toX(x),pad.t);ctx.lineTo(toX(x),pad.t+h);ctx.stroke();}
   for(let y=y0;y<=yMax+1e-9;y+=yStep){ctx.beginPath();ctx.moveTo(pad.l,toY(y));ctx.lineTo(pad.l+w,toY(y));ctx.stroke();}
  }
  // Axes
- ctx.strokeStyle='rgba(132,148,178,0.85)';ctx.lineWidth=1.2;ctx.beginPath();ctx.moveTo(pad.l,pad.t);ctx.lineTo(pad.l,pad.t+h);ctx.lineTo(pad.l+w,pad.t+h);ctx.stroke();
+ ctx.strokeStyle=pgThemeColor('--chart-axis','#3a3a4a');ctx.lineWidth=1.2;ctx.beginPath();ctx.moveTo(pad.l,pad.t);ctx.lineTo(pad.l,pad.t+h);ctx.lineTo(pad.l+w,pad.t+h);ctx.stroke();
  // CIE spectral locus
  if(meterCieViewOpts.locus){
   ctx.strokeStyle='rgba(176,190,220,0.85)';ctx.lineWidth=1.6;ctx.lineJoin='round';ctx.lineCap='round';
@@ -17956,14 +17956,14 @@ function drawCIETargetInset(ctx,readings,geom){
  // Caption box sized exactly to the measured text.
  ctx.fillStyle=pgThemeColor('--chart-bg','#0d0d15');
  ctx.fillRect(lx,ly,lw,labelH);
- ctx.strokeStyle='rgba(132,148,178,0.9)';ctx.lineWidth=1;
+ ctx.strokeStyle=pgThemeColor('--chart-label','#888898');ctx.lineWidth=1;
  ctx.strokeRect(lx+0.5,ly+0.5,lw-1,labelH-1);
  ctx.fillStyle=pgThemeColor('--text-primary','#edf3ff');ctx.textAlign='center';ctx.textBaseline='middle';
  ctx.font=fontPx+'px sans-serif';
  ctx.fillText(labelText,lx+lw/2,ly+labelH/2);
  // Zoom frame
  ctx.fillStyle=pgThemeColor('--chart-bg','#0d0d15');
- ctx.strokeStyle='rgba(132,148,178,0.9)';ctx.lineWidth=1.1;
+ ctx.strokeStyle=pgThemeColor('--chart-label','#888898');ctx.lineWidth=1.1;
  ctx.beginPath();ctx.rect(ix,iy,insetSize,insetSize);ctx.fill();ctx.stroke();
  // Clip to inset for zoom content
  ctx.save();
@@ -18081,12 +18081,12 @@ function drawCIEChartPreset(steps){
   }
  }catch(e){}
  meterCieDrawOpponentPolar(ctx,g);
- ctx.strokeStyle='rgba(56,72,102,0.65)';ctx.lineWidth=1;
+ ctx.strokeStyle=pgThemeColor('--chart-grid','#1d1d29');ctx.lineWidth=1;
  if(!meterCieIsOpponentMode()){
   for(let x=x0;x<=xMax+1e-9;x+=xStep){ctx.beginPath();ctx.moveTo(toX(x),pad.t);ctx.lineTo(toX(x),pad.t+h);ctx.stroke();}
   for(let y=y0;y<=yMax+1e-9;y+=yStep){ctx.beginPath();ctx.moveTo(pad.l,toY(y));ctx.lineTo(pad.l+w,toY(y));ctx.stroke();}
  }
- ctx.strokeStyle='rgba(132,148,178,0.85)';ctx.lineWidth=1.2;ctx.beginPath();ctx.moveTo(pad.l,pad.t);ctx.lineTo(pad.l,pad.t+h);ctx.lineTo(pad.l+w,pad.t+h);ctx.stroke();
+ ctx.strokeStyle=pgThemeColor('--chart-axis','#3a3a4a');ctx.lineWidth=1.2;ctx.beginPath();ctx.moveTo(pad.l,pad.t);ctx.lineTo(pad.l,pad.t+h);ctx.lineTo(pad.l+w,pad.t+h);ctx.stroke();
  // Locus / gamut honor the same view options as the live 2D chart — the
  // pre-read preset used to ignore them, leaving the checkboxes dead until
  // the first measurement arrived.

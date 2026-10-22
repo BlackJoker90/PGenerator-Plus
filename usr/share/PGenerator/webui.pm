@@ -841,6 +841,8 @@ sub webui_route_is_concurrent_safe (@) {
  # Static assets: read a fixed file from disk and stream it.
  return 1 if($path eq "/favicon.ico" || $path eq "/pgen-logo-light.png" || $path eq "/assets/hcfr_chc.js"
   || $path eq "/assets/icc_profile.js" || $path eq "/assets/icc_profile.css");
+ # Page CSS/JS split out of the HTML: read-only, built from the fragments.
+ return 1 if($path=~m{^/assets/pg-[a-z]+\.[0-9a-f]{12}\.(?:css|js)\z});
  # Live device health and identity are read-only. Keep both on the fast lane so
  # a long profile build or calibration worker cannot freeze Device Info.
  # /api/stats reads /proc/sysfs plus a 2s response cache; its cross-call CPU
@@ -1550,6 +1552,17 @@ sub webui_handle_request (@) {
      print $client $ico_data;
     } else {
      print $client "HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\n\r\n";
+    }
+   }
+   elsif($path=~m{^/assets/(pg-[a-z]+\.[0-9a-f]{12}\.(css|js))\z}) {
+    my ($asset_name,$ext)=($1,$2);
+    my $asset_data=&webui_page_asset($asset_name);
+    if(defined($asset_data)) {
+     my $content_type=($ext eq "css")?"text/css":"application/javascript";
+     # The name carries the content hash, so a cached copy can never be stale.
+     &webui_send_text($client,$req,"$content_type; charset=utf-8",$asset_data,"Cache-Control: public, max-age=31536000, immutable\r\n",1);
+    } else {
+     print $client "HTTP/1.1 404 Not Found\r\nCache-Control: no-store\r\nContent-Length: 0\r\n\r\n";
     }
    }
    elsif($path eq "/assets/hcfr_chc.js") {
@@ -13674,6 +13687,7 @@ my %_webui_asset_allowed = map { $_ => 1 } qw(
 my %_webui_asset_cache;
 my $_webui_asset_missing="";
 my $_webui_html_cache;
+my %_webui_page_assets;
 
 sub _webui_asset_path (@) {
  my ($name)=@_;
@@ -13917,8 +13931,37 @@ sub webui_html (@) {
   &log("WebUI ERROR: assembled page still contains unreplaced marker $1",1);
   return &webui_recovery_html("webui.html (marker $1 not replaced)");
  }
- $_webui_html_cache=$html;
+ $_webui_html_cache=&webui_split_page_assets($html,\%_webui_page_assets);
  return $_webui_html_cache;
+}
+
+# The page CSS and JS (about 2.7 MB) leave the HTML for URLs named by their
+# content hash (/assets/pg-<block>.<md5>.<ext>). The browser keeps them across
+# reloads and fetches a block again only when an update changed it, and it can
+# reuse its compiled code for external scripts. Order and blocking behaviour
+# are unchanged: <link> in <head>, classic synchronous <script src>.
+sub webui_split_page_assets (@) {
+ my ($html,$assets)=@_;
+ %{$assets}=();
+ require Digest::MD5;
+ foreach my $tag ("style","script") {
+  $html=~s{<$tag data-pg-asset="([a-z]+)">\n(.*?)</$tag>}{
+   my ($name,$body)=($1,$2);
+   my $ext=($tag eq "style") ? "css" : "js";
+   my $file="pg-$name.".substr(Digest::MD5::md5_hex($body),0,12).".$ext";
+   $assets->{$file}=$body;
+   ($tag eq "style") ? qq{<link rel="stylesheet" href="/assets/$file">} : qq{<script src="/assets/$file"></script>};
+  }gse;
+ }
+ return $html;
+}
+
+# The lexicals above are declared after the request handler, which therefore
+# reaches them through this sub (webui.pm runs without strict).
+sub webui_page_asset (@) {
+ my ($name)=@_;
+ &webui_html();
+ return exists($_webui_page_assets{$name}) ? $_webui_page_assets{$name} : undef;
 }
 
 &webui_check_assets();

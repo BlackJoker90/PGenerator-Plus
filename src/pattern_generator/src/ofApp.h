@@ -49,9 +49,6 @@ class ofApp : public ofBaseApp{
   ofFbo fbo8;
   ofFbo fbo10;
   ofFbo fbo_dovi;
-  int arr_bits[2048][2048];
-  int arr_source_max[2048][2048];
-  int arr_source_range[2048][2048];
   int bits;
   int source_max=255;
   int source_range=0;
@@ -75,7 +72,6 @@ class ofApp : public ofBaseApp{
   std::string name;
   std::string m_name;
   std::string text_to_write;
-  std::string arr_text[2048][2048];
   std::string img_file;
   int save_images=0;
   int position_x;
@@ -90,23 +86,6 @@ class ofApp : public ofBaseApp{
   unsigned long long last_frame_time;
   int to_draw;
   int position_y;
-  int arr_resolution[2048][2048];
-  std::string arr_image[2048][2048];
-  int arr_rotate[2048][2048];
-  int arr_draw[2048][2048];
-  std::string arr_name[2048];
-  int arr_red[2048][2048];
-  int arr_green[2048][2048];
-  int arr_blue[2048][2048];
-  int arr_redbg[2048][2048];
-  int arr_greenbg[2048][2048];
-  int arr_bluebg[2048][2048];
-  int arr_dim1[2048][2048];
-  int arr_dim2[2048][2048];
-  int arr_posx[2048][2048];
-  int arr_posy[2048][2048];
-  unsigned long long arr_frame_time[2048];
-  unsigned long long arr_frame_duration[2048];
   int dim1;
   int dim2;
   int width;
@@ -120,8 +99,26 @@ class ofApp : public ofBaseApp{
   int blueb;
   int duration;
   int frame;
-  int n_draw[2048];
   int frame_to_draw;
+  /* A parsed pattern: frames of draw commands, sized to what the file
+     holds and capped at max_frames x max_draws. */
+  struct DrawOp {
+   int draw=0, red=0, green=0, blue=0, redbg=0, greenbg=0, bluebg=0;
+   int dim1=0, dim2=0, posx=0, posy=0, resolution=0, rotate=0;
+   int bits=0, source_max=0, source_range=0;
+   std::string text, image;
+  };
+  struct PatternFrame {
+   std::string name;
+   unsigned long long time=0, duration=0;
+   std::vector<DrawOp> ops;
+  };
+  static const int max_frames=2048;
+  static const int max_draws=2048;
+  std::vector<PatternFrame> frames;
+  DrawOp no_op;
+  DrawOp& cur_op();
+  int frame_draws(int f);
   ofVideoPlayer myPlayer;
   void setup();
   void update();

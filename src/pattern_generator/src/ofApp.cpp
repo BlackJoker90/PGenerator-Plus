@@ -181,7 +181,7 @@ void ofApp::update(){
   frame=frame_to_draw=entered=0;
   p_name=m_name="";
   source_max=255;
-  n_draw[frame]=0;
+  frames.assign(1,PatternFrame());
   ofApp::log("\n\n");   
   ofApp::log("***********************************");
   ofApp::log("*             Open File           *");
@@ -250,18 +250,20 @@ void ofApp::update(){
 	}
    if(el[0] == "FRAME_NAME") {
     name=el[1];
-    arr_name[frame]=name;
+    frames[frame].name=name;
    }
    if(el[0] == "FRAME") {
-    arr_frame_time[frame]=boost::lexical_cast<int>(el[1])*1000;
-    frame++;
-    n_draw[frame]=0;
+    frames[frame].time=boost::lexical_cast<int>(el[1])*1000;
+    if(frame+1 < max_frames) {
+     frame++;
+     frames.push_back(PatternFrame());
+    } else
+     ofApp::log("Too many frames: the rest of the pattern is drawn into the last one");
    }
    if(el[0] == "FRAME_DURATION")
-    arr_frame_duration[frame]=boost::lexical_cast<int>(el[1])*1000;
+    frames[frame].duration=boost::lexical_cast<int>(el[1])*1000;
    if(el[0] == "END") {
     ofApp::set_values();
-    n_draw[frame]++;
     dim1=dim2=0;
 	source_range=0;
    }
@@ -342,7 +344,9 @@ void ofApp::draw(){
   }
   return;
  }
- if(n_draw[i] > 0) {
+ if(i < 0 || i >= (int)frames.size())
+  i=0;
+ if(frame_draws(i) > 0) {
   string return_file=tmp_dir+ofToString("/running/return");
   const char * return_file_char = return_file.c_str();
   /* A new pattern is parsed by the next update(). This frame still draws
@@ -356,65 +360,65 @@ void ofApp::draw(){
    unlink(return_file_char);
   }
  }
- for(to_draw=0;to_draw<n_draw[i];to_draw++) {
+ for(to_draw=0;to_draw<frame_draws(i);to_draw++) {
   if(log_enabled) {
    char buffer[255];
    sprintf(buffer,"Doing the frame %d and the Draw %d",i,to_draw);
    ofApp::log(buffer);
-   sprintf(buffer,"RGB: %d %d %d",arr_red[i][to_draw],arr_green[i][to_draw],arr_blue[i][to_draw]);
+   sprintf(buffer,"RGB: %d %d %d",cur_op().red,cur_op().green,cur_op().blue);
    ofApp::log(buffer);
-   sprintf(buffer,"Background: %d %d %d",arr_redbg[i][to_draw],arr_greenbg[i][to_draw],arr_bluebg[i][to_draw]);
+   sprintf(buffer,"Background: %d %d %d",cur_op().redbg,cur_op().greenbg,cur_op().bluebg);
    ofApp::log(buffer);
-   sprintf(buffer,"DrawType: %d",arr_draw[i][to_draw]);
+   sprintf(buffer,"DrawType: %d",cur_op().draw);
    ofApp::log(buffer);
-   if(arr_draw[i][to_draw] == 4) {
-    sprintf(buffer,"DrawImage: %s",arr_text[i][to_draw].c_str());
+   if(cur_op().draw == 4) {
+    sprintf(buffer,"DrawImage: %s",cur_op().text.c_str());
     ofApp::log(buffer);
    }
-   if(arr_draw[i][to_draw] == 5) {
-    sprintf(buffer,"DrawImage: %s",arr_image[i][to_draw].c_str());
+   if(cur_op().draw == 5) {
+    sprintf(buffer,"DrawImage: %s",cur_op().image.c_str());
     ofApp::log(buffer);
    }
-   sprintf(buffer,"Dim: %d %d",arr_dim1[i][to_draw],arr_dim2[i][to_draw]);
+   sprintf(buffer,"Dim: %d %d",cur_op().dim1,cur_op().dim2);
    ofApp::log(buffer);
-   sprintf(buffer,"Resolution: %d",arr_resolution[i][to_draw]);
+   sprintf(buffer,"Resolution: %d",cur_op().resolution);
    ofApp::log(buffer);
-   sprintf(buffer,"Position: %d %d",arr_posx[i][to_draw],arr_posy[i][to_draw]);
+   sprintf(buffer,"Position: %d %d",cur_op().posx,cur_op().posy);
    ofApp::log(buffer);
 
-   sprintf(buffer,"Bits: %d",arr_bits[i][to_draw]);
+   sprintf(buffer,"Bits: %d",cur_op().bits);
    ofApp::log(buffer);
   }
 
-  if(arr_draw[i][to_draw] == 0) 
+  if(cur_op().draw == 0) 
    ::exit(0);
  /* Start Patch RPI P4 */
  //  ofApp::fbo_allocate(); //allocate framebuffer for DoVi background and patch
 
 
   
-  ofApp::setBackground(arr_redbg[i][to_draw], arr_greenbg[i][to_draw], arr_bluebg[i][to_draw]);
+  ofApp::setBackground(cur_op().redbg, cur_op().greenbg, cur_op().bluebg);
 
-  ofApp::setColor(arr_red[i][to_draw],arr_green[i][to_draw],arr_blue[i][to_draw]); 
+  ofApp::setColor(cur_op().red,cur_op().green,cur_op().blue); 
 
-  if(arr_draw[i][to_draw] !=  5) ofApp::shader_begin(0); //set for draw = 0
+  if(cur_op().draw !=  5) ofApp::shader_begin(0); //set for draw = 0
  /* End Patch RPI P4 */
-  if(arr_draw[i][to_draw] ==  1)
+  if(cur_op().draw ==  1)
    ofApp::rectangle();
-  if(arr_draw[i][to_draw] ==  2)
+  if(cur_op().draw ==  2)
    ofApp::circle();
-  if(arr_draw[i][to_draw] ==  3)
+  if(cur_op().draw ==  3)
    ofApp::triangle();
-  if(arr_draw[i][to_draw] ==  4)
+  if(cur_op().draw ==  4)
    ofApp::text();
   /* Start Patch RPI P4 */
-  if(arr_draw[i][to_draw] != 5) ofApp::shader_end(0); //set for draw = 0
-   if (arr_draw[i][to_draw] !=  5 && ofxRPI4Window::is_std_DoVi && !ofxRPI4Window::shader_init) ofApp::dovi_metadata_mux(); //draw dovi metadata muxed patch only if shader already initialized
+  if(cur_op().draw != 5) ofApp::shader_end(0); //set for draw = 0
+   if (cur_op().draw !=  5 && ofxRPI4Window::is_std_DoVi && !ofxRPI4Window::shader_init) ofApp::dovi_metadata_mux(); //draw dovi metadata muxed patch only if shader already initialized
   /* End Patch RPI P4 */
-  if(arr_draw[i][to_draw] ==  5)
+  if(cur_op().draw ==  5)
    ofApp::image();
   /* Start Patch RPI P4 */
-  if (arr_draw[i][to_draw] ==  5 && ofxRPI4Window::is_std_DoVi && !ofxRPI4Window::shader_init) ofApp::dovi_metadata_mux(); //draw dovi metadata muxed with patch only if shader already initialized
+  if (cur_op().draw ==  5 && ofxRPI4Window::is_std_DoVi && !ofxRPI4Window::shader_init) ofApp::dovi_metadata_mux(); //draw dovi metadata muxed with patch only if shader already initialized
    /* End Patch RPI P4 */
   if(last_frame_time == 0)
    last_frame_time=ofGetSystemTimeMicros();
@@ -426,15 +430,15 @@ void ofApp::draw(){
   //int n_frame=ofGetFrameNum();
   n_frame++;
   if(n_frame != 0 && n_frame > 3) {
-   string movie_time=ofToString(arr_frame_time[i]);
-   if(arr_frame_duration[i])
-    movie_time=ofToString(arr_frame_duration[i]);
+   string movie_time=ofToString(frames[i].time);
+   if(frames[i].duration)
+    movie_time=ofToString(frames[i].duration);
    movie_name=p_name;
    if(!m_name.empty())
     movie_name=m_name;
-   //string image_name=tmp_dir+ofToString("/frames/Img_")+ofToString(movie_name)+",,,,"+ofToString(i)+"-"+arr_name[i]+",,,,"+movie_time+".png";
-   string image_name_tmp=tmp_dir+ofToString("/tmp/")+ofToString(i+1)+"-"+arr_name[i]+",,,,"+movie_time+".png";
-   string image_name=tmp_dir+ofToString("/frames/")+ofToString(i+1)+"-"+arr_name[i]+",,,,"+movie_time+".png";
+   //string image_name=tmp_dir+ofToString("/frames/Img_")+ofToString(movie_name)+",,,,"+ofToString(i)+"-"+frames[i].name+",,,,"+movie_time+".png";
+   string image_name_tmp=tmp_dir+ofToString("/tmp/")+ofToString(i+1)+"-"+frames[i].name+",,,,"+movie_time+".png";
+   string image_name=tmp_dir+ofToString("/frames/")+ofToString(i+1)+"-"+frames[i].name+",,,,"+movie_time+".png";
    const char * c = image_name.c_str();
    ifstream p(c);
    if(!p.good()) {
@@ -445,7 +449,7 @@ void ofApp::draw(){
 //	ofApp::dovi_metadata_inject(ofxRPI4Window::bit_depth);
 	if( img.isAllocated() ){
  
-	  img.draw(arr_posx[i][to_draw],arr_posy[i][to_draw],arr_dim1[i][to_draw],arr_dim2[i][to_draw]);
+	  img.draw(cur_op().posx,cur_op().posy,cur_op().dim1,cur_op().dim2);
 	}
 	img.save(image_name_tmp);
     rename(image_name_tmp.c_str(),image_name.c_str());
@@ -453,9 +457,9 @@ void ofApp::draw(){
     p.close();
   }
  }
- if(arr_frame_time[i] != 0) {
+ if(frames[i].time != 0) {
   unsigned long long diff=ofGetSystemTimeMicros()-last_frame_time;
-  if(diff > arr_frame_time[i]) {
+  if(diff > frames[i].time) {
    i++;
    last_frame_time=0;
    n_frame=0;
@@ -500,29 +504,48 @@ void ofApp::set_values () {
  if(draw_type == "TRIANGLE")  draw_num=3;
  if(draw_type == "TEXT")      draw_num=4;
  if(draw_type == "IMAGE")     draw_num=5;
- arr_text[frame][n_draw[frame]]=text_to_write;
- arr_red[frame][n_draw[frame]]=red;
- arr_green[frame][n_draw[frame]]=green;
- arr_blue[frame][n_draw[frame]]=blue;
- arr_redbg[frame][n_draw[frame]]=redb;
- arr_greenbg[frame][n_draw[frame]]=greenb;
- arr_bluebg[frame][n_draw[frame]]=blueb;
- arr_draw[frame][n_draw[frame]]=draw_num;
- arr_dim1[frame][n_draw[frame]]=dim1;
- arr_dim2[frame][n_draw[frame]]=dim2;
- arr_posx[frame][n_draw[frame]]=position_x;
- arr_posy[frame][n_draw[frame]]=position_y;
- arr_resolution[frame][n_draw[frame]]=resolution;
- arr_image[frame][n_draw[frame]]=img_file;
- arr_rotate[frame][n_draw[frame]]=img_rotate;
- /* Start Patch RPI P4 */
- arr_bits[frame][n_draw[frame]]=bits;
- arr_source_max[frame][n_draw[frame]]=source_max;
- arr_source_range[frame][n_draw[frame]]=source_range;
+ if((int)frames[frame].ops.size() >= max_draws) {
+  ofApp::log("Too many draws in one frame: the rest is ignored");
+  return;
+ }
+ DrawOp op;
+ op.text=text_to_write;
+ op.red=red;
+ op.green=green;
+ op.blue=blue;
+ op.redbg=redb;
+ op.greenbg=greenb;
+ op.bluebg=blueb;
+ op.draw=draw_num;
+ op.dim1=dim1;
+ op.dim2=dim2;
+ op.posx=position_x;
+ op.posy=position_y;
+ op.resolution=resolution;
+ op.image=img_file;
+ op.rotate=img_rotate;
+ op.bits=bits;
+ op.source_max=source_max;
+ op.source_range=source_range;
+ frames[frame].ops.push_back(op);
  ofxRPI4Window::bit_depth=effectivePatternBits(bits);
  if (!usesDolbyVisionTransport())
   ofxRPI4Window::avi_info.max_bpc = ofxRPI4Window::bit_depth;
- /* End Patch RPI P4 */
+}
+
+/* The draw command being drawn (frame i, command to_draw). Past the end,
+   e.g. after the draw loop in the frame-save path: an all-zero command. */
+ofApp::DrawOp& ofApp::cur_op() {
+ if(i >= 0 && i < (int)frames.size() && to_draw >= 0 && to_draw < (int)frames[i].ops.size())
+  return frames[i].ops[to_draw];
+ no_op=DrawOp();
+ return no_op;
+}
+
+int ofApp::frame_draws(int f) {
+ if(f < 0 || f >= (int)frames.size())
+  return 0;
+ return (int)frames[f].ops.size();
 }
 
 /*
@@ -531,11 +554,11 @@ void ofApp::set_values () {
  ##########################################################
 */
 void ofApp::rectangle () {
- if(arr_posx[i][to_draw] == -1) {
-  arr_posx[i][to_draw]=(ofGetWindowWidth()-arr_dim1[i][to_draw])/2;
-  arr_posy[i][to_draw]=(ofGetWindowHeight()-arr_dim2[i][to_draw])/2;
+ if(cur_op().posx == -1) {
+  cur_op().posx=(ofGetWindowWidth()-cur_op().dim1)/2;
+  cur_op().posy=(ofGetWindowHeight()-cur_op().dim2)/2;
  }
- ofDrawRectangle(arr_posx[i][to_draw],arr_posy[i][to_draw],arr_dim1[i][to_draw],arr_dim2[i][to_draw]);
+ ofDrawRectangle(cur_op().posx,cur_op().posy,cur_op().dim1,cur_op().dim2);
 }
  
 /*
@@ -544,12 +567,12 @@ void ofApp::rectangle () {
  ##########################################################
 */
 void ofApp::circle() {
- ofSetCircleResolution(arr_resolution[i][to_draw]);
- if(arr_posx[i][to_draw] == -1) {
-  arr_posx[i][to_draw]=ofGetWindowWidth()/2;
-  arr_posy[i][to_draw]=ofGetWindowHeight()/2;
+ ofSetCircleResolution(cur_op().resolution);
+ if(cur_op().posx == -1) {
+  cur_op().posx=ofGetWindowWidth()/2;
+  cur_op().posy=ofGetWindowHeight()/2;
  }
- ofDrawCircle(arr_posx[i][to_draw],arr_posy[i][to_draw],arr_dim1[i][to_draw]);
+ ofDrawCircle(cur_op().posx,cur_op().posy,cur_op().dim1);
 }
 
 /*
@@ -558,11 +581,11 @@ void ofApp::circle() {
  ##########################################################
 */
 void ofApp::triangle() {
- if(arr_posx[i][to_draw] == -1) {
-  arr_posx[i][to_draw]=ofGetWindowWidth()/2;
-  arr_posy[i][to_draw]=ofGetWindowHeight()/2;
+ if(cur_op().posx == -1) {
+  cur_op().posx=ofGetWindowWidth()/2;
+  cur_op().posy=ofGetWindowHeight()/2;
  }
- ofDrawTriangle(arr_posx[i][to_draw],arr_posy[i][to_draw]-arr_dim1[i][to_draw],arr_posx[i][to_draw]-arr_dim1[i][to_draw],arr_posy[i][to_draw]+arr_dim1[i][to_draw],arr_posx[i][to_draw]+arr_dim1[i][to_draw],arr_posy[i][to_draw]+arr_dim1[i][to_draw]);
+ ofDrawTriangle(cur_op().posx,cur_op().posy-cur_op().dim1,cur_op().posx-cur_op().dim1,cur_op().posy+cur_op().dim1,cur_op().posx+cur_op().dim1,cur_op().posy+cur_op().dim1);
 }
 
 /*
@@ -571,14 +594,14 @@ void ofApp::triangle() {
  ##########################################################
 */
 void ofApp::text() {
- myfont.load(text_font,arr_dim1[i][to_draw]);
- int width=myfont.stringWidth(arr_text[i][to_draw]);
- //int height=myfont.stringHeight(arr_text[i][to_draw]);
- if(arr_posx[i][to_draw] == -1) {
-  arr_posx[i][to_draw]=(ofGetWindowWidth()-width)/2;
-  arr_posy[i][to_draw]=ofGetWindowHeight()/2;
+ myfont.load(text_font,cur_op().dim1);
+ int width=myfont.stringWidth(cur_op().text);
+ //int height=myfont.stringHeight(cur_op().text);
+ if(cur_op().posx == -1) {
+  cur_op().posx=(ofGetWindowWidth()-width)/2;
+  cur_op().posy=ofGetWindowHeight()/2;
  }
- myfont.drawString(arr_text[i][to_draw],arr_posx[i][to_draw],arr_posy[i][to_draw]);
+ myfont.drawString(cur_op().text,cur_op().posx,cur_op().posy);
 }
 
 /*
@@ -594,23 +617,23 @@ void ofApp::text() {
 bool ofApp::usesFloatImage() {
  /* 8-bit HDR images stay on the 8-bit texture and take the texel * 4
     tint in image(), like SDR. */
- if (ofxRPI4Window::avi_info.max_bpc == 10 && ofxRPI4Window::isHDR && arr_bits[i][to_draw] != 8)
+ if (ofxRPI4Window::avi_info.max_bpc == 10 && ofxRPI4Window::isHDR && cur_op().bits != 8)
   return true;
- return arr_bits[i][to_draw] == 10 && !usesDolbyVisionTransport();
+ return cur_op().bits == 10 && !usesDolbyVisionTransport();
 }
 
 void ofApp::image() {
- if(arr_posx[i][to_draw] == -1) {
-  arr_posx[i][to_draw]=(ofGetWindowWidth()-arr_dim1[i][to_draw])/2;
-  arr_posy[i][to_draw]=(ofGetWindowHeight()-arr_dim2[i][to_draw])/2;
+ if(cur_op().posx == -1) {
+  cur_op().posx=(ofGetWindowWidth()-cur_op().dim1)/2;
+  cur_op().posy=(ofGetWindowHeight()-cur_op().dim2)/2;
  }
  /* Start Patch RPI P4 */
  if (usesFloatImage()) {
-  if (previous_image != arr_image[i][to_draw] || loop_count < 2) { //needs to load each new image twice to allow time to load shader
+  if (previous_image != cur_op().image || loop_count < 2) { //needs to load each new image twice to allow time to load shader
   float_img.clear();
-  float_img.load(arr_image[i][to_draw]);
-  float_img.rotate90(arr_rotate[i][to_draw]);
-  normalizeImageSourcePixels(arr_source_range[i][to_draw]);
+  float_img.load(cur_op().image);
+  float_img.rotate90(cur_op().rotate);
+  normalizeImageSourcePixels(cur_op().source_range);
 
   float_img.getTexture().setTextureMinMagFilter(GL_NEAREST, GL_NEAREST); //set pixel precision
   loop_count++;
@@ -618,15 +641,15 @@ void ofApp::image() {
   ofSet10bitColor(1023,1023,1023,1023);
 //  float_img.update();  //update here no necessary,  occurs in both load and rotate90 routines 
   ofApp::shader_begin(1); //set for image = 1
-  float_img.draw(arr_posx[i][to_draw],arr_posy[i][to_draw],arr_dim1[i][to_draw],arr_dim2[i][to_draw]);
+  float_img.draw(cur_op().posx,cur_op().posy,cur_op().dim1,cur_op().dim2);
   ofApp::shader_end(1); //set for image = 1
  /* End Patch RPI P4 */
  } else {
-  if (previous_image != arr_image[i][to_draw] || loop_count < 2) { //needs to load each new image twice to allow time to load shader
+  if (previous_image != cur_op().image || loop_count < 2) { //needs to load each new image twice to allow time to load shader
     img.clear();
-    img.load(arr_image[i][to_draw]);
-    img.rotate90(arr_rotate[i][to_draw]);
-    normalizeImageSourcePixels(arr_source_range[i][to_draw]);
+    img.load(cur_op().image);
+    img.rotate90(cur_op().rotate);
+    normalizeImageSourcePixels(cur_op().source_range);
   //img.update(); //update here no necessary,  occurs in both load and rotate90 routines 
     img.getTexture().setTextureMinMagFilter(GL_NEAREST, GL_NEAREST); //set pixel precision
 	loop_count++;
@@ -643,13 +666,13 @@ void ofApp::image() {
   /* Start Patch RPI P4 */
   ofApp::shader_begin(1); //set for image = 1
   /* End Patch RPI P4 */
-  img.draw(arr_posx[i][to_draw],arr_posy[i][to_draw],arr_dim1[i][to_draw],arr_dim2[i][to_draw]); 
+  img.draw(cur_op().posx,cur_op().posy,cur_op().dim1,cur_op().dim2); 
   /* Start Patch RPI P4 */
   ofApp::shader_end(1); //set for image = 1
   /* End Patch RPI P4 */
  
  }
- previous_image = arr_image[i][to_draw]; 
+ previous_image = cur_op().image; 
 }
 
 /*
@@ -676,13 +699,13 @@ void ofApp::log(std::string str) {
  ##########################################################
 */
 void ofApp::setBackground(int redbg, int greenbg, int bluebg) {
- redbg=normalizeSourceValue(scaleSourceToBitDepth(redbg),arr_source_range[i][to_draw]);
- greenbg=normalizeSourceValue(scaleSourceToBitDepth(greenbg),arr_source_range[i][to_draw]);
- bluebg=normalizeSourceValue(scaleSourceToBitDepth(bluebg),arr_source_range[i][to_draw]);
+ redbg=normalizeSourceValue(scaleSourceToBitDepth(redbg),cur_op().source_range);
+ greenbg=normalizeSourceValue(scaleSourceToBitDepth(greenbg),cur_op().source_range);
+ bluebg=normalizeSourceValue(scaleSourceToBitDepth(bluebg),cur_op().source_range);
  int lldv422=usesLowLatencyDoVi422Transport();
  if (ofxRPI4Window::isHDR && !ofxRPI4Window::isDoVi && !ofxRPI4Window::is_std_DoVi) { 
   if (ofxRPI4Window::bit_depth == 10) {  
-   if(arr_redbg[i][to_draw] != -1) {
+   if(cur_op().redbg != -1) {
 	if (ofxRPI4Window::avi_info.output_format != 0) {
      RGB data = RGB(redbg,greenbg,bluebg);
      YCbCr bg = RGB2YCbCr(data,10, ofxRPI4Window::avi_info.colorimetry, ofxRPI4Window::avi_info.rgb_quant_range);
@@ -691,7 +714,7 @@ void ofApp::setBackground(int redbg, int greenbg, int bluebg) {
     } else                                           of10bitBackground(redbg,greenbg,bluebg);
    }
   } else {
-   if(arr_redbg[i][to_draw] != -1) {
+   if(cur_op().redbg != -1) {
 	if (ofxRPI4Window::avi_info.output_format != 0) {
      RGB data = RGB(redbg,greenbg,bluebg);
      YCbCr bg = RGB2YCbCr(data,8,ofxRPI4Window::avi_info.colorimetry, ofxRPI4Window::avi_info.rgb_quant_range);
@@ -702,7 +725,7 @@ void ofApp::setBackground(int redbg, int greenbg, int bluebg) {
   }
  } else {
   if (ofxRPI4Window::bit_depth == 10) {  
-   if(arr_redbg[i][to_draw] != -1) {
+   if(cur_op().redbg != -1) {
 	if (ofxRPI4Window::avi_info.output_format != 0 || ofxRPI4Window::is_std_DoVi) {
 	 if (lldv422) {
 	  of10bitBackground(redbg,greenbg,bluebg);
@@ -716,7 +739,7 @@ void ofApp::setBackground(int redbg, int greenbg, int bluebg) {
 	    } else                                           					of10bitBackground(redbg,greenbg,bluebg);
    }
   } else {
-   if(arr_redbg[i][to_draw] != -1) {
+   if(cur_op().redbg != -1) {
 		if (ofxRPI4Window::avi_info.output_format != 0 || ofxRPI4Window::is_std_DoVi) {
 		 if (lldv422) {
 		  ofBackground(redbg,greenbg,bluebg);
@@ -739,11 +762,11 @@ void ofApp::setBackground(int redbg, int greenbg, int bluebg) {
  ##########################################################
 */
 void ofApp::setColor(int red, int green, int blue) {
- red=normalizeSourceValue(scaleSourceToBitDepth(red),arr_source_range[i][to_draw]);
- green=normalizeSourceValue(scaleSourceToBitDepth(green),arr_source_range[i][to_draw]);
- blue=normalizeSourceValue(scaleSourceToBitDepth(blue),arr_source_range[i][to_draw]);
+ red=normalizeSourceValue(scaleSourceToBitDepth(red),cur_op().source_range);
+ green=normalizeSourceValue(scaleSourceToBitDepth(green),cur_op().source_range);
+ blue=normalizeSourceValue(scaleSourceToBitDepth(blue),cur_op().source_range);
  if(ofxRPI4Window::is_std_DoVi && ofxRPI4Window::colorspace_on) {
-  dv_source_max=arr_source_max[i][to_draw];
+  dv_source_max=cur_op().source_max;
   if(dv_source_max != 255 && dv_source_max != 1023 && dv_source_max != 4095)
    dv_source_max=255;
   dv_source_red=ofClamp(red,0,dv_source_max);
@@ -776,18 +799,18 @@ int ofApp::scaleSourceToBitDepth(int value) {
   return value;
  /* Low Latency DV keeps its source codes, except for an 8-bit pattern
     promoted to the 10-bit framebuffer (handled below). */
- if(ofxRPI4Window::isDoVi && !promotedEightBitPattern(arr_bits[i][to_draw]))
+ if(ofxRPI4Window::isDoVi && !promotedEightBitPattern(cur_op().bits))
   return value;
- int source_max=arr_source_max[i][to_draw];
+ int source_max=cur_op().source_max;
  int target_max=(ofxRPI4Window::bit_depth == 10) ? 1023 : 255;
  /* 8-bit pattern drawn in the 10-bit framebuffer (effectivePatternBits):
     RGB Limited wire codes go out times 4; full-range values take the
     8 -> 10 bit step that keeps 255 at 1023, so the later Limited
     compression lands on the 8 bpc code times 4 as well. */
- if(arr_bits[i][to_draw] == 8 && ofxRPI4Window::bit_depth == 10 && source_max == 255 && value >= 0) {
+ if(cur_op().bits == 8 && ofxRPI4Window::bit_depth == 10 && source_max == 255 && value >= 0) {
   if(value > 255)
    value=255;
-  if(arr_source_range[i][to_draw] == 1 && ofxRPI4Window::avi_info.output_format == 0 &&
+  if(cur_op().source_range == 1 && ofxRPI4Window::avi_info.output_format == 0 &&
      ofxRPI4Window::avi_info.rgb_quant_range == 1)
    return value << 2;
   /* The YCbCr shader encodes its input as studio-range codes. */
@@ -864,7 +887,7 @@ void ofApp::normalizeImageSourcePixels(int source_range_mode) {
    int color_channels=(channels == 2) ? 1 : std::min(3,channels);
    float *data=pixels.getData();
    size_t pixel_count=(size_t)pixels.getWidth() * pixels.getHeight();
-   const bool codes10=(arr_bits[i][to_draw] == 10);
+   const bool codes10=(cur_op().bits == 10);
    const float black=codes10 ? 64.0f : 16.0f;
    const float span=codes10 ? 876.0f : 219.0f;
    const float top=codes10 ? 1023.0f : 255.0f;
@@ -907,7 +930,7 @@ void ofApp::normalizeImageSourcePixels(int source_range_mode) {
   float *data=pixels.getData();
   size_t pixel_count=(size_t)pixels.getWidth() * pixels.getHeight();
   // 10-bit plates carry 10-bit codes (64-940); HDR images 8-bit ones.
-  const bool codes10=(arr_bits[i][to_draw] == 10);
+  const bool codes10=(cur_op().bits == 10);
   const float limited_min=codes10 ? 64.0f / 1023.0f : 16.0f / 255.0f;
   const float limited_scale=codes10 ? 1023.0f / 876.0f : 255.0f / 219.0f;
   for(size_t pixel=0;pixel<pixel_count;pixel++) {

@@ -1681,8 +1681,18 @@ async function loadInfo(quiet){
   document.getElementById('updateCurrent').textContent='v'+info.version;
  }
  const g=document.getElementById('infoGrid');
- // GPU memory and scaling type are live selects: keep their tiles, rebuild the rest
  const ctl=id=>document.getElementById(id);
+ // Rebuild the tiles only when a fact changed. A rebuild on every poll
+ // replaced DOM above the viewport while a phone was scrolling, and iOS
+ // Safari (no scroll anchoring) let the page jump.
+ const factsKey=JSON.stringify([info.model,info.hostname,info.resolution,info.total_ram,info.interfaces||null]);
+ if(g.dataset.factsKey===factsKey&&g.querySelector('.devinfo-fact')){
+  const up=ctl('deviceInfoUptime');
+  if(up){ up.textContent=formatUptime(info.uptime); up.title=up.textContent; }
+  if(info.temperature) pgSetDeviceTemperature(Number(info.temperature));
+ }else{
+ g.dataset.factsKey=factsKey;
+ // GPU memory and scaling type are live selects: keep their tiles, rebuild the rest
  const ctlTiles=['gpuMemField','cmaMemField','governorField'].map(ctl).filter(Boolean);
  ctlTiles.forEach(t=>t.remove());
  g.innerHTML='';
@@ -1711,19 +1721,31 @@ async function loadInfo(quiet){
   });
   pgSyncDeviceInfoAp();
  }
+ }
  const wifiDisconnectBtn=document.getElementById('wifiDisconnectBtn');
  if(info.wifi && info.wifi.state==='COMPLETED' && info.wifi.ssid){
   const ws=document.getElementById('wifiStatus');
-  ws.innerHTML='';
-  addInfo(ws,'Network',info.wifi.ssid);
-  if(info.wifi.band) addInfo(ws,'Band',info.wifi.band+' ('+info.wifi.freq+' MHz)');
-  if(info.wifi.signal) addInfo(ws,'Signal',info.wifi.signal+' dBm');
+  // Same rows as before: only the values change, no rebuild (see infoGrid)
+  const wifiKey=JSON.stringify([info.wifi.ssid,info.wifi.band,info.wifi.freq,!!info.wifi.signal]);
+  if(ws.dataset.wifiKey!==wifiKey){
+   ws.dataset.wifiKey=wifiKey;
+   ws.innerHTML='';
+   addInfo(ws,'Network',info.wifi.ssid);
+   if(info.wifi.band) addInfo(ws,'Band',info.wifi.band+' ('+info.wifi.freq+' MHz)');
+   if(info.wifi.signal) addInfo(ws,'Signal',info.wifi.signal+' dBm','wifiSignalValue');
+  }else if(info.wifi.signal){
+   const sv=document.getElementById('wifiSignalValue');
+   if(sv){ sv.textContent=info.wifi.signal+' dBm'; sv.title=sv.textContent; }
+  }
   if(wifiDisconnectBtn) wifiDisconnectBtn.style.display='';
   const wifiForgetBtn=document.getElementById('wifiForgetBtn');
   if(wifiForgetBtn) wifiForgetBtn.style.display='';
  }else{
   const ws=document.getElementById('wifiStatus');
-  ws.innerHTML='<div style="font-size:.8rem;color:var(--text2)">Not connected</div>';
+  if(ws.dataset.wifiKey!=='off'){
+   ws.dataset.wifiKey='off';
+   ws.innerHTML='<div style="font-size:.8rem;color:var(--text2)">Not connected</div>';
+  }
   if(wifiDisconnectBtn) wifiDisconnectBtn.style.display='none';
   const wifiForgetBtn=document.getElementById('wifiForgetBtn');
   if(wifiForgetBtn) wifiForgetBtn.style.display='none';
@@ -2039,6 +2061,10 @@ function pgDiagNowAction(){
 async function loadStats(quiet){
  const stats=await fetchJSON('/api/stats',{_quiet:!!quiet,_timeoutMs:5000});
  if(!stats)return;
+ // The answer can land mid-scroll; apply it once the page is at rest.
+ pgWhenScrollIdle('stats',()=>pgApplyStats(stats));
+}
+function pgApplyStats(stats){
  // The conf file changed (Calman, another browser, ...): reload the
  // settings now instead of waiting for the 10s config poll.
  if(stats.config_rev){
@@ -2868,7 +2894,8 @@ function playlistRender(){
  }
  const lib=document.getElementById('playlistLibrary');
  const sdr=(playlistData.signal_mode||'sdr')==='sdr';
- lib.innerHTML=(playlistData.playlists||[]).map(pl=>{
+ // Rendered on every poll: replace the list only when it changed (see infoGrid)
+ const libHtml=(playlistData.playlists||[]).map(pl=>{
   const isActive=active&&active.id===pl.id;
   const blocked=!sdr&&playlistNeedsSdr(pl);
   const strip=(pl.items||[]).slice(0,6).map(it=>playlistThumb(it,'playlist-mini')).join('')+((pl.items||[]).length>6?'<span class="playlist-more">+'+((pl.items||[]).length-6)+'</span>':'');
@@ -2886,6 +2913,7 @@ function playlistRender(){
     (pl.builtin?'':'<button type="button" class="icon-btn playlist-icon-btn is-danger" onclick="playlistDelete(\''+pl.id+'\')" aria-label="Delete '+playlistEsc(pl.name)+'" title="Delete"><svg viewBox="0 0 24 24"><path d="M5 7h14M10 7V4.5h4V7M7 7l1 13h8l1-13M10.5 11v5M13.5 11v5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></button>')+
    '</div></li>';
  }).join('');
+ if(lib._pgHtml!==libHtml){ lib.innerHTML=libHtml; lib._pgHtml=libHtml; }
  const editing=!!playlistDraft;
  document.getElementById('playlistEditor').hidden=!editing;
  lib.hidden=editing;
@@ -3653,7 +3681,7 @@ function renderCecStatus(tvPower,physAddr){
   let html='TV: <span style="color:'+c+';font-weight:600">'+lbl+'</span>';
  const shownPhys=physAddr||cecLastPhysAddr;
  if(shownPhys) html+=' &bull; HDMI '+shownPhys;
- el.innerHTML=html;
+ if(el._pgHtml!==html){ el.innerHTML=html; el._pgHtml=html; }
  el.style.color='';
 }
 
@@ -3760,15 +3788,17 @@ async function loadBluetooth(){
  const r=await fetchJSON('/api/bluetooth/status',{_quiet:true,_timeoutMs:10000});
  const el=document.getElementById('btStatus');
  if(!el||!r||r.status!=='ok') return;
- el.innerHTML='';
- addInfo(el,'Power',r.powered?'On':'Off');
  const bt=document.getElementById('btPowerToggle');
  if(bt&&!bt.disabled) bt.checked=!!r.powered;
- addInfo(el,'Visible',r.discoverable?'Yes':'No');
- addInfo(el,'Agent',r.agent?'Running':'Stopped');
- addInfo(el,'PAN',r.pan_running?'Running':'Stopped');
- addInfo(el,'Network',(r.pan_net||'10.10.11')+'.1');
- if(Array.isArray(r.devices)&&r.devices.length) addInfo(el,'Devices',r.devices.length);
+ // Built off-DOM and swapped in only when it changed (see infoGrid)
+ const box=document.createElement('div');
+ addInfo(box,'Power',r.powered?'On':'Off');
+ addInfo(box,'Visible',r.discoverable?'Yes':'No');
+ addInfo(box,'Agent',r.agent?'Running':'Stopped');
+ addInfo(box,'PAN',r.pan_running?'Running':'Stopped');
+ addInfo(box,'Network',(r.pan_net||'10.10.11')+'.1');
+ if(Array.isArray(r.devices)&&r.devices.length) addInfo(box,'Devices',r.devices.length);
+ if(el.innerHTML!==box.innerHTML) el.replaceChildren(...box.childNodes);
 }
 
 async function btSet(kind,enabled){
@@ -4622,7 +4652,9 @@ function pgLayoutInit(){
   jumpNav.addEventListener('focusout',event=>{ if(pgTabletMoreOpen&&!(event.relatedTarget&&jumpNav.contains(event.relatedTarget))&&event.relatedTarget) pgSetTabletMore(false); });
   document.addEventListener('pointerdown',event=>{ if(pgTabletMoreOpen&&!jumpNav.contains(event.target)) pgSetTabletMore(false); });
  }
- window.addEventListener('scroll',pgScheduleTabletNavSync,{passive:true});
+ // The jump bar highlight follows the scroll once it settles; restyling the
+ // fixed bar mid-momentum made iOS jump (see pgWhenScrollIdle).
+ window.addEventListener('scroll',()=>pgWhenScrollIdle('tabletNav',pgScheduleTabletNavSync),{passive:true});
  ['wheel','touchstart','keydown'].forEach(type=>window.addEventListener(type,()=>{ if(pgTabletNavPinned){ pgTabletNavPinned=''; pgScheduleTabletNavSync(); } },{passive:true}));
  window.addEventListener('resize',()=>{
   const width=Math.round(window.innerWidth||0);
@@ -4632,9 +4664,14 @@ function pgLayoutInit(){
   // pgRefreshVisibleWorkspace, which dispatches resize again and creates a
   // permanent redraw loop. Only the real viewport changing needs layout work.
   if(width===pgLayoutViewportWidth&&height===pgLayoutViewportHeight) return;
+  const widthChanged=width!==pgLayoutViewportWidth;
   pgLayoutViewportWidth=width;
   pgLayoutViewportHeight=height;
   pgUpdateHeaderOffset();
+  // Mobile browsers change only the height while scrolling (toolbars slide
+  // in and out). The layout depends on the width; a full pass here moved
+  // DOM and redrew charts mid-scroll, which made iOS Safari jump.
+  if(!widthChanged){ pgWhenScrollIdle('tabletNav',pgScheduleTabletNavSync); return; }
   if(pgLayoutResizeTimer) clearTimeout(pgLayoutResizeTimer);
   pgLayoutResizeTimer=setTimeout(()=>pgApplyLayout(),80);
  });
@@ -4755,10 +4792,38 @@ function pgSetDesktopUtilityDrawer(open){
  // after the transition doubled the most expensive calibration work.
  setTimeout(()=>window.dispatchEvent(new Event('resize')),240);
 }
+// iOS WebKit (Safari and Chrome on iOS) moves the scroll position when the
+// page rewrites text or highlight states while a touch scroll or its momentum
+// is running (seen as ~150 px jumps exactly on the 3 s stats poll and on jump
+// bar highlight changes). Background updates wait until the page is at rest.
+let pgScrollTouchAt=0,pgScrollLastAt=0,pgScrollIdleTimer=0;
+const pgScrollIdleJobs=new Map();
+function pgScrollBusy(){
+ const now=performance.now();
+ // A lost touchend must not hold the polls back for good: 8 s at most.
+ return (pgScrollTouchAt&&now-pgScrollTouchAt<8000)||now-pgScrollLastAt<400;
+}
+function pgFlushScrollIdle(){
+ pgScrollIdleTimer=0;
+ if(pgScrollBusy()){ pgScrollIdleTimer=setTimeout(pgFlushScrollIdle,150); return; }
+ const jobs=Array.from(pgScrollIdleJobs.values());
+ pgScrollIdleJobs.clear();
+ jobs.forEach(fn=>{try{fn();}catch(e){}});
+}
+// Runs fn now, or once scrolling has settled; a later job with the same key
+// replaces the queued one (only the newest poll result is applied).
+function pgWhenScrollIdle(key,fn){
+ if(!pgScrollBusy()){ fn(); return; }
+ pgScrollIdleJobs.set(key,fn);
+ if(!pgScrollIdleTimer) pgScrollIdleTimer=setTimeout(pgFlushScrollIdle,150);
+}
+window.addEventListener('scroll',()=>{pgScrollLastAt=performance.now();},{passive:true});
+window.addEventListener('touchstart',()=>{pgScrollTouchAt=performance.now();},{passive:true});
+['touchend','touchcancel'].forEach(type=>window.addEventListener(type,()=>{pgScrollTouchAt=0;pgScrollLastAt=performance.now();},{passive:true}));
 const pgVisiblePolls=[];
 function pgVisiblePoll(fn,ms){
  pgVisiblePolls.push(fn);
- setInterval(()=>{if(!document.hidden) fn();},ms);
+ setInterval(()=>{if(!document.hidden) pgWhenScrollIdle(fn,fn);},ms);
 }
 document.addEventListener('visibilitychange',()=>{
  if(document.hidden) return;

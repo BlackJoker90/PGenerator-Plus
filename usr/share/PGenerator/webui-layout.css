@@ -369,6 +369,13 @@ body.layout-tablet .dashboard [style*="font-size:.5"],body.layout-tablet .dashbo
    temperature); the row wraps, nothing is hidden. */
 @media(max-width:600px){
 body.layout-tablet .header{padding:10px 14px;column-gap:8px;row-gap:6px}
+/* Phone/tablet: the header is fixed, not sticky. A sticky header stays in the
+   page flow, and the status polls rewrite it every few seconds; iOS WebKit
+   (Safari and Chrome on iPhone) then re-laid out the page mid-scroll and the
+   view jumped. Out of the flow, header updates cannot move the page. The
+   padding reserves its measured height (ResizeObserver -> --pg-header-height). */
+body.layout-tablet .header{position:fixed;top:0;left:0;right:0}
+body.layout-tablet{padding-top:var(--pg-header-height,61px)}
 body.layout-tablet .hdr-right{display:contents}
 body.layout-tablet .logo{order:0;margin-right:auto}
 body.layout-tablet .hdr-actions{order:1;flex:0 1 auto}

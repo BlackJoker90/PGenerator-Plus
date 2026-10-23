@@ -2,7 +2,7 @@
   <img src="Pgen+_Logo_black_bg_slim.png" alt="PGenerator+" width="640"/>
 </p>
 
-<h3 align="center">A Raspberry Pi 4 HDMI pattern generator for display calibration that is bit-exact, fast and quiet in daily use</h3>
+<h3 align="center">The Raspberry Pi 4 pattern generator that proves its codes on the HDMI cable: bit-exact, Dolby Vision aware, driven from your TV remote</h3>
 
 <p align="center">
   <a href="https://github.com/BlackJoker90/PGenerator-Plus/releases/latest"><img src="https://img.shields.io/github/v/release/BlackJoker90/PGenerator-Plus?style=for-the-badge&color=5b7fff&label=release" alt="Latest release"/></a>
@@ -12,6 +12,7 @@
 </p>
 
 <p align="center">
+  <a href="#only-in-this-fork">Only here</a> ·
   <a href="#why-this-fork">Why this fork</a> ·
   <a href="#at-a-glance-fork-vs-original">Fork vs. original</a> ·
   <a href="#get-started">Get started</a> ·
@@ -26,11 +27,62 @@
 
 ---
 
+<a id="only-in-this-fork"></a>
+
+## 🏆 Only in this fork
+
+What no other PGenerator build does today. The comparison basis is the latest upstream PGenerator+ (2.12.1); none of these exist there.
+
+<table>
+<tr>
+<td width="50%" valign="top">
+
+### 🔬 Codes proven on the cable
+The Pi reads back its own scanout. The built-in **Signal Self-Test** draws known codes in ten signal modes and checks the pixels, the link depth and the AVI infoframe. 10-bit codes stay 10-bit, and **RGB Limited goes out without the kernel's compression** (patched vc4). A full 0–1023 sweep comes back exact.
+
+</td>
+<td width="50%" valign="top">
+
+### 🕶️ A silent source: no SPD InfoFrame
+A stock Pi labels itself in the SPD InfoFrame (*"Broadcom Videocore"*), and displays can change the picture for the source type it names. [Light Illusion](https://www.lightillusion.com/hdmi_infoframes.html) saw it on an ASUS ProArt PA32DC: Low Latency Dolby Vision from a Pi was **limited to Rec.709**, and with the Pi's SPD removed it showed the **full gamut**, matching a Murideo SIX-G. The fork's vc4 driver **never sends the SPD InfoFrame**, and the WebUI shows the packet register as proof.
+
+</td>
+</tr>
+<tr>
+<td valign="top">
+
+### 🌈 Dolby Vision that reads your display
+The DV card decodes the display's **EDID Dolby block**: peak and black luminance, primaries, Standard and Low Latency support. Choosing DV fills in the display's own peak and black, flags mismatches and marks patches above the peak. **LLDV runs at 12-bit** and really switches the TV into DV.
+
+</td>
+<td valign="top">
+
+### 📺 Patterns from the TV remote
+Press **OK or Menu on the TV remote** and every pattern appears as a menu on the TV. **Playlists** step with the arrow keys over HDMI-CEC. No phone or laptop needed at the screen.
+
+</td>
+</tr>
+<tr>
+<td valign="top">
+
+### 🎛️ Calman connects as a G1
+Calman can drive PGenerator+ as a **Portrait Displays G1**: patches, signal modes and all **19 G1 specialty patterns**, rendered on the Pi. The UPGCI connection works too, now with replies Calman can parse.
+
+</td>
+<td valign="top">
+
+### ⚡ Fast, and it does not fall over
+A signal mode change takes **~3.5–4.5 s instead of ~10 s**. Rapid setting changes are serialized, so they can no longer start two renderers and crash the HDMI driver. Without a display the renderer waits instead of failing.
+
+</td>
+</tr>
+</table>
+
 <a id="why-this-fork"></a>
 
 ## ✨ Why this fork
 
-This is **BlackJoker90's fork** of [BigShoots/PGenerator-Plus](https://github.com/BigShoots/PGenerator-Plus). It branched from upstream 2.12.1 in September 2026 and has had **115+ commits and 24 releases** since then (2.12.2 → 2.13.x). Upstream has nothing newer that the fork lacks.
+This is **BlackJoker90's fork** of [BigShoots/PGenerator-Plus](https://github.com/BigShoots/PGenerator-Plus). It branched from upstream 2.12.1 in September 2026 and has had **145+ commits and 30+ releases** since then (2.12.2 → 2.13.x). Upstream has nothing newer that the fork lacks.
 
 Everything the original does is still here: patterns over TCP for Calman, ColourSpace, HCFR and Resolve; on-Pi meter workflows; LG AutoCal; profile building. The fork's focus is the **signal on the HDMI cable** and the **day-to-day experience**:
 
@@ -59,7 +111,7 @@ The UPGCI handshake now has proper ACKs and the settings format Calman actually 
 <td valign="top">
 
 ### 🌈 Dolby Vision, fixed
-Low Latency DV renders at **12-bit** and really switches the TV into DV, with pattern codes sent at 10-bit. Leaving DV signals "DV off" properly and gives back the format, range and depth you had before DV, and the SDR colorimetry. Calman DV consistently runs as standard DV.
+Low Latency DV renders at **12-bit** and really switches the TV into DV, with pattern codes sent at 10-bit. The display's EDID Dolby block sets the DV metadata defaults. Standard DV always uses the 8-bit tunnel the TV expects, also after a 10-bit Calman session. Leaving DV signals "DV off" properly and gives back the format, range and depth you had before DV, and the SDR colorimetry. Calman DV consistently runs as standard DV.
 
 </td>
 </tr>
@@ -123,8 +175,9 @@ Press **OK or Menu on the TV remote** and a menu of every pattern appears on the
 | Calman connection as G1 | – | **full control** from Calman (patches, signal modes, G1 patterns) |
 | Calman G1 specialty patterns | – | all 19 rendered on the Pi, started from Calman or the WebUI |
 | No display connected | renderer started anyway | waits for a display, banner in the UI, saved mode kept |
+| Rapid setting changes | could start two renderers at once (vc4 crash, reboot needed) | **serialized**: one renderer, no crash |
 | Display's Dolby Vision block | only "DV supported" | peak, black, interfaces and primaries shown; mismatch warnings; patches above the peak flagged |
-| SPD InfoFrame | always sent ("Broadcom Videocore", media player) | never sent: removed in the vc4 driver (Pi 4) |
+| SPD InfoFrame | always sent ("Broadcom Videocore", media player); can limit a display's LLDV gamut to Rec.709 (ASUS PA32DC, Light Illusion) | **never sent**: removed in the vc4 driver (Pi 4) |
 | WebUI themes | dark / light / system | **13 themes** incl. Natrium dark & light and Volt, Scope, Ultraviolet |
 | Measurement workspaces | – | **can be hidden** in Settings for pattern-only setups (Calman, HCFR) |
 | HDMI link readout | – | measured link depth and clock |
@@ -344,7 +397,7 @@ The Pi 4's KMS driver sets the HDMI InfoFrames directly:
 - **AVI:** colour format (RGB / YCbCr 4:4:4 / 4:2:2), colorimetry (BT.709 / BT.2020), quantisation range, VIC
 - **DRM:** EOTF, mastering primaries, max/min luminance, MaxCLL, MaxFALL
 - **Dolby Vision:** a DOVI output metadata blob from `PGeneratord.dv`, with DV capability detected from the EDID VSVDB
-- **SPD:** a stock Pi kernel names the Pi "Broadcom Videocore", source type media player, and some displays treat that source type differently. The vc4 driver shipped with PGenerator+ (Pi 4) never sends it; the card shows the packet enable bit read back from the HDMI block as proof
+- **SPD:** a stock Pi kernel names the Pi "Broadcom Videocore", source type media player, and some displays treat that source type differently (an ASUS PA32DC limited LLDV to Rec.709 until it was removed, see Light Illusion's [HDMI InfoFrames](https://www.lightillusion.com/hdmi_infoframes.html)). The vc4 driver shipped with PGenerator+ (Pi 4) never sends it; the card shows the packet enable bit read back from the HDMI block as proof
 
 The Dolby Vision card shows what the display declares in its EDID Dolby block: peak and black luminance, supported interfaces (Standard / Low Latency) and primaries. Choosing Dolby Vision fills in the declared peak and black while Max/Min Luma are still at the factory 1000 / 0.005; otherwise it warns when Max Luma or the transport does not match (a higher Max Luma is fine to test the display's tone mapping) and sets the declared values with one button, and the measurement strip flags DV patches above the declared peak, which the display clips.
 

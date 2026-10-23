@@ -232,6 +232,13 @@ __PG_LOGO_DARK__
       <input type="number" id="dv_max_fall" min="0" max="10000" step="1">
      </div>
   </div>
+  <!-- What the display declares in its EDID Dolby Vision block (webui-app.js pgRenderDvDisplayInfo). -->
+  <div class="dv-display" id="dvDisplayInfo" hidden>
+   <div class="dv-display-title">Display (EDID Dolby Vision block)</div>
+   <div class="if-decoded" id="dvDisplayFacts"></div>
+   <ul class="dv-display-warn" id="dvDisplayWarn" hidden></ul>
+   <button type="button" class="btn btn-sm btn-secondary" id="dvUseDisplayBtn" onclick="pgDvUseDisplayValues()">Use display peak &amp; black</button>
+  </div>
  </div>
 
  <!-- Apply Settings Bar -->
@@ -847,6 +854,7 @@ __PG_LOGO_DARK__
    </div>
    <button type="button" id="meterThumbsRightBtn" class="meter-thumbs-nav" onclick="meterThumbsPage(1)" aria-label="Scroll thumbnails right" title="Scroll thumbnails right">&#10095;</button>
   </div>
+  <p id="meterOverPeakNote" class="meter-over-peak-note" role="status" hidden></p>
 
   <!-- Live Reading -->
   <div id="meterLiveReadingHome" aria-hidden="true"></div>
@@ -1903,6 +1911,11 @@ __PG_LOGO_DARK__
     <div style="font-size:.7rem;color:var(--text2);text-transform:uppercase;margin-bottom:4px">DRM InfoFrame</div>
     <div id="drmIF" class="if-hex">-</div>
     <div id="drmDecoded" class="if-decoded"></div>
+   </div>
+   <div style="margin-top:10px">
+    <div style="font-size:.7rem;color:var(--text2);text-transform:uppercase;margin-bottom:4px">SPD InfoFrame (source name)</div>
+    <div id="spdIF" class="if-hex">-</div>
+    <div id="spdDecoded" class="if-decoded"></div>
  </div>
  </div>
  </div>

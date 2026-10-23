@@ -12896,6 +12896,19 @@ function meterUpdateColorDeltaEScrollLayout(sortedSteps){
  meterGreyscaleScrollSyncing=false;
 }
 
+// Dolby Vision on a PQ curve: a greyscale patch whose signal decodes above
+// the peak the display declares in its EDID Dolby block is clipped by the
+// display, so its reading cannot track the target. Returns the patch's PQ
+// level in nits when it is above that peak, else 0.
+function meterStepOverDisplayPeak(step){
+ if(typeof pgDvDisplayPeak!=='function'||!meterChartIsDv()||!meterSeriesStepIsGreyscale(step)) return 0;
+ const peak=pgDvDisplayPeak();
+ if(!(peak>0)) return 0;
+ // Relative mapping scales 100 % to the peak (gamma 2.2), nothing exceeds it.
+ if(meterDvMapModeValue()==='2'&&!meterDvUsesPqTargetCurve()) return 0;
+ const nits=meterChartPqDecodeNormalized(meterDvTargetSignalFraction(step.ire,step.r));
+ return nits>peak+0.5?nits:0;
+}
 function meterBuildPatchThumbs(sortedSteps,completedIres,currentIre){
  const container=document.getElementById('meterPatchThumbs');
  if(!container) return;
@@ -12923,6 +12936,7 @@ function meterBuildPatchThumbs(sortedSteps,completedIres,currentIre){
 	  ?meterDistributedThumbWidth(parseFloat(container.style.width)||0,visibleSteps.length,index,2)
 	  :null;
 	 const customGreyscaleThumbs=meterActiveSeriesType==='greyscale'&&meterActiveSeriesIsCustom();
+	 const overPeak=visibleSteps.map(meterStepOverDisplayPeak);
 	 const buildSignature=visibleSteps.map((step,index)=>{
 	  const isGrey=meterSeriesStepIsGreyscale(step);
 	  const label=isGrey?meterGreyscaleStepLabel(step):(step.name||'');
@@ -12930,7 +12944,7 @@ function meterBuildPatchThumbs(sortedSteps,completedIres,currentIre){
 	  const fontSize=(isGrey&&customGreyscaleThumbs)?'10px':'8px';
 	  const border=(isGrey&&customGreyscaleThumbs)?'1px solid var(--border)':'0';
 	  const colorKey=[step.r,step.g,step.b,step.preview_r,step.preview_g,step.preview_b].join(',');
-	  return [meterStepNameKey(step),label,thumbWidth,fontSize,border,colorKey].join('\x1f');
+	  return [meterStepNameKey(step),label,thumbWidth,fontSize,border,colorKey,overPeak[index]?'1':'0'].join('\x1f');
 	 }).join('\x1e');
 	 const needsRebuild=container.children.length!==visibleSteps.length||container._meterBuildSignature!==buildSignature;
  if(needsRebuild){
@@ -12962,10 +12976,20 @@ function meterBuildPatchThumbs(sortedSteps,completedIres,currentIre){
   thumb.dataset.thumbWidth=scrollMode?String(thumbWidth):'';
   thumb.dataset.key=meterStepNameKey(step);
 	  thumb.dataset.colorKey=[step.r,step.g,step.b,step.preview_r,step.preview_g,step.preview_b].join(',');
+  if(overPeak[index]){
+   thumb.classList.add('is-over-peak');
+   thumb.title=Math.round(overPeak[index])+' cd/m\u00B2: above the display\u2019s declared peak ('+pgDvDisplayPeak()+' cd/m\u00B2), the display clips this patch';
+  }
    fragment.appendChild(thumb);
   });
   container.replaceChildren(fragment);
   container._meterBuildSignature=buildSignature;
+ }
+ const overNote=document.getElementById('meterOverPeakNote');
+ if(overNote){
+  const overCount=overPeak.filter(Boolean).length;
+  overNote.hidden=!overCount;
+  if(overCount) overNote.textContent=overCount+(overCount===1?' patch is':' patches are')+' above the display\u2019s declared Dolby Vision peak ('+pgDvDisplayPeak()+' cd/m\u00B2, EDID) and will be clipped by the display.';
  }
  if(container.dataset.thumbClickBound!=='1'){
   container.dataset.thumbClickBound='1';

@@ -846,6 +846,7 @@ function applyConfigState(nextConfig){
  updateDropdowns();
  refreshSavedSettingsSnapshot();
  pgCaptureHeaderSignal();
+ pgRenderDvDisplayInfo();
 }
 
 async function syncRemoteConfig(){
@@ -1234,6 +1235,7 @@ document.getElementById('signal_mode').addEventListener('change',function(){
  // BT.709 for SDR); the next /api/config poll respects what the server stores.
  const autoColorimetry=webuiAutoColorimetryForSignalMode(sm);
  const preset=PG_SIGNAL_MODE_PRESETS[sm];
+ let lumaFromDisplay=false;
  if(preset){
   // Format before bit depth: YCbCr 4:2:2 is 10-bit only, and updateDropdowns()
   // filters bit depths against the current format.
@@ -1249,6 +1251,12 @@ document.getElementById('signal_mode').addEventListener('change',function(){
   setVal('primaries','1');
   setVal('max_bpc',dvTransport.max_bpc);
   setVal('rgb_quant_range',dvTransport.rgb_quant_range);
+  // Carry the HDR10 Max/Min Luma over first (it would otherwise run on the
+  // first input event below and overwrite the display's values).
+  meterSyncHdrMetadataFieldMirrors();
+  const display=pgDvDisplayBlock();
+  if(display&&pgDvLumaIsFactory()){ pgDvSetDisplayValues(display); lumaFromDisplay=true; }
+  pgRenderDvDisplayInfo();
  }
  uiEnforceQuantRangeForColorFormat();
 	 applyMeterTargetGamutDefault(true);
@@ -1266,12 +1274,16 @@ document.getElementById('signal_mode').addEventListener('change',function(){
  meterQueueOutputSettingsRefresh(true);
  // updateDropdowns() may have adjusted the preset to what the resolution
  // allows, so report the values that are actually selected now.
- toast('Recommended '+meterSelectLabel('signal_mode')+' settings loaded: '+pgSignalModePresetSummary()+'. Click Apply to output them.');
+ toast('Recommended '+meterSelectLabel('signal_mode')+' settings loaded: '+pgSignalModePresetSummary()+(lumaFromDisplay?' · Max/Min Luma from the display\u2019s EDID':'')+'. Click Apply to output them.');
 });
 
 // Switching the DV transport loads that transport's wire format. Done here as
 // well as in updateDropdowns(), which returns early while no display (and so
 // no mode list) is known.
+['dv_transport','dv_max_luma','dv_min_luma'].forEach(id=>{
+ const el=document.getElementById(id);
+ if(el){ el.addEventListener('input',pgRenderDvDisplayInfo); el.addEventListener('change',pgRenderDvDisplayInfo); }
+});
 document.getElementById('dv_transport').addEventListener('change',function(){
  if(getVal('signal_mode')!=='dv') return;
  const dvTransport=dvTransportDefaults(this.value);
@@ -1447,6 +1459,78 @@ function syncModeSelectValue(){
 
 async function loadCapabilities(quiet){
  caps=await fetchJSON('/api/capabilities',{_quiet:!!quiet,_timeoutMs:10000});
+ pgRenderDvDisplayInfo();
+}
+
+// Dolby Vision as the display declares it in its EDID Dolby block
+// (caps.dv_vsvdb, parsed by PGEdidDolby.pm). TV-led DV is meant to be
+// mastered to the declared peak, and the display clips codes above it
+// (Light Illusion, "Dolby Vision"); a transport the block does not list is
+// not decoded at all.
+function pgDvDisplayBlock(){
+ const d=caps&&caps.dv_vsvdb;
+ return d&&!d.error&&Number(d.max_nits)>0?d:null;
+}
+function pgDvDisplayPeak(){
+ const d=pgDvDisplayBlock();
+ return d?Number(d.max_nits):0;
+}
+function pgDvDisplayMinLuma(d){
+ return Math.round(Number(d.min_nits||0)*10000)/10000;
+}
+function pgRenderDvDisplayInfo(){
+ const box=document.getElementById('dvDisplayInfo');
+ if(!box) return;
+ const d=pgDvDisplayBlock();
+ box.hidden=!d;
+ if(!d) return;
+ // en-US like the rest of the English UI text (no "1.000" for 1000).
+ const fmt=v=>Number(v).toLocaleString('en-US',{maximumFractionDigits:v<1?6:0});
+ const xy=p=>p?p[0].toFixed(4)+', '+p[1].toFixed(4):'-';
+ const facts=[
+  'Peak: '+fmt(d.max_nits)+' cd/m\u00B2 \u00B7 Black: '+fmt(d.min_nits)+' cd/m\u00B2',
+  'Interface: '+(d.interface||'-'),
+  'Primaries: R '+xy(d.primaries&&d.primaries.r)+' \u00B7 G '+xy(d.primaries&&d.primaries.g)+' \u00B7 B '+xy(d.primaries&&d.primaries.b),
+  'Block version '+d.version+(d.dm_version?' \u00B7 DM '+d.dm_version:'')+(d.ycc444&&d.ycc444!=='none'?' \u00B7 4:4:4 '+d.ycc444+'-bit':'')+(d.yuv422_12bit?' \u00B7 4:2:2 12-bit':'')
+ ];
+ const factsEl=document.getElementById('dvDisplayFacts');
+ factsEl.innerHTML='';
+ facts.forEach((line,i)=>{ if(i) factsEl.appendChild(document.createElement('br')); factsEl.appendChild(document.createTextNode(line)); });
+ const warn=[];
+ const transport=dvTransportDefaults(getVal('dv_transport')).dv_transport;
+ if(transport==='lldv'&&!d.low_latency) warn.push('The display declares no Low-Latency Dolby Vision. Use the Standard transport.');
+ if(transport==='standard'&&!d.standard) warn.push('The display declares Low-Latency Dolby Vision only and will not decode the Standard transport. Use LLDV.');
+ const maxLuma=Number(getVal('dv_max_luma'));
+ if(maxLuma>0&&Math.abs(maxLuma-d.max_nits)>=1) warn.push('Max Luma ('+fmt(maxLuma)+') is not the display\u2019s declared peak ('+fmt(d.max_nits)+' cd/m\u00B2). Calibrate with the declared peak; a higher value tests the display\u2019s tone mapping, and LLDV codes above the peak are clipped.');
+ const list=document.getElementById('dvDisplayWarn');
+ list.innerHTML='';
+ warn.forEach(text=>{ const li=document.createElement('li'); li.textContent=text; list.appendChild(li); });
+ list.hidden=!warn.length;
+ const btn=document.getElementById('dvUseDisplayBtn');
+ if(btn) btn.disabled=Math.abs(maxLuma-d.max_nits)<1&&Math.abs(Number(getVal('dv_min_luma'))-pgDvDisplayMinLuma(d))<0.00005;
+}
+// Factory Max/Min Luma (etc/PGenerator/PGenerator.conf). Only these are
+// replaced by the display's values when DV is chosen; anything else was set
+// on purpose (e.g. mastering above the peak to test the tone mapping).
+const PG_DV_FACTORY_LUMA={max:1000,min:0.005};
+function pgDvLumaIsFactory(){
+ return Number(getVal('dv_max_luma'))===PG_DV_FACTORY_LUMA.max&&Number(getVal('dv_min_luma'))===PG_DV_FACTORY_LUMA.min;
+}
+function pgDvSetDisplayValues(d){
+ [['dv_max_luma',String(d.max_nits)],['dv_min_luma',String(pgDvDisplayMinLuma(d))]].forEach(([id,value])=>{
+  const el=document.getElementById(id);
+  if(!el) return;
+  el.value=value;
+  el.dispatchEvent(new Event('input',{bubbles:true}));
+  el.dispatchEvent(new Event('change',{bubbles:true}));
+ });
+ pgRenderDvDisplayInfo();
+}
+function pgDvUseDisplayValues(){
+ const d=pgDvDisplayBlock();
+ if(!d) return;
+ pgDvSetDisplayValues(d);
+ toast('Dolby Vision Max/Min Luma set to the display\u2019s declared values. Apply to send them.');
 }
 
 // Determine which color formats are valid for a given mode + bit depth
@@ -4854,6 +4938,7 @@ async function loadInfoframes(){
   window._hdmiLink=null;
   ae.textContent='-';ad.textContent='No signal: no HDMI display connected';
   de.textContent='-';dd.textContent='No signal: no HDMI display connected';
+  pgRenderSpdInfoframe(r);
   pgUpdateNoHdmiBanner(false);
   if(document.body.classList.contains('desktop-utility-open')) pgSyncDesktopUtilityDrawer();
   return;
@@ -4900,7 +4985,32 @@ async function loadInfoframes(){
    dd.innerHTML=lines.join('<br>');
   }
  }else{de.textContent='-';dd.textContent=r.avi?'Not sent (SDR signal)':'';}
+ pgRenderSpdInfoframe(r);
  if(document.body.classList.contains('desktop-utility-open')) pgSyncDesktopUtilityDrawer();
+}
+// SPD InfoFrame: a stock vc4 logs the frame it packs at each modeset; whether
+// it is on the wire comes from the packet enable bit (link.spd_sent).
+const PG_SPD_SOURCE_TYPES=['Unknown','Digital STB','DVD player','D-VHS','HDD recorder','DVC','DSC','Video CD','Game','PC','Blu-ray','Super Audio CD','HD DVD','PMP (media player)'];
+function pgRenderSpdInfoframe(r){
+ const he=document.getElementById('spdIF');
+ const dd=document.getElementById('spdDecoded');
+ if(!he||!dd) return;
+ if(!r||r.connected===false){ he.textContent='-'; dd.textContent='No signal: no HDMI display connected'; return; }
+ he.textContent=r.spd||'-';
+ const lines=[];
+ const b=String(r.spd||'').split(':').map(x=>parseInt(x,16));
+ if(b.length>=29&&b[0]===0x83){
+  const text=(from,to)=>b.slice(from,to).filter(c=>c>=32&&c<127).map(c=>String.fromCharCode(c)).join('').trim();
+  lines.push('Vendor: '+(text(4,12)||'-'));
+  lines.push('Product: '+(text(12,28)||'-'));
+  lines.push('Source type: '+(PG_SPD_SOURCE_TYPES[b[28]]||('0x'+b[28].toString(16))));
+ }
+ // The PGenerator+ vc4 module never writes it (srcversion ...RQ3V1SPD).
+ const sent=r.link?r.link.spd_sent:-1;
+ if(sent===1) lines.push('On the wire: yes');
+ else if(sent===0) lines.push('On the wire: no'+(r.spd?'':' (never sent by PGenerator+)'));
+ dd.innerHTML='';
+ lines.forEach((line,i)=>{ if(i) dd.appendChild(document.createElement('br')); dd.appendChild(document.createTextNode(line)); });
 }
 
 // Device Info opens the page. Topic order: Signal (output, self-test, infoframes, patterns) · Measure (calibration,

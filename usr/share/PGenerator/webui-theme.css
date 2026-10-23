@@ -1030,6 +1030,16 @@ font-size:.7rem;font-weight:700;letter-spacing:.5px}
 .if-hex{font-family:'Courier New',monospace;font-size:.78rem;color:var(--accent);
 background:var(--surface-inset);padding:8px;border-radius:6px;word-break:break-all;line-height:1.4}
 .if-decoded{margin-top:6px;font-size:.75rem;color:var(--text2);line-height:1.5}
+.dv-display{margin-top:12px;padding-top:10px;border-top:1px solid var(--border)}
+.dv-display-title{font-size:.7rem;color:var(--text2);text-transform:uppercase;margin-bottom:4px}
+.dv-display-warn{margin:8px 0 0;padding-left:18px;font-size:.78rem;line-height:1.45;color:var(--warning-text)}
+.dv-display-warn li+li{margin-top:4px}
+.dv-display .btn{margin-top:8px}
+/* DV patches above the display's declared peak (meterStepOverDisplayPeak):
+   a corner flag, so the inline box-shadow states stay untouched. */
+.meter-patch-thumb.is-over-peak{position:relative}
+.meter-patch-thumb.is-over-peak::after{content:"";position:absolute;top:0;right:0;border-style:solid;border-width:0 9px 9px 0;border-color:transparent var(--warning-text) transparent transparent;border-top-right-radius:3px;pointer-events:none}
+.meter-over-peak-note{margin:-4px 0 10px;font-size:.75rem;line-height:1.45;color:var(--warning-text)}
 .pat-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(100px,1fr));gap:6px}
 .diag-pattern-layout{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:12px;align-items:start}
 .diag-pattern-column{min-width:0}

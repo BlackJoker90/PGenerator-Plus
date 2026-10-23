@@ -123,6 +123,8 @@ Press **OK or Menu on the TV remote** and a menu of every pattern appears on the
 | Calman connection as G1 | – | **full control** from Calman (patches, signal modes, G1 patterns) |
 | Calman G1 specialty patterns | – | all 19 rendered on the Pi, started from Calman or the WebUI |
 | No display connected | renderer started anyway | waits for a display, banner in the UI, saved mode kept |
+| Display's Dolby Vision block | only "DV supported" | peak, black, interfaces and primaries shown; mismatch warnings; patches above the peak flagged |
+| SPD InfoFrame | always sent ("Broadcom Videocore", media player) | never sent: removed in the vc4 driver (Pi 4) |
 | WebUI themes | dark / light / system | **13 themes** incl. Natrium dark & light and Volt, Scope, Ultraviolet |
 | Measurement workspaces | – | **can be hidden** in Settings for pattern-only setups (Calman, HCFR) |
 | HDMI link readout | – | measured link depth and clock |
@@ -342,6 +344,9 @@ The Pi 4's KMS driver sets the HDMI InfoFrames directly:
 - **AVI:** colour format (RGB / YCbCr 4:4:4 / 4:2:2), colorimetry (BT.709 / BT.2020), quantisation range, VIC
 - **DRM:** EOTF, mastering primaries, max/min luminance, MaxCLL, MaxFALL
 - **Dolby Vision:** a DOVI output metadata blob from `PGeneratord.dv`, with DV capability detected from the EDID VSVDB
+- **SPD:** a stock Pi kernel names the Pi "Broadcom Videocore", source type media player, and some displays treat that source type differently. The vc4 driver shipped with PGenerator+ (Pi 4) never sends it; the card shows the packet enable bit read back from the HDMI block as proof
+
+The Dolby Vision card shows what the display declares in its EDID Dolby block: peak and black luminance, supported interfaces (Standard / Low Latency) and primaries. Choosing Dolby Vision fills in the declared peak and black while Max/Min Luma are still at the factory 1000 / 0.005; otherwise it warns when Max Luma or the transport does not match (a higher Max Luma is fine to test the display's tone mapping) and sets the declared values with one button, and the measurement strip flags DV patches above the declared peak, which the display clips.
 
 ### 🏗️ Architecture
 
@@ -443,7 +448,7 @@ All endpoints are on port 80 and return JSON.
 | GET | `/api/wifi/status` | Wi-Fi connection status |
 | POST | `/api/wifi/connect` | Connect to Wi-Fi (`ssid`, `psk`) |
 | GET / POST | `/api/wifi/ap` | Read / set AP SSID and password |
-| GET | `/api/infoframes` | AVI and DRM InfoFrame hex data |
+| GET | `/api/infoframes` | AVI, DRM and SPD InfoFrame hex data, whether SPD is on the wire |
 | GET | `/api/cec/status` | HDMI-CEC TV power status |
 | GET | `/api/cec/{cmd}` | Send a CEC command (`wake`, `on`, `off`, `as`) |
 | POST | `/api/pattern` | Display a test pattern |

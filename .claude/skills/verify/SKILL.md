@@ -116,7 +116,7 @@ previous frame (e.g. 30 for code 0064): re-probe it before calling it a bug.
 ## Where to look
 
 - Daemon: `/tmp/pgenerator_debug.log`; patterns: `/var/log/PGenerator/calman-patches.log` (`range=LIMITED`, `bg=`); updater: `/var/log/PGenerator/update.log`; renderer stderr: `/tmp/pg_stderr.log`; drm_override: `/tmp/drm_override.log`.
-- vc4 module: `/sys/module/vc4/srcversion` ends in `RQ3V1` when the patched module is loaded.
+- vc4 module: `/sys/module/vc4/srcversion` is `24E978B6C622711RQ3V1SPD` when the patched module is loaded (RQ3 range patch + no SPD infoframe; the renderer looks for `RQ3V1`). SPD must never be on the wire: bit 3 of `HDMI_RAM_PACKET_CONFIG` stays 0.
 - WebUI range text: `/var/lib/PGenerator/running/info/GET_OUTPUT_RANGE.info`.
 
 `scripts/fbprobe` is prebuilt (armhf, libdrm). Source `scripts/fbprobe.c`; rebuild

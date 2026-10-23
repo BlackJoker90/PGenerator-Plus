@@ -23,6 +23,7 @@ use PGTVMenu ();
 use PGCalibrationMath qw(
  calibration_target_context saturation_stimulus_for_gamuts standard_gamut_records
 );
+use PGEdidDolby qw(dolby_vsvdb_from_edid dolby_vsvdb_json);
 use PGSignalCode qw(
  signal_code_nominal_range signal_code_policy signal_percent_to_code
 );
@@ -11108,6 +11109,17 @@ sub webui_capabilities_json (@) {
  %vic_420=();
  my @v420=map{"\"$_\""} sort keys %vic_420;
 
+ # Dolby Vision VSVDB from the raw EDID (no edid-decode needed): the
+ # display's own peak/black, interface and primaries.
+ my $dv_vsvdb;
+ if($edid_path ne "" && open(my $efh,"<:raw",$edid_path)) {
+  local $/;
+  my $raw=<$efh>;
+  close($efh);
+  $dv_vsvdb=&dolby_vsvdb_from_edid($raw);
+ }
+ $has_dv=1 if($dv_vsvdb && !$dv_vsvdb->{error});
+
 	 my $dv_transport_is_ll=&pg_dv_transport_ll_flag();
 	 my $dv_transport_is_std=&pg_dv_transport_std_flag();
 	 my $dv_transport_interface=&pg_dv_transport_interface();
@@ -11138,6 +11150,7 @@ sub webui_capabilities_json (@) {
 		  .",\"dv_transport_max_bpc\":\"$dv_transport_max_bpc\""
 		  .",\"dv_transport\":\"$dv_transport_mode\""
 		  .",\"dv_transport_modes\":[$dv_transport_modes]"
+	  .",\"dv_vsvdb\":".&dolby_vsvdb_json($dv_vsvdb)
 	  .",\"edid_decode_available\":".($edid_decode_available?"true":"false")
   .",\"edid_parsed\":".($edid_parsed?"true":"false")
 	  .",\"vic_420\":[".join(",",@v420)."]}";
@@ -11458,7 +11471,9 @@ sub webui_hdmi_link_json (@) {
   close($pf);
   $renderer=1 if(defined($pid) && $pid=~/^\s*(\d+)/ && -e "/proc/$1");
  }
- return sprintf(",\"link\":{\"port\":\"HDMI-A-%d\",\"bpc\":%d,\"gcp\":%d,\"tmds_mhz\":%.3f,\"renderer\":%d}",$port,$bpc,$gcp,$tmds,$renderer);
+ # Packet id 3 (SPD, type 0x83) in the infoframe packet enable register.
+ my $spd_sent=defined($reg{"HDMI_RAM_PACKET_CONFIG"}) ? (($reg{"HDMI_RAM_PACKET_CONFIG"} & 0x8) ? 1 : 0) : -1;
+ return sprintf(",\"link\":{\"port\":\"HDMI-A-%d\",\"bpc\":%d,\"gcp\":%d,\"tmds_mhz\":%.3f,\"renderer\":%d,\"spd_sent\":%d}",$port,$bpc,$gcp,$tmds,$renderer,$spd_sent);
 }
 
 #
@@ -12206,19 +12221,21 @@ sub webui_infoframes_json (@) {
  # the last burst counts: vc4 logs AVI, SPD, DRM, HVS per modeset and logs no
  # DRM frame for SDR, so a DRM frame before the last AVI frame is stale.
  my $connected=&webui_hdmi_connected();
- my ($avi_hex,$drm_hex)=("","");
+ my ($avi_hex,$drm_hex,$spd_hex)=("","","");
  if($connected) {
   my $dmesg=`timeout 3 /bin/dmesg 2>/dev/null`;
   foreach my $line (split(/\n/,$dmesg)) {
-   if($line=~/AVI IF:\s*(.+)/) { $avi_hex=$1; $drm_hex=""; }
+   if($line=~/AVI IF:\s*(.+)/) { $avi_hex=$1; $drm_hex=""; $spd_hex=""; }
    if($line=~/DRM IF:\s*(.+)/) { $drm_hex=$1; }
+   if($line=~/SPD IF:\s*(.+)/) { $spd_hex=$1; }
   }
  }
- $avi_hex=~s/"/\\"/g;
- $drm_hex=~s/"/\\"/g;
- $avi_hex=~s/\s+$//;
- $drm_hex=~s/\s+$//;
- return "{\"status\":\"ok\",\"connected\":".($connected ? "true" : "false").",\"avi\":\"$avi_hex\",\"drm\":\"$drm_hex\"".&webui_hdmi_link_json()."}";
+ foreach my $hex ($avi_hex,$drm_hex,$spd_hex) {
+  $hex=~s/[^0-9a-fA-F:]//g;
+ }
+ # The PGenerator+ vc4 module never writes SPD, so "spd" stays empty there;
+ # "spd_sent" in the link block reads the packet enable bit back.
+ return "{\"status\":\"ok\",\"connected\":".($connected ? "true" : "false").",\"avi\":\"$avi_hex\",\"drm\":\"$drm_hex\",\"spd\":\"$spd_hex\"".&webui_hdmi_link_json()."}";
 }
 
 sub webui_cec_power_label (@) {

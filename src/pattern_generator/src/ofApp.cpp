@@ -95,12 +95,15 @@ inline bool usesDolbyVisionTransport() {
  * the top bits (235 -> 943, 128 -> 514). Draw it in the 10-bit framebuffer
  * instead, with the codes the 8-bit pattern has on an 8 bpc link times 4.
  * This holds for SDR, HDR10/HLG and Low Latency DV (12 bpc wire, 10-bit
- * surface). Standard DV tunnels 8-bit RGB and keeps its own surface.
+ * surface). Standard DV tunnels 8-bit RGB on the 8-bit surface whatever
+ * BITS says: its shader takes the 12-bit codes from SOURCE_MAX, and the
+ * 10-bit surface fails on the Pi 4 (glTexImage2D RGB10_A2 rejected, FBO
+ * incomplete, AB30 241 on the wire), e.g. after a Calman "Bits 10".
  */
 inline int effectivePatternBits(int bits) {
- if(bits != 8 || ofxRPI4Window::wire_bpc < 10)
-  return bits;
  if(ofxRPI4Window::is_std_DoVi)
+  return 8;
+ if(bits != 8 || ofxRPI4Window::wire_bpc < 10)
   return bits;
  return 10;
 }

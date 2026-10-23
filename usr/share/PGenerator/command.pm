@@ -700,7 +700,7 @@ sub renderer_reconfigure_in_place (@) {
  # one caller cannot consume or delete the other's acknowledgement.
  require Fcntl;
  my $lock;
- if(open($lock,'>',"$var_dir/running/renderer-reconfigure.lock")) {
+ if(open($lock,'>',&pgen_lock_path("renderer-reconfigure.lock"))) {
   flock($lock,Fcntl::LOCK_EX());
  } else {
   undef $lock;
@@ -872,10 +872,80 @@ sub renderer_start_when_hdmi_connected (@) {
  &show_boot_pattern() if(defined &show_boot_pattern);
 }
 
+###############################################
+#           Renderer Lock Functions           #
+###############################################
+# Lock files live in $var_dir/locks: clean_files() empties $var_dir and
+# running/ on every renderer stop. A lock file deleted there let the next
+# caller lock a new inode while the first one still held the old: with
+# rapid WebUI applies two workers then started renderers at the same time
+# and vc4 oopsed (drm_atomic_set_crtc_for_plane), leaving the renderer in
+# D state until a reboot.
+sub pgen_lock_path (@) {
+ my $name=shift;
+ my $dir="$var_dir/locks";
+ mkdir($dir) if(!-d $dir);
+ return "$dir/$name";
+}
+
+# Renderer start and stop form one critical section across threads and
+# processes (flock on separate opens). A nested call from the same thread
+# (stop -> video_program_stop -> start) only counts up.
+my $renderer_lock_fh;
+my $renderer_lock_depth=0;
+sub renderer_lock () {
+ return if($renderer_lock_depth++);
+ require Fcntl;
+ if(open($renderer_lock_fh,'>',&pgen_lock_path("renderer.lock"))) {
+  flock($renderer_lock_fh,Fcntl::LOCK_EX());
+ } else {
+  &log("Renderer: cannot open the renderer lock: $!");
+  undef $renderer_lock_fh;
+ }
+}
+
+sub renderer_unlock () {
+ return if($renderer_lock_depth <= 0 || --$renderer_lock_depth);
+ close($renderer_lock_fh) if($renderer_lock_fh);
+ undef $renderer_lock_fh;
+}
+
+# A forked child shares the open lock descriptions of every thread of its
+# parent; flock locks belong to those, so the child would hold a lock it
+# does not know about and block on its own next renderer_lock(). Call this
+# first thing after fork().
+sub pgen_drop_inherited_locks () {
+ require POSIX;
+ my $dir=&pgen_lock_path("");
+ $dir=~s{/+$}{};
+ if(opendir(my $fds,"/proc/self/fd")) {
+  for my $fd (readdir($fds)) {
+   next if($fd !~ /^\d+$/ || $fd <= 2);
+   my $target=readlink("/proc/self/fd/$fd");
+   next if(!defined $target);
+   $target=~s{/+}{/}g;
+   (my $want=$dir)=~s{/+}{/}g;
+   POSIX::close($fd) if(index($target,"$want/") == 0);
+  }
+  closedir($fds);
+ }
+ undef $renderer_lock_fh;
+ $renderer_lock_depth=0;
+}
+
 sub pattern_generator_start(@) {
  my $no_clean_files = shift;
  my $use_drm_override=1;
  my $has_dovi_metadata=1;
+ &renderer_lock();
+ # Another caller (Calman thread, apply worker, hotplug) may have started
+ # one while this one waited: a second renderer on the same CRTC is what
+ # crashed vc4.
+ if(&pattern_generator_is_running()) {
+  &log("Renderer: start skipped, a renderer is already running");
+  &renderer_unlock();
+  return;
+ }
  &clean_files() if(!$no_clean_files);
  mkdir("$var_dir/running/tmp") if(!-d "$var_dir/running/tmp");
  if(-e "$var_dir/operations.txt" && !-l "$var_dir/operations.txt") {
@@ -891,6 +961,7 @@ sub pattern_generator_start(@) {
    &log("Renderer: no HDMI display connected; deferring the renderer start until one is plugged in");
    if(open(my $wfh,">",&renderer_waiting_for_hdmi_path())) { close($wfh); }
   }
+  &renderer_unlock();
   return;
  }
  unlink(&renderer_waiting_for_hdmi_path());
@@ -1004,6 +1075,7 @@ sub pattern_generator_start(@) {
  &apply_hdr_metadata_helper();
  unlink("$info_dir/GET_PGENERATOR_IS_EXECUTED.info");
  &get_pattern($test_template_command,"$pattern_start","$rgb","pattern_generator_start") if(!$no_clean_files);
+ &renderer_unlock();
 }
 
 ###############################################
@@ -1011,6 +1083,9 @@ sub pattern_generator_start(@) {
 ###############################################
 sub pattern_generator_stop {
  my $pid = "";
+ # Wait for a start in progress: killing a renderer before it holds DRM
+ # master is the window the start path protects.
+ &renderer_lock();
  &video_program_stop("$program_video_to_kill");
  &process_pid("$pattern_generator","kill");
  # Also kill the .dv variant in case we're switching modes
@@ -1026,6 +1101,7 @@ sub pattern_generator_stop {
   &process_pid("${pattern_generator}.dv","kill") if(-x "${pattern_generator}.dv");
  }
  &clean_files();
+ &renderer_unlock();
 }
 
 ###############################################

@@ -139,7 +139,7 @@ Updates come from **this fork's releases**. The dialog shows the release notes a
 <td valign="top">
 
 ### 🧹 Small things that add up
-mDNS answers AAAA queries with an NSEC record, so clients do not wait for an IPv6 address that never comes. `/api/lg/status` answers in milliseconds instead of ~4 s. The boot splash shows once, early. **Download Logs** replaces the old log upload.
+mDNS answers AAAA queries with an NSEC record, so clients do not wait for an IPv6 address that never comes. `/api/lg/status` answers in milliseconds instead of ~4 s. Start and restart show an **animated progress screen on the TV** that follows the real boot steps, and the WebUI follows a restart in its own dialog and reloads once the Pi is back. A renderer restart in YCbCr no longer flashes the screen green. **Download Logs** replaces the old log upload.
 
 </td>
 </tr>
@@ -186,6 +186,7 @@ Press **OK or Menu on the TV remote** and a menu of every pattern appears on the
 | Self-test of the HDMI output | – | **built in**: scanout readback, link depth, AVI, HDR and Dolby Vision infoframes per mode |
 | Pattern playlists | – | **stepped with the TV remote** (HDMI-CEC), own playlists |
 | On-screen pattern menu | – | **every pattern on the TV**, picked with the remote |
+| Start and restart | static splash, WebUI just goes offline | **animated progress on the TV** (real boot steps), restart dialog in the WebUI that reconnects by itself |
 | Popups | success and error toasts | warnings and errors only |
 
 > The left column describes upstream behaviour as stated in the fork commits that changed it. Run `git log origin/main..main` in a clone with both remotes for the full list.
@@ -208,6 +209,9 @@ Press **OK or Menu on the TV remote** and a menu of every pattern appears on the
 </tr>
 <tr>
 <td colspan="2" valign="top"><img src="screenshots/webui-selftest.png" alt="Signal self-test in Output: bit-exact in 10 of 10 modes, with link details and the drawn swatches per mode"/><br/><p align="center"><sub>Signal self-test, right below Display Settings: every mode read back from the scanout on a real Pi 4, bit-exact in 10 of 10</sub></p></td>
+</tr>
+<tr>
+<td colspan="2" valign="top"><img src="screenshots/tv-restart.png" alt="Restart screen on the TV: PGenerator+ logo, Restarting PGenerator+, a progress bar and the steps Shut down (done), Restart (current) and Start"/><br/><p align="center"><sub>On the TV during a restart (read back from the Pi's framebuffer); at start-up the same screen follows System, Network, Services and PGenerator+</sub></p></td>
 </tr>
 </table>
 <p align="center"><sub>Top right: the same playlists on a phone, with a bottom tab bar</sub></p>
@@ -491,7 +495,7 @@ All endpoints are on port 80 and return JSON.
 
 | Method | Endpoint | Description |
 |---|---|---|
-| GET | `/api/ping` | Health check |
+| GET | `/api/ping` | Health check; `boot` is the kernel boot id, new after every reboot |
 | GET | `/api/info` | Device info (hostname, temp, IPs, Wi-Fi, resolution, calibration status) |
 | GET | `/api/config` | Current configuration |
 | POST | `/api/config` | Apply configuration changes (only the keys you send) |

@@ -1673,6 +1673,11 @@ sub webui_handle_request (@) {
      my $len=length($json);
      print $client "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: $len\r\n$cors\r\n$json";
     }
+     elsif($method eq "POST" && !&webui_config_body_valid($body)) {
+      # The key/value scan in webui_apply_config would apply whatever
+      # pairs a malformed or truncated body still contains.
+      &_webui_reject_request($client,"400 Bad Request","The settings request is not a valid JSON object");
+     }
      elsif($method eq "POST") {
       # Apply config changes
       my ($result,$need_restart,$restart_id,$apply_hint)=&webui_apply_config($body);
@@ -10077,6 +10082,15 @@ sub webui_config_json (@) {
  }
  $json.="}";
  return $json;
+}
+
+# POST /api/config must be one complete JSON object; anything else
+# (truncated, trailing garbage, an array) changes nothing.
+sub webui_config_body_valid (@) {
+ my $body=shift;
+ return 0 if(!defined($body) || $body!~/\S/);
+ my $decoded=eval { require JSON::PP; JSON::PP->new->decode($body); };
+ return (ref($decoded) eq "HASH") ? 1 : 0;
 }
 
 sub webui_apply_config (@) {

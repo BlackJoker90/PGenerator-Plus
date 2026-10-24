@@ -248,6 +248,7 @@ require_writable_path() {
 # PGenerator was stopped, they are restored and PGenerator is started again
 # instead of leaving a half-updated, stopped device.
 ROLLBACK_TARBALL=""
+ROLLBACK_KEEP=0
 APPLY_STOPPED=0
 APPLY_STARTED=0
 APPLY_DONE=0
@@ -274,14 +275,23 @@ apply_cleanup() {
    if (cd / && tar xzf "$ROLLBACK_TARBALL") >>"$UPDATE_LOG" 2>&1; then
     log_msg "Previous files restored"
    else
-    log_msg "ERROR: Restoring the previous files failed"
-    set_update_state failed "Update failed while installing, and restoring the previous files failed too. Run the update again or re-flash the image."
+    # Keep the backup for a manual restore, under a name the next
+    # update's create_rollback does not overwrite.
+    local kept="$UPDATE_DIR/kept-rollback-$(date +%Y%m%d-%H%M%S 2>/dev/null || echo $$).tar.gz"
+    if mv -f "$ROLLBACK_TARBALL" "$kept" 2>/dev/null; then
+     ROLLBACK_TARBALL=""
+    else
+     kept="$ROLLBACK_TARBALL"
+     ROLLBACK_KEEP=1
+    fi
+    log_msg "ERROR: Restoring the previous files failed; the backup stays at $kept"
+    set_update_state failed "Update failed while installing, and restoring the previous files failed too. The previous version is saved at $kept (restore as root: cd / && tar xzf $kept), or re-flash the image."
    fi
   fi
   log_msg "Starting PGenerator again"
   /etc/init.d/PGenerator start >/dev/null 2>&1 9>&- || log_msg "ERROR: PGenerator start failed"
  fi
- [ -n "$ROLLBACK_TARBALL" ] && rm -f "$ROLLBACK_TARBALL"
+ [ -n "$ROLLBACK_TARBALL" ] && [ "$ROLLBACK_KEEP" != "1" ] && rm -f "$ROLLBACK_TARBALL"
  [ -n "${tarball:-}" ] && rm -f "$tarball"
  rm -f "$WATCHDOG_PAUSE_FILE"
  return $rc

@@ -124,6 +124,7 @@ sub create_pattern_file (@) {
  $pattern_string.="MOVIE_NAME=TestPattern\nBITS=$bits\n" if($simple);
  $pattern_string.="SOURCE_MAX=$source_max\n" if($source_max > 0);
  $pattern_string.="DRAW=$draw\nDIM=$dim\nRESOLUTION=$resolution\nRGB=$new_rgb\nBG=$bg\nPOSITION=$position\n";
+ $source_range=&pattern_default_source_range($source_range);
  $pattern_string.="SOURCE_RANGE=$source_range\n" if($source_range ne "");
  $pattern_string.="$options=$text\nEND=1\n";
  $pattern_string.="FRAME_NAME=TestPattern\nFRAME=$frame_default\n" if($simple);
@@ -409,6 +410,19 @@ sub create_return_file (@) {
 ###############################################
 #               Pattern Get                   #
 ###############################################
+# YCbCr is always Limited on the wire: the renderer turns a Full range
+# into Limited. A calibration client (Calman, LightSpace, Resolve) that set
+# Full still sends full-range codes; SOURCE_RANGE=FULL makes the renderer
+# compress them to studio range instead of putting code 0 below black.
+sub pattern_default_source_range (@) {
+ my $source_range=shift // "";
+ return $source_range if($source_range ne "");
+ return "FULL" if($external_rgb_quant_range_active &&
+                  ($pgenerator_conf{"color_format"} || "0") =~/^[12]$/ &&
+                  ($pgenerator_conf{"rgb_quant_range"} || "") eq "2");
+ return "";
+}
+
 sub get_pattern (@) {
  my $type = shift;
  my $pattern = shift;
@@ -639,6 +653,7 @@ sub get_pattern (@) {
  #
  $bits=$bits_default if($bits eq "");
  $str=~s/^END=(.*)$/SOURCE_MAX=$source_max\nEND=$1/mg if($source_max > 0 && $str !~/^SOURCE_MAX=/m);
+ $source_range=&pattern_default_source_range($source_range) if($str !~/^SOURCE_RANGE=/m);
  $str=~s/^END=(.*)$/SOURCE_RANGE=$source_range\nEND=$1/mg if($source_range ne "");
  $str.="FRAME=$frame_default\n"  if($str !~/\n^FRAME=/m);
  open(PATTERN,">$command_file.tmp");
@@ -732,6 +747,7 @@ return 1;
 sub create_tmp_file(@) {
  my $pattern_string = shift;
  my $source_range = shift;
+ $source_range=&pattern_default_source_range($source_range) if($pattern_string !~/^SOURCE_RANGE=/m);
  $pattern_string=~s/^END=(.*)$/SOURCE_RANGE=$source_range\nEND=$1/mg if($source_range ne "");
  open(FILE,">$command_file.tmp");
  print FILE $pattern_string;

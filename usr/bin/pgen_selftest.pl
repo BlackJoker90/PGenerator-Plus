@@ -444,6 +444,11 @@ for(my $n=0;$n<@scenarios;$n++) {
  if($format eq "RGB") {
   my $want_q=(($sc->{range} || "") eq "FULL") ? 2 : 1;
   add_check($entry,"AVI quantisation",$want_q == 2 ? "Full" : "Limited",$avi_q == 2 ? "Full" : $avi_q == 1 ? "Limited" : "Default",$avi_q == $want_q);
+ } elsif($format=~/^YCbCr/ && @avi > 8) {
+  # YQ (PB5 bits 7..6): 0 Limited, 1 Full
+  my $want_yq=(($sc->{range} || "") eq "FULL") ? 1 : 0;
+  my $avi_yq=($avi[8]>>6)&3;
+  add_check($entry,"AVI YCC quantisation",$want_yq ? "Full" : "Limited",$avi_yq == 1 ? "Full" : $avi_yq == 0 ? "Limited" : "Reserved",$avi_yq == $want_yq);
  }
  if($format ne "YCbCr 4:2:2") {
   my $want_bpc=$sc->{depth} > 10 ? 10 : $sc->{depth};

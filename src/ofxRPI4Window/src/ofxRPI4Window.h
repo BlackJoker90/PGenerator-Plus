@@ -461,6 +461,28 @@ public:
 	void updateAVI_Infoframe(uint32_t plane_id, struct avi_infoframe avi_infoframe);
 	void updateDoVi_Infoframe(int enable, int dv_interface);
 
+	/* DOVI_OUTPUT_METADATA blobs. The patched vc4 kernel does not take a
+	   reference for this blob when it duplicates a connector state, so every
+	   change of the property drops one reference from the blob the connector
+	   currently shows (see the comment above DoviBlobFor()). The renderer
+	   therefore keeps every DOVI blob it created for its whole lifetime,
+	   never changes the property in a TEST_ONLY commit and leaves it alone
+	   when the content does not change. */
+	struct DoviBlob {
+		uint32_t id;
+		struct dovi_output_metadata meta; // as requested, before drm_override.so
+	};
+	std::vector<DoviBlob> dovi_blobs;
+	uint32_t DoviBlobFor(const struct dovi_output_metadata &meta);
+	bool DoviIsOwn(uint64_t blob_id);
+	int DoviBlobStatus(uint64_t blob_id);
+	bool DoviBlobEqual(uint64_t a, uint64_t b);
+	/* Batched commits: updateDoVi_Infoframe() parks the DOVI change here and
+	   FlipPage() adds it only after the TEST_ONLY check. */
+	bool dovi_pending = false;
+	uint32_t dovi_pending_prop = 0;
+	uint64_t dovi_pending_blob = 0;
+
 	drm_fb * drm_fb_get_from_bo(struct gbm_bo *bo);
     void swapBuffers() override;
     

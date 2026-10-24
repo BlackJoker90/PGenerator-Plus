@@ -246,7 +246,9 @@ void ofApp::update(){
     blueb=boost::lexical_cast<int>(rgbb[2]);
    }
 	if(el[0] == "SOURCE_RANGE") {
-	 source_range=(el[1] == "LIMITED") ? 1 : 0;
+	 /* 1 LIMITED: studio-range codes; 2 FULL: full-range codes that a
+	    YCbCr link (always Limited) must compress; 0: unspecified. */
+	 source_range=(el[1] == "LIMITED") ? 1 : (el[1] == "FULL") ? 2 : 0;
 	}
    if(el[0] == "FRAME_NAME") {
     name=el[1];
@@ -803,6 +805,20 @@ int ofApp::scaleSourceToBitDepth(int value) {
   return value;
  int source_max=cur_op().source_max;
  int target_max=(ofxRPI4Window::bit_depth == 10) ? 1023 : 255;
+ /* YCbCr is always Limited: a client that asked for Full sends full-range
+    codes (SOURCE_RANGE=FULL). The YCbCr shader reads studio-range codes,
+    so compress them in the source depth, where 0/max land exactly on
+    black/white (8 bit 16/235, 10 bit 64/940, 12 bit 256/3760). */
+ if(cur_op().source_range == 2 && ofxRPI4Window::avi_info.output_format != 0 &&
+    ofxRPI4Window::avi_info.rgb_quant_range == 1 && value >= 0) {
+  /* SOURCE_MAX defaults to 255; BITS=10 codes without it are 0..1023. */
+  int full=(source_max == 255 && cur_op().bits == 10) ? 1023 : (source_max > 0 ? source_max : 255);
+  int black=16 * (full + 1) / 256;
+  int span=219 * (full + 1) / 256;
+  if(value > full)
+   value=full;
+  value=black + (int)(((long long)value * span + full / 2) / full);
+ }
  /* 8-bit pattern drawn in the 10-bit framebuffer (effectivePatternBits):
     RGB Limited wire codes go out times 4; full-range values take the
     8 -> 10 bit step that keeps 255 at 1023, so the later Limited

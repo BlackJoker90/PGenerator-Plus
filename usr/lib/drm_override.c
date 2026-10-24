@@ -618,25 +618,30 @@ static void override_colorimetry(uint64_t *value, const char *source) {
 }
 
 static void override_rgb_qr(uint64_t *value, const char *source) {
+    uint64_t want = rgb_qr_override;
+    /* YCbCr is always Limited on the wire: PGeneratord turns a Full conf
+     * (set by a calibration client) into Limited. */
+    if (want == 2 && output_fmt_found && (output_fmt_override == 1 || output_fmt_override == 2))
+        want = 1;
     /* 3 is Limited without the vc4 CSC (patched vc4, set by PGeneratord
-     * for RGB Limited); it satisfies a Limited conf. */
-    if (*value == 3 && rgb_qr_override == 1)
+     * for RGB and YCbCr Limited); it satisfies a Limited conf. */
+    if (*value == 3 && want == 1)
         return;
     /* Default (0): PGeneratord sets the range the kernel would pick for
      * the mode (Limited for CEA VICs, Full otherwise), so keep it. */
-    if (rgb_qr_override == 0)
+    if (want == 0)
         return;
-    if (rgb_qr_prop_id && rgb_qr_found && *value != rgb_qr_override) {
+    if (rgb_qr_prop_id && rgb_qr_found && *value != want) {
         char old_val[24], new_val[24];
         itoa_simple(*value, old_val);
-        itoa_simple(rgb_qr_override, new_val);
+        itoa_simple(want, new_val);
         write_log("DRM_OVERRIDE: rgb_quant_range ");
         write_log(old_val);
         write_log(" -> ");
         write_log(new_val);
         if (source) { write_log(" ("); write_log(source); write_log(")"); }
         write_log("\n");
-        *value = rgb_qr_override;
+        *value = want;
     }
 }
 

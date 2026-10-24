@@ -431,7 +431,13 @@ void dovi_output_metadata_info(int fd, uint32_t blob_id)
 {
 	drmModePropertyBlobRes *blob = drmModeGetPropertyBlob(fd, blob_id);
 	if (!blob) {
-		ofLogError() << "Could not get drmModeGetPropertyBlob";
+		ofLogError() << "Could not get drmModeGetPropertyBlob for DOVI blob " << blob_id;
+		return;
+	}
+	if (blob->length < sizeof(struct dovi_output_metadata)) {
+		ofLogError() << "DOVI blob " << blob_id << " has " << blob->length << " bytes";
+		drmModeFreePropertyBlob(blob);
+		return;
 	}
 
 	struct dovi_output_metadata *dovi = static_cast<dovi_output_metadata*>(blob->data);
@@ -1603,19 +1609,30 @@ bool ofxRPI4Window::rgbLimitedPassthrough()
 		!isDoVi && !is_std_DoVi && rgbLimitedPassthroughSupported();
 }
 
+/* 3 = Limited without the compression CSC (patched vc4). For YCbCr the
+   kernel CSC ignores the range, but its AVI path treats 0 and 1 like
+   Default and signals Q/YQ Full on modes without a CEA VIC (e.g. the
+   userdef mode) while the shader draws Limited codes. 3 is the only value
+   that signals Limited there. YCbCr Default (0) draws Limited codes. */
 uint64_t ofxRPI4Window::wireRgbQuantRange(int rgb_quant_range, int output_format)
 {
-	if (rgb_quant_range == 1 && output_format == 0 && !isDoVi && !is_std_DoVi &&
-	    rgbLimitedPassthroughSupported())
+	if (isDoVi || is_std_DoVi || !rgbLimitedPassthroughSupported())
+		return (uint64_t)rgb_quant_range;
+	if (rgb_quant_range == 1 || (rgb_quant_range == 0 && output_format != 0))
 		return 3;
 	return (uint64_t)rgb_quant_range;
 }
 
 int ofxRPI4Window::default_rgb_quant_range = 0;
 
-/* YCbCr keeps 0: the kernel's YCbCr path ignores the RGB range. */
+/* YCbCr is always Limited on the wire. Full (set by a calibration client)
+   becomes Limited; its full-range codes come with SOURCE_RANGE=FULL and are
+   compressed in ofApp::scaleSourceToBitDepth. 0 stays 0: the shader draws
+   Limited codes for it and wireRgbQuantRange signals it as Limited. */
 int ofxRPI4Window::effectiveRgbQuantRange(int rgb_quant_range, int output_format)
 {
+	if (output_format != 0 && rgb_quant_range == 2)
+		return 1;
 	if (rgb_quant_range == 0 && output_format == 0 && default_rgb_quant_range != 0)
 		return default_rgb_quant_range;
 	return rgb_quant_range;
@@ -3538,16 +3555,111 @@ float timedifference_msec(struct timeval t0, struct timeval t1)
  * sink keeps seeing Dolby Vision on every resync until something overwrites
  * it. Leaving DV therefore attaches a Dolby VSIF with dv_status=0 (the
  * signalled "Dolby Vision off") instead. drm_override.so lets these blobs
- * through unchanged. Returns 0 if the blob could not be created. */
-static uint32_t create_dovi_off_blob(int fd)
+ * through unchanged. */
+static struct dovi_output_metadata dovi_off_metadata()
 {
-	struct dovi_output_metadata dovi = {};
-	uint32_t blob_id = 0;
+	struct dovi_output_metadata dovi;
+	memset(&dovi, 0, sizeof(dovi));
 	dovi.oui = 0x00D046; // Dolby OUI: the IEEE OUI packet has no off state
 	dovi.dv_status = 0;
-	if (drmModeCreatePropertyBlob(fd, &dovi, sizeof(dovi), &blob_id) != 0)
+	return dovi;
+}
+
+/* DOVI_OUTPUT_METADATA reference counting on the Pi 4 kernel.
+ *
+ * drm_vc4.patch adds the property to drm_atomic_uapi.c but not to
+ * drm_atomic_state_helper.c: a duplicated connector state copies the blob
+ * pointer without drm_property_blob_get() and destroying a state does not
+ * put it. Setting the property to a different blob in a request still runs
+ * drm_property_replace_blob(), which puts the blob the duplicated state
+ * pointed to (the committed one) and gets the new one. So, per request that
+ * carries a changed DOVI value:
+ *  - committed:            old blob -1, new blob +1 (balanced: the old state
+ *                           is gone, the new state owns the new reference)
+ *  - TEST_ONLY, failed, or retried after -EDEADLK inside the kernel:
+ *                           old blob -1 although it stays committed, new blob
+ *                           +1 that is never put again
+ * A blob whose last reference goes while a state still points to it is freed
+ * under that state; the next put writes into freed memory (refcount_t
+ * underflow in drm_property_replace_blob) and the slab corruption shows up
+ * later as a random oops. Our own user reference (from
+ * drmModeCreatePropertyBlob) is the only margin we have, so:
+ *  - never drmModeDestroyPropertyBlob() a DOVI blob; the kernel drops our
+ *    references when the DRM fd closes. Blobs are cached by content, so a
+ *    process creates only a handful.
+ *  - never change the property in a TEST_ONLY commit (FlipPage adds it after
+ *    the check);
+ *  - never change it when the content stays the same (the kernel compares
+ *    content, so the wire is the same);
+ *  - on exit hand the connector back with 0 when the committed blob is ours,
+ *    while our reference still covers it, so the next renderer does not
+ *    inherit a blob that only the committed state holds.
+ * Returns 0 if the blob could not be created. */
+uint32_t ofxRPI4Window::DoviBlobFor(const struct dovi_output_metadata &meta)
+{
+	for (size_t i = 0; i < dovi_blobs.size(); i++) {
+		if (memcmp(&dovi_blobs[i].meta, &meta, sizeof(meta)) != 0)
+			continue;
+		drmModePropertyBlobRes *blob = drmModeGetPropertyBlob(device, dovi_blobs[i].id);
+		if (blob) {
+			drmModeFreePropertyBlob(blob);
+			return dovi_blobs[i].id;
+		}
+		// should not happen: we still hold a reference on it
+		ofLogError() << "DRM: own DOVI blob " << dovi_blobs[i].id << " is gone, creating a new one";
+		dovi_blobs.erase(dovi_blobs.begin() + i);
+		break;
+	}
+	uint32_t blob_id = 0;
+	if (drmModeCreatePropertyBlob(device, &meta, sizeof(meta), &blob_id) != 0 || !blob_id) {
+		ofLogError() << "DRM: unable to create DOVI blob: " << strerror(errno);
 		return 0;
+	}
+	DoviBlob entry;
+	entry.id = blob_id;
+	memcpy(&entry.meta, &meta, sizeof(meta)); // with padding, for the memcmp above
+	dovi_blobs.push_back(entry);
+	ofLog() << "DRM: created DOVI blob " << blob_id << " (dv_status=" << (int)meta.dv_status << ")";
 	return blob_id;
+}
+
+bool ofxRPI4Window::DoviIsOwn(uint64_t blob_id)
+{
+	for (size_t i = 0; i < dovi_blobs.size(); i++)
+		if (dovi_blobs[i].id == blob_id)
+			return true;
+	return false;
+}
+
+/* dv_status byte of a DOVI blob as the kernel holds it, -1 if the blob
+ * cannot be read (gone or malformed). */
+int ofxRPI4Window::DoviBlobStatus(uint64_t blob_id)
+{
+	drmModePropertyBlobRes *blob = drmModeGetPropertyBlob(device, (uint32_t)blob_id);
+	if (!blob)
+		return -1;
+	int status = -1;
+	if (blob->length >= sizeof(struct dovi_output_metadata))
+		status = static_cast<struct dovi_output_metadata*>(blob->data)->dv_status;
+	drmModeFreePropertyBlob(blob);
+	return status;
+}
+
+/* Same test as drm_connector_atomic_dovi_metadata_equal() in the kernel:
+ * the bytes the kernel holds (after drm_override.so normalised them). */
+bool ofxRPI4Window::DoviBlobEqual(uint64_t a, uint64_t b)
+{
+	if (a == b)
+		return true;
+	if (!a || !b)
+		return false;
+	drmModePropertyBlobRes *ba = drmModeGetPropertyBlob(device, (uint32_t)a);
+	drmModePropertyBlobRes *bb = drmModeGetPropertyBlob(device, (uint32_t)b);
+	bool equal = ba && bb && ba->length == bb->length &&
+		memcmp(ba->data, bb->data, ba->length) == 0;
+	if (ba) drmModeFreePropertyBlob(ba);
+	if (bb) drmModeFreePropertyBlob(bb);
+	return equal;
 }
 
 void ofxRPI4Window::ResetConnectorProperties()
@@ -3598,26 +3710,12 @@ void ofxRPI4Window::ResetConnectorProperties()
 		drm_mode_atomic_set_property(device, req, "HDR_OUTPUT_METADATA", connectorId, prop_id, blob_id, prop, 0);
 	}
 
-	last_req = 1; //final atomic request, set to commit all prior requests
-	
-    //disable DOVI Metadata
-	ok = drm_mode_get_property(device, connectorId,	DRM_MODE_OBJECT_CONNECTOR, "DOVI_OUTPUT_METADATA", &prop_id, &blob_id, &prop);
-
-	if (!ok || !blob_id) {
-		ofLogError() << "Unable to find or DOVI_OUTPUT_METADATA not set";
-		blob_id = 0; //set to 0 to be sure property is disabled
-		drm_mode_atomic_set_property(device, req, "DOVI_OUTPUT_METADATA", connectorId, prop_id, blob_id, prop, DRM_MODE_ATOMIC_ALLOW_MODESET);
-	} else {				
-
-		if (blob_id) {
-			drmModeDestroyPropertyBlob(device, blob_id);
-			// see create_dovi_off_blob(): a 0 blob keeps the last DV VSIF
-			blob_id = create_dovi_off_blob(device);
-		}
-		drm_mode_atomic_set_property(device, req, "DOVI_OUTPUT_METADATA", connectorId,	prop_id, blob_id, prop, DRM_MODE_ATOMIC_ALLOW_MODESET);
-	}
-
-		
+	/* DOVI_OUTPUT_METADATA is not reset here: every SetModeProperties()
+	 * branch calls updateDoVi_Infoframe() next, which sets it once and only
+	 * when it changes (see DoviBlobFor()). Resetting it here as well would be
+	 * a second change in the separate-commit path, and destroying the
+	 * committed blob freed it under the committed state. */
+	drm_mode_atomic_commit(device, DRM_MODE_ATOMIC_ALLOW_MODESET); // no-op while batched
 }
 
 /* Put the connector back to plain RGB so the console (or whatever takes
@@ -3651,13 +3749,41 @@ void ofxRPI4Window::ResetConnectorOnExit()
 		drmModeAtomicFree(req);
 		req = nullptr;
 	}
+	/* DOVI (see DoviBlobFor()): a blob signalling DV on is replaced by our
+	 * "DV off" blob (a 0 blob keeps the DV VSIF on the wire), and a second
+	 * commit then clears our off blob to 0 while our reference still covers
+	 * it. Our off blob already committed is cleared to 0 in this commit (its
+	 * VSIF is already the last one written). A blob we did not create is left
+	 * alone unless it signals DV on: replacing it frees it under the
+	 * committed state. A blob that can no longer be read is never touched. */
+	uint32_t dovi_prop = 0;
+	bool dovi_clear_after = false;
 	batch_req = true;
 	for (size_t i = 0; i < sizeof(reset_props) / sizeof(reset_props[0]); i++) {
 		if (drm_mode_get_property(device, connectorId, DRM_MODE_OBJECT_CONNECTOR, reset_props[i].name, &prop_id, &value, &prop)) {
 			uint64_t reset_value = reset_props[i].value;
-			// A DV blob that is merely cleared keeps its VSIF on the wire.
-			if (value && strcmp(reset_props[i].name, "DOVI_OUTPUT_METADATA") == 0)
-				reset_value = create_dovi_off_blob(device);
+			if (strcmp(reset_props[i].name, "DOVI_OUTPUT_METADATA") == 0) {
+				dovi_prop = prop_id;
+				reset_value = value;
+				if (value) {
+					int status = DoviBlobStatus(value);
+					if (status > 0) {
+						reset_value = DoviBlobFor(dovi_off_metadata());
+						dovi_clear_after = reset_value != 0;
+						if (!reset_value)
+							reset_value = value; // keep what is there rather than 0
+					} else if (status == 0 && DoviIsOwn(value)) {
+						reset_value = 0;
+					} else if (status < 0) {
+						fprintf(stderr, "PGEN: committed DOVI blob %llu cannot be read, leaving it\n", (unsigned long long)value);
+					}
+				}
+				if (reset_value == value) {
+					// unchanged: not part of the request
+					drmModeFreeProperty(prop);
+					continue;
+				}
+			}
 			drm_mode_atomic_set_property(device, req, reset_props[i].name, connectorId, prop_id, reset_value, prop, 0);
 		}
 	}
@@ -3676,10 +3802,25 @@ void ofxRPI4Window::ResetConnectorOnExit()
 	int ret = drmModeAtomicCommit(device, req, DRM_MODE_ATOMIC_ALLOW_MODESET, NULL);
 	drmModeAtomicFree(req);
 	req = nullptr;
-	if (ret < 0)
+	if (ret < 0) {
 		fprintf(stderr, "PGEN: exit connector reset failed: %s\n", strerror(-ret));
-	else
-		fprintf(stderr, "PGEN: exit connector reset to RGB 8 bpc committed\n");
+		return;
+	}
+	fprintf(stderr, "PGEN: exit connector reset to RGB 8 bpc committed\n");
+
+	if (dovi_clear_after && dovi_prop) {
+		drmModeAtomicReq *dreq = drmModeAtomicAlloc();
+		if (!dreq)
+			return;
+		if (drmModeAtomicAddProperty(dreq, connectorId, dovi_prop, 0) >= 0) {
+			ret = drmModeAtomicCommit(device, dreq, DRM_MODE_ATOMIC_ALLOW_MODESET, NULL);
+			if (ret < 0)
+				fprintf(stderr, "PGEN: exit DOVI clear failed: %s\n", strerror(-ret));
+			else
+				fprintf(stderr, "PGEN: exit DOVI off VSIF sent, DOVI_OUTPUT_METADATA cleared\n");
+		}
+		drmModeAtomicFree(dreq);
+	}
 }
 
 void ofxRPI4Window::DisablePlane(uint32_t plane_id, const char* plane)
@@ -3726,6 +3867,7 @@ void ofxRPI4Window::FlipPage(bool flip, uint32_t fb_id)
 		 * properties in one request are fine: libdrm keeps the last value.
 		 * Blobs are created before the commit and only referenced by it, so
 		 * their lifetime does not force separate commits. */
+		dovi_pending = false;
 		batch_req = true;
 		SetModeProperties();
 		SetActivePlane(SetPlaneId(), currentWindowRect, fb_id);
@@ -3735,14 +3877,25 @@ void ofxRPI4Window::FlipPage(bool flip, uint32_t fb_id)
 
 		/* Check first: if the kernel rejects the combined request, nothing
 		 * is shown and swapBuffers() would time out, so fall back to the
-		 * previous sequence of separate commits instead. */
+		 * previous sequence of separate commits instead. The check runs
+		 * without DOVI_OUTPUT_METADATA: on this kernel a changed DOVI blob
+		 * in a TEST_ONLY request drops a reference from the committed blob
+		 * (see DoviBlobFor()). */
 		int ret = req ? drmModeAtomicCommit(device, req, DRM_MODE_ATOMIC_TEST_ONLY | DRM_MODE_ATOMIC_ALLOW_MODESET, NULL) : -EINVAL;
 		if (ret == 0) {
+			if (dovi_pending) {
+				if (drmModeAtomicAddProperty(req, connectorId, dovi_pending_prop, dovi_pending_blob) < 0)
+					ofLogError() << "DRM: Unable to request DOVI_OUTPUT_METADATA " << strerror(errno);
+				else
+					ofLog() << "DRM: atomic_request DOVI_OUTPUT_METADATA(blob): blob_id = " << dovi_pending_blob;
+				dovi_pending = false;
+			}
 			ofLog() << "DRM: committing mode, infoframes and plane in one atomic request";
 			drm_mode_atomic_commit(device, DRM_MODE_ATOMIC_ALLOW_MODESET | DRM_MODE_PAGE_FLIP_EVENT | DRM_MODE_ATOMIC_NONBLOCK);
 			return;
 		}
 		ofLogError() << "DRM: combined atomic request rejected (" << strerror(-ret) << "), falling back to separate commits";
+		dovi_pending = false;
 		if (req) {
 			drmModeAtomicFree(req);
 			req = nullptr;
@@ -4006,28 +4159,38 @@ void ofxRPI4Window::updateHDR_Infoframe(hdmi_eotf eotf, int idx)
 void ofxRPI4Window::updateDoVi_Infoframe(int enable, int dv_interface) 
 {
 	bool ok;
-	uint64_t blob_id = 0;
+	uint64_t committed = 0;
+	uint32_t dovi_prop_id = 0;
+	drmModePropertyPtr dovi_prop = nullptr;
 	
 	ofLog() << "DRM: Setting DoVi infoframe";	
 	
-	ok = drm_mode_get_property(device, connectorId,	DRM_MODE_OBJECT_CONNECTOR, "DOVI_OUTPUT_METADATA", &prop_id, &blob_id, &prop);
+	ok = drm_mode_get_property(device, connectorId,	DRM_MODE_OBJECT_CONNECTOR, "DOVI_OUTPUT_METADATA", &dovi_prop_id, &committed, &dovi_prop);
 	
 	if (!ok) {
 		ofLogError() << "Unable to find DOVI_OUTPUT_METADATA";
+		return;
+	}
+
+	/* Never destroy the committed blob and never change the property when
+	 * the content stays the same: see DoviBlobFor(). */
+	if (committed && DoviBlobStatus(committed) < 0) {
+		// the committed state points to a blob that is gone; any change
+		// would put it again
+		ofLogError() << "DRM: committed DOVI blob " << committed << " cannot be read, leaving DOVI_OUTPUT_METADATA unchanged";
+		drmModeFreeProperty(dovi_prop);
+		return;
+	}
+
+	uint64_t target = 0;
+	if (!enable) {
+		// 0 stays 0: no DV VSIF was ever attached. Otherwise attach the
+		// "DV off" blob, see dovi_off_metadata(): a 0 blob keeps the DV VSIF.
+		if (committed)
+			target = DoviBlobFor(dovi_off_metadata());
 	} else {
-		bool had_blob = blob_id != 0;
-		if (blob_id)
-			drmModeDestroyPropertyBlob(device, blob_id);
-		blob_id = 0;	
-		if (!enable) {
-			if (had_blob)
-				blob_id = create_dovi_off_blob(device);
-			first_req = 1; // allocate for atomic requests
-			last_req = 1; // commit previous atomic requests	
-			drm_mode_atomic_set_property(device, req, "DOVI_OUTPUT_METADATA", connectorId, prop_id, blob_id, prop, DRM_MODE_ATOMIC_ALLOW_MODESET);
-			return; 
-		}
-		struct dovi_output_metadata dovi = {};
+		struct dovi_output_metadata dovi;
+		memset(&dovi, 0, sizeof(dovi));
 		dovi.oui = ofxRPI4Window::is_std_DoVi ? 0x000C03 : 0x00D046;
 		dovi.dv_status = enable; //set to 1 to enable dovi infoframe 
 		// The kernel packs the low-latency Dolby VSIF for 2 (see drm_override.c).
@@ -4037,12 +4200,36 @@ void ofxRPI4Window::updateDoVi_Infoframe(int enable, int dv_interface)
 		dovi.aux_runmode = (uint8_t)ofClamp(ofxRPI4Window::dv_map_mode, 0, 255);
 		dovi.aux_version = 0;
 		dovi.aux_debug = 0;
-		drmModeCreatePropertyBlob(device, &dovi, sizeof(dovi), (uint32_t*)&blob_id); 
-		first_req = 1; // allocate for atomic requests
-		last_req = 1; // commit previous atomic requests	
-		drm_mode_atomic_set_property(device, req, "DOVI_OUTPUT_METADATA", connectorId, prop_id, blob_id, prop, DRM_MODE_ATOMIC_ALLOW_MODESET);
-	} 
+		target = DoviBlobFor(dovi);
+	}
+	if (!target)
+		target = committed; // could not create the blob: 0 would not clear the VSIF either
+	if (committed && target != committed && DoviBlobEqual(committed, target))
+		target = committed;
 
+	if (target == committed) {
+		ofLog() << "DRM: DOVI_OUTPUT_METADATA unchanged (blob " << committed << ")";
+		if (!enable || !committed) {
+			drmModeFreeProperty(dovi_prop);
+			return;
+		}
+		/* DV on: send the committed blob again. The kernel sees the same
+		 * blob and moves no reference, and drm_override.so sees that the
+		 * renderer provides DOVI and does not inject its fallback blob. */
+	}
+
+	if (batch_req) {
+		// FlipPage() adds it after the TEST_ONLY check
+		dovi_pending = true;
+		dovi_pending_prop = dovi_prop_id;
+		dovi_pending_blob = target;
+		ofLog() << "DRM: DOVI_OUTPUT_METADATA blob " << committed << " -> " << target << " staged for the commit";
+		drmModeFreeProperty(dovi_prop);
+		return;
+	}
+	first_req = 1; // allocate for atomic requests
+	last_req = 1; // commit previous atomic requests	
+	drm_mode_atomic_set_property(device, req, "DOVI_OUTPUT_METADATA", connectorId, dovi_prop_id, target, dovi_prop, DRM_MODE_ATOMIC_ALLOW_MODESET);
 }
 
 void ofxRPI4Window::updateAVI_Infoframe(uint32_t plane_id, struct avi_infoframe avi_infoframe)

@@ -3787,6 +3787,33 @@ void ofxRPI4Window::ResetConnectorOnExit()
 			drm_mode_atomic_set_property(device, req, reset_props[i].name, connectorId, prop_id, reset_value, prop, 0);
 		}
 	}
+	/* Take our planes off the CRTC in the same commit. In YCbCr and RGB
+	 * passthrough the framebuffer holds the final codes (no CSC after it),
+	 * so on the RGB link it would show YCbCr black as teal until the
+	 * console takes over (measured ~0.2 s on 4:2:2). Without a plane the
+	 * HVS sends its black background. Only when the connector changes:
+	 * a plain RGB link needs nothing. */
+	int cursor_before_planes = req ? drmModeAtomicGetCursor(req) : -1;
+	int planes_off = 0;
+	if (req && crtcId) {
+		const uint32_t planes[] = { HDRplaneId, SDRplaneId };
+		for (size_t p = 0; p < sizeof(planes) / sizeof(planes[0]); p++) {
+			uint32_t plane_id = planes[p];
+			uint64_t plane_crtc = 0;
+			if (!plane_id || (p > 0 && plane_id == planes[0]))
+				continue;
+			if (!drm_mode_get_property(device, plane_id, DRM_MODE_OBJECT_PLANE, "CRTC_ID", &prop_id, &plane_crtc, &prop))
+				continue;
+			if (plane_crtc != crtcId) {
+				drmModeFreeProperty(prop);
+				continue;
+			}
+			drm_mode_atomic_set_property(device, req, "CRTC_ID", plane_id, prop_id, 0, prop, 0);
+			if (drm_mode_get_property(device, plane_id, DRM_MODE_OBJECT_PLANE, "FB_ID", &prop_id, NULL, &prop))
+				drm_mode_atomic_set_property(device, req, "FB_ID", plane_id, prop_id, 0, prop, 0);
+			planes_off++;
+		}
+	}
 	batch_req = false;
 	first_req = 0;
 	last_req = 0;
@@ -3800,13 +3827,20 @@ void ofxRPI4Window::ResetConnectorOnExit()
 		set_suspended(1);
 
 	int ret = drmModeAtomicCommit(device, req, DRM_MODE_ATOMIC_ALLOW_MODESET, NULL);
+	if (ret < 0 && planes_off) {
+		/* The connector reset matters more than the black gap. */
+		fprintf(stderr, "PGEN: exit reset with %d plane(s) off refused (%s), retrying without\n", planes_off, strerror(-ret));
+		drmModeAtomicSetCursor(req, cursor_before_planes);
+		planes_off = 0;
+		ret = drmModeAtomicCommit(device, req, DRM_MODE_ATOMIC_ALLOW_MODESET, NULL);
+	}
 	drmModeAtomicFree(req);
 	req = nullptr;
 	if (ret < 0) {
 		fprintf(stderr, "PGEN: exit connector reset failed: %s\n", strerror(-ret));
 		return;
 	}
-	fprintf(stderr, "PGEN: exit connector reset to RGB 8 bpc committed\n");
+	fprintf(stderr, "PGEN: exit connector reset to RGB 8 bpc committed (%d plane(s) off)\n", planes_off);
 
 	if (dovi_clear_after && dovi_prop) {
 		drmModeAtomicReq *dreq = drmModeAtomicAlloc();

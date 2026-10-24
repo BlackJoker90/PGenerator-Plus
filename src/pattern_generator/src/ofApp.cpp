@@ -24,6 +24,7 @@
 
 /* Start Patch RPI P4 */
 #include "rgb2ycbcr.h"
+#include "pattern_parse.h"
 /* End Patch RPI P4 */
 
 namespace {
@@ -171,10 +172,6 @@ void ofApp::setup(){
 */
 void ofApp::update(){
  const bool reparsed=open_file;
- std::vector<std::string> dimensions;
- std::vector<std::string> rgb;
- std::vector<std::string> rgbb;
- std::vector<std::string> positions;
  std::string str; 
 
  if(open_file) {
@@ -191,80 +188,96 @@ void ofApp::update(){
    entered=1;
    open_file=0;
    last_frame_time=0;
-   std::vector<std::string> el;
-   boost::split(el, str, boost::is_any_of("="));
-   if(el[0] == "DRAW") {
-    draw_type=el[1];
+   std::string key, value;
+   if(!patternSplitLine(str, key, value))
+    continue;
+   if(key == "DRAW") {
+    draw_type=value;
    }
-   if(el[0] == "TEXT")
-    text_to_write=el[1];
-   if(el[0] == "PATTERN_NAME")
-    p_name=el[1];
-   if(el[0] == "MOVIE_NAME")
-    m_name=el[1];
-   if(el[0] == "IMAGE") {
-    img_file=el[1]; 
+   if(key == "TEXT")
+    text_to_write=value;
+   if(key == "PATTERN_NAME")
+    p_name=value;
+   if(key == "MOVIE_NAME")
+    m_name=value;
+   if(key == "IMAGE") {
+    img_file=value; 
    }
-   if(el[0] == "ROTATE")
-    img_rotate=boost::lexical_cast<int>(el[1]);
-   if(el[0] == "DIM") {
-    boost::split(dimensions, el[1], boost::is_any_of(","));
-    dim1=boost::lexical_cast<int>(dimensions[0]);
-    dim2=boost::lexical_cast<int>(dimensions[1]);
+   if(key == "ROTATE")
+    parseIntValue(key, value, img_rotate);
+   if(key == "DIM") {
+    int v[2];
+    if(parseIntList(key, value, 2, v)) {
+     dim1=v[0];
+     dim2=v[1];
+    }
    }
-   if(el[0] == "RESOLUTION")
-    resolution=boost::lexical_cast<int>(el[1]);
-   if(el[0] == "RGB") {
-    boost::split(rgb, el[1], boost::is_any_of(","));
-    red=boost::lexical_cast<int>(rgb[0]);
-    green=boost::lexical_cast<int>(rgb[1]);
-    blue=boost::lexical_cast<int>(rgb[2]);
+   if(key == "RESOLUTION")
+    parseIntValue(key, value, resolution);
+   if(key == "RGB") {
+    int v[3];
+    if(parseIntList(key, value, 3, v)) {
+     red=v[0];
+     green=v[1];
+     blue=v[2];
+    }
    }
    /* Start Patch RPI P4 */
-   if(el[0] == "BITS") {
-    bits=boost::lexical_cast<int>(el[1]);
+   if(key == "BITS") {
+    if(!parseIntValue(key, value, bits))
+     continue;
     ofxRPI4Window::bit_depth = effectivePatternBits(bits);
     if (!usesDolbyVisionTransport())
      ofxRPI4Window::avi_info.max_bpc = ofxRPI4Window::bit_depth;
  //   ofxRPI4Window::colorspace_on=1;
    }
-   if(el[0] == "SOURCE_MAX") {
-    source_max=boost::lexical_cast<int>(el[1]);
+   if(key == "SOURCE_MAX") {
+    if(!parseIntValue(key, value, source_max))
+     source_max=255;
     if(source_max != 255 && source_max != 1023 && source_max != 4095)
      source_max=255;
    }
    /* End Patch RPI P4 */
-   if(el[0] == "POSITION") {
-    boost::split(positions, el[1], boost::is_any_of(","));
-    position_x=boost::lexical_cast<int>(positions[0]);
-    position_y=boost::lexical_cast<int>(positions[1]);
+   if(key == "POSITION") {
+    int v[2];
+    if(parseIntList(key, value, 2, v)) {
+     position_x=v[0];
+     position_y=v[1];
+    }
    }
-   if(el[0] == "BG") {
-    boost::split(rgbb, el[1], boost::is_any_of(","));
-    redb=boost::lexical_cast<int>(rgbb[0]);
-    greenb=boost::lexical_cast<int>(rgbb[1]);
-    blueb=boost::lexical_cast<int>(rgbb[2]);
+   if(key == "BG") {
+    int v[3];
+    if(parseIntList(key, value, 3, v)) {
+     redb=v[0];
+     greenb=v[1];
+     blueb=v[2];
+    }
    }
-	if(el[0] == "SOURCE_RANGE") {
+	if(key == "SOURCE_RANGE") {
 	 /* 1 LIMITED: studio-range codes; 2 FULL: full-range codes that a
 	    YCbCr link (always Limited) must compress; 0: unspecified. */
-	 source_range=(el[1] == "LIMITED") ? 1 : (el[1] == "FULL") ? 2 : 0;
+	 source_range=(value == "LIMITED") ? 1 : (value == "FULL") ? 2 : 0;
 	}
-   if(el[0] == "FRAME_NAME") {
-    name=el[1];
+   if(key == "FRAME_NAME") {
+    name=value;
     frames[frame].name=name;
    }
-   if(el[0] == "FRAME") {
-    frames[frame].time=boost::lexical_cast<int>(el[1])*1000;
+   if(key == "FRAME") {
+    int seconds=0;
+    parseIntValue(key, value, seconds);
+    frames[frame].time=seconds*1000;
     if(frame+1 < max_frames) {
      frame++;
      frames.push_back(PatternFrame());
     } else
      ofApp::log("Too many frames: the rest of the pattern is drawn into the last one");
    }
-   if(el[0] == "FRAME_DURATION")
-    frames[frame].duration=boost::lexical_cast<int>(el[1])*1000;
-   if(el[0] == "END") {
+   if(key == "FRAME_DURATION") {
+    int seconds=0;
+    if(parseIntValue(key, value, seconds))
+     frames[frame].duration=seconds*1000;
+   }
+   if(key == "END") {
     ofApp::set_values();
     dim1=dim2=0;
 	source_range=0;
@@ -682,6 +695,20 @@ void ofApp::image() {
  #                          Log                           #
  ##########################################################
 */
+bool ofApp::parseIntValue(const std::string &key, const std::string &text, int &out) {
+ if(patternParseInt(text, out))
+  return true;
+ fprintf(stderr, "PGEN: pattern line %s=%s ignored: not a number\n", key.c_str(), text.c_str());
+ return false;
+}
+
+bool ofApp::parseIntList(const std::string &key, const std::string &text, size_t count, int *out) {
+ if(patternParseInts(text, count, out))
+  return true;
+ fprintf(stderr, "PGEN: pattern line %s=%s ignored: %zu numbers needed\n", key.c_str(), text.c_str(), count);
+ return false;
+}
+
 void ofApp::log(std::string str) {
   if (!log_enabled)
    return;

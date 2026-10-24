@@ -109,6 +109,8 @@ sub create_pattern_file (@) {
   $new_rgb.=int($_).",";
  }
  $bg=$bg_default if($bg eq "");
+ # The renderer reads BG as three integers.
+ return &error() if($bg!~/^-?\d+,-?\d+,-?\d+$/);
  $position=$position_default if($position eq "");
  $new_rgb=~s/,$//;
  $options="TEXT";
@@ -605,6 +607,7 @@ sub get_pattern (@) {
   if($_=~/^BG=DYNAMIC/) {
    $bg=$1          if($bg eq "" && /^BG=DYNAMIC\|\|(.*)/);
    $bg=$bg_default if($bg eq "");
+   return &error() if($bg!~/^-?\d+,-?\d+,-?\d+$/);
    $str.="BG=$bg\n";
    next;
   }

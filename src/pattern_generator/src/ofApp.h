@@ -130,6 +130,10 @@ class ofApp : public ofBaseApp{
   void image();
   void set_values();
   void log(std::string);
+  /* Pattern file numbers: false (value kept, line logged) instead of an
+     exception out of update() on a malformed value. */
+  bool parseIntValue(const std::string &key, const std::string &text, int &out);
+  bool parseIntList(const std::string &key, const std::string &text, size_t count, int *out);
   /* Start Patch For RPI 4 */
   void setColor(int red, int green, int blue);
   void setBackground(int redbg, int greenbg, int bluebg);

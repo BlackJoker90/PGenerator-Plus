@@ -1796,8 +1796,10 @@ sub webui_handle_request (@) {
     print $client "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: $len\r\n$cors\r\n$r";
    }
    elsif($path eq "/api/ping") {
-    my $r='{"ok":1}';
-    print $client "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: 8\r\n$cors\r\n$r";
+    # boot: the kernel's boot id, so the WebUI's restart dialog can tell a
+    # restarted Pi from a daemon that is still shutting down.
+    my $r='{"ok":1,"boot":"'.&webui_boot_id().'"}';
+    print $client "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: ".length($r)."\r\n$cors\r\n$r";
    }
    elsif($path eq "/api/info") {
     my $now=time();
@@ -12256,6 +12258,20 @@ sub webui_selftest_status_json (@) {
   }
  }
  return $json;
+}
+
+# Kernel boot id (a new random UUID per boot), read once per daemon.
+my $_webui_boot_id;
+sub webui_boot_id (@) {
+ if(!defined $_webui_boot_id) {
+  $_webui_boot_id="";
+  if(open(my $fh,"<","/proc/sys/kernel/random/boot_id")) {
+   my $id=<$fh>;
+   close($fh);
+   $_webui_boot_id=$1 if(defined $id && $id=~/^([0-9a-f-]{36})/);
+  }
+ }
+ return $_webui_boot_id;
 }
 
 sub webui_selftest_start (@) {

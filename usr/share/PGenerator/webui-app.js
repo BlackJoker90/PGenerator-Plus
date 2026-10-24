@@ -3375,9 +3375,121 @@ async function confirmReboot(){
  rebootDevice();
 }
 async function rebootDevice(){
- toast('Rebooting device...');
+ const before=await fetchJSON('/api/ping',{_quiet:true,_timeoutMs:3000});
+ const r=await fetchJSON('/api/reboot',{method:'POST'});
+ if(!r||r.status!=='ok'){ toast(pgFailMsg('The Pi didn’t restart',r),'err'); return; }
  setPowerButtonState(false);
- await fetchJSON('/api/reboot',{method:'POST'});
+ pgRebootProgress(before&&before.boot);
+}
+
+// Restart progress: the update dialog's card for a Pi restart. It follows
+// /api/ping: the old boot id means PGenerator+ is still shutting down, no
+// answer means the Pi is restarting, a new boot id means it is back (reload).
+// The bar is an estimate from the usual timing (the WebUI answers again about
+// 55 s after the request) and never passes a step that has not happened.
+const PG_RB_STEPS=['Shut down','Restart','Reconnect'];
+const PG_RB_TIMEOUT_MS=4*60*1000;
+function pgRebootProgress(bootId){
+ const old=document.getElementById('rebootProgressModal');
+ if(old) old.remove();
+ const root=document.createElement('div');
+ root.id='rebootProgressModal';
+ root.className='upd-modal';
+ const card=document.createElement('div');
+ card.className='upd-card';
+ card.setAttribute('role','dialog');
+ card.setAttribute('aria-modal','true');
+ card.setAttribute('aria-labelledby','rbProgTitle');
+ card.setAttribute('aria-describedby','rbProgMsg');
+ card.tabIndex=-1;
+ card.innerHTML='<div class="upd-title" id="rbProgTitle"></div><div class="upd-meta"><span class="rb-hint"></span><span class="upd-elapsed"></span></div>'
+  +'<div class="upd-bar" role="progressbar" aria-labelledby="rbProgTitle" aria-valuemin="0" aria-valuemax="100"><div class="upd-bar-fill"></div><div class="upd-bar-seek"></div></div>'
+  +'<div class="upd-status"><span class="upd-msg" id="rbProgMsg" aria-live="polite"></span></div>'
+  +'<ol class="upd-steps">'+PG_RB_STEPS.map(t=>'<li class="upd-step"><svg class="btn-ico" viewBox="0 0 24 24" aria-hidden="true"></svg><span>'+t+'</span><span class="sr-only"></span></li>').join('')+'</ol>'
+  +'<div class="upd-note" hidden></div><div class="btn-row btn-row-end upd-actions" hidden></div>';
+ root.appendChild(card);
+ document.body.appendChild(root);
+ document.body.classList.add('pg-restarting');
+ const d={step:0,result:'running',t0:Date.now(),offlineAt:0,value:0,timer:0,poll:0,actionsFor:''};
+ const opener=document.activeElement;
+ const close=()=>{ clearInterval(d.timer); clearTimeout(d.poll); document.removeEventListener('keydown',onKey,true); root.remove(); document.body.classList.remove('pg-restarting'); if(opener&&opener.isConnected) opener.focus(); };
+ const onKey=ev=>{
+  if(!root.isConnected) return;
+  if(ev.key==='Escape'&&d.result==='timeout'){ ev.preventDefault(); close(); return; }
+  pgDialogTrapTab(card,ev);
+ };
+ document.addEventListener('keydown',onKey,true);
+ const render=()=>{
+  const run=d.result==='running',now=Date.now();
+  const s=Math.floor((now-d.t0)/1000);
+  card.querySelector('.upd-elapsed').textContent=Math.floor(s/60)+':'+String(s%60).padStart(2,'0')+' elapsed';
+  // Shutting down fills the first 12 %, the restart creeps towards 92 %
+  // (about 80 % of that span after the usual 45 s offline).
+  let v;
+  if(d.result==='done') v=100;
+  else if(d.step===0) v=12*(1-Math.exp(-(now-d.t0)/2500));
+  else v=12+80*(1-Math.exp(-(now-d.offlineAt)/28000));
+  d.value=Math.max(d.value,v);
+  card.classList.toggle('is-done',d.result==='done');
+  card.classList.toggle('is-timeout',d.result==='timeout');
+  card.querySelector('.upd-title').textContent={running:'Restarting the Pi',done:'The Pi is back',timeout:'The restart is taking too long'}[d.result];
+  card.querySelector('.rb-hint').textContent=run?'Usually about a minute':'';
+  const msg=d.result==='done'?'Reloading the page…':(d.result==='timeout'?'The Pi has not answered after 4 minutes.'
+   :(d.step===0?'Shutting down PGenerator+…':'The Pi is restarting — this page reconnects automatically.'));
+  const msgEl=card.querySelector('.upd-msg');
+  if(msgEl.textContent!==msg) msgEl.textContent=msg;
+  card.querySelector('.upd-bar-fill').style.width=d.value.toFixed(1)+'%';
+  const bar=card.querySelector('.upd-bar');
+  bar.setAttribute('aria-valuenow',String(Math.round(d.value)));
+  bar.setAttribute('aria-valuetext',d.result==='done'?'Done':(run?'Step '+(d.step+1)+' of 3, '+PG_RB_STEPS[d.step]:'Stopped at '+PG_RB_STEPS[d.step]));
+  card.querySelectorAll('.upd-step').forEach((li,i)=>{
+   let st='pending';
+   if(i<d.step||d.result==='done') st='done';
+   else if(i===d.step) st=run?'current':'stalled';
+   if(li.dataset.state===st) return;
+   li.dataset.state=st;
+   const svg=li.querySelector('svg');
+   svg.innerHTML=PG_UPD_ICONS[st==='stalled'?'pending':st];
+   svg.classList.toggle('upd-spin',st==='current');
+   if(st==='current') li.setAttribute('aria-current','step'); else li.removeAttribute('aria-current');
+   li.querySelector('.sr-only').textContent={done:', done',current:', in progress',stalled:', not finished',pending:''}[st];
+  });
+  const note=card.querySelector('.upd-note');
+  const noteText=d.result==='timeout'?'Check that the Pi has power and a network connection; the TV shows how far the start has come. Reload this page once the Pi is back.':'';
+  note.textContent=noteText;
+  note.hidden=!noteText;
+  if(d.actionsFor!==d.result){
+   d.actionsFor=d.result;
+   const row=card.querySelector('.upd-actions');
+   row.innerHTML='';
+   if(d.result==='timeout'){
+    const mk=(label,cls,fn)=>{ const b=document.createElement('button'); b.type='button'; b.className='btn btn-sm '+cls; b.textContent=label; b.onclick=fn; row.appendChild(b); return b; };
+    mk('Close','btn-secondary',close);
+    mk('Reload','btn-primary ico-refresh',()=>location.reload()).focus();
+   }
+   row.hidden=!row.children.length;
+  }
+ };
+ const poll=async()=>{
+  if(d.result!=='running'||!root.isConnected) return;
+  let p=null;
+  try{ const r=await fetch(API+'/api/ping',{cache:'no-store',signal:AbortSignal.timeout(1500)}); if(r.ok) p=await r.json(); }catch(e){}
+  if(!p){
+   if(d.step===0){ d.step=1; d.offlineAt=Date.now(); }
+  }else if((bootId&&p.boot&&p.boot!==bootId)||(!bootId&&d.step>=1)){
+   d.step=2;
+   d.result='done';
+   render();
+   setTimeout(()=>location.reload(),900);
+   return;
+  }
+  if(Date.now()-d.t0>PG_RB_TIMEOUT_MS){ d.result='timeout'; render(); return; }
+  d.poll=setTimeout(poll,1000);
+ };
+ render();
+ d.timer=setInterval(()=>{ if(d.result==='running') render(); else clearInterval(d.timer); },500);
+ card.focus();
+ d.poll=setTimeout(poll,1000);
 }
 let _powerOffRequested=false;
 async function shutdownDevice(){
@@ -3449,9 +3561,10 @@ async function applyMemory(){
   body:'PGenerator+ restarts the Pi to apply it. Patterns and calibration software disconnect until it is back; this page reconnects on its own.'
  });
  if(!ok){ sel.value=from||sel.value; return; }
+ const before=await fetchJSON('/api/ping',{_quiet:true,_timeoutMs:3000});
  const r=await fetchJSON('/api/boot/memory',{method:'POST',
   headers:{'Content-Type':'application/json'},body:JSON.stringify(cma?{cma_mb:to}:{gpu_mem:to})});
- if(r&&r.status==='ok'){ sel.dataset.applied=to; toast(r.message); }
+ if(r&&r.status==='ok'){ sel.dataset.applied=to; setPowerButtonState(false); pgRebootProgress(before&&before.boot); }
  else{ sel.value=from||sel.value; toast(pgFailMsg('Couldn\u2019t change the GPU memory',r),'err'); }
 }
 

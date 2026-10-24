@@ -289,6 +289,8 @@ transition:background .18s ease-out,box-shadow .18s ease-out,transform .08s}
 body.ui-offline .dashboard,body.ui-offline .site-footer{filter:grayscale(.35);opacity:.45;pointer-events:none;user-select:none}
 .offline-mask{position:absolute;inset:0;display:none;z-index:20;align-items:flex-start;justify-content:center;padding:64px 20px 20px;background:rgba(10,10,15,.42);backdrop-filter:blur(3px)}
 body.ui-offline .offline-mask{display:flex}
+/* The restart dialog already says the Pi is away and that the page reconnects. */
+body.pg-restarting .offline-mask-card{display:none}
 .offline-mask-card{max-width:430px;padding:18px 20px;border:1px solid var(--border);border-radius:14px;background:rgba(20,20,31,.94);box-shadow:0 12px 30px rgba(0,0,0,.35);text-align:center}
 .meter-autocal-mask{position:fixed;inset:0;z-index:9000;display:none;align-items:center;justify-content:center;padding:18px;background:rgba(6,6,10,.66);backdrop-filter:blur(4px)}
 body.meter-autocal-active .dashboard,body.meter-autocal-active .site-footer{filter:grayscale(.25);opacity:.42;pointer-events:none;user-select:none}

@@ -65,16 +65,14 @@ struct fb_fix_screeninfo {
 #define PROC_DIR "/proc"
 #endif
 
-/* The WebUI's dark theme on the splash background. */
-#define C_BG     0x101018
-#define C_TEXT   0xe0e0e8
-#define C_TEXT2  0x888898
-#define C_ACCENT 0x5b7fff
-#define C_FILL   0x4a68e8
-#define C_TRACK  0x20202d
-#define C_EDGE   0x2a2a3a
-#define C_DONE   0x4caf50
-#define C_IDLE   0x55556a
+#define THEME "/var/lib/PGenerator/ui/bootscreen.theme"
+
+/* Colours: the WebUI theme the user picked, written by the WebUI to THEME
+ * (bootscreen.theme: "key=#rrggbb" lines). Without it, or for a missing or
+ * malformed key, the WebUI's dark theme on the splash background. */
+static struct {
+	uint32_t bg, text, text2, accent, fill, track, edge, done, idle;
+} th = { 0x101018, 0xe0e0e8, 0x888898, 0x5b7fff, 0x4a68e8, 0x20202d, 0x2a2a3a, 0x4caf50, 0x55556a };
 
 #define FPS 30
 #define BOOT_TIMEOUT 150.0   /* no renderer after this: leave the logo */
@@ -122,7 +120,9 @@ static int load_assets(const char *path)
 		s->w = buf[p + 1] | buf[p + 2] << 8;
 		s->h = buf[p + 3] | buf[p + 4] << 8;
 		p += 5;
-		long bytes = (long)s->w * s->h * (s->kind == 1 ? 2 : 1);
+		/* 0 alpha8 (tinted), 1 rgb565, 2 rgb565 + alpha8 */
+		if (s->kind > 2) return -1;
+		long bytes = (long)s->w * s->h * (s->kind + 1);
 		if (p + bytes > size) return -1;
 		s->data = buf + p;
 		p += bytes;
@@ -137,6 +137,28 @@ static const sprite_t *sp(const char *name)
 		if (strcmp(sprites[i].name, name) == 0)
 			return &sprites[i];
 	return NULL;
+}
+
+static void load_theme(const char *path)
+{
+	static const char *keys[] = { "bg", "text", "text2", "accent", "fill", "track", "edge", "done", "idle" };
+	uint32_t *vals[] = { &th.bg, &th.text, &th.text2, &th.accent, &th.fill, &th.track, &th.edge, &th.done, &th.idle };
+	FILE *f = fopen(path, "r");
+	if (!f)
+		return;
+	char line[128];
+	while (fgets(line, sizeof(line), f)) {
+		char *eq = strchr(line, '=');
+		if (!eq || eq[1] != '#') continue;
+		*eq = 0;
+		char *hex = eq + 2, *end;
+		int n = (int)strspn(hex, "0123456789abcdefABCDEF");
+		if (n != 6 || (hex[6] && hex[6] != '\n' && hex[6] != '\r')) continue;
+		unsigned long v = strtoul(hex, &end, 16);
+		for (size_t k = 0; k < sizeof(keys) / sizeof(keys[0]); k++)
+			if (!strcmp(line, keys[k])) *vals[k] = (uint32_t)v;
+	}
+	fclose(f);
 }
 
 /* ------------------------------------------------------------ drawing */
@@ -178,9 +200,10 @@ static int put_alpha(uint32_t *buf, const sprite_t *s, int x, int y, uint32_t c)
 	return x + s->w;
 }
 
-static void put_rgb565(uint32_t *buf, const sprite_t *s, int x, int y)
+/* rgb565 with an alpha byte per pixel: the logo, over any theme background. */
+static void put_rgba565(uint32_t *buf, const sprite_t *s, int x, int y)
 {
-	if (!s || s->kind != 1)
+	if (!s || s->kind != 2)
 		return;
 	for (int j = 0; j < s->h; j++) {
 		int yy = y + j;
@@ -188,10 +211,12 @@ static void put_rgb565(uint32_t *buf, const sprite_t *s, int x, int y)
 		for (int i = 0; i < s->w; i++) {
 			int xx = x + i;
 			if (xx < 0 || xx >= W) continue;
-			const uint8_t *p = s->data + 2 * (j * s->w + i);
+			const uint8_t *p = s->data + 3 * (j * s->w + i);
+			if (!p[2]) continue;
 			unsigned v = p[0] | p[1] << 8;
 			unsigned r = (v >> 11) & 31, g = (v >> 5) & 63, b = v & 31;
-			buf[yy * W + xx] = (r * 255 / 31) << 16 | (g * 255 / 63) << 8 | (b * 255 / 31);
+			uint32_t c = (r * 255 / 31) << 16 | (g * 255 / 63) << 8 | (b * 255 / 31);
+			buf[yy * W + xx] = mix(buf[yy * W + xx], c, p[2]);
 		}
 	}
 }
@@ -215,7 +240,7 @@ static void draw_bar(int bx, int by, int bw, int bh, float value, int indetermin
 {
 	float r = bh / 2.0f, cy = by + r;
 	float fw = bw * clampf(value, 0, 100) / 100.0f;
-	uint32_t fc = done ? C_DONE : C_FILL;
+	uint32_t fc = done ? th.done : th.fill;
 	float sheen = (float)fmod(t / 2.4, 1.0) * 1.6f - 0.3f;
 	float glow = (float)fmod(t / 1.8, 1.0);
 	glow = glow * glow * (3 - 2 * glow) * 1.4f - 0.2f; /* ease in-out, starts and ends off the track */
@@ -225,12 +250,12 @@ static void draw_bar(int bx, int by, int bw, int bh, float value, int indetermin
 			float px = x + 0.5f, py = y + 0.5f;
 			float ct = capsule(px, py, bx, bx + bw, cy, r);
 			if (ct <= 0) continue;
-			uint32_t c = mix(canvas[y * W + x], C_TRACK, (int)(ct * 255));
+			uint32_t c = mix(canvas[y * W + x], th.track, (int)(ct * 255));
 			if (indeterminate) {
 				float d = fabsf(px - (bx + glow * bw)) / (0.2f * bw);
 				float k = clampf(1 - d, 0, 1);
 				k = k * k * (3 - 2 * k);
-				c = mix(c, C_FILL, (int)(k * ct * 0.85f * 255));
+				c = mix(c, th.fill, (int)(k * ct * 0.85f * 255));
 			} else if (fw > 0) {
 				float cf = capsule(px, py, bx, bx + (fw < bh ? bh : fw), cy, r);
 				if (cf > 0) {
@@ -252,7 +277,7 @@ static void draw_bar(int bx, int by, int bw, int bh, float value, int indetermin
  * (the WebUI's spinner), 4x4 supersampled. */
 static void draw_spinner(int x, int y, int size, double t)
 {
-	float R = size * 0.35f, th = size * 0.1f, c0 = size / 2.0f;
+	float R = size * 0.35f, tk = size * 0.1f, c0 = size / 2.0f;
 	float rot = (float)fmod(t / 0.9, 1.0) * 2 * (float)M_PI;
 	for (int j = 0; j < size; j++) {
 		for (int i = 0; i < size; i++) {
@@ -261,7 +286,7 @@ static void draw_spinner(int x, int y, int size, double t)
 				for (int sx = 0; sx < 4; sx++) {
 					float px = i + (sx + 0.5f) / 4 - c0, py = j + (sy + 0.5f) / 4 - c0;
 					float d = sqrtf(px * px + py * py);
-					if (fabsf(d - R) > th / 2) continue;
+					if (fabsf(d - R) > tk / 2) continue;
 					ring++;
 					float a = atan2f(py, px) - rot;
 					while (a < 0) a += 2 * (float)M_PI;
@@ -271,43 +296,69 @@ static void draw_spinner(int x, int y, int size, double t)
 			}
 			int xx = x + i, yy = y + j;
 			if (xx < 0 || xx >= W || yy < 0 || yy >= H || !ring) continue;
-			uint32_t c = mix(canvas[yy * W + xx], C_ACCENT, ring * 255 * 3 / 10 / 16);
-			canvas[yy * W + xx] = mix(c, C_ACCENT, arc * 255 / 16);
+			uint32_t c = mix(canvas[yy * W + xx], th.accent, ring * 255 * 3 / 10 / 16);
+			canvas[yy * W + xx] = mix(c, th.accent, arc * 255 / 16);
 		}
 	}
 }
 
-/* "m:ss elapsed", right-aligned at RIGHT. */
-static void draw_elapsed(int right, int y, double seconds)
+/* Visible width of a text sprite (2 px of padding on each side). */
+static int text_w(const sprite_t *s) { return s ? s->w - 4 : 0; }
+
+/* Centred text sprite at row Y. */
+static void put_centred(const sprite_t *s, int y, uint32_t c)
+{
+	put_alpha(canvas, s, (W - text_w(s)) / 2 - 2, y, c);
+}
+
+/* "m:ss elapsed": its width, and drawn from X. Digits share one advance, so
+ * the counter does not shift while it runs. */
+static int digit_advance(void)
+{
+	int adv = 0;
+	for (int d = 0; d < 10; d++) {
+		char n[4] = { 'd', (char)('0' + d), 0 };
+		if (text_w(sp(n)) > adv) adv = text_w(sp(n));
+	}
+	return adv;
+}
+
+static void elapsed_text(double seconds, char *txt, size_t len)
 {
 	int s = (int)seconds;
 	if (s < 0) s = 0;
 	if (s > 5999) s = 5999;
+	snprintf(txt, len, "%d:%02d", s / 60, s % 60);
+}
+
+static int elapsed_w(double seconds)
+{
 	char txt[8];
-	snprintf(txt, sizeof(txt), "%d:%02d", s / 60, s % 60);
-	int adv = 0;
-	for (int d = 0; d < 10; d++) {
-		char n[4] = { 'd', (char)('0' + d), 0 };
-		const sprite_t *g = sp(n);
-		if (g && g->w - 4 > adv) adv = g->w - 4;
-	}
-	const sprite_t *colon = sp("colon"), *word = sp("word_elapsed");
-	int width = (word ? word->w - 4 : 0) + 10;
+	elapsed_text(seconds, txt, sizeof(txt));
+	int adv = digit_advance(), width = text_w(sp("word_elapsed")) + 10;
 	for (const char *p = txt; *p; p++)
-		width += (*p == ':') ? (colon ? colon->w - 4 : 0) : adv;
-	int x = right - width;
+		width += (*p == ':') ? text_w(sp("colon")) : adv;
+	return width;
+}
+
+static void draw_elapsed(int x, int y, double seconds)
+{
+	char txt[8];
+	elapsed_text(seconds, txt, sizeof(txt));
+	int adv = digit_advance();
+	const sprite_t *colon = sp("colon");
 	for (const char *p = txt; *p; p++) {
 		if (*p == ':') {
-			put_alpha(canvas, colon, x - 2, y, C_TEXT2);
-			x += colon ? colon->w - 4 : 0;
+			put_alpha(canvas, colon, x - 2, y, th.text2);
+			x += text_w(colon);
 		} else {
 			char n[4] = { 'd', *p, 0 };
 			const sprite_t *g = sp(n);
-			if (g) put_alpha(canvas, g, x - 2 + (adv - (g->w - 4)) / 2, y, C_TEXT2);
+			if (g) put_alpha(canvas, g, x - 2 + (adv - text_w(g)) / 2, y, th.text2);
 			x += adv;
 		}
 	}
-	put_alpha(canvas, word, x + 10 - 2, y, C_TEXT2);
+	put_alpha(canvas, sp("word_elapsed"), x + 10 - 2, y, th.text2);
 }
 
 /* ------------------------------------------------------------ layout */
@@ -317,12 +368,14 @@ typedef struct {
 	int col_x, col_w;
 	int logo_x, logo_y;
 	int title_y, meta_y, bar_y, status_y, divider_y, steps_y;
+	int steps_x; /* the step list is one block, centred, rows left-aligned */
 	int dyn_y0, dyn_y1; /* rows redrawn every frame */
 } layout_t;
 
 #define BAR_H 10
 #define ICON 30
 #define STEP_ROW 46
+#define META_GAP 28 /* between "Back in about a minute" and the counter */
 
 static void make_layout(layout_t *L, int mode)
 {
@@ -334,6 +387,16 @@ static void make_layout(layout_t *L, int mode)
 	L->nsteps = mode == MODE_BOOT ? 4 : 3;
 	L->col_w = 880 < W - 80 ? 880 : W - 80;
 	L->col_x = (W - L->col_w) / 2;
+	int label_w = 0;
+	for (int i = 0; i < L->nsteps; i++) {
+		char name[32];
+		const char *m = mode == MODE_BOOT ? "boot" : "reboot";
+		snprintf(name, sizeof(name), "step_%s%d", m, i);
+		if (text_w(sp(name)) > label_w) label_w = text_w(sp(name));
+		snprintf(name, sizeof(name), "stepcur_%s%d", m, i);
+		if (text_w(sp(name)) > label_w) label_w = text_w(sp(name));
+	}
+	L->steps_x = (W - (ICON + 12 + label_w)) / 2;
 	int total = logo_h + 48 + title_h + 6 + line_h + 22 + BAR_H + 14 + line_h + 22 + 1 + 18 + L->nsteps * STEP_ROW;
 	int y = (H - total) / 2;
 	if (y < 0) y = 0;
@@ -357,8 +420,8 @@ static void make_layout(layout_t *L, int mode)
 
 static void draw_base(const layout_t *L)
 {
-	fill(base, 0, 0, W, H, C_BG);
-	put_rgb565(base, sp("logo"), L->logo_x, L->logo_y);
+	fill(base, 0, 0, W, H, th.bg);
+	put_rgba565(base, sp("logo"), L->logo_x, L->logo_y);
 }
 
 /* step: index of the current step; nsteps = everything done. */
@@ -367,32 +430,37 @@ static void draw_frame(const layout_t *L, int step, float value, double t, doubl
 	memcpy(canvas, base, (size_t)W * H * sizeof(uint32_t));
 	int boot = L->mode == MODE_BOOT, done = step >= L->nsteps;
 	char name[32];
-	put_alpha(canvas, sp(boot ? "title_boot" : "title_reboot"), L->col_x - 2, L->title_y, C_TEXT);
-	if (!boot)
-		put_alpha(canvas, sp("meta_reboot"), L->col_x - 2, L->meta_y, C_TEXT2);
-	draw_elapsed(L->col_x + L->col_w, L->meta_y, elapsed);
+	put_centred(sp(boot ? "title_boot" : "title_reboot"), L->title_y, th.text);
+	/* Meta line, centred as a whole: "[Back in about a minute]  m:ss elapsed". */
+	const sprite_t *meta = boot ? NULL : sp("meta_reboot");
+	int ew = elapsed_w(elapsed), mw = meta ? text_w(meta) + META_GAP : 0;
+	int mx = (W - mw - ew) / 2;
+	if (meta)
+		put_alpha(canvas, meta, mx - 2, L->meta_y, th.text2);
+	draw_elapsed(mx + mw, L->meta_y, elapsed);
 	draw_bar(L->col_x, L->bar_y, L->col_w, BAR_H, value, !boot, done, t);
 	if (boot)
 		snprintf(name, sizeof(name), "status_boot%d", step < L->nsteps ? step : L->nsteps - 1);
 	else
 		snprintf(name, sizeof(name), step > 0 && sp("status_reboot1") ? "status_reboot1" : "status_reboot");
-	put_alpha(canvas, sp(name), L->col_x - 2, L->status_y, C_TEXT);
-	fill(canvas, L->col_x, L->divider_y, L->col_w, 1, C_EDGE);
+	put_centred(sp(name), L->status_y, th.text);
+	fill(canvas, L->col_x, L->divider_y, L->col_w, 1, th.edge);
+	int sx = L->steps_x;
 	for (int i = 0; i < L->nsteps; i++) {
 		int ry = L->steps_y + i * STEP_ROW, iy = ry + (STEP_ROW - ICON) / 2;
 		const char *m = boot ? "boot" : "reboot";
 		if (i < step) {
-			put_alpha(canvas, sp("icon_check"), L->col_x, iy, C_DONE);
+			put_alpha(canvas, sp("icon_check"), sx, iy, th.done);
 			snprintf(name, sizeof(name), "step_%s%d", m, i);
-			put_alpha(canvas, sp(name), L->col_x + ICON + 12, ry + 5, C_TEXT);
+			put_alpha(canvas, sp(name), sx + ICON + 12 - 2, ry + 5, th.text);
 		} else if (i == step) {
-			draw_spinner(L->col_x, iy, ICON, t);
+			draw_spinner(sx, iy, ICON, t);
 			snprintf(name, sizeof(name), "stepcur_%s%d", m, i);
-			put_alpha(canvas, sp(name), L->col_x + ICON + 12, ry + 5, C_TEXT);
+			put_alpha(canvas, sp(name), sx + ICON + 12 - 2, ry + 5, th.text);
 		} else {
-			put_alpha(canvas, sp("icon_dot"), L->col_x, iy, C_IDLE);
+			put_alpha(canvas, sp("icon_dot"), sx, iy, th.idle);
 			snprintf(name, sizeof(name), "step_%s%d", m, i);
-			put_alpha(canvas, sp(name), L->col_x + ICON + 12, ry + 5, C_TEXT2);
+			put_alpha(canvas, sp(name), sx + ICON + 12 - 2, ry + 5, th.text2);
 		}
 	}
 }
@@ -661,6 +729,8 @@ int main(int argc, char **argv)
 			fprintf(stderr, "pgen_bootscreen: cannot load assets\n");
 			return 1;
 		}
+		if (getenv("PGEN_BOOTSCREEN_THEME"))
+			load_theme(getenv("PGEN_BOOTSCREEN_THEME"));
 		base = malloc((size_t)W * H * 4);
 		canvas = malloc((size_t)W * H * 4);
 		if (!base || !canvas) return 1;
@@ -692,6 +762,7 @@ int main(int argc, char **argv)
 		fprintf(stderr, "pgen_bootscreen: cannot load %s\n", ASSETS);
 		return 1;
 	}
+	load_theme(THEME);
 	base = malloc((size_t)W * H * 4);
 	canvas = malloc((size_t)W * H * 4);
 	if (!base || !canvas) return 1;

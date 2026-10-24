@@ -300,6 +300,7 @@ PGenerator+ is a free, open-source display calibration suite for the Raspberry P
   - *Modes:* `CONF_FORMAT` requests resolve to the EDID copy of a mode rather than the userdef boot mode. G1 sessions start at Calman's RGB 8-bit default.
   - *Windows and APL:* fixed, custom and gray-surround APL windows (`RGB_S`, `RGB_A`, `CommandRGB`, `10_SIZE`, `11_APL`). With limited range, window backgrounds are drawn at black.
   - *Unsupported formats:* a YCbCr 4:2:0 request gets a NAK, and the WebUI shows a notice. The current format stays.
+  - *YCbCr is always Limited:* with Range Full on a YCbCr output (Calman, LightSpace, Resolve), the full-range codes are converted to studio range (0–1023 → 64–940) and the AVI infoframe says Limited, also on modes without a CEA VIC.
   - *Session safety:* pattern state is cleared on session start, shutdown and disconnect.
   - *Connect as G1:* Calman can also connect through **Find Source → Portrait Displays G1** and controls PGenerator+ completely that way: patches, signal modes and every G1 specialty pattern (Basic Alignment, Warm-Up, Granger Rainbow, Brightness, Contrast, Color Bars, SMPTE, ANSI checkerboards and the rest). The same 19 patterns are in the WebUI under Patterns.
   - *Compatibility note:* PGenerator+ is an independent community project, not affiliated with or endorsed by Portrait Displays. Make sure your Calman license and workflow comply with the vendor's terms.
@@ -334,7 +335,7 @@ Served on **port 80** at `http://pgenerator.local`. It has a **Desktop** layout 
 
 | Workspace | What's in it |
 |---|---|
-| **Output** | Signal mode (SDR / HDR10 / HLG / Dolby Vision), resolution from the EDID, bit depth, colour format, colorimetry, range, and HDR10 and DV metadata. Shows a banner while no display is connected. Below it the **Signal Self-Test**: draws known codes in every signal mode and reads the scanout back, next to link depth, range CSC, AVI infoframe, HDR metadata and the Dolby Vision infoframe |
+| **Output** | Signal mode (SDR / HDR10 / HLG / Dolby Vision), resolution from the EDID, bit depth, colour format, colorimetry, range, and HDR10 and DV metadata (with hints for measuring Dolby Vision). Shows a banner while no display is connected. Below it the **Signal Self-Test**: draws known codes in every signal mode and reads the scanout back, next to link depth, range CSC, AVI infoframe, HDR metadata and the Dolby Vision infoframe |
 | **Patterns** | Calman G1 plates (favourites Basic Alignment, Warm-Up, Granger Rainbow, plus all others), the test images White Clipping, Black Clipping and Overscan, your own uploaded images and videos, and **playlists** you step through with the TV remote; "Show menu on TV" opens the on-screen pattern menu |
 | **Calibration** | Meter detection, single and continuous reads, series runs (Greyscale 21/11, Colors 30, Saturation 24), charts, and session export |
 | **Meter Profiler** | Meter correction (CCSS) editor and preview |
@@ -387,7 +388,7 @@ On-device closed-loop calibration of LG TVs through the webOS calibration API. L
 
 | Mode | Description |
 |---|---|
-| **SDR** | Rec.709, 8- or 10-bit, RGB Full / Limited or YCbCr |
+| **SDR** | Rec.709, 8- or 10-bit, RGB Full / Limited or YCbCr (always Limited) |
 | **HDR10** | PQ (ST.2084), full DRM InfoFrame metadata, 10-bit (12-bit requests go out as bit-exact 10-bit) |
 | **HLG** | Hybrid Log-Gamma, 10-bit |
 | **Dolby Vision** | Standard (TV-led, 8-bit RGB tunnel; used for Calman DV) or Low Latency (LLDV, 12-bit) |
@@ -460,7 +461,7 @@ PGenerator 1.6 treats this as a normal `GETSTATUS`. PGenerator+ also shows the s
 | `port_pattern` | `85` | TCP port for the pattern protocol (read-only) |
 | `color_format` | `0`=RGB, `1`=YCbCr444, `2`=YCbCr422 | HDMI output colour format |
 | `colorimetry` | `0`=BT.709, `1`=BT.2020 | AVI InfoFrame colorimetry |
-| `rgb_quant_range` | `0`=Auto, `1`=Limited, `2`=Full | RGB quantisation range |
+| `rgb_quant_range` | `0`=Auto, `1`=Limited, `2`=Full | RGB quantisation range (YCbCr always goes out Limited) |
 | `max_bpc` | `8`, `10`, `12` | Bits per channel |
 | `eotf` | `0`=SDR, `2`=PQ, `3`=HLG | Transfer function |
 | `primaries` | `1`=Rec.2020, `2`=P3/D65, `3`=P3/DCI | Mastering display primaries |

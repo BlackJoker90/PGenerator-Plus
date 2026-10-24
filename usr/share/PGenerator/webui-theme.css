@@ -1035,6 +1035,9 @@ background:var(--surface-inset);padding:8px;border-radius:6px;word-break:break-a
 .dv-display-warn{margin:8px 0 0;padding-left:18px;font-size:.78rem;line-height:1.45;color:var(--warning-text)}
 .dv-display-warn li+li{margin-top:4px}
 .dv-display .btn{margin-top:8px}
+.dv-hints{margin-top:12px;padding-top:10px;border-top:1px solid var(--border)}
+.dv-hints-list{margin:0;padding-left:18px;max-width:72ch;font-size:.75rem;line-height:1.5;color:var(--text2)}
+.dv-hints-list li+li{margin-top:4px}
 /* DV patches above the display's declared peak (meterStepOverDisplayPeak):
    a corner flag, so the inline box-shadow states stay untouched. */
 .meter-patch-thumb.is-over-peak{position:relative}

@@ -239,6 +239,15 @@ __PG_LOGO_DARK__
    <ul class="dv-display-warn" id="dvDisplayWarn" hidden></ul>
    <button type="button" class="btn btn-sm btn-secondary" id="dvUseDisplayBtn" onclick="pgDvUseDisplayValues()">Use display peak &amp; black</button>
   </div>
+  <!-- TV-side checks before measuring DV; the Relative/Absolute curves are the solver's (meterDvUsesPqTargetCurve). -->
+  <div class="dv-hints" id="dvHints">
+   <div class="dv-display-title">Before measuring</div>
+   <ul class="dv-hints-list">
+    <li>Turn off Dolby Vision IQ, ambient light sensing and dynamic contrast or tone mapping on the TV. They change what the meter reads.</li>
+    <li>Confirm Dolby Vision by the TV&rsquo;s DV picture mode or badge. Some TVs show &ldquo;HDR OFF&rdquo; in their info overlay while DV is active.</li>
+    <li>Target curve: PGenerator+ calibrates Relative to gamma 2.2 and Absolute to ST 2084 (PQ). To verify, or with other calibration software, use the target that workflow expects.</li>
+   </ul>
+  </div>
  </div>
 
  <!-- Apply Settings Bar -->

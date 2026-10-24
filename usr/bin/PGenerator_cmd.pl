@@ -893,6 +893,7 @@ sub stop_renderer_for_shutdown(@) {
  system("/usr/bin/pkill -9 -f spotread 2>/dev/null");
 }
 
+# The renderer runs as PGeneratord, or PGeneratord.dv for Dolby Vision.
 sub renderer_pids(@) {
  my @pids;
  foreach my $dir (glob("/proc/[0-9]*")) {
@@ -901,7 +902,7 @@ sub renderer_pids(@) {
   close($fh);
   next if(!defined $comm);
   chomp($comm);
-  push(@pids,(split(m{/},$dir))[-1]) if($comm eq "PGeneratord");
+  push(@pids,(split(m{/},$dir))[-1]) if($comm eq "PGeneratord" || $comm eq "PGeneratord.dv");
  }
  return @pids;
 }

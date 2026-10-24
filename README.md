@@ -502,7 +502,7 @@ All endpoints are on port 80 and return JSON.
 | GET | `/api/modes` | HDMI modes from the display EDID |
 | POST | `/api/restart` | Restart the pattern generator |
 | POST | `/api/reboot` | Reboot the device |
-| GET / POST | `/api/ui/bootscreen-theme` | Read / store the theme colours for the TV's start and restart screen (`theme`, `colors`: nine `#rrggbb` values); the WebUI sends them when a theme is picked |
+| GET / POST | `/api/ui/bootscreen-theme` | Read / store the theme colours for the TV's start and restart screen (`theme`, `colors`: nine `#rrggbb` values); the WebUI sends the latest theme choice in order, reports save failures with Retry, and retries an unsaved choice after a page reload |
 | GET | `/api/wifi/scan` | Scan for Wi-Fi networks |
 | GET | `/api/wifi/status` | Wi-Fi connection status |
 | POST | `/api/wifi/connect` | Connect to Wi-Fi (`ssid`, `psk`) |

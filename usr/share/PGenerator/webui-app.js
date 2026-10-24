@@ -4322,15 +4322,36 @@ function pgBootscreenColors(){
  out.track='#'+[0,1,2].map(i=>Math.round(ch(out.bg,i)+(ch(out.edge,i)-ch(out.bg,i))*0.6).toString(16).padStart(2,'0')).join('');
  return out;
 }
+const PG_BOOTSCREEN_PENDING_KEY='pgen.ui.bootscreenThemePending';
+let pgBootscreenSyncVersion=0,pgBootscreenSyncTail=Promise.resolve();
 async function pgSyncBootscreenTheme(force){
- const colors=pgBootscreenColors();
- if(!force){
-  const cur=await fetchJSON('/api/ui/bootscreen-theme',{_quiet:true});
-  if(!cur||cur.status!=='ok') return;
-  if(cur.theme&&cur.theme!==pgThemeId) return;
-  if(cur.theme===pgThemeId&&Object.keys(colors).every(k=>cur.colors&&cur.colors[k]===colors[k])) return;
- }
- await fetchJSON('/api/ui/bootscreen-theme',{method:'POST',_quiet:true,headers:{'Content-Type':'application/json'},body:JSON.stringify({theme:pgThemeId,colors})});
+ const theme=pgThemeId,colors=pgBootscreenColors(),version=++pgBootscreenSyncVersion;
+ // Remember an explicit choice until the device acknowledges it, including
+ // when the response is lost or the user reloads before the write completes.
+ if(force){ try{ localStorage.setItem(PG_BOOTSCREEN_PENDING_KEY,theme); }catch(e){} }
+ const current=()=>version===pgBootscreenSyncVersion&&theme===pgThemeId;
+ const sync=async()=>{
+  if(!current()) return;
+  let retry=!!force;
+  try{ retry=retry||localStorage.getItem(PG_BOOTSCREEN_PENDING_KEY)===theme; }catch(e){}
+  if(!retry){
+   const cur=await fetchJSON('/api/ui/bootscreen-theme',{_quiet:true});
+   if(!current()||!cur||cur.status!=='ok') return;
+   if(cur.theme&&cur.theme!==theme) return;
+   if(cur.theme===theme&&Object.keys(colors).every(k=>cur.colors&&cur.colors[k]===colors[k])) return;
+  }
+  const r=await fetchJSON('/api/ui/bootscreen-theme',{method:'POST',_quiet:true,headers:{'Content-Type':'application/json'},body:JSON.stringify({theme,colors})});
+  if(!current()) return;
+  if(r&&r.status==='ok'){
+   try{ if(localStorage.getItem(PG_BOOTSCREEN_PENDING_KEY)===theme) localStorage.removeItem(PG_BOOTSCREEN_PENDING_KEY); }catch(e){}
+  }else{
+   toast('The TV start screen theme could not be saved.','err',{action:{label:'Retry',run:()=>pgSyncBootscreenTheme(true)}});
+  }
+ };
+ // Keep writes in order: aborting a fetch would not undo a write the device
+ // already accepted. Superseded queued calls and late GET results are skipped.
+ pgBootscreenSyncTail=pgBootscreenSyncTail.then(sync,sync);
+ return pgBootscreenSyncTail;
 }
 function pgPanelBelongsToActiveWorkspace(panel){
  if(!panel||!panel.getAttribute) return false;

@@ -4293,6 +4293,44 @@ function pgApplyThemeMode(mode,options){
 function pgSetThemeMode(mode){
  pgApplyThemeMode(mode);
  try{ localStorage.setItem(PG_THEME_STORAGE_KEY,pgThemeId); }catch(e){}
+ pgSyncBootscreenTheme(true);
+}
+// The start and restart screen on the TV (pgen_bootscreen) follows the WebUI
+// theme: the active theme's colours, resolved here, are kept on the device
+// for the next start. Picking a theme always sends them; on page load they
+// are only sent when the device has none yet, or the same theme with other
+// colours (an update changed the palette), so two browsers with different
+// themes do not overwrite each other on every visit.
+const PG_BOOTSCREEN_TOKENS={bg:['--surface-page','--bg'],text:['--text-primary','--text'],text2:['--text-secondary','--text2'],
+ accent:['--accent'],fill:['--accent-fill','--accent'],edge:['--divider','--border'],done:['--status-success','--green'],idle:['--text-disabled','--text2']};
+// Any CSS colour as #rrggbb, composited over OVER when it is translucent.
+function pgCssHex(value,over){
+ const c=document.createElement('canvas'); c.width=c.height=1;
+ const x=c.getContext('2d');
+ x.fillStyle=over||'#000'; x.fillRect(0,0,1,1);
+ x.fillStyle=value; x.fillRect(0,0,1,1);
+ const d=x.getImageData(0,0,1,1).data;
+ return '#'+[d[0],d[1],d[2]].map(v=>v.toString(16).padStart(2,'0')).join('');
+}
+function pgBootscreenColors(){
+ const css=getComputedStyle(document.documentElement);
+ const token=list=>{ for(const t of list){ const v=css.getPropertyValue(t).trim(); if(v) return v; } return '#000'; };
+ const out={bg:pgCssHex(token(PG_BOOTSCREEN_TOKENS.bg),'#000')};
+ for(const k of Object.keys(PG_BOOTSCREEN_TOKENS)) if(k!=='bg') out[k]=pgCssHex(token(PG_BOOTSCREEN_TOKENS[k]),out.bg);
+ // Bar track: 60 % of the way from the background to the divider.
+ const ch=(h,i)=>parseInt(h.slice(1+2*i,3+2*i),16);
+ out.track='#'+[0,1,2].map(i=>Math.round(ch(out.bg,i)+(ch(out.edge,i)-ch(out.bg,i))*0.6).toString(16).padStart(2,'0')).join('');
+ return out;
+}
+async function pgSyncBootscreenTheme(force){
+ const colors=pgBootscreenColors();
+ if(!force){
+  const cur=await fetchJSON('/api/ui/bootscreen-theme',{_quiet:true});
+  if(!cur||cur.status!=='ok') return;
+  if(cur.theme&&cur.theme!==pgThemeId) return;
+  if(cur.theme===pgThemeId&&Object.keys(colors).every(k=>cur.colors&&cur.colors[k]===colors[k])) return;
+ }
+ await fetchJSON('/api/ui/bootscreen-theme',{method:'POST',_quiet:true,headers:{'Content-Type':'application/json'},body:JSON.stringify({theme:pgThemeId,colors})});
 }
 function pgPanelBelongsToActiveWorkspace(panel){
  if(!panel||!panel.getAttribute) return false;
@@ -4825,6 +4863,7 @@ function pgJumpToTabletWorkspace(workspace){
 }
 function pgLayoutInit(){
  pgApplyThemeMode(pgReadThemeMode(),{initial:true});
+ setTimeout(()=>pgSyncBootscreenTheme(false),3000);
  pgLayoutPreference=pgReadLayoutPreference();
  pgDesktopZoom=pgReadDesktopZoom();
  pgDesktopSidebarCollapsed=pgReadDesktopSidebarCollapsed();

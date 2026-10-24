@@ -1801,6 +1801,10 @@ sub webui_handle_request (@) {
     my $r='{"ok":1,"boot":"'.&webui_boot_id().'"}';
     print $client "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: ".length($r)."\r\n$cors\r\n$r";
    }
+   elsif($path eq "/api/ui/bootscreen-theme") {
+    my ($code,$r)=&webui_bootscreen_theme($method,$body);
+    print $client "HTTP/1.1 $code\r\nContent-Type: application/json\r\nContent-Length: ".length($r)."\r\n$cors\r\n$r";
+   }
    elsif($path eq "/api/info") {
     my $now=time();
     if(!$_info_cache || ($now - $_info_cache_time) >= $_INFO_CACHE_TTL) {
@@ -12260,6 +12264,71 @@ sub webui_selftest_status_json (@) {
   }
  }
  return $json;
+}
+
+# Colours of the WebUI theme for the TV's start and restart screen
+# (pgen_bootscreen reads them when it starts). The WebUI resolves the active
+# theme and sends {"theme":"volt","colors":{"bg":"#0a0b09",...}}; stored in a
+# subdirectory of $var_dir, which clean_files leaves alone and which the
+# boot screen can read before the daemon runs.
+our @_bootscreen_theme_keys=qw(bg text text2 accent fill track edge done idle);
+sub webui_bootscreen_theme_file (@) { return "$var_dir/ui/bootscreen.theme"; }
+
+sub webui_bootscreen_theme_read (@) {
+ my ($theme,%colors)=("");
+ if(open(my $fh,"<",&webui_bootscreen_theme_file())) {
+  while(my $line=<$fh>) {
+   $theme=$1 if($line=~/^theme=([a-z][a-z0-9-]{0,31})$/);
+   $colors{$1}=$2 if($line=~/^([a-z0-9]+)=(#[0-9a-f]{6})$/);
+  }
+  close($fh);
+ }
+ return ($theme,\%colors);
+}
+
+sub webui_bootscreen_theme (@) {
+ my ($method,$body)=@_;
+ my $json=&_webui_json_pp();
+ if($method eq "GET") {
+  my ($theme,$colors)=&webui_bootscreen_theme_read();
+  my %known=map { $_ => $colors->{$_} } grep { defined $colors->{$_} } @_bootscreen_theme_keys;
+  return ("200 OK",$json->encode({status=>"ok",theme=>$theme,colors=>\%known}));
+ }
+ return ("405 Method Not Allowed",'{"status":"error","message":"Use GET or POST"}') if($method ne "POST");
+ my $req=eval { $json->decode(defined $body ? $body : "") };
+ my $bad=sub { return ("400 Bad Request",$json->encode({status=>"error",message=>shift})); };
+ return $bad->("Body is not a JSON object") if(ref($req) ne "HASH");
+ my $theme=$req->{theme};
+ return $bad->("theme: lower-case id expected") if(!defined $theme || ref($theme) || $theme!~/^[a-z][a-z0-9-]{0,31}$/);
+ my $colors=$req->{colors};
+ return $bad->("colors: object expected") if(ref($colors) ne "HASH");
+ my @lines=("theme=$theme");
+ foreach my $k (@_bootscreen_theme_keys) {
+  my $v=$colors->{$k};
+  return $bad->("colors.$k: #rrggbb expected") if(!defined $v || ref($v) || $v!~/^#[0-9a-fA-F]{6}$/);
+  push(@lines,"$k=".lc($v));
+ }
+ my %allowed=map { $_ => 1 } @_bootscreen_theme_keys;
+ my @extra=grep { !$allowed{$_} } sort keys %$colors;
+ return $bad->("colors.$extra[0]: unknown key") if(@extra);
+ my $file=&webui_bootscreen_theme_file();
+ my $content=join("\n",@lines)."\n";
+ my $old="";
+ if(open(my $fh,"<",$file)) { local $/; $old=<$fh>; close($fh); $old="" if(!defined $old); }
+ if($old ne $content) {
+  (my $dir=$file)=~s{/[^/]+$}{};
+  mkdir($dir) if(!-d $dir);
+  my $tmp="$file.tmp.$$";
+  my $ok=open(my $out,">",$tmp);
+  $ok=$ok && print $out $content;
+  $ok=close($out) && $ok if($out);
+  $ok=$ok && rename($tmp,$file);
+  if(!$ok) {
+   unlink($tmp);
+   return ("500 Internal Server Error",$json->encode({status=>"error",message=>"Could not save the theme for the start screen"}));
+  }
+ }
+ return ("200 OK",$json->encode({status=>"ok",theme=>$theme}));
 }
 
 # Kernel boot id (a new random UUID per boot), read once per daemon.

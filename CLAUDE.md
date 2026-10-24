@@ -32,6 +32,21 @@ Run what applies and say what was and was not checked:
 - Signal, renderer or pattern changes: on the Pi at the HDMI output
   (`/verify` skill, the Signal Self-Test in Output, or `pgen_scanout`).
   Deploy scripts are not verification.
+- Robustness, as its own pass next to the HDMI check (a scanout does not
+  find a lost conf write, a unit test does not prove a code on the cable):
+  invalid input, concurrent access, and the safeguard itself failing
+  (restore fails, packet unreadable, body complete but not valid JSON).
+  Test behaviour, not code text: send the request and read the response
+  and the state (`t/config_post_behaviour.t`); the renderer's pattern
+  parser is `pattern_parse.h`, built under ASan/UBSan by
+  `t/renderer_pattern_parse.t`.
+- A fix is closed when its repro fails against the old code and passes
+  against the new: run the test against `git archive HEAD` unpacked into
+  `$TMPDIR`, never by stashing in the shared checkout.
+
+Report each change at its level, and name the levels still missing:
+implemented / tested locally / repro fails on the old code / confirmed on
+the Pi. The release refuses to run without `t/` or `prove`.
 
 ## Rules that bite
 

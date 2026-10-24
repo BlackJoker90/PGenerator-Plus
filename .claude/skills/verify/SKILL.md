@@ -7,6 +7,9 @@ description: Verify PGenerator+ changes on the real Pi 4 at the HDMI output - bu
 
 The surface is the HDMI signal of the Pi 4 at `192.168.1.235` (LG TV attached).
 Evidence = what the Pi scans out and signals, not unit tests.
+This proves the signal only. The local robustness pass (invalid input,
+failing safeguards, repro against the old code; CLAUDE.md "Verify after a
+change") is separate and still needed.
 
 ## Ground rules (from the user)
 
@@ -112,6 +115,26 @@ previous frame (e.g. 30 for code 0064): re-probe it before calling it a bug.
 - Calman `CONF_FORMAT:1920x1080p 60` / `59.94`: EDID modes 21 / 22, never the userdef boot mode (VIC 0).
 - WebUI bit depth during an open Calman session: 10-bit codes stay exact.
 - Probes: `rgb_quant_range` 3 and 0 via WebUI, two range POSTs back to back, renderer restart (prop goes to 0 while it is down).
+
+## Failure paths worth driving
+
+The device side of the robustness pass; each must leave the renderer
+running and the conf unchanged (md5 of `/etc/PGenerator/PGenerator.conf`
+before and after).
+
+- Malformed pattern line (`BG=broken,0,0`, `RGB=1,2`, a line without `=`)
+  written straight into `/var/lib/PGenerator/running/operations.txt`, then
+  `touch running/return` (the renderer reloads and removes it): the renderer
+  keeps its pid and the scanout shows the valid lines drawn (window code
+  changed, BG/RGB kept at the previous value). Its `pattern line ... ignored`
+  message is not in `/tmp/pg_stderr.log` (the spawn log stayed empty in
+  2.13.24 tests), so prove it by pid and scanout. The 2.13.23 renderer died
+  on `BG=broken,0,0` and was not restarted until the next pattern request.
+  Through the daemon the same BG is refused before it reaches the file.
+- `POST /api/config` with a truncated body and matching Content-Length:
+  `400`, conf unchanged.
+- Signal Self-Test while the packet RAM cannot be read: the DV check says
+  "Not verified" and the mode is not counted as passed.
 
 ## Where to look
 

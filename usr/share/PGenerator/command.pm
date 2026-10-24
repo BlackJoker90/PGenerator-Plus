@@ -1082,7 +1082,13 @@ sub pattern_generator_start(@) {
  }
  &apply_hdr_metadata_helper();
  unlink("$info_dir/GET_PGENERATOR_IS_EXECUTED.info");
- &get_pattern($test_template_command,"$pattern_start","$rgb","pattern_generator_start") if(!$no_clean_files);
+ if(!$no_clean_files) {
+  # Video black on Limited links (see pattern_start_black in daemon.pm).
+  # "window;background": the template's 640x360 window sits on a full-screen
+  # background, and both need the black.
+  my ($start_black,$start_range,$start_max)=defined(&pattern_start_black) ? &pattern_start_black() : ("0,0,0","",0);
+  &get_pattern($test_template_command,"$pattern_start","$start_black;$start_black","pattern_generator_start",$start_range,$start_max);
+ }
  &renderer_unlock();
 }
 

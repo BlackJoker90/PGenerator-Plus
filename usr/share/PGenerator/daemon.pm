@@ -427,6 +427,15 @@ sub calman_current_bg (@) {
  return ($calman_bg ne "") ? $calman_bg : &calman_black_bg();
 }
 
+# Black of the start pattern (PatternStart, drawn on every renderer start:
+# boot, /api/restart, hotplug): the same codes as an idle Calman window,
+# with the SOURCE_RANGE and SOURCE_MAX the renderer needs to read them.
+# The template's code 0 put Y=0 on a Limited YCbCr link instead of 16/64.
+# Returns (triplet, source range, source max).
+sub pattern_start_black (@) {
+ return (&calman_black_bg(),&calman_pattern_source_range(),&calman_dv_source_max());
+}
+
 sub calman_patch_context (@) {
  return "mode_idx=".($pgenerator_conf{"mode_idx"}||"").
         " renderer=${w_s}x${h_s}".

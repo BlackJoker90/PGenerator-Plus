@@ -1077,6 +1077,47 @@ sub webui_renderer_last_error (@) {
  return substr($last,0,160);
 }
 
+# Run $work in a process reparented to init (double fork, see the
+# /api/config POST handler). fork() in this threaded daemon copies
+# threads::shared's global lock as it is at that instant: when another
+# thread holds it, the child's first shared variable (%pgenerator_conf, or
+# destruction at exit) waits for an owner that does not exist in the child.
+# A restart stress test caught an apply worker and its intermediate parent
+# parked in futex_wait for good, the restart lock held and the HTTP lane
+# stuck in waitpid. So the intermediate child reads a shared variable under
+# alarm(): if that blocks, SIGALRM ends it and the parent forks again. The
+# worker it forks next is safe, as the intermediate child has one thread.
+# Returns 1 when the worker was started, 0 when there is none (fork failed
+# or the lock never came free); the caller then does the work itself.
+my $_webui_fork_probe :shared = 0;
+sub webui_spawn_detached (@) {
+ my $work=shift;
+ require POSIX;
+ for my $attempt (1..5) {
+  my $pid=fork();
+  return 0 if(!defined $pid);
+  if($pid == 0) {
+   $SIG{ALRM}='DEFAULT';
+   alarm(1);
+   my $probe=$_webui_fork_probe;
+   alarm(0);
+   my $worker=fork();
+   if(defined $worker && $worker == 0) {
+    $work->();
+    exit(0);
+   }
+   # No global destruction here: the parent only needs the exit status.
+   POSIX::_exit(defined $worker ? 0 : 1);
+  }
+  waitpid($pid,0);
+  return 1 if($? == 0);
+  return 0 if(($? & 127) != POSIX::SIGALRM());
+  &log("WebUI: forked worker inherited a held threads::shared lock; forking again ($attempt)");
+ }
+ &log("WebUI: no clean fork after 5 attempts; running the worker in this thread");
+ return 0;
+}
+
 sub webui_complete_renderer_restart (@) {
  my $restart_id=shift;
  my $apply_hint=shift;
@@ -1620,28 +1661,19 @@ sub webui_handle_request (@) {
        # on the next poll, and so subsequent WebUI POSTs (e.g.
        # pattern requests) are not blocked. The child does
        # stop+start; the parent closes the client and returns
-       # to the accept loop. If the fork fails (e.g. resource
-       # limits), fall back to an in-process restart so the
-       # user's intent is still honoured.
-       my $pid=fork();
-       if(!defined $pid) {
-        # Fork failed — do the restart in-process as a
-        # last resort. The HTTP client is already closed below.
-        close($client);
-        undef $client;
-        &webui_complete_renderer_restart($restart_id,$apply_hint);
-       } elsif($pid == 0) {
-        # Intermediate child: double-fork so the actual worker is
-        # reparented to init and reaped there. A $SIG{CHLD} reaper
-        # in the HTTP server would also steal exit statuses from
-        # the system()/backtick/piped-open calls this process makes
-        # everywhere (command.pm checks $? after modetest), so the
-        # daemon must never install one. The intermediate child
-        # exits immediately and the parent reaps it synchronously.
-        my $worker=fork();
-        if(!defined $worker || $worker == 0) {
-         # Worker (or fork-failed fallback running inside the
-         # intermediate child): do the restart with the same retry
+       # to the accept loop. If no worker can be forked (e.g.
+       # resource limits), fall back to an in-process restart so
+       # the user's intent is still honoured.
+       #
+       # Double fork (webui_spawn_detached) so the worker is
+       # reparented to init and reaped there. A $SIG{CHLD} reaper
+       # in the HTTP server would also steal exit statuses from
+       # the system()/backtick/piped-open calls this process makes
+       # everywhere (command.pm checks $? after modetest), so the
+       # daemon must never install one. The intermediate child
+       # exits immediately and the parent reaps it synchronously.
+       my $spawned=&webui_spawn_detached(sub {
+         # Worker: do the restart with the same retry
          # ladder as load_new_pattern_file, which handles the
          # documented DRM-master race (pgsethdr steals DRM master
          # from the newly-spawned renderer) with up to 4 attempts
@@ -1678,16 +1710,11 @@ sub webui_handle_request (@) {
          # no-op whenever the renderer survived — alive but stuck in
          # the previous mode with a stale/empty HDR blob.
          &webui_complete_renderer_restart($restart_id,$apply_hint);
-        }
-        exit(0);
-       } else {
-        # Parent: reap the intermediate child (it exits at once;
-        # the worker it spawned belongs to init now) and return to
-        # the accept loop.
-        waitpid($pid,0);
-        close($client);
-        undef $client;
-       }
+       });
+       close($client);
+       undef $client;
+       # No worker: do the restart in-process as a last resort.
+       &webui_complete_renderer_restart($restart_id,$apply_hint) if(!$spawned);
       }
      }
    }

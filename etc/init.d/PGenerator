@@ -91,6 +91,7 @@ case "$1" in
         # overbright until the renderer takes over. Show black instead.
         if [ -x "/usr/bin/pgsethdr" ]; then
          if grep -q '^is_hdr=1$' /etc/PGenerator/PGenerator.conf 2>/dev/null && ! grep -q '^dv_status=1$' /etc/PGenerator/PGenerator.conf 2>/dev/null && grep -Eq '^eotf=([2-9]|[1-9][0-9])$' /etc/PGenerator/PGenerator.conf 2>/dev/null && [ -c /dev/fb0 ]; then
+          [ -x /usr/sbin/pgen_bootscreen ] && /usr/sbin/pgen_bootscreen stop 2>/dev/null
           dd if=/dev/zero of=/dev/fb0 bs=65536 2>/dev/null
          fi
          /usr/bin/pgsethdr 2>/dev/null || echo "pgsethdr pre-set failed"

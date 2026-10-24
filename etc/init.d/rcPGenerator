@@ -49,10 +49,14 @@ rc_PGenerator_start () {
    grep -q "frame buffer" "$VTCON/name" 2>/dev/null && echo 0 > "$VTCON/bind" 2>/dev/null
   done
 
-  # Show boot splash on framebuffer (replaces GPU rainbow gradient)
+  # Show the boot screen on the framebuffer (replaces GPU rainbow gradient).
+  # Usually already running from 99-PGenerator_splash.rules; a second start
+  # returns at once. Static splash when the animated one cannot run.
   SPLASH_FB="/usr/share/PGenerator/splash.fb"
-  if [ -f "$SPLASH_FB" ] && [ -c /dev/fb0 ]; then
-   cat "$SPLASH_FB" > /dev/fb0 2>/dev/null
+  if [ -c /dev/fb0 ]; then
+   if ! { [ -x /usr/sbin/pgen_bootscreen ] && /usr/sbin/pgen_bootscreen boot --daemon 2>/dev/null; }; then
+    [ -f "$SPLASH_FB" ] && cat "$SPLASH_FB" > /dev/fb0 2>/dev/null
+   fi
   fi
 
   # Redirect all script output to a log file so nothing appears on

@@ -857,19 +857,53 @@ sub apply_bootloader () {
 sub reboot(@) {
  &persist_meter_settings_legacy();
  &process_pid("$pattern_generator.pl","kill");
+ &stop_renderer_for_shutdown();
+ &reset_hdmi_output();
+ # Animated restart screen on the console framebuffer (plain RGB now) until
+ # sendsigs ends it; the next boot shows its own progress.
+ system("/usr/sbin/pgen_bootscreen reboot --daemon >/dev/null 2>&1") if(-x "/usr/sbin/pgen_bootscreen");
+ system("$reboot");
+}
+
+###############################################
+#   Stop renderer and meter before shutdown   #
+###############################################
+sub stop_renderer_for_shutdown(@) {
  # The renderer holds DRM master and an in-flight spotread holds the
  # meter's USB claim. Leaving them for init's blanket sendsigs lets a
  # process stuck in an uninterruptible DRM/USB ioctl wedge the late
  # shutdown (observed as a WebUI reboot that never completes, with the
  # console showing the stale boot splash once fbcon takes the
  # framebuffer back). There is no K-script on this image, so tear them
- # down here the way the init script's stop) case does. The pattern
- # "PGeneratord" also matches PGeneratord.dv and its sh wrapper but not
- # this process or PGenerator_serial.pl.
+ # down here the way the init script's stop) case does.
+ # TERM first: on exit the renderer puts the connector back to RGB and
+ # takes its planes off in one commit, so the console framebuffer is never
+ # shown with YCbCr signalling (black read as YCbCr is green). -9 only when
+ # it is still there after 3 s.
+ my @pids=&renderer_pids();
+ if(@pids) {
+  kill('TERM',@pids);
+  for(my $i=0;$i<30 && &renderer_pids();$i++) {
+   select(undef,undef,undef,0.1);
+  }
+ }
+ # The pattern "PGeneratord" also matches PGeneratord.dv and its sh wrapper
+ # but not this process or PGenerator_serial.pl.
  system("/usr/bin/pkill -9 -f PGeneratord 2>/dev/null");
  system("/usr/bin/pkill -9 -f spotread 2>/dev/null");
- &reset_hdmi_output();
- system("$reboot");
+}
+
+sub renderer_pids(@) {
+ my @pids;
+ foreach my $dir (glob("/proc/[0-9]*")) {
+  open(my $fh,"<","$dir/comm") or next;
+  my $comm=<$fh>;
+  close($fh);
+  next if(!defined $comm);
+  chomp($comm);
+  push(@pids,(split(m{/},$dir))[-1]) if($comm eq "PGeneratord");
+ }
+ return @pids;
 }
 
 ###############################################
@@ -908,10 +942,9 @@ sub reset_hdmi_output(@) {
 ###############################################
 sub halt(@) {
  &persist_meter_settings_legacy();
- # Same teardown as reboot(): see the comment there.
+ # Same teardown as reboot(): see stop_renderer_for_shutdown().
  &process_pid("$pattern_generator.pl","kill");
- system("/usr/bin/pkill -9 -f PGeneratord 2>/dev/null");
- system("/usr/bin/pkill -9 -f spotread 2>/dev/null");
+ &stop_renderer_for_shutdown();
  &reset_hdmi_output();
  system("$halt");
 }

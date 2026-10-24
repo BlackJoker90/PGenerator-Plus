@@ -3242,7 +3242,7 @@ function selftestModeRow(mode,result,running){
  const strip=windows.length?windows.map(c=>'<span class="selftest-swatch'+(c.ok?'':' is-off')+'" style="background:'+selftestSwatchColor(c.swatch)+'" title="'+selftestEsc(c.label+': '+(c.ok?'exact':'expected '+c.expect+', read '+c.got))+'"></span>').join('')
   :'<span class="selftest-strip-empty">'+(status==='pending'?(running?'Queued':'Not run'):'')+'</span>';
  const score=r.total?r.passed+'/'+r.total:'';
- const rows=(r.checks||[]).map(c=>'<tr class="'+(c.ok?'':'is-off')+'"><th scope="row">'+(c.swatch?'<span class="selftest-swatch" style="background:'+selftestSwatchColor(c.swatch)+'"></span>':'')+selftestEsc(c.label)+'</th><td>'+selftestEsc(c.expect)+'</td><td>'+selftestEsc(c.got)+'</td><td class="selftest-cell-state">'+(c.ok?(c.swatch?'Exact':'Match'):'Mismatch')+'</td></tr>').join('');
+ const rows=(r.checks||[]).map(c=>'<tr class="'+(c.ok?'':'is-off')+'"><th scope="row">'+(c.swatch?'<span class="selftest-swatch" style="background:'+selftestSwatchColor(c.swatch)+'"></span>':'')+selftestEsc(c.label)+'</th><td>'+selftestEsc(c.expect)+'</td><td>'+selftestEsc(c.got)+'</td><td class="selftest-cell-state">'+(c.ok?(c.swatch?'Exact':'Match'):(c.info?'Not verified':'Mismatch'))+'</td></tr>').join('');
  const detail=(r.checks||[]).length?
   '<div class="selftest-detail" id="selftestDetail_'+mode.id+'"'+(open?'':' hidden')+'>'+
    (r.link&&r.link.avi?'<p class="selftest-detail-meta">AVI infoframe <code>'+selftestEsc(r.link.avi)+'</code>'+(r.link.prop>=0?' · range property '+selftestEsc(r.link.prop):'')+'</p>':'')+
@@ -3345,7 +3345,7 @@ async function selftestCopyReport(){
   lines.push(r.group+' '+r.label+' '+r.depth+'-bit: '+(SELFTEST_STATUS_TEXT[r.status]||r.status)+(r.total?' '+r.passed+'/'+r.total:''));
   if(r.note) lines.push('  '+r.note);
   if(r.link&&r.link.avi) lines.push('  AVI '+r.link.avi+' | '+selftestLinkText(r.link));
-  (r.checks||[]).forEach(c=>lines.push('  '+(c.ok?'ok  ':'FAIL')+' '+c.label+': expected '+c.expect+', read '+c.got));
+  (r.checks||[]).forEach(c=>lines.push('  '+(c.ok?'ok  ':(c.info?'n/a ':'FAIL'))+' '+c.label+': expected '+c.expect+', read '+c.got));
  });
  const text=lines.join('\n');
  try{ await navigator.clipboard.writeText(text); toast('Self-test report copied.'); }

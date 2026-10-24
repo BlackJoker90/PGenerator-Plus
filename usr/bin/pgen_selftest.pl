@@ -241,17 +241,27 @@ sub infoframes {
 # as root through PGenerator_cmd.pl).
 sub vendor_infoframe {
  my $line=&sudo_cmd("HDMI_PACKET",1);
- return {} if($line!~/^slot=1 enabled=(\d) type=([0-9a-f]{2}) version=[0-9a-f]{2} length=([0-9a-f]{2}) bytes=([0-9a-f:]*)/m);
- my ($on,$type,$len,@b)=($1,hex($2),hex($3),map { hex($_) } split(/:/,$4));
- my $oui=@b >= 4 ? sprintf("%02x:%02x:%02x",$b[3],$b[2],$b[1]) : "";
- my $kind="none";
- if($on eq "1" && $type == 0x81) {
-  $kind="Dolby VSIF" if($oui eq "00:d0:46");
-  $kind="Standard DV VSIF" if($oui eq "00:0c:03" && $len == 0x18);
+ return { kind=>"unreadable", label=>"packet RAM not readable" }
+  if($line!~/^slot=1 enabled=(\d) type=([0-9a-f]{2}) version=([0-9a-f]{2}) length=([0-9a-f]{2}) bytes=([0-9a-f:]*)/m);
+ my ($on,$type,$ver,$len,@b)=($1,hex($2),hex($3),hex($4),map { hex($_) } split(/:/,$5));
+ return { kind=>"none", label=>"none" } if($on ne "1");
+ my $label=sprintf("infoframe type 0x%02x",$type);
+ return { kind=>"other", label=>$label } if($type != 0x81);
+ # Checksum byte first, then the payload: type + version + length + all
+ # bytes sum to 0 (mod 256).
+ return { kind=>"other", label=>"vendor infoframe, ".scalar(@b)." of ".($len+1)." bytes" } if(@b < $len+1 || $len < 4);
+ my $sum=$type+$ver+$len;
+ $sum+=$b[$_] for(0..$len);
+ return { kind=>"other", label=>"vendor infoframe with a bad checksum" } if($sum & 0xff);
+ my $oui=sprintf("%02x:%02x:%02x",$b[3],$b[2],$b[1]);
+ if($oui eq "00:d0:46") {
+  # PB4 bit 1 Dolby_Vision_Signal, bit 0 Low_Latency; the renderer's "off"
+  # frame carries the OUI with both clear.
+  return { kind=>"Dolby VSIF", label=>"Dolby VSIF" } if(($b[4] & 0x03) == 0x03);
+  return { kind=>"other", label=>sprintf("Dolby VSIF without the low-latency DV signal (PB4 0x%02x)",$b[4]) };
  }
- my $label=$kind;
- $label="vendor infoframe, OUI $oui, length ".sprintf("0x%02x",$len) if($kind eq "none" && $on eq "1" && $type == 0x81);
- return { kind=>$kind, label=>$label };
+ return { kind=>"Standard DV VSIF", label=>"Standard DV VSIF" } if($oui eq "00:0c:03" && $len == 0x18);
+ return { kind=>"other", label=>"vendor infoframe, OUI $oui, length ".sprintf("0x%02x",$len) };
 }
 
 sub write_pattern {
@@ -470,7 +480,13 @@ for(my $n=0;$n<@scenarios;$n++) {
  my $vsif=&vendor_infoframe();
  my $dv_kind=$vsif->{kind};
  my $want_dv=(($sc->{config}{signal_mode} || "") eq "dv") ? ((($sc->{config}{dv_transport} || "") eq "standard") ? "Standard DV VSIF" : "Dolby VSIF") : "none";
- add_check($entry,"Dolby Vision signalling",$want_dv,$vsif->{label},$dv_kind eq $want_dv) if(defined($vsif->{label}));
+ if($dv_kind eq "unreadable") {
+  # No packet data: neither DV on nor DV off is proven.
+  add_check($entry,"Dolby Vision signalling",$want_dv,"not verified (".$vsif->{label}.")",0,1);
+  $entry->{unverified}=1;
+ } else {
+  add_check($entry,"Dolby Vision signalling",$want_dv,$vsif->{label},$dv_kind eq $want_dv);
+ }
 
  # Scanout = wire only while the range CSC is unity (YCbCr, RGB Full, RGB
  # Limited on the patched vc4). Otherwise the codes are not provable here.
@@ -527,6 +543,12 @@ for(my $n=0;$n<@scenarios;$n++) {
   $skipped++ if($entry->{status} eq "skip");
  } else {
   $entry->{status}=($entry->{passed} == $entry->{total}) ? "pass" : "fail";
+  # Codes fine but the infoframe could not be read: not a pass.
+  if($entry->{status} eq "pass" && $entry->{unverified}) {
+   $entry->{status}="skip";
+   $entry->{note}="The Dolby Vision infoframe could not be read, so this mode is not fully verified.";
+   $skipped++;
+  }
  }
  $failed++ if($entry->{status} eq "fail");
  &write_state();

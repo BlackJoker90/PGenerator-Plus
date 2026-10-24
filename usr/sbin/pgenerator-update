@@ -59,6 +59,7 @@ WATCHDOG_PAUSE_FILE="${WATCHDOG_PAUSE_FILE:-/tmp/pgenerator-watchdog.pause}"
 # "<epoch>\n<phase>\n<message>" for the WebUI (/api/update/status), which
 # keeps polling it across the daemon restart.
 UPDATE_STATE_FILE="${UPDATE_STATE_FILE:-/tmp/pgenerator-update.state}"
+APPLY_LOCK_FILE="${APPLY_LOCK_FILE:-/tmp/pgenerator-update.lock}"
 LAST_ERROR=""
 UPDATE_PHASE=""
 GITHUB_ACCEPT="Accept: application/vnd.github.v3+json"
@@ -248,6 +249,7 @@ require_writable_path() {
 # instead of leaving a half-updated, stopped device.
 ROLLBACK_TARBALL=""
 APPLY_STOPPED=0
+APPLY_STARTED=0
 APPLY_DONE=0
 
 apply_cleanup() {
@@ -262,6 +264,11 @@ apply_cleanup() {
  fi
  if [ "$APPLY_STOPPED" = "1" ] && [ "$APPLY_DONE" != "1" ]; then
   log_msg "ERROR: Update failed after PGenerator was stopped (exit $rc)"
+  if [ "$APPLY_STARTED" = "1" ]; then
+   # The new version was started but did not answer: stop it before its
+   # files are replaced.
+   /etc/init.d/PGenerator stop >/dev/null 2>&1 9>&- || true
+  fi
   if [ -n "$ROLLBACK_TARBALL" ] && [ -s "$ROLLBACK_TARBALL" ]; then
    log_msg "Restoring the previous files from $ROLLBACK_TARBALL"
    if (cd / && tar xzf "$ROLLBACK_TARBALL") >>"$UPDATE_LOG" 2>&1; then
@@ -272,7 +279,7 @@ apply_cleanup() {
    fi
   fi
   log_msg "Starting PGenerator again"
-  /etc/init.d/PGenerator start >/dev/null 2>&1 || log_msg "ERROR: PGenerator start failed"
+  /etc/init.d/PGenerator start >/dev/null 2>&1 9>&- || log_msg "ERROR: PGenerator start failed"
  fi
  [ -n "$ROLLBACK_TARBALL" ] && rm -f "$ROLLBACK_TARBALL"
  [ -n "${tarball:-}" ] && rm -f "$tarball"
@@ -706,7 +713,7 @@ run_update_migrations() {
    migration_count=$((migration_count + 1))
    log_msg "Running OTA migration $base"
    chmod +x "$path" 2>/dev/null || true
-   if ! PG_UPDATE_FROM="$from_version" PG_UPDATE_TO="$target_version" PG_MIGRATION_VERSION="$script_version" "$path" >> "$UPDATE_LOG" 2>&1; then
+   if ! PG_UPDATE_FROM="$from_version" PG_UPDATE_TO="$target_version" PG_MIGRATION_VERSION="$script_version" "$path" >> "$UPDATE_LOG" 2>&1 9>&-; then
     log_msg "ERROR: OTA migration failed: $base"
     echo "ERROR: OTA migration failed: $base"
     return 1
@@ -831,6 +838,19 @@ case "$cmd" in
   ;;
 
  apply)
+  # One install at a time: a second apply (another browser, a retried
+  # request) would share the download, the rollback archive and the state
+  # file with the running one. It leaves before the trap, so it changes
+  # nothing. PGenerator is started with fd 9 closed, or the daemon would
+  # hold the lock after this script ends.
+  if command -v flock >/dev/null 2>&1; then
+   exec 9>"$APPLY_LOCK_FILE"
+   if ! flock -n 9; then
+    log_msg "Update request ignored: another update is running"
+    echo "ERROR: Another update is already running"
+    exit 75
+   fi
+  fi
   trap apply_cleanup EXIT
   # Optional: a specific release (older, or the same one to repair the
   # install). Without it, the latest release.
@@ -981,7 +1001,7 @@ case "$cmd" in
   date +%s > "$WATCHDOG_PAUSE_FILE" 2>/dev/null || true
   log_msg "Stopping PGenerator..."
   APPLY_STOPPED=1
-  /etc/init.d/PGenerator stop 2>/dev/null || true
+  /etc/init.d/PGenerator stop 2>/dev/null 9>&- || true
   sleep 2
 
   require_writable_path "/" "root filesystem"
@@ -1021,20 +1041,23 @@ case "$cmd" in
   sync
 
   log_msg "Update to $latest extracted — restarting PGenerator..."
-  # From here the new files stay: a failed start is reported, not rolled back.
-  APPLY_DONE=1
+  # The new files stay only once the new version answers on its API; a
+  # failed start rolls back like any other failure after the stop.
+  APPLY_STARTED=1
   set_update_state restarting "Starting PGenerator+ $latest"
-  if ! /etc/init.d/PGenerator start 2>/dev/null; then
+  if ! /etc/init.d/PGenerator start 2>/dev/null 9>&-; then
    log_msg "ERROR: PGenerator restart command failed after update"
    echo "ERROR: PGenerator restart failed after update"
    exit 1
   fi
 
-  if ! wait_for_local_api 30; then
+  if ! wait_for_local_api 60; then
    log_msg "ERROR: PGenerator API did not recover after updating to $latest"
    echo "ERROR: PGenerator did not come back after update"
+   LAST_ERROR="PGenerator+ $latest did not start"
    exit 1
   fi
+  APPLY_DONE=1
 
   set_update_state done "Updated to $latest"
   echo "OK: Updated to $latest"

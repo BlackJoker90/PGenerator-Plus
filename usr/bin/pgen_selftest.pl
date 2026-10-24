@@ -237,6 +237,23 @@ sub infoframes {
  return { bytes=>\@b, drm=>($drm ne "" ? 1 : 0), count=>scalar(() = $dmesg=~/AVI IF:/g) };
 }
 
+# The vendor infoframe on the wire (pgen_hdmi_packet reads the packet RAM,
+# as root through PGenerator_cmd.pl).
+sub vendor_infoframe {
+ my $line=&sudo_cmd("HDMI_PACKET",1);
+ return {} if($line!~/^slot=1 enabled=(\d) type=([0-9a-f]{2}) version=[0-9a-f]{2} length=([0-9a-f]{2}) bytes=([0-9a-f:]*)/m);
+ my ($on,$type,$len,@b)=($1,hex($2),hex($3),map { hex($_) } split(/:/,$4));
+ my $oui=@b >= 4 ? sprintf("%02x:%02x:%02x",$b[3],$b[2],$b[1]) : "";
+ my $kind="none";
+ if($on eq "1" && $type == 0x81) {
+  $kind="Dolby VSIF" if($oui eq "00:d0:46");
+  $kind="Standard DV VSIF" if($oui eq "00:0c:03" && $len == 0x18);
+ }
+ my $label=$kind;
+ $label="vendor infoframe, OUI $oui, length ".sprintf("0x%02x",$len) if($kind eq "none" && $on eq "1" && $type == 0x81);
+ return { kind=>$kind, label=>$label };
+}
+
 sub write_pattern {
  my ($bits,$max,$range,$rgb,$bg,$w,$h)=@_;
  my $s=sqrt(0.10);
@@ -432,7 +449,23 @@ for(my $n=0;$n<@scenarios;$n++) {
   my $want_bpc=$sc->{depth} > 10 ? 10 : $sc->{depth};
   add_check($entry,"Link depth","$want_bpc-bit",$bpc ? "$bpc-bit" : "unknown",$bpc == $want_bpc);
  }
- add_check($entry,"HDR metadata","DRM infoframe",$if->{drm} ? "DRM infoframe" : "none",$if->{drm}) if($sc->{drm});
+ # HDR metadata from the packet gate (bit 7), so a frame left over from an
+ # earlier HDR mode cannot pass SDR; the kernel log when the register is
+ # unreadable.
+ my $pkt=$reg{"HDMI_RAM_PACKET_CONFIG"};
+ my $drm_on=defined($pkt) ? (($pkt & 0x80) ? 1 : 0) : $if->{drm};
+ if($sc->{drm}) {
+  add_check($entry,"HDR metadata","DRM infoframe",$drm_on ? "DRM infoframe" : "none",$drm_on);
+ } else {
+  add_check($entry,"HDR metadata","none",$drm_on ? "DRM infoframe" : "none",!$drm_on);
+ }
+ # Dolby Vision is signalled by the vendor infoframe, not the pixels: LLDV
+ # by the Dolby VSIF (OUI 00:D0:46), standard DV by the HDMI 1.4b VSIF
+ # (OUI 00:0C:03) with the DV length 0x18. Outside DV neither may be sent.
+ my $vsif=&vendor_infoframe();
+ my $dv_kind=$vsif->{kind};
+ my $want_dv=(($sc->{config}{signal_mode} || "") eq "dv") ? ((($sc->{config}{dv_transport} || "") eq "standard") ? "Standard DV VSIF" : "Dolby VSIF") : "none";
+ add_check($entry,"Dolby Vision signalling",$want_dv,$vsif->{label},$dv_kind eq $want_dv) if(defined($vsif->{label}));
 
  # Scanout = wire only while the range CSC is unity (YCbCr, RGB Full, RGB
  # Limited on the patched vc4). Otherwise the codes are not provable here.

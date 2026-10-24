@@ -38,7 +38,7 @@ What no other PGenerator build does today. The comparison basis is the latest up
 <td width="50%" valign="top">
 
 ### 🔬 Codes proven on the cable
-The Pi reads back its own scanout. The built-in **Signal Self-Test** draws known codes in ten signal modes and checks the pixels, the link depth and the AVI infoframe. 10-bit codes stay 10-bit, and **RGB Limited goes out without the kernel's compression** (patched vc4). A full 0–1023 sweep comes back exact.
+The Pi reads back its own scanout. The built-in **Signal Self-Test** draws known codes in ten signal modes and checks the pixels, the link depth, the AVI infoframe, the HDR metadata and the Dolby Vision infoframe. 10-bit codes stay 10-bit, and **RGB Limited goes out without the kernel's compression** (patched vc4). A full 0–1023 sweep comes back exact.
 
 </td>
 <td width="50%" valign="top">
@@ -147,7 +147,7 @@ mDNS answers AAAA queries with an NSEC record, so clients do not wait for an IPv
 <td valign="top">
 
 ### 🧪 Signal self-test
-One button in **System** runs ten signal modes (SDR RGB Limited/Full and YCbCr 4:2:2/4:4:4, HDR10 RGB Limited and YCbCr 4:2:2/4:4:4, Dolby Vision Standard and Low Latency). In each mode it draws known codes, **reads back what the Pi scans out** and checks the link depth and AVI infoframe. Your signal settings come back afterwards; a quick check covers three modes in about 40 s.
+One button in **System** runs ten signal modes (SDR RGB Limited/Full and YCbCr 4:2:2/4:4:4, HDR10 RGB Limited and YCbCr 4:2:2/4:4:4, Dolby Vision Standard and Low Latency). In each mode it draws known codes, **reads back what the Pi scans out** and checks the link depth and AVI infoframe. It also reads the infoframes from the HDMI packet RAM: HDR metadata only in HDR, and in Dolby Vision the infoframe the display switches on (the Dolby VSIF for Low Latency, the HDMI 1.4b VSIF for Standard). Your signal settings come back afterwards; a quick check covers three modes in about 40 s.
 
 </td>
 <td valign="top">
@@ -183,7 +183,7 @@ Press **OK or Menu on the TV remote** and a menu of every pattern appears on the
 | HDMI link readout | – | measured link depth and clock |
 | CPU scaling governor | fixed in `/etc/default/rcPGenerator` | **Scaling Type in the WebUI**, applies without a reboot |
 | OTA | latest release only | release notes, progress, **reinstall / rollback**, ~20 % smaller packages |
-| Self-test of the HDMI output | – | **built in**: scanout readback, link depth and AVI per mode |
+| Self-test of the HDMI output | – | **built in**: scanout readback, link depth, AVI, HDR and Dolby Vision infoframes per mode |
 | Pattern playlists | – | **stepped with the TV remote** (HDMI-CEC), own playlists |
 | On-screen pattern menu | – | **every pattern on the TV**, picked with the remote |
 | Popups | success and error toasts | warnings and errors only |
@@ -334,7 +334,7 @@ Served on **port 80** at `http://pgenerator.local`. It has a **Desktop** layout 
 
 | Workspace | What's in it |
 |---|---|
-| **Output** | Signal mode (SDR / HDR10 / HLG / Dolby Vision), resolution from the EDID, bit depth, colour format, colorimetry, range, and HDR10 and DV metadata. Shows a banner while no display is connected. Below it the **Signal Self-Test**: draws known codes in every signal mode and reads the scanout back, next to link depth, range CSC and AVI infoframe |
+| **Output** | Signal mode (SDR / HDR10 / HLG / Dolby Vision), resolution from the EDID, bit depth, colour format, colorimetry, range, and HDR10 and DV metadata. Shows a banner while no display is connected. Below it the **Signal Self-Test**: draws known codes in every signal mode and reads the scanout back, next to link depth, range CSC, AVI infoframe, HDR metadata and the Dolby Vision infoframe |
 | **Patterns** | Calman G1 plates (favourites Basic Alignment, Warm-Up, Granger Rainbow, plus all others), the test images White Clipping, Black Clipping and Overscan, your own uploaded images and videos, and **playlists** you step through with the TV remote; "Show menu on TV" opens the on-screen pattern menu |
 | **Calibration** | Meter detection, single and continuous reads, series runs (Greyscale 21/11, Colors 30, Saturation 24), charts, and session export |
 | **Meter Profiler** | Meter correction (CCSS) editor and preview |

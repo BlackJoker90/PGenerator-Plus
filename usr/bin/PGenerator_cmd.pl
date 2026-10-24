@@ -115,6 +115,7 @@ $root_video_pid_file="/tmp/PGenerator_video.pid";
 &bt_remove_device()       if($action eq "BT_REMOVE_DEVICE");
 &bt_set_agent()           if($action eq "BT_SET_AGENT");
 &scanout_probe()          if($action eq "SCANOUT_PROBE");
+&hdmi_packet_probe()      if($action eq "HDMI_PACKET");
 
 
 #
@@ -131,6 +132,19 @@ sub scanout_probe(@) {
  my $probe="/usr/bin/pgen_scanout";
  if(!-x $probe) { print "ERR $probe missing\n"; exit 1; }
  system($probe,@region);
+ exit(0);
+}
+
+# Signal self-test: the infoframes in the HDMI packet RAM (root only,
+# /dev/mem). Arguments are packet slots.
+sub hdmi_packet_probe(@) {
+ my @slots=@ARGV[1..$#ARGV];
+ for(@slots) {
+  if($_!~/^\d{1,2}$/) { print "ERR bad slot\n"; exit 1; }
+ }
+ my $probe="/usr/bin/pgen_hdmi_packet";
+ if(!-x $probe) { print "ERR $probe missing\n"; exit 1; }
+ system($probe,@slots);
  exit(0);
 }
 

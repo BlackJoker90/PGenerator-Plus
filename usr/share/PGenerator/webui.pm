@@ -770,6 +770,9 @@ $WEBUI_HEADER_READ_TIMEOUT=2;
 # Total budget for reading a request BODY, which is legitimately large and
 # slow: 3D LUT and 1D DPG uploads post multi-hundred-KB JSON.
 $WEBUI_BODY_READ_TIMEOUT=60;
+# Largest body a request may carry. Uploads come in chunks; the largest
+# single body is a 3D LUT import (a 65-point .cube is about 8 MB).
+$WEBUI_MAX_BODY_BYTES=64*1024*1024;
 # fds of accepted client sockets, handed from the accept thread to the workers.
 $_webui_worker_queue=undef;
 # Dedicated fast lane. Keeping idle sockets off the workers is not enough on
@@ -1442,6 +1445,14 @@ sub webui_http_worker (@) {
  }
 }
 
+sub _webui_reject_request (@) {
+ my ($client,$status,$message)=@_;
+ my $r='{"status":"error","message":"'.$message.'"}';
+ eval { $client->blocking(1); };
+ eval { print $client "HTTP/1.1 $status\r\nContent-Type: application/json\r\nContent-Length: ".length($r)."\r\nConnection: close\r\n\r\n$r"; };
+ &log("WebUI: request rejected ($status): $message");
+}
+
 ###############################################
 #          WebUI Request Handler              #
 ###############################################
@@ -1493,6 +1504,10 @@ sub webui_handle_request (@) {
    # Read body if Content-Length present
    if($req=~/Content-Length:\s*(\d+)/i) {
     my $cl=$1;
+    if($cl > $WEBUI_MAX_BODY_BYTES) {
+     &_webui_reject_request($client,"413 Payload Too Large","Request body too large");
+     return;
+    }
     my $body_deadline=Time::HiRes::time() + $WEBUI_BODY_READ_TIMEOUT;
     while(length($body) < $cl) {
      my $remaining=$body_deadline - Time::HiRes::time();
@@ -1503,6 +1518,12 @@ sub webui_handle_request (@) {
      if(!defined($n)) { next if($!{EAGAIN} || $!{EWOULDBLOCK} || $!{EINTR}); last; }
      last if($n <= 0);
      $body.=$chunk;
+    }
+    # A peer that hung up or timed out mid-body must not reach a handler:
+    # the key=value parsers would apply whatever keys arrived complete.
+    if(length($body) < $cl) {
+     &_webui_reject_request($client,"400 Bad Request","Incomplete request body");
+     return;
     }
    } else {
     $body="";

@@ -254,7 +254,10 @@ sub vendor_infoframe {
  $sum+=$b[$_] for(0..$len);
  return { kind=>"other", label=>"vendor infoframe with a bad checksum" } if($sum & 0xff);
  my $oui=sprintf("%02x:%02x:%02x",$b[3],$b[2],$b[1]);
+ # Both DV vendor frames are version 1 (the Pi sends 81:01:1b and 81:01:18).
+ return { kind=>"other", label=>sprintf("vendor infoframe, OUI %s, version 0x%02x",$oui,$ver) } if($ver != 1);
  if($oui eq "00:d0:46") {
+  return { kind=>"other", label=>sprintf("Dolby VSIF with length 0x%02x instead of 0x1b",$len) } if($len != 0x1b);
   # PB4 bit 1 Dolby_Vision_Signal, bit 0 Low_Latency; the renderer's "off"
   # frame carries the OUI with both clear.
   return { kind=>"Dolby VSIF", label=>"Dolby VSIF" } if(($b[4] & 0x03) == 0x03);

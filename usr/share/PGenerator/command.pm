@@ -946,6 +946,14 @@ sub pattern_generator_start(@) {
   &renderer_unlock();
   return;
  }
+ # After a kernel oops in the HDMI driver the crashed renderer stays in the
+ # kernel holding the DRM modeset lock: a new renderer would hang on it too.
+ # Only a reboot clears it.
+ if(my $stuck=&renderer_stuck_in_kernel()) {
+  &log("Renderer: not started: renderer $stuck is stuck in the HDMI driver after a kernel error; restart the Pi");
+  &renderer_unlock();
+  return;
+ }
  &clean_files() if(!$no_clean_files);
  mkdir("$var_dir/running/tmp") if(!-d "$var_dir/running/tmp");
  if(-e "$var_dir/operations.txt" && !-l "$var_dir/operations.txt") {
@@ -1096,6 +1104,12 @@ sub pattern_generator_stop {
  while(($pid=&process_pid("$pattern_generator","get"))
        || (-x "${pattern_generator}.dv" && ($pid=&process_pid("${pattern_generator}.dv","get")))) {
   usleep(50000);
+  # A renderer stuck in the kernel never exits: give up after 5 s instead
+  # of holding the renderer lock forever.
+  if($polls >= 100 && (my $stuck=&renderer_stuck_in_kernel())) {
+   &log("Renderer: stop gave up: renderer $stuck is stuck in the HDMI driver after a kernel error; restart the Pi");
+   last;
+  }
   next if(++$polls % 10);
   &process_pid("$pattern_generator","kill");
   &process_pid("${pattern_generator}.dv","kill") if(-x "${pattern_generator}.dv");
@@ -1114,6 +1128,30 @@ sub video_program_stop {
   &process_pid("$program","kill");
   &pattern_generator_start(1) if(!&pattern_generator_is_running());
  }
+}
+
+# Pid of a renderer that is stuck in the DRM driver (state D, waiting in a
+# drm_* kernel function), e.g. after a vc4 kernel oops; "" otherwise. The
+# crashed process can have an empty cmdline, so it is found by name.
+sub renderer_stuck_in_kernel (@) {
+ opendir(my $dh,"/proc") or return "";
+ my @pids=grep { /^\d+$/ } readdir($dh);
+ closedir($dh);
+ for my $pid (@pids) {
+  open(my $cf,"<","/proc/$pid/comm") or next;
+  my $comm=<$cf> || "";
+  close($cf);
+  next if($comm!~/^PGeneratord(\.dv)?$/);
+  open(my $sf,"<","/proc/$pid/stat") or next;
+  my $stat=<$sf> || "";
+  close($sf);
+  next if($stat!~/\)\s+D\s/);
+  open(my $wf,"<","/proc/$pid/wchan") or next;
+  my $wchan=<$wf> || "";
+  close($wf);
+  return $pid if($wchan=~/drm/);
+ }
+ return "";
 }
 
 sub pattern_generator_is_running () {

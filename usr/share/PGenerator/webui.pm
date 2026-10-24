@@ -1149,6 +1149,7 @@ sub webui_complete_renderer_restart (@) {
  }
  if(&webui_wait_for_renderer_ready(12) && !&webui_renderer_stays_up(3)) {
   my $why=&webui_renderer_last_error();
+  $why="the HDMI driver hit a kernel error; restart the Pi to get the picture back" if(&renderer_stuck_in_kernel());
   &webui_renderer_restart_status_write($restart_id,"error","The renderer started but exited again".($why ne "" ? ": $why" : "."));
   &log("WebUI: renderer restart $restart_id failed: renderer exited after taking DRM master".($why ne "" ? " ($why)" : ""));
   return 0;
@@ -1178,6 +1179,11 @@ sub webui_complete_renderer_restart (@) {
   &webui_renderer_restart_status_write($restart_id,"ready","The renderer is running and owns DRM master.");
   &log("WebUI: renderer restart $restart_id is ready");
   return 1;
+ }
+ if(&renderer_stuck_in_kernel()) {
+  &webui_renderer_restart_status_write($restart_id,"error","The HDMI driver hit a kernel error and the renderer is stuck. Restart the Pi to get the picture back.");
+  &log("WebUI: renderer restart $restart_id failed: renderer stuck in the HDMI driver");
+  return 0;
  }
  &webui_renderer_restart_status_write($restart_id,"error","The renderer did not become ready after restarting.");
  &log("WebUI: renderer restart $restart_id failed readiness verification");

@@ -38,6 +38,7 @@ use File::Path;
 use Digest::MD5;
 use List::Util qw(sum);
 use POSIX qw(setsid WNOHANG);
+use Fcntl qw(:flock);
 
 #########################################
 #              Shared Dir               #
@@ -1225,21 +1226,40 @@ sub read_pgenerator_conf_text (@) {
  return $content;
 }
 
+# Read, change and write PGenerator.conf as one step. Every writer is its
+# own sudo process (daemon, WebUI workers, Calman, TV remote): without the
+# lock two of them read the same file and the later write drops the
+# other's key. The per-process temp file keeps one writer from renaming
+# another's half-written file into place.
+sub pgenerator_conf_update (@) {
+ my $change = shift;
+ my $lock;
+ if(open($lock,">>","$pattern_conf.lock")) {
+  flock($lock,LOCK_EX);
+ } else {
+  undef $lock;
+ }
+ my $content = $change->(&read_pgenerator_conf_text());
+ &write_file("$pattern_conf.tmp.$$","$pattern_conf","$content\n");
+ close($lock) if($lock);
+}
+
 sub set_pgenerator_conf (@) {
  return print $error_response if($ARGV[1] =~/^(ip_pattern|^port_pattern)$/);
- my $content = &pgenerator_conf_set_pair(&read_pgenerator_conf_text(),$ARGV[1],$ARGV[2]);
- &write_file("$pattern_conf.tmp","$pattern_conf","$content\n");
+ &pgenerator_conf_update(sub { return &pgenerator_conf_set_pair($_[0],$ARGV[1],$ARGV[2]); });
  print $ok_response;
 }
 
 # SET_PGENERATOR_CONF_MULTI key1 value1 key2 value2 ...: one read and one
 # atomic write for a whole WebUI apply instead of a sudo spawn per key.
 sub set_pgenerator_conf_multi (@) {
- my $content = &read_pgenerator_conf_text();
- for(my $i=1; $i+1 <= $#ARGV; $i+=2) {
-  $content = &pgenerator_conf_set_pair($content,$ARGV[$i],$ARGV[$i+1]);
- }
- &write_file("$pattern_conf.tmp","$pattern_conf","$content\n");
+ &pgenerator_conf_update(sub {
+  my $content = shift;
+  for(my $i=1; $i+1 <= $#ARGV; $i+=2) {
+   $content = &pgenerator_conf_set_pair($content,$ARGV[$i],$ARGV[$i+1]);
+  }
+  return $content;
+ });
  print $ok_response;
 }
 

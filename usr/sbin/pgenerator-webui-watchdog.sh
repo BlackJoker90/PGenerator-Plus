@@ -7,11 +7,14 @@
 # /sbin; without it the restarted daemon cannot bind port 80 and the watchdog
 # would restart it every minute forever).
 PATH="/usr/sbin:/usr/bin:/sbin:/bin"
+# The test harness puts stub curl/ss in front; cron never sets this.
+[ -n "${PG_WATCHDOG_STUB_PATH:-}" ] && PATH="$PG_WATCHDOG_STUB_PATH:$PATH"
 export PATH
 
 PID_FILE=${PG_WATCHDOG_PID_FILE:-/var/run/PGenerator/PGeneratord.pl.pid}
 LOG=${PG_WATCHDOG_LOG:-/tmp/pgenerator-watchdog.log}
-# PG_WATCHDOG_TMPDIR, PG_WATCHDOG_INIT and PG_WATCHDOG_PID_FILE exist so the
+# PG_WATCHDOG_TMPDIR, PG_WATCHDOG_INIT, PG_WATCHDOG_PID_FILE and
+# PG_WATCHDOG_STUB_PATH exist so the
 # test harness can run the script in isolation; the device always uses the
 # defaults.
 WORK_DIR=${PG_WATCHDOG_TMPDIR:-/tmp}
@@ -25,6 +28,9 @@ INSTANCE_PID_FILE="$WORK_DIR/pgenerator-watchdog.pid"
 PAUSE_FILE="$WORK_DIR/pgenerator-watchdog.pause"
 PAUSE_MAX_SECONDS=1800
 STALL_COUNT_FILE="$WORK_DIR/pgenerator-watchdog-stalls"
+# Root page stuck while /api/ping answers (see root_stall_due).
+ROOT_FAIL_COUNT_FILE="$WORK_DIR/pgenerator-watchdog-root-stalls"
+ROOT_RESTART_COUNT_FILE="$WORK_DIR/pgenerator-watchdog-root-restarts"
 TIMEOUT_CMD=$(command -v timeout 2>/dev/null)
 MAX_LOG=50
 WEBUI_MIN_BYTES=65536
@@ -62,9 +68,12 @@ trim_log() {
 trim_log
 
 # /api/ping can remain healthy while a missing UI fragment breaks only `/`.
-# This probe is deliberately observational: its result never enters the
-# restart decision below. The recovery page is a valid HTTP response, but the
-# sentinel makes that degraded state visible in the watchdog log.
+# What the page contains never enters the restart decision: a restart does
+# not bring back a missing fragment. The recovery page is a valid HTTP
+# response, but the sentinel makes that degraded state visible in the
+# watchdog log. Only a probe that gets no page at all -- connect failure,
+# timeout, or the accept thread's 503 "busy" once the lane's queue is full --
+# counts as a stalled root (root_probe=stalled, see root_stall_due).
 # The body is discarded — pulling the multi-megabyte page to disk every
 # minute would wear the SD card; status and size come from curl itself, and
 # the body is fetched for the sentinel only when the page is already small.
@@ -73,7 +82,12 @@ trim_log
 # the expensive 2.6 MB probe for 15 minutes, then allows a low-frequency
 # sample of another worker. Degraded results are never stamped, so an
 # unhealthy root is re-probed every tick.
+#
+# Sets root_probe: "answered" (the lane served the request), "stalled" (it
+# did not) or "skipped" (healthy stamp, nothing probed).
+root_probe=skipped
 probe_webui_root() {
+  root_probe=skipped
   daemon_pid=$(cat "$PID_FILE" 2>/dev/null || echo "")
   if [ -n "$daemon_pid" ] && [ "$(cat "$PROBE_STAMP" 2>/dev/null)" = "$daemon_pid" ] \
      && [ -n "$(find "$PROBE_STAMP" -mmin -15 2>/dev/null)" ]; then
@@ -83,10 +97,19 @@ probe_webui_root() {
   if ! err=$(curl -sS --max-time 5 -o /dev/null -w '%{http_code} %{size_download}' http://127.0.0.1/ 2>&1 >"$status_file"); then
     log "ERROR: WebUI root probe failed to connect: ${err:-no detail}"
     rm -f "$status_file"
+    root_probe=stalled
     return 0
   fi
   read -r status bytes <"$status_file" 2>/dev/null
   rm -f "$status_file"
+  if [ "${status:-}" = "503" ]; then
+    # Shed by the accept thread: the lane's queue is full, nothing is served.
+    log "ERROR: WebUI root probe returned HTTP 503 (request lane busy)"
+    root_probe=stalled
+    return 0
+  fi
+  root_probe=answered
+  rm -f "$ROOT_FAIL_COUNT_FILE" "$ROOT_RESTART_COUNT_FILE"
   if [ "${status:-}" != "200" ]; then
     log "ERROR: WebUI root probe returned HTTP ${status:-unknown}"
   elif [ "${bytes:-0}" -ge "$WEBUI_MIN_BYTES" ] 2>/dev/null; then
@@ -106,6 +129,36 @@ probe_webui_root() {
     rm -f "$body_file"
   fi
   return 0
+}
+
+# /api/ping is served by the fast lane, `/` by the serialized general lane.
+# One stuck general-lane request (2026-10: a worker parked in waitpid by a
+# fork deadlock) kept `/` timing out for 30 minutes while ping answered, and
+# the watchdog only logged. Restart once the root has stalled on
+# ROOT_STALL_TICKS consecutive probes (ticks are minutes; an unhealthy root
+# is probed on every tick). Five minutes is far beyond any legitimate
+# general-lane request -- the helpers its handlers run are capped at 25 s,
+# the long jobs (ICC builds, TV and meter talks, OTA installs) run on other
+# lanes or in the background -- yet well short of the incident. It takes
+# five probes in a row without a page (5 s each, a minute apart), so a busy
+# moment on the lane does not add up to a restart.
+# Restarts that do not bring the root back mean the cause is not a stuck
+# request; after ROOT_STALL_BACKOFF_AFTER of them the next one needs
+# ROOT_STALL_BACKOFF_TICKS stalled ticks. Any served page resets both.
+ROOT_STALL_TICKS=5
+ROOT_STALL_BACKOFF_AFTER=2
+ROOT_STALL_BACKOFF_TICKS=30
+root_stall_due() {
+  [ "$root_probe" = "stalled" ] || return 1
+  root_fails=$(cat "$ROOT_FAIL_COUNT_FILE" 2>/dev/null)
+  case "$root_fails" in (''|*[!0-9]*) root_fails=0;; esac
+  root_fails=$((root_fails + 1))
+  echo "$root_fails" >"$ROOT_FAIL_COUNT_FILE" 2>/dev/null
+  root_restarts=$(cat "$ROOT_RESTART_COUNT_FILE" 2>/dev/null)
+  case "$root_restarts" in (''|*[!0-9]*) root_restarts=0;; esac
+  root_need=$ROOT_STALL_TICKS
+  [ "$root_restarts" -ge "$ROOT_STALL_BACKOFF_AFTER" ] && root_need=$ROOT_STALL_BACKOFF_TICKS
+  [ "$root_fails" -ge "$root_need" ]
 }
 
 # Bounded liveness probe.
@@ -152,12 +205,18 @@ fi
 echo $$ >"$INSTANCE_PID_FILE" 2>/dev/null
 
 # Already listening?
+# restart_reason: "ping" (the daemon does not answer at all) or "root" (it
+# answers /api/ping, but `/` has stalled for ROOT_STALL_TICKS ticks).
+restart_reason=ping
 if webui_ping 80; then
   # Clear any failure history: the WebUI is healthy now, so a stale count
   # from an earlier incident must not push a future recovery into backoff.
   rm -f "$FAIL_COUNT_FILE" "$TICK_COUNT_FILE" "$STALL_COUNT_FILE"
   probe_webui_root
-  exit 0
+  root_stall_due || exit 0
+  # A stalled root goes through the same guards as a dead daemon below
+  # (update pause, boot/startup grace, calibration session, lock).
+  restart_reason=root
 fi
 
 # An OTA update stops the daemon on purpose; never restart into it.
@@ -174,7 +233,9 @@ fi
 
 # One missed ping is not an outage: a heavy request (ICC build, meter read,
 # slow SD card) can stall the HTTP loop for a few seconds. Ask twice more.
+# (A stalled root has already been confirmed on several ticks.)
 retry=0
+[ "$restart_reason" = "root" ] && retry=2
 while [ "$retry" -lt 2 ]; do
   sleep 5
   if webui_ping 80; then
@@ -220,8 +281,17 @@ fi
 # The daemon process is alive but not answering while a calibration program
 # (Calman UPGCI 2100, HCFR/RPC 2101, Resolve/ColourSpace 20002) is connected:
 # restarting would drop the session. Give it three ticks (minutes) first.
-if [ -n "$daemon_pid" ] && [ -d "/proc/$daemon_pid" ] && \
-   ss -tn state established 2>/dev/null | awk '{print $3" "$4}' | grep -Eq ':(2100|2101) |:20002$'; then
+# With only `/` stalled the daemon is serving that session (calibration
+# programs do not use the WebUI lanes), so never drop it for the page: wait
+# until the client disconnects.
+calibration_client_connected() {
+  ss -tn state established 2>/dev/null | awk '{print $3" "$4}' | grep -Eq ':(2100|2101) |:20002$'
+}
+if [ "$restart_reason" = "root" ] && calibration_client_connected; then
+  log "WebUI root page stalled for $root_fails minutes but a calibration client is connected — not restarting"
+  exit 0
+fi
+if [ -n "$daemon_pid" ] && [ -d "/proc/$daemon_pid" ] && calibration_client_connected; then
   stalls=$(cat "$STALL_COUNT_FILE" 2>/dev/null)
   case "$stalls" in (''|*[!0-9]*) stalls=0;; esac
   stalls=$((stalls + 1))
@@ -267,7 +337,14 @@ fi
 
 touch "$LOCK_FILE"
 
-log "WebUI down — restarting PGenerator"
+# The new daemon starts with fresh lanes: its root stalls count from zero.
+rm -f "$ROOT_FAIL_COUNT_FILE"
+if [ "$restart_reason" = "root" ]; then
+  echo $((root_restarts + 1)) >"$ROOT_RESTART_COUNT_FILE" 2>/dev/null
+  log "WebUI root page stalled for $root_fails minutes while /api/ping answers — restarting PGenerator"
+else
+  log "WebUI down — restarting PGenerator"
+fi
 "$INIT_SCRIPT" restart >>"$LOG" 2>&1
 trim_log
 # Poll rather than check once: a fresh daemon needs a few seconds to compile

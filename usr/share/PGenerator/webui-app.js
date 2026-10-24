@@ -3379,12 +3379,14 @@ async function rebootDevice(){
  const r=await fetchJSON('/api/reboot',{method:'POST'});
  if(!r||r.status!=='ok'){ toast(pgFailMsg('The Pi didn’t restart',r),'err'); return; }
  setPowerButtonState(false);
- pgRebootProgress(before&&before.boot);
+ pgRebootProgress(r.boot||(before&&before.boot));
 }
 
 // Restart progress: the update dialog's card for a Pi restart. It follows
 // /api/ping: the old boot id means PGenerator+ is still shutting down, no
 // answer means the Pi is restarting, a new boot id means it is back (reload).
+// Without the old id (no ping before the request, no id in the reply) an
+// answer proves nothing: the dialog says so and leaves the reload to the user.
 // The bar is an estimate from the usual timing (the WebUI answers again about
 // 55 s after the request) and never passes a step that has not happened.
 const PG_RB_STEPS=['Shut down','Restart','Reconnect'];
@@ -3415,7 +3417,7 @@ function pgRebootProgress(bootId){
  const close=()=>{ clearInterval(d.timer); clearTimeout(d.poll); document.removeEventListener('keydown',onKey,true); root.remove(); document.body.classList.remove('pg-restarting'); if(opener&&opener.isConnected) opener.focus(); };
  const onKey=ev=>{
   if(!root.isConnected) return;
-  if(ev.key==='Escape'&&d.result==='timeout'){ ev.preventDefault(); close(); return; }
+  if(ev.key==='Escape'&&(d.result==='timeout'||d.result==='unconfirmed')){ ev.preventDefault(); close(); return; }
   pgDialogTrapTab(card,ev);
  };
  document.addEventListener('keydown',onKey,true);
@@ -3431,11 +3433,12 @@ function pgRebootProgress(bootId){
   else v=12+80*(1-Math.exp(-(now-d.offlineAt)/28000));
   d.value=Math.max(d.value,v);
   card.classList.toggle('is-done',d.result==='done');
-  card.classList.toggle('is-timeout',d.result==='timeout');
-  card.querySelector('.upd-title').textContent={running:'Restarting the Pi',done:'The Pi is back',timeout:'The restart is taking too long'}[d.result];
+  card.classList.toggle('is-timeout',d.result==='timeout'||d.result==='unconfirmed');
+  card.querySelector('.upd-title').textContent={running:'Restarting the Pi',done:'The Pi is back',timeout:'The restart is taking too long',unconfirmed:'PGenerator+ answers again'}[d.result];
   card.querySelector('.rb-hint').textContent=run?'Usually about a minute':'';
   const msg=d.result==='done'?'Reloading the page…':(d.result==='timeout'?'The Pi has not answered after 4 minutes.'
-   :(d.step===0?'Shutting down PGenerator+…':'The Pi is restarting — this page reconnects automatically.'));
+   :(d.result==='unconfirmed'?'This page could not tell which start was running before, so it cannot confirm the restart.'
+   :(d.step===0?'Shutting down PGenerator+…':'The Pi is restarting — this page reconnects automatically.')));
   const msgEl=card.querySelector('.upd-msg');
   if(msgEl.textContent!==msg) msgEl.textContent=msg;
   card.querySelector('.upd-bar-fill').style.width=d.value.toFixed(1)+'%';
@@ -3455,14 +3458,15 @@ function pgRebootProgress(bootId){
    li.querySelector('.sr-only').textContent={done:', done',current:', in progress',stalled:', not finished',pending:''}[st];
   });
   const note=card.querySelector('.upd-note');
-  const noteText=d.result==='timeout'?'Check that the Pi has power and a network connection; the TV shows how far the start has come. Reload this page once the Pi is back.':'';
+  const noteText=d.result==='timeout'?'Check that the Pi has power and a network connection; the TV shows how far the start has come. Reload this page once the Pi is back.'
+   :(d.result==='unconfirmed'?'Reload to see the current state of the device.':'');
   note.textContent=noteText;
   note.hidden=!noteText;
   if(d.actionsFor!==d.result){
    d.actionsFor=d.result;
    const row=card.querySelector('.upd-actions');
    row.innerHTML='';
-   if(d.result==='timeout'){
+   if(d.result==='timeout'||d.result==='unconfirmed'){
     const mk=(label,cls,fn)=>{ const b=document.createElement('button'); b.type='button'; b.className='btn btn-sm '+cls; b.textContent=label; b.onclick=fn; row.appendChild(b); return b; };
     mk('Close','btn-secondary',close);
     mk('Reload','btn-primary ico-refresh',()=>location.reload()).focus();
@@ -3476,11 +3480,16 @@ function pgRebootProgress(bootId){
   try{ const r=await fetch(API+'/api/ping',{cache:'no-store',signal:AbortSignal.timeout(1500)}); if(r.ok) p=await r.json(); }catch(e){}
   if(!p){
    if(d.step===0){ d.step=1; d.offlineAt=Date.now(); }
-  }else if((bootId&&p.boot&&p.boot!==bootId)||(!bootId&&d.step>=1)){
+  }else if(bootId&&p.boot&&p.boot!==bootId){
    d.step=2;
    d.result='done';
    render();
    setTimeout(()=>location.reload(),900);
+   return;
+  }else if(!bootId&&d.step>=1){
+   d.step=2;
+   d.result='unconfirmed';
+   render();
    return;
   }
   if(Date.now()-d.t0>PG_RB_TIMEOUT_MS){ d.result='timeout'; render(); return; }
@@ -3564,7 +3573,7 @@ async function applyMemory(){
  const before=await fetchJSON('/api/ping',{_quiet:true,_timeoutMs:3000});
  const r=await fetchJSON('/api/boot/memory',{method:'POST',
   headers:{'Content-Type':'application/json'},body:JSON.stringify(cma?{cma_mb:to}:{gpu_mem:to})});
- if(r&&r.status==='ok'){ sel.dataset.applied=to; setPowerButtonState(false); pgRebootProgress(before&&before.boot); }
+ if(r&&r.status==='ok'){ sel.dataset.applied=to; setPowerButtonState(false); pgRebootProgress(r.boot||(before&&before.boot)); }
  else{ sel.value=from||sel.value; toast(pgFailMsg('Couldn\u2019t change the GPU memory',r),'err'); }
 }
 

@@ -1894,7 +1894,9 @@ sub webui_handle_request (@) {
     print $client "HTTP/1.1 $code ".($code==200?"OK":"Bad Request")."\r\nContent-Type: application/json\r\nContent-Length: ".length($result)."\r\n$cors\r\n$result";
    }
    elsif($path eq "/api/reboot") {
-    my $r='{"status":"ok","message":"Rebooting..."}';
+    # "boot" names the boot that goes down: the restart dialog waits for a
+    # different one, even when its own ping before the request failed.
+    my $r='{"status":"ok","message":"Rebooting...","boot":"'.&webui_boot_id().'"}';
     my $len=length($r);
     print $client "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: $len\r\n$cors\r\n$r";
     close($client);
@@ -2154,7 +2156,7 @@ sub webui_handle_request (@) {
      $cma_val=$1 if($body=~/"cma_mb"\s*:\s*"(default|\d+)"/);
      if($memory_model eq "cma" && defined $cma_val && $cma_val=~/^(default|64|96|128|192|256|320|384|448|512)$/) {
       my $shown=($cma_val eq "default") ? "the Raspberry Pi OS default (64MB)" : "${cma_val}MB";
-      my $r="{\"status\":\"ok\",\"message\":\"CMA graphics memory set to $shown. Rebooting...\"}";
+      my $r="{\"status\":\"ok\",\"message\":\"CMA graphics memory set to $shown. Rebooting...\",\"boot\":\"".&webui_boot_id()."\"}";
       my $len=length($r);
       print $client "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: $len\r\n$cors\r\n$r";
       close($client);
@@ -2168,7 +2170,7 @@ sub webui_handle_request (@) {
       print $client "HTTP/1.1 400 Bad Request\r\nContent-Type: application/json\r\nContent-Length: $len\r\n$cors\r\n$r";
      }
      elsif($gpu_val && $gpu_val=~/^(64|128|192|256)$/) {
-      my $r="{\"status\":\"ok\",\"message\":\"GPU memory set to ${gpu_val}MB. Rebooting...\"}";
+      my $r="{\"status\":\"ok\",\"message\":\"GPU memory set to ${gpu_val}MB. Rebooting...\",\"boot\":\"".&webui_boot_id()."\"}";
       my $len=length($r);
       print $client "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: $len\r\n$cors\r\n$r";
       close($client);

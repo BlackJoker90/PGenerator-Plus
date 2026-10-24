@@ -59,6 +59,11 @@ struct fb_fix_screeninfo {
 
 #define ASSETS "/usr/share/PGenerator/bootscreen.dat"
 #define SELF_COMM "pgen_bootscreen"
+/* Overridden only by the local tests, which build against a fake process
+ * table. */
+#ifndef PROC_DIR
+#define PROC_DIR "/proc"
+#endif
 
 /* The WebUI's dark theme on the splash background. */
 #define C_BG     0x101018
@@ -421,12 +426,18 @@ static int read_small(const char *path, char *buf, size_t len)
 	return (int)n;
 }
 
+/* The renderer runs as PGeneratord, or PGeneratord.dv for Dolby Vision. */
+static int is_renderer(const char *comm)
+{
+	return !strcmp(comm, "PGeneratord") || !strcmp(comm, "PGeneratord.dv");
+}
+
 /* Bit 0: dhcp client, 1: PGenerator daemon, 2: renderer, 3: another
  * pgen_bootscreen. */
 static int scan_processes(void)
 {
 	int found = 0;
-	DIR *d = opendir("/proc");
+	DIR *d = opendir(PROC_DIR);
 	if (!d) return 0;
 	struct dirent *e;
 	char path[300], comm[64], cmd[256];
@@ -434,17 +445,17 @@ static int scan_processes(void)
 	while ((e = readdir(d))) {
 		if (e->d_name[0] < '0' || e->d_name[0] > '9') continue;
 		if (atoi(e->d_name) == self) continue;
-		snprintf(path, sizeof(path), "/proc/%s/comm", e->d_name);
+		snprintf(path, sizeof(path), PROC_DIR "/%s/comm", e->d_name);
 		if (read_small(path, comm, sizeof(comm)) <= 0) continue;
 		comm[strcspn(comm, "\n")] = 0;
 		if (!strcmp(comm, "dhcpcd") || !strcmp(comm, "dhclient") || !strcmp(comm, "udhcpc"))
 			found |= 1;
-		else if (!strcmp(comm, "PGeneratord"))
+		else if (is_renderer(comm))
 			found |= 4;
 		else if (!strcmp(comm, SELF_COMM))
 			found |= 8;
 		else if (!strncmp(comm, "/usr/sbin/PGene", 15) || !strcmp(comm, "perl")) {
-			snprintf(path, sizeof(path), "/proc/%s/cmdline", e->d_name);
+			snprintf(path, sizeof(path), PROC_DIR "/%s/cmdline", e->d_name);
 			int n = read_small(path, cmd, sizeof(cmd));
 			for (int i = 0; i < n; i++) if (!cmd[i]) cmd[i] = ' ';
 			if (n > 0 && strstr(cmd, "PGeneratord.pl"))
@@ -457,7 +468,7 @@ static int scan_processes(void)
 
 static int has_default_route(void)
 {
-	FILE *f = fopen("/proc/net/route", "r");
+	FILE *f = fopen(PROC_DIR "/net/route", "r");
 	if (!f) return 0;
 	char line[256];
 	int yes = 0;
@@ -475,7 +486,7 @@ static int has_default_route(void)
 static double uptime_s(void)
 {
 	char b[64];
-	if (read_small("/proc/uptime", b, sizeof(b)) <= 0) return 0;
+	if (read_small(PROC_DIR "/uptime", b, sizeof(b)) <= 0) return 0;
 	return atof(b);
 }
 
@@ -608,7 +619,7 @@ static void on_signal(int sig) { (void)sig; stop_requested = 1; }
 
 static int stop_others(void)
 {
-	DIR *d = opendir("/proc");
+	DIR *d = opendir(PROC_DIR);
 	if (!d) return 1;
 	struct dirent *e;
 	char path[300], comm[64];
@@ -617,7 +628,7 @@ static int stop_others(void)
 		if (e->d_name[0] < '0' || e->d_name[0] > '9') continue;
 		pid_t pid = atoi(e->d_name);
 		if (pid == self) continue;
-		snprintf(path, sizeof(path), "/proc/%s/comm", e->d_name);
+		snprintf(path, sizeof(path), PROC_DIR "/%s/comm", e->d_name);
 		if (read_small(path, comm, sizeof(comm)) <= 0) continue;
 		comm[strcspn(comm, "\n")] = 0;
 		if (!strcmp(comm, SELF_COMM))

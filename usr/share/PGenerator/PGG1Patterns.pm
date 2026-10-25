@@ -1177,14 +1177,15 @@ sub _range_check {
   _stext($im,$text,$x+$mw+$gap,$my+$mh/2,$lh,$lsw,$label,$ltr);
   $x+=$mw+$gap+_stext_width($text,$lh,$lsw,$ltr)+$sep;
  }
- # What the EDID and the AVI infoframe predict for a display on Auto
- # (PGSignalCheck signal_range_plate_lines): the verdict, then its basis.
- # The row names that condition: a range set by hand on the display does
- # not reach the Pi, so the verdict says nothing about it (the panel does).
+ # What the EDID and the AVI infoframe predict for a display on Auto, or
+ # what the TV reported it is set to (PGSignalCheck
+ # signal_range_plate_lines): the verdict, its basis and the label of the
+ # verdict row. Without a label the row names the Auto condition: a range
+ # set by hand on the display does not reach the Pi over HDMI.
  my $check=$o->{check};
- if(ref($check) eq "ARRAY" && @$check == 2) {
+ if(ref($check) eq "ARRAY" && (@$check == 2 || @$check == 3)) {
   my $ey=$my+$mh+int($h*0.06+0.5);
-  my @row=("IF TV ON AUTO",$check->[0]);
+  my @row=($check->[2] // "IF TV ON AUTO",$check->[0]);
   my @rw=map { _stext_width($_,$lh,$lsw,$ltr) } @row;
   my $rx=$w/2-($rw[0]+$lh+$rw[1])/2;
   _stext($im,$row[0],$rx,$ey,$lh,$lsw,$title,$ltr);

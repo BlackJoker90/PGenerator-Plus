@@ -1367,11 +1367,13 @@ sub pattern_daemon {
       # Calman only sends GET_SETTINGS when CAP lists it, and it ignores a
       # CAP reply that does not start with ACK.
       my $caps="GET_SETTINGS,STATUS,CONF_FORMAT,CONF_HDR,CONF_LEVEL,CONF_DV,HDR_ENABLE,IMAGE,PUSH,RGB_S,RGB_B,RGB_A,SPECIALTY,UPDATE,YCC_A,YCC_B,YCC_S,HDR,DOLBYVISION,SIZE,10_SIZE,11_APL,CommandRGB,BITDEPTH,COLORSPACE,RANGE";
-      # The G1 source (port 2101) has so far always run on its built-in
-      # list, because this reply went out without ACK. It now gets that
-      # list plus GET_SETTINGS, so it reads the current signal at connect
-      # and nothing else in its command set changes.
-      $caps="GET_SETTINGS,STATUS,CONF_FORMAT,CONF_HDR,CONF_LEVEL,CONF_DV,HDR_ENABLE,IMAGE,PUSH,RGB_S,RGB_B,RGB_A,SPECIALTY,UPDATE,YCC_A,YCC_B,YCC_S" if($rpc_client{$connection});
+      # The G1 source (port 2101) gets exactly its built-in list, without
+      # GET_SETTINGS. Its UI does not show what GET_SETTINGS reports: after
+      # reading "Format YCC444_10" it still showed RGB 8-bit (Calman's
+      # Color Format list has "YCbCr 444 10-bit"). The output then has to
+      # follow Calman's start-up format instead (see calman_g1_startup), so
+      # the cable and Calman's display agree.
+      $caps="STATUS,CONF_FORMAT,CONF_HDR,CONF_LEVEL,CONF_DV,HDR_ENABLE,IMAGE,PUSH,RGB_S,RGB_B,RGB_A,SPECIALTY,UPDATE,YCC_A,YCC_B,YCC_S" if($rpc_client{$connection});
       &log("Calman: CAP request, returning $caps");
       &send_calman_payload_to_client($connection,$caps,1);
       last;
@@ -2149,12 +2151,11 @@ sub pattern_daemon {
      return 0;
     };
 
-    # Without GET_SETTINGS after its handshake (CAP not read, or an
-    # older reply without ACK) the G1 source starts the connection at
-    # RGB 8-bit (its constructor default), sends only Range Limited and
-    # sends CONF_LEVEL:Format only when the user changes the colour
-    # format. Match that default on the first command so the output
-    # agrees with what Calman shows.
+    # The G1 source is not offered GET_SETTINGS (see CAP). It starts the
+    # connection at RGB 8-bit (its constructor default), sends only Range
+    # Limited and sends CONF_LEVEL:Format only when the user changes the
+    # colour format. Match that default on the first command so the
+    # output agrees with what Calman shows.
     if($type ne "INIT" && delete $calman_g1_startup{$connection}) {
      &log("Calman G1: no GET_SETTINGS after the handshake, using Calman's start-up format RGB 8-bit");
      $calman_apply_source_payload->("RGB",1);
@@ -3194,7 +3195,7 @@ sub send_calman_payload_to_client (@) {
  # whole reply goes out in one write.
  # On the RPC port (Calman's G1 source) only the replies passed with
  # $framed are framed: CAP and GET_SETTINGS. SN, FIRMWARE and STATUS stay
- # bare there. With an SN stored, the G1 source switches to its
+ # bare there, as they always were. With an SN stored, the G1 source switches to its
  # obfuscated "CryptoII" transport, which PGenerator+ does not speak.
  $response=$ack_cmd_string.$response.$end_cmd_string_calman if(!$rpc_client{$connection} || $framed);
  eval { $connection->send("$response"); };

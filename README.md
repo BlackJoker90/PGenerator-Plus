@@ -105,7 +105,7 @@ Changing signal mode takes **~3.5–4.5 s instead of ~10 s**. Format changes go 
 <td valign="top">
 
 ### 🎛️ Calman that just works
-The UPGCI handshake now has proper ACKs and the settings format Calman actually parses. `GET_SETTINGS` works. Codes are rounded to the output depth, with a notice when a code is not exact. YCbCr 4:2:0 requests are refused cleanly with a NAK instead of breaking the link. Calman can also **connect to PGenerator+ as a G1** and control it completely; on connect it reads the signal set in the WebUI (resolution, colour format, range, bit depth). All 19 **G1 specialty patterns** are rendered on the Pi; you start them from Calman or from the WebUI.
+The UPGCI handshake now has proper ACKs and the settings format Calman actually parses. `GET_SETTINGS` works. Codes are rounded to the output depth, with a notice when a code is not exact. YCbCr 4:2:0 requests are refused cleanly with a NAK instead of breaking the link. Calman can also **connect to PGenerator+ as a G1** and control it completely; the output follows what Calman shows (a G1 connection starts at RGB 8-bit Limited, like Calman's G1 source). All 19 **G1 specialty patterns** are rendered on the Pi; you start them from Calman or from the WebUI.
 
 </td>
 <td valign="top">

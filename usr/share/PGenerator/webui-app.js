@@ -1314,8 +1314,11 @@ function applyMeterTargetGammaDefault(force){
 }
 
 // Recommended output per signal mode, loaded when the operator picks a mode.
-// YCbCr 4:4:4 Limited is the bit-exact path (unity CSC in vc4, same transport
-// as LG AutoCal); RGB Limited would go through the inexact vc4 range CSC.
+// Limited range follows CTA-861 (§5.1) and BT.2100/BT.2408 for PQ and HLG;
+// HDR stays at 10 bits because BT.2020 is not defined at 8 (CTA-861-G §6.4).
+// YCbCr 4:4:4 Limited is a bit-exact path (unity CSC in vc4, the transport
+// LG AutoCal uses); RGB Limited is bit-exact too on the patched vc4 (no
+// range CSC), the norms prefer neither.
 // DV starts on the standard transport (8-bit RGB Full, see dvTransportDefaults);
 // LLDV stays selectable in the DV card. Colorimetry comes from
 // webuiAutoColorimetryForSignalMode. HDR metadata is display specific and kept.
@@ -3225,14 +3228,14 @@ function dvTransportDefaults(mode){
 }
 
 async function resetDefaults(){
- if(!await pgConfirm({title:'Reset display settings to defaults?',body:'Signal mode, format, range, HDR metadata and Dolby Vision fields return to SDR 8-bit RGB defaults. Unsaved edits in this card are lost; the output changes only after Apply & Restart.',acceptLabel:'Reset Defaults',destructive:true,tone:'caution'})) return;
+ if(!await pgConfirm({title:'Reset display settings to defaults?',body:'Signal mode, format, range, HDR metadata and Dolby Vision fields return to the SDR defaults: YCbCr 4:4:4, 8-bit, Limited, BT.709. Unsaved edits in this card are lost; the output changes only after Apply & Restart.',acceptLabel:'Reset Defaults',destructive:true,tone:'caution'})) return;
+ // The same output the SDR mode preset loads (CTA-861 default for CE
+ // formats: Limited range, BT.709, 8-bit).
+ const sdr=PG_SIGNAL_MODE_PRESETS.sdr;
  setVal('signal_mode','sdr');
- setVal('max_bpc','8');
- setVal('color_format','0');
- setVal('colorimetry','2');
- setVal('rgb_quant_range','2');
- setVal('eotf','0');
- setVal('primaries','0');
+ // Format before bit depth (see the mode presets).
+ ['color_format','max_bpc','rgb_quant_range','eotf','primaries'].forEach(k=>setVal(k,sdr[k]));
+ setVal('colorimetry',webuiAutoColorimetryForSignalMode('sdr'));
  document.getElementById('max_luma').value='1000';
  document.getElementById('min_luma').value='0.005';
  document.getElementById('max_cll').value='1000';

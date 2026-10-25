@@ -28,6 +28,9 @@ sub fork_pattern_daemon (@) {
  if(fork() == 0 ){
   $SIG{PIPE}='IGNORE';
   open(STDERR,">>/tmp/pg_stderr.log");
+  # A refusal ends with the daemon; what a refused apply goes back to until
+  # the first one passes is the conf found now.
+  &signal_state_reset();
   &pattern_generator_start();
   &show_boot_pattern();
   threads->create(\&device_info)->detach();
@@ -39,6 +42,8 @@ sub fork_pattern_daemon (@) {
   threads->create(\&lg_startup_scan_worker)->detach();
   threads->create(\&webui_http)->detach();
   threads->create(\&webui_mdns)->detach();
+  # HDMI link interruptions during measurements (refused settings' sibling).
+  threads->create(\&webui_hdmi_link_watch)->detach() if($is_kms);
   # TV remote listener for the on-screen menu (setting on by default).
   &webui_tvmenu_boot();
   &pattern_daemon();
@@ -1645,6 +1650,10 @@ sub pattern_daemon {
 	      my $new_val=defined($conf_val) ? "$conf_val" : "";
 	      my $cur_val=defined($pgenerator_conf{$conf_key}) ? "$pgenerator_conf{$conf_key}" : "";
 	      if($cur_val eq $new_val) {
+	       # A refused apply put the conf back to the kept output; Calman
+	       # choosing those working settings again must still reach the
+	       # apply, which ends the refused state (signal_gate_conf).
+	       $calman_settings_dirty=1 if(-e $signal_refused_file);
 	       return;
 	      }
 	      &sudo("SET_PGENERATOR_CONF",$conf_key,$conf_val);
@@ -1843,6 +1852,14 @@ sub pattern_daemon {
        $calman_settings_dirty=0;
        eval {
         $calman_force_dv_rgb->();
+        # Refused settings: a signal the board or display cannot carry
+        # is not applied. The gate puts the conf back to the kept output
+        # and leaves the refused state, which refuses patches until
+        # Calman chooses settings that work (return leaves the eval).
+        if(!&signal_gate_conf(&signal_source_label("Calman"))) {
+         &log("Calman: apply refused, output unchanged");
+         return;
+        }
         # Compare the current mode-affecting conf to the last
         # applied snapshot. If they match, the connector mode
         # (resolution, color format, colorimetry, max_bpc,
@@ -2523,6 +2540,7 @@ sub pattern_daemon {
      if($type eq "CommandRGB") {
       # Apply any pending settings before showing pattern
       $calman_apply->(0);
+      last if(&signal_refuse_patch($connection,"Calman CommandRGB"));
       &calman_render_commandrgb_pattern($pattern_cmd,$connection);
       &calman_remember_pattern("CommandRGB",$type,$pattern_cmd);
       &send_key_to_client($connection,"");
@@ -2538,6 +2556,7 @@ sub pattern_daemon {
      if($type =~/RGB_/) {
       # Apply any pending display mode settings before showing pattern
       $calman_apply->(0);
+      last if(&signal_refuse_patch($connection,"Calman $type"));
       &calman_render_rgb_pattern($type,$pattern_cmd,$key,$connection);
       &calman_remember_pattern("RGB",$type,$pattern_cmd);
       &send_key_to_client($connection,"");
@@ -2725,6 +2744,7 @@ sub pattern_daemon {
      if($type eq "SPECIALTY") {
       &log("Calman: SPECIALTY=$pattern_cmd");
       $calman_apply->(0);
+      last if(&signal_refuse_patch($connection,"Calman SPECIALTY"));
       &calman_render_specialty_pattern($pattern_cmd);
       &calman_remember_pattern("SPECIALTY",$type,$pattern_cmd);
       &send_key_to_client($connection,"");
@@ -2747,6 +2767,7 @@ sub pattern_daemon {
       if(defined $g1_key) {
        &log("Calman: IMAGE=$pattern_cmd -> G1 $g1_key");
        $calman_apply->(0);
+       last if(&signal_refuse_patch($connection,"Calman IMAGE"));
        &calman_render_specialty_pattern($pattern_cmd);
        &calman_remember_pattern("SPECIALTY",$type,$pattern_cmd);
       } else {
@@ -2765,9 +2786,17 @@ sub pattern_daemon {
     # RESTARTPGENERATOR
     #
     if($key=~/$restart_pgenerator_command:(.*)/) {
-     &pattern_generator_stop();
-     &pattern_generator_start();
-     &send_key_to_client($connection,$ok_response);
+     # Port 85 clients set the signal keys first (CMD:SET_PGENERATOR_CONF_*)
+     # and apply them with this restart; refused settings are put back and
+     # the output stays as it was (signal_gate_conf). Settings that did not
+     # change since the renderer started need no restart (ColourSpace sends
+     # its unchanged settings and this restart on every connect).
+     if(!$is_kms || &signal_gate_conf(&signal_source_label())) {
+      &pattern_generator_restart_unless_current("RESTARTPGENERATOR");
+      &send_key_to_client($connection,$ok_response);
+     } else {
+      &send_key_to_client($connection,"$error_response:Refused: ".&signal_patches_refused());
+     }
      last;
     }
     #
@@ -2998,6 +3027,7 @@ sub pattern_daemon {
        &legacy_external_set_status($connection,"DeviceControl");
       }
      $command_found=1;
+     last if(&signal_refuse_patch($connection,"Pattern FUNCTIONS"));
      my ($draw,$dim,$res,$functions)=split($separator,$1);
      $log_string="Received rgb triplet request command";
      $log_string.=" ($key)" if($key ne "");
@@ -3034,6 +3064,7 @@ sub pattern_daemon {
       &send_key_to_client($connection,$ok_response);
       last;
      }
+     last if(&signal_refuse_patch($connection,"Pattern RGB"));
      &clean_pattern_files();
      $log_string="Received rgb triplet request command";
      $log_string.=" ($key)" if($key ne "");
@@ -3090,12 +3121,37 @@ sub send_key_to_client (@) {
  my $response = shift;
  $response.=$end_cmd_string;
  $response=$ack_cmd_string if($calman{$connection});
+ # The command just handled had its settings refused (signal_gate_conf):
+ # UPGCI treats any reply but ACK as a failed command, so Calman learns
+ # that the change did not happen. Port 85 replies carry the error text.
+ if($signal_refused_pending) {
+  $signal_refused_pending=0;
+  $response=$nak_cmd_string if($calman{$connection});
+ }
  eval { $connection->send("$response"); };
  if($@) {
   my $send_error="$@";
   $send_error=~s/\s+$//;
   &close_connection($connection,"send error: $send_error");
  }
+}
+
+# Patches while a refused state is active (signal_gate_conf): Calman gets
+# NAK, a port 85 client an error, so neither measures an output it did not
+# choose. Returns 1 when the patch was refused (the caller stops there).
+sub signal_refuse_patch (@) {
+ my ($connection,$what)=@_;
+ my $reason=&signal_patches_refused();
+ return 0 if($reason eq "");
+ &log("Signal: $what refused, settings are refused: $reason");
+ $signal_refused_pending=0;
+ if($calman{$connection}) {
+  eval { $connection->send($nak_cmd_string); };
+  &close_connection($connection,"send error: $@") if($@);
+ } else {
+  &send_key_to_client($connection,"$error_response:Refused: $reason");
+ }
+ return 1;
 }
 
 ###############################################
@@ -3135,6 +3191,8 @@ sub close_connection {
  delete $legacy_external_client_name{$connection};
  if($calman{$connection} || ($conn_ip ne "" && $conn_ip eq $calibration_client_ip)) {
   &log("Calman: socket disconnected, preserving pattern state");
+  # A refusal belongs to the session of the program that asked.
+  &signal_refused_clear(($calibration_client_software || "calibration software")." disconnected");
   $calibration_client_ip="";
   $calibration_client_software="";
  }

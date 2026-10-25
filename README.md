@@ -91,7 +91,7 @@ Everything the original does is still here: patterns over TCP for Calman, Colour
 <td width="50%" valign="top">
 
 ### 🎯 Bit-exact output
-10-bit pattern codes reach the GPU **without 8-bit quantisation**. **RGB Limited is bit-exact**: a patched vc4 module skips the kernel's compression CSC. HDR10/HLG at 12-bit goes out as bit-exact 10-bit instead of crashing the renderer. **8-bit patterns on a 10-bit link** go out as exactly code × 4 (126 → 504), in SDR, HDR10 and LLDV. The G1 Brightness and Contrast plates switch to **10-bit steps** (0–95, 928–1023) on a 10-bit link. Scanout readback on the Pi checks the codes; nobody has to eyeball them.
+10-bit pattern codes reach the GPU **without 8-bit quantisation**. **RGB Limited is bit-exact**: a patched vc4 module skips the kernel's compression CSC. HDR10/HLG at 12-bit goes out as bit-exact 10-bit instead of crashing the renderer. **8-bit patterns on a 10-bit link** go out as exactly code × 4 (126 → 504), in SDR, HDR10 and LLDV. The G1 Brightness and Contrast plates switch to **10-bit steps** (0–95, 928–1023) on a 10-bit link. Scanout readback on the Pi checks the codes; nobody has to eyeball them. At 4K: 60 Hz in 8-bit RGB or YCbCr 4:2:2, 24 / 30 Hz up to 10-bit RGB ([which signals](#bit-exact-4k)).
 
 </td>
 <td width="50%" valign="top">
@@ -157,6 +157,20 @@ Press **OK or Menu on the TV remote** and a menu of every pattern appears on the
 
 </td>
 </tr>
+<tr>
+<td valign="top">
+
+### 🚫 Refused settings, with the reason
+A setting the Pi or the display cannot carry is **refused instead of quietly changed**: 10-bit RGB at 4K 60 Hz needs 742.5 MHz on the link and the Pi 4 sends at most 600 MHz; a YCbCr format, a bit depth or an HDR mode missing from the display's EDID; TV-led Dolby Vision at 4K 60 Hz or low-latency DV in RGB where the display's Dolby block does not list it. The output stays as it was, the WebUI says why and what works instead, and **patches are refused until working settings arrive** (Calman gets a NAK). In Output, options that cannot go out stay visible but locked, with the reason next to them.
+
+</td>
+<td valign="top">
+
+### 🔗 What is on the cable, and when the link dropped
+Next to the settings, **On the cable** shows what is actually sent (format, range, depth, HDR mode), read from the infoframes and the encoder, and names every quiet adjustment ("12-bit setting is sent as 10-bit."). Hover over the signal or the calibration program in the header for the same. If the HDMI link drops while Calman is connected or a measurement runs (display reset, input change, power off), the time is recorded and a notice says the readings across it can't be combined.
+
+</td>
+</tr>
 </table>
 
 <a id="at-a-glance-fork-vs-original"></a>
@@ -172,6 +186,9 @@ Press **OK or Menu on the TV remote** and a menu of every pattern appears on the
 | Low Latency Dolby Vision | TV did not switch into DV | 12-bit, TV switches into DV |
 | Calman UPGCI | settings replies Calman could not parse | ACK + parseable settings, `GET_SETTINGS` |
 | Calman YCbCr 4:2:0 request | no defined answer | clean NAK, current format kept, WebUI notice |
+| Settings the Pi or display can't carry | applied anyway: vc4 quietly lowers the depth, or the display shows nothing | **refused with the reason** (link bandwidth, EDID), output kept, patches refused until working settings arrive |
+| What goes out on the cable | – | **shown next to the settings**, quiet adjustments named (e.g. 12-bit sent as 10-bit) |
+| HDMI link drop during a measurement | – | **recorded with the time**, notice and banner: readings across it can't be combined |
 | Calman connection as G1 | – | **full control** from Calman (patches, signal modes, G1 patterns) |
 | Calman G1 specialty patterns | – | all 19 rendered on the Pi, started from Calman or the WebUI |
 | No display connected | renderer started anyway | waits for a display, banner in the UI, saved mode kept |
@@ -304,6 +321,7 @@ PGenerator+ is a free, open-source display calibration suite for the Raspberry P
   - *Modes:* `CONF_FORMAT` requests resolve to the EDID copy of a mode rather than the userdef boot mode. G1 sessions start at Calman's RGB 8-bit default.
   - *Windows and APL:* fixed, custom and gray-surround APL windows (`RGB_S`, `RGB_A`, `CommandRGB`, `10_SIZE`, `11_APL`). With limited range, window backgrounds are drawn at black.
   - *Unsupported formats:* a YCbCr 4:2:0 request gets a NAK, and the WebUI shows a notice. The current format stays.
+  - *Refused settings:* settings the Pi or the display cannot carry (link bandwidth, missing EDID support for a format, depth or HDR mode) get a NAK. The output stays as it was, the WebUI shows the reason and what works, and patches get a NAK until Calman sends settings that work (or disconnects). The same applies to port 85 clients (`ERR:Refused: …`).
   - *YCbCr is always Limited:* with Range Full on a YCbCr output (Calman, LightSpace, Resolve), the full-range codes are converted to studio range (0–1023 → 64–940) and the AVI infoframe says Limited, also on modes without a CEA VIC.
   - *Session safety:* pattern state is cleared on session start, shutdown and disconnect.
   - *Connect as G1:* Calman can also connect through **Find Source → Portrait Displays G1** and controls PGenerator+ completely that way: patches, signal modes and every G1 specialty pattern (Basic Alignment, Warm-Up, Granger Rainbow, Brightness, Contrast, Color Bars, SMPTE, ANSI checkerboards and the rest). The same 19 patterns are in the WebUI under Patterns.
@@ -339,7 +357,7 @@ Served on **port 80** at `http://pgenerator.local`. It has a **Desktop** layout 
 
 | Workspace | What's in it |
 |---|---|
-| **Output** | Signal mode (SDR / HDR10 / HLG / Dolby Vision), resolution from the EDID, bit depth, colour format, colorimetry, range, and HDR10 and DV metadata (with hints for measuring Dolby Vision). Shows a banner while no display is connected. Below it the **Signal Self-Test**: draws known codes in every signal mode and reads the scanout back, next to link depth, range CSC, AVI infoframe, HDR metadata and the Dolby Vision infoframe |
+| **Output** | Signal mode (SDR / HDR10 / HLG / Dolby Vision), resolution from the EDID, bit depth, colour format, colorimetry, range, and HDR10 and DV metadata (with hints for measuring Dolby Vision). Options the Pi or the display cannot carry stay visible but locked, with the reason. **On the cable** shows what is actually sent and any quiet adjustment; banners show refused settings (with what works) and HDMI link interruptions during a measurement. Shows a banner while no display is connected. Below it the **Signal Self-Test**: draws known codes in every signal mode and reads the scanout back, next to link depth, range CSC, AVI infoframe, HDR metadata and the Dolby Vision infoframe |
 | **Patterns** | Calman G1 plates (favourites Basic Alignment, Warm-Up, Granger Rainbow, plus all others), the test images White Clipping, Black Clipping and Overscan, your own uploaded images and videos, and **playlists** you step through with the TV remote; "Show menu on TV" opens the on-screen pattern menu |
 | **Calibration** | Meter detection, single and continuous reads, series runs (Greyscale 21/11, Colors 30, Saturation 24), charts, and session export |
 | **Meter Profiler** | Meter correction (CCSS) editor and preview |
@@ -396,6 +414,22 @@ On-device closed-loop calibration of LG TVs through the webOS calibration API. L
 | **HDR10** | PQ (ST.2084), full DRM InfoFrame metadata, 10-bit (12-bit requests go out as bit-exact 10-bit) |
 | **HLG** | Hybrid Log-Gamma, 10-bit |
 | **Dolby Vision** | Standard (TV-led, 8-bit RGB tunnel; used for Calman DV) or Low Latency (LLDV, 12-bit) |
+
+<a id="bit-exact-4k"></a>
+
+### 📐 What goes out bit-exact at 4K
+
+The Pi 4 sends at most **600 MHz** on the HDMI link, and only on HDMI0 (HDMI1: 340 MHz, no 4K 60 Hz). The link clock is the pixel clock × bit depth / 8; YCbCr 4:2:2 always travels in a 12-bit container at the pixel clock. For 4K (3840 × 2160):
+
+| Signal | Link clock | On the cable |
+|---|---|---|
+| 4K 60 Hz, RGB / YCbCr 4:4:4, 8-bit | 594 MHz | **bit-exact** |
+| 4K 60 Hz, YCbCr 4:2:2, 12-bit container | 594 MHz | **bit-exact** (10-bit codes; 12-bit codes in Low Latency DV) |
+| 4K 24 / 30 Hz, RGB / YCbCr 4:4:4, 10-bit | 371.25 MHz | **bit-exact** |
+| 4K 60 Hz, RGB / YCbCr 4:4:4, 10-bit | 742.5 MHz | **not possible**: needs HDMI 2.1 |
+| 4K 60 Hz, RGB / YCbCr 4:4:4, 12-bit | 891 MHz | **not possible**: needs HDMI 2.1 |
+
+HDMI 2.0 ends at 600 MHz; anything above needs the FRL link of HDMI 2.1, which the Pi 4 does not have. PGenerator+ **refuses** these settings with the reason and suggests what works instead (8-bit, YCbCr 4:2:2 or 24 / 30 Hz). A 12-bit RGB setting outside Dolby Vision goes out as 10-bit, and **On the cable** says so.
 
 The Pi 4's KMS driver sets the HDMI InfoFrames directly:
 
@@ -498,7 +532,7 @@ All endpoints are on port 80 and return JSON.
 | GET | `/api/ping` | Health check; `boot` is the kernel boot id, new after every reboot |
 | GET | `/api/info` | Device info (hostname, temp, IPs, Wi-Fi, resolution, calibration status) |
 | GET | `/api/config` | Current configuration |
-| POST | `/api/config` | Apply configuration changes (only the keys you send) |
+| POST | `/api/config` | Apply configuration changes (only the keys you send). Signal settings the Pi or display cannot carry are refused (`"refused":true` with the reason, nothing written); quiet adjustments come back in `adjusted` |
 | GET | `/api/modes` | HDMI modes from the display EDID |
 | POST | `/api/restart` | Restart the pattern generator |
 | POST | `/api/reboot` | Reboot the device |
@@ -508,9 +542,10 @@ All endpoints are on port 80 and return JSON.
 | POST | `/api/wifi/connect` | Connect to Wi-Fi (`ssid`, `psk`) |
 | GET / POST | `/api/wifi/ap` | Read / set AP SSID and password |
 | GET | `/api/infoframes` | AVI, DRM and SPD InfoFrame hex data, whether SPD is on the wire |
+| GET | `/api/signal` | What the settings ask for (`requested`), what is on the cable (`sending`, `wire`: format, range, EOTF, depth, TMDS clock), the check against board and display (`check`), quiet `adjustments`, the current refusal (`refused`) and the last HDMI link interruption during a measurement (`link_event`) |
 | GET | `/api/cec/status` | HDMI-CEC TV power status |
 | GET | `/api/cec/{cmd}` | Send a CEC command (`wake`, `on`, `off`, `as`) |
-| POST | `/api/pattern` | Display a test pattern |
+| POST | `/api/pattern` | Display a test pattern (refused with the reason while signal settings are refused) |
 | POST | `/api/resolve/connect` · `/disconnect` | Resolve client mode |
 | GET | `/api/resolve/status` | Resolve connection status |
 | GET | `/api/update/check` | Check this fork's releases for an OTA package |

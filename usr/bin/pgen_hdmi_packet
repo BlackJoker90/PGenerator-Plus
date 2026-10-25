@@ -1,35 +1,101 @@
 #!/usr/bin/python3
-# pgen_hdmi_packet [slot ...]: print the infoframes the Pi 4 HDMI0 block is
-# sending, read from its packet RAM, one line per slot:
+# pgen_hdmi_packet [slot ...]: print the infoframes the Pi 4 HDMI block of
+# the connected port is sending, read from its packet RAM, one line per slot
+# after a "port=" line:
 #   slot=1 enabled=1 type=81 version=01 length=1b bytes=48:46:d0:00:...
 # "bytes" starts with the checksum (PB0). A slot is on the wire when its
 # bit in HDMI_RAM_PACKET_CONFIG is set ("enabled"); a disabled slot can
 # still hold an old frame. Slots follow vc4: 1 vendor (VSIF), 3 SPD, 7 DRM.
 # The AVI slot (2) does not decode with this layout; the AVI infoframe is in
 # the kernel log ("AVI IF:"). Default: slots 1, 3 and 7. Needs root
-# (/dev/mem). Python 3.5.
+# (/dev/mem). Python 3.5. The port is the connected HDMI-A-N connector
+# (PGEN_HDMI_PORT=0|1 overrides); its packet region comes from the device
+# tree, so HDMI1 (HDMI-A-2) is read from its own block, not from HDMI0.
 import mmap
 import os
 import re
 import struct
 import sys
 
-PACKET_RAM = 0xfef01b00     # "packet" region of hdmi@7ef00700 (BCM2711)
+import glob
+
+# "packet" regions of hdmi@7ef00700 / hdmi@7ef05700 (BCM2711), used when the
+# device tree cannot be read.
+PACKET_RAM_FALLBACK = {0: 0xfef01b00, 1: 0xfef06b00}
 STRIDE = 0x24               # 9 words per slot
-REGS = "/sys/kernel/debug/dri/1/hdmi0_regs"
+DT = "/proc/device-tree"
 
 
-def packet_config():
+def connected_port():
+    env = os.environ.get("PGEN_HDMI_PORT", "")
+    if env in ("0", "1"):
+        return int(env), "HDMI-A-%d" % (int(env) + 1)
+    for status in sorted(glob.glob("/sys/class/drm/card*-HDMI-A-*/status")):
+        try:
+            with open(status) as f:
+                if f.read().startswith("connected"):
+                    n = int(re.search(r"HDMI-A-(\d+)/status$", status).group(1))
+                    return n - 1, "HDMI-A-%d" % n
+        except (IOError, OSError, AttributeError, ValueError):
+            pass
+    return 0, "none"
+
+
+def cells(path, default):
     try:
-        with open(REGS) as f:
+        with open(path, "rb") as f:
+            return struct.unpack(">I", f.read(4))[0]
+    except (IOError, OSError, struct.error):
+        return default
+
+
+def packet_ram(port):
+    """CPU address of the port's "packet" region, from the device tree."""
+    try:
+        nodes = sorted(glob.glob(DT + "/soc/hdmi@*"), key=lambda n: int(n.split("@")[1], 16))
+        node = nodes[port]
+        with open(node + "/reg-names", "rb") as f:
+            names = f.read().decode("ascii").rstrip("\0").split("\0")
+        with open(node + "/reg", "rb") as f:
+            reg = f.read()
+        ac = cells(DT + "/soc/#address-cells", 1)
+        sc = cells(DT + "/soc/#size-cells", 1)
+        entry = 4 * (ac + sc)
+        i = names.index("packet")
+        bus = int.from_bytes(reg[i * entry:i * entry + 4 * ac], "big")
+        # soc ranges: child (ac cells), parent (root #address-cells), size (sc)
+        pc = cells(DT + "/#address-cells", 2)
+        with open(DT + "/soc/ranges", "rb") as f:
+            ranges = f.read()
+        rlen = 4 * (ac + pc + sc)
+        for k in range(0, len(ranges) - rlen + 1, rlen):
+            r = ranges[k:k + rlen]
+            child = int.from_bytes(r[:4 * ac], "big")
+            parent = int.from_bytes(r[4 * ac:4 * (ac + pc)], "big")
+            size = int.from_bytes(r[4 * (ac + pc):], "big")
+            if child <= bus < child + size:
+                return parent + (bus - child)
+    except (IOError, OSError, IndexError, ValueError, UnicodeDecodeError):
+        pass
+    return PACKET_RAM_FALLBACK.get(port, PACKET_RAM_FALLBACK[0])
+
+
+def regs_file(port):
+    found = glob.glob("/sys/kernel/debug/dri/*/hdmi%d_regs" % port)
+    return found[0] if found else "/sys/kernel/debug/dri/1/hdmi%d_regs" % port
+
+
+def packet_config(regs):
+    try:
+        with open(regs) as f:
             m = re.search(r"HDMI_RAM_PACKET_CONFIG\s*=\s*(0x[0-9a-fA-F]+)", f.read())
         return int(m.group(1), 16) if m else None
     except (IOError, OSError):
         return None
 
 
-def read_slots(slots):
-    page = PACKET_RAM & ~0xfff
+def read_slots(slots, packet_base):
+    page = packet_base & ~0xfff
     fd = os.open("/dev/mem", os.O_RDONLY | os.O_SYNC)
     try:
         mem = mmap.mmap(fd, 0x1000, mmap.MAP_SHARED, mmap.PROT_READ, offset=page)
@@ -37,7 +103,7 @@ def read_slots(slots):
         os.close(fd)
     out = {}
     for slot in slots:
-        off = PACKET_RAM - page + slot * STRIDE
+        off = packet_base - page + slot * STRIDE
         words = struct.unpack("<9I", mem[off:off + 36])
         header = [words[0] & 0xff, (words[0] >> 8) & 0xff, (words[0] >> 16) & 0xff]
         body = []
@@ -54,8 +120,11 @@ def read_slots(slots):
 
 def main():
     slots = [int(a) for a in sys.argv[1:]] or [1, 3, 7]
-    cfg = packet_config()
-    for slot, (header, body) in sorted(read_slots(slots).items()):
+    port, name = connected_port()
+    base = packet_ram(port)
+    cfg = packet_config(regs_file(port))
+    print("port=%s hdmi=%d packet=0x%08x" % (name, port, base))
+    for slot, (header, body) in sorted(read_slots(slots, base).items()):
         enabled = "?" if cfg is None else str((cfg >> slot) & 1)
         print("slot=%d enabled=%s type=%02x version=%02x length=%02x bytes=%s" % (
             slot, enabled, header[0], header[1], header[2],

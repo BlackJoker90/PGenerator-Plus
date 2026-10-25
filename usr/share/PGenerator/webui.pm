@@ -840,8 +840,9 @@ sub webui_route_is_concurrent_safe (@) {
  # it is what the browser uses to decide the WebUI is up, so it must answer
  # even while the serialized device lane or compute lane is busy.
  return 1 if($path eq "/api/ping" || $path eq "/api/restart/status" || $path eq "/api/selftest/status");
- # Playlist list and remote state: reads two small JSON files.
- return 1 if($method eq "GET" && ($path eq "/api/playlists" || $path eq "/api/tvmenu"));
+ # Playlist list and remote state: reads two small JSON files. Signal
+ # preset list: reads one small JSON file (writes go through the normal lane).
+ return 1 if($method eq "GET" && ($path eq "/api/playlists" || $path eq "/api/tvmenu" || $path eq "/api/presets"));
  # Static assets: read a fixed file from disk and stream it.
  return 1 if($path eq "/favicon.ico" || $path eq "/pgen-logo-light.png" || $path eq "/assets/hcfr_chc.js"
   || $path eq "/assets/icc_profile.js" || $path eq "/assets/icc_profile.css");
@@ -1760,6 +1761,14 @@ sub webui_handle_request (@) {
     my $len=length($r);
     print $client "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: $len\r\n$cors\r\n$r";
    }
+   elsif(($path eq "/api/presets" && $method eq "GET") || ($path=~m{^/api/presets/(?:save|delete)$} && $method eq "POST")) {
+    my ($code,$res)=$path eq "/api/presets" ? &webui_presets_list()
+     : $path eq "/api/presets/save" ? &webui_presets_save($body) : &webui_presets_delete($body);
+    my %reason=(200=>"OK",400=>"Bad Request",404=>"Not Found",500=>"Internal Server Error");
+    my $r=&_webui_json_pp()->encode($res);
+    my $len=length($r);
+    print $client "HTTP/1.1 $code $reason{$code}\r\nContent-Type: application/json\r\nCache-Control: no-store\r\nContent-Length: $len\r\n$cors\r\n$r";
+   }
    elsif($path eq "/api/tvmenu" && $method eq "GET") {
     my $r=&webui_tvmenu_json();
     my $len=length($r);
@@ -1840,6 +1849,9 @@ sub webui_handle_request (@) {
      $stats=~s/\}$/sprintf(',"notice":{"id":"%s","title":"%s","text":"%s"}}',&_webui_json_escape($nid),&_webui_json_escape($ntitle),&_webui_json_escape($ntext))/e;
     }
    }
+   # Refused settings and HDMI link interruptions (cheap: two small files).
+   my $signal_state=eval { &webui_signal_state_json() };
+   $stats=~s/\}$/,"signal":{$signal_state}}/ if($signal_state);
    my $len=length($stats);
    print $client "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: $len\r\n$cors\r\n$stats";
   }
@@ -2028,6 +2040,13 @@ sub webui_handle_request (@) {
     my $result=&webui_bluetooth_pan_restart();
     my $len=length($result);
     print $client "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: $len\r\n$cors\r\n$result";
+   }
+   elsif($path eq "/api/signal") {
+    # What the settings ask for, what is on the cable, quiet adjustments,
+    # refused settings and HDMI link interruptions.
+    my $json=eval { &webui_signal_json() } || '{"status":"error","message":"Signal state could not be read."}';
+    my $len=length($json);
+    print $client "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: $len\r\n$cors\r\n$json";
    }
    elsif($path eq "/api/infoframes") {
     my $json=&webui_infoframes_json();
@@ -10117,6 +10136,9 @@ sub webui_apply_config (@) {
   }
   # A marker from the self-test (read from $body below), not a setting.
   delete $changes{"selftest"};
+  # As posted, before the derivations below: what was quietly changed is
+  # reported back (adjusted).
+  my %posted=%changes;
   my $requested_dv_transport=&pg_dv_transport_mode($changes{"dv_transport"} || $pgenerator_conf{"dv_transport"});
  # HDR10/HLG and DV force BT.2020 colorimetry below. Remember the SDR choice
  # when leaving SDR and give it back on the way in, else SDR kept signalling
@@ -10252,7 +10274,9 @@ sub webui_apply_config (@) {
    $dv_map_mode="2" if($dv_metadata eq "4");
   }
   $changes{"dv_transport"}=$dv_transport;
-  $changes{"max_bpc"}=&pg_dv_transport_max_bpc($changes{"max_bpc"} || $effective{"max_bpc"} || $pgenerator_conf{"max_bpc"});
+  # The depth follows this transport, not the dv_transport still in the
+  # conf (standard after LLDV would otherwise get LLDV's 12-bit).
+  $changes{"max_bpc"}=&pg_dv_transport_max_bpc($dv_transport, $changes{"max_bpc"} || $effective{"max_bpc"} || $pgenerator_conf{"max_bpc"});
   $changes{"is_ll_dovi"}=&pg_dv_transport_ll_flag($dv_transport);
   $changes{"is_std_dovi"}=&pg_dv_transport_std_flag($dv_transport);
   $changes{"dv_status"}="1";
@@ -10310,6 +10334,40 @@ sub webui_apply_config (@) {
   # YCbCr 4:2:2 renderer path is supported at 10-bit only.
   $changes{"max_bpc"}="10";
  }
+ # Refused settings (PGSignalCheck.pm): a signal the board or the display
+ # cannot carry is not written, so the output stays as it was instead of
+ # the HDMI driver quietly sending something else. Checked only when a
+ # signal key changes, so an unrelated POST still works on a display that
+ # cannot take the current settings.
+ my %signal_after=%pgenerator_conf;
+ $signal_after{$_}=$changes{$_} foreach(keys %changes);
+ my $signal_changed=0;
+ foreach my $k (@signal_conf_keys) {
+  next if(!exists $changes{$k} || $k eq "signal_mode");
+  $signal_changed=1 if("$changes{$k}" ne (defined($pgenerator_conf{$k}) ? "$pgenerator_conf{$k}" : ""));
+ }
+ my @adjusted=();
+ if($signal_changed) {
+  my ($check,$req)=eval { &signal_check_conf(\%signal_after) };
+  if($check && !$check->{ok}) {
+   my $alt=@{$check->{alternatives} || []} ? " Works here: ".join(", ",@{$check->{alternatives}})."." : "";
+   &log("WebUI: settings refused (".&signal_request_label($req)."): $check->{reason}");
+   my $result='{"status":"error","refused":true,"message":"'.&_webui_json_escape($check->{reason}.$alt).'"}';
+   return wantarray ? ($result,0) : $result;
+  }
+  &log("WebUI: signal check failed ($@), applying unchecked") if(!$check);
+  push(@adjusted,@{$check->{adjustments} || []}) if($check);
+  if(!$dv_on) {
+   my %fmt=(0=>"RGB",1=>"YCbCr 4:4:4",2=>"YCbCr 4:2:2");
+   my $f=$fmt{$effective_color_format} || "RGB";
+   if(defined $posted{"max_bpc"} && $posted{"max_bpc"} ne "" && defined $changes{"max_bpc"} && "$posted{max_bpc}" ne "$changes{max_bpc}") {
+    push(@adjusted,"$posted{max_bpc}-bit $f is sent as $changes{max_bpc}-bit.");
+   }
+   if(defined $posted{"rgb_quant_range"} && "$posted{rgb_quant_range}" eq "2" && "$effective_rgb_quant_range" eq "1") {
+    push(@adjusted,"$f is sent as Limited range: Full range is for RGB only.");
+   }
+  }
+ }
  # Keys that require pattern generator restart
  my %restart_keys=map{$_=>1} qw(mode_idx eotf is_hdr is_sdr colorimetry primaries
   min_luma max_luma max_cll max_fall color_format max_bpc rgb_quant_range
@@ -10344,6 +10402,12 @@ sub webui_apply_config (@) {
    }
   }
   &sudo("SET_PGENERATOR_CONF_MULTI",@conf_writes) if(@conf_writes);
+ # Settings that work: what a later refused apply goes back to, and the end
+ # of a refusal a calibration program was left in.
+ if($signal_changed) {
+  &signal_applied_snapshot_write(\%pgenerator_conf);
+  &signal_refused_clear("settings applied in the WebUI");
+ }
  # Resolve card knobs: redraw the live Resolve patch immediately so the
  # operator sees the change without waiting for the calibration software's
  # next pattern message.
@@ -10364,6 +10428,7 @@ sub webui_apply_config (@) {
  my $restart_id=$need_restart ? &webui_renderer_restart_begin() : "";
  my $result='{"status":"ok","restart":'.($need_restart ? 'true' : 'false');
  $result.=',"restart_id":"'.$restart_id.'"' if($restart_id ne "");
+ $result.=',"adjusted":['.join(",",map {'"'.&_webui_json_escape($_).'"'} @adjusted).']' if(@adjusted);
  $result.='}';
  # The renderer-apply hint travels with the restart token: the apply worker
  # first tries to reconfigure the running renderer in place and only falls
@@ -11096,107 +11161,47 @@ sub webui_modes_json (@) {
 }
 
 sub webui_capabilities_json (@) {
- # Find connected HDMI port and its EDID
- my $edid_path="";
- foreach my $port ($hdmi_2,$hdmi_1) {
-  foreach my $card (0..3) {
-   my $p="/sys/class/drm/card${card}-${port}";
-   if(-d $p) {
-    my $st=&_webui_slurp("$p/status"); chomp $st;
-    if($st eq "connected") {
-     $edid_path="$p/edid";
-     last;
-    }
-   }
-  }
-  last if($edid_path ne "");
- }
-
- # Defaults (conservative — no deep color, no 420)
- my $dc_30=0; my $dc_36=0; my $dc_y444=0;
- my $dc_420_10=0; my $dc_420_12=0;
- my $max_tmds=340; my $scdc=0;
- my $has_444=0; my $has_422=0;
- my $has_st2084=0; my $has_hlg=0;
- my $has_dv=0; my $dv_444_10b12b=0;
- my $edid_decode_available=(-x $edidparser) ? 1 : 0;
- my $edid_parsed=0;
+ # What the connected display declares, read from its raw EDID by
+ # PGEdidCaps.pm: the same reading the refused-settings check
+ # (PGSignalCheck.pm) decides from, so the dropdowns and the daemon agree.
+ my ($ecaps,$dv_vsvdb,$port,$raw_edid)=&signal_display_caps();
+ my $edid_parsed=$ecaps->{known} ? 1 : 0;
  my $kms_output_format=0;
  my $kms_dovi_output_metadata=0;
- my %vic_420; # "WxH@HZi" => 1
-
  if($is_kms) {
   my $mt=`timeout 5 $modetest -a -c 2>/dev/null`;
   $kms_output_format=1 if($mt=~/\boutput format\b/);
   $kms_dovi_output_metadata=1 if($mt=~/\bDOVI_OUTPUT_METADATA\b/);
  }
-
- if($edid_decode_available && $edid_path ne "" && -e $edid_path) {
-  my $e=`timeout 5 $edidparser $edid_path 2>/dev/null`;
-  $edid_parsed=1 if(defined($e) && $e ne "");
-
-  # Base color format support (CTA header)
-  $has_444=1 if($e=~/(?:Supports\s+)?YCbCr\s+4:4:4/i);
-  $has_422=1 if($e=~/(?:Supports\s+)?YCbCr\s+4:2:2/i);
-
-  # HDMI VSDB deep color flags
-  $dc_30=1 if($e=~/DC_30bit/);
-  $dc_36=1 if($e=~/DC_36bit/);
-  $dc_y444=1 if($e=~/DC_Y444/);
-
-  # HDMI VSDB Max TMDS (1.4 block)
-  if($e=~/Maximum TMDS clock:\s*(\d+)\s*MHz/) {
-   $max_tmds=$1 if($1 > $max_tmds);
-  }
-  # HDMI Forum VSDB (2.x block)
-  if($e=~/Maximum TMDS Character Rate:\s*(\d+)\s*MHz/) {
-   $max_tmds=$1 if($1 > $max_tmds);
-  }
-  $scdc=1 if($e=~/SCDC Present/);
-  $dc_420_10=1 if($e=~/10-bits\/component Deep Color 4:2:0/);
-  $dc_420_12=1 if($e=~/12-bits\/component Deep Color 4:2:0/);
-
-  # HDR support
-  $has_st2084=1 if($e=~/SMPTE ST2084/);
-  $has_hlg=1 if($e=~/Hybrid Log-Gamma/);
-
-  # Dolby Vision VSVDB
-  if($e=~/Vendor-Specific Video Data Block \(Dolby\)/) {
-   $has_dv=1;
-   $dv_444_10b12b=1 if($e=~/Supports 10b 12b 444:\s*Supported/i);
-  }
-
-  # Parse 4:2:0 Capability Map VICs (resolution@integer_hz)
-  my $in_420=0;
-  foreach my $line (split /\n/,$e) {
-   if($line=~/4:2:0 Capability Map/) { $in_420=1; next; }
-   if($in_420) {
-    if($line=~/VIC\s+\d+:\s+(\d+x\d+i?)\s+([\d.]+)\s*Hz/) {
-     my $key=$1."\@".int($2+0.5);
-     $vic_420{$key}=1;
-    } elsif($line=~/Data Block|Checksum/) {
-     $in_420=0;
-    }
-   }
-  }
+ my $dc_30=$ecaps->{dc_30bit} ? 1 : 0;
+ my $dc_36=$ecaps->{dc_36bit} ? 1 : 0;
+ my $dc_y444=$ecaps->{dc_y444} ? 1 : 0;
+ my $has_444=$ecaps->{has_ycbcr444} ? 1 : 0;
+ my $has_422=$ecaps->{has_ycbcr422} ? 1 : 0;
+ my $has_st2084=$ecaps->{has_hdr_st2084} ? 1 : 0;
+ my $has_hlg=$ecaps->{has_hdr_hlg} ? 1 : 0;
+ my $has_dv=$ecaps->{has_dv} ? 1 : 0;
+ my $scdc=$ecaps->{scdc} ? 1 : 0;
+ my $dv_444_10b12b=0;
+ # TMDS limits: the board's port, the display's declared rate (340 MHz when
+ # it declares none or cannot scramble), and the lower of the two.
+ require PGSignalCheck;
+ my $board=PGSignalCheck::signal_board_limits($device_model,$port);
+ my $display_tmds=0;
+ if($edid_parsed) {
+  $display_tmds=$ecaps->{max_tmds_mhz} || 340;
+  $display_tmds=340 if($display_tmds > 340 && !$scdc);
  }
+ my $max_tmds=$board->{max_tmds_mhz};
+ $max_tmds=$display_tmds if($display_tmds && $display_tmds < $max_tmds);
+ my $dc_420_10=0;
+ my $dc_420_12=0;
+ my @v420=();
 
- # Build 4:2:0 VIC array
- $dc_420_10=0;
- $dc_420_12=0;
- %vic_420=();
- my @v420=map{"\"$_\""} sort keys %vic_420;
-
- # Dolby Vision VSVDB from the raw EDID (no edid-decode needed): the
- # display's own peak/black, interface and primaries.
- my $dv_vsvdb;
- if($edid_path ne "" && open(my $efh,"<:raw",$edid_path)) {
-  local $/;
-  my $raw=<$efh>;
-  close($efh);
-  $dv_vsvdb=&dolby_vsvdb_from_edid($raw);
- }
+ # Dolby Vision VSVDB (PGEdidDolby.pm): the display's own peak/black,
+ # interface and primaries.
  $has_dv=1 if($dv_vsvdb && !$dv_vsvdb->{error});
+ $dv_444_10b12b=1 if($dv_vsvdb && !$dv_vsvdb->{error} && ($dv_vsvdb->{ycc444} || "none") ne "none");
 
 	 my $dv_transport_is_ll=&pg_dv_transport_ll_flag();
 	 my $dv_transport_is_std=&pg_dv_transport_std_flag();
@@ -11212,6 +11217,11 @@ sub webui_capabilities_json (@) {
   .",\"dc_420_10bit\":".($dc_420_10?"true":"false")
   .",\"dc_420_12bit\":".($dc_420_12?"true":"false")
   .",\"max_tmds\":$max_tmds"
+  .",\"display_max_tmds\":$display_tmds"
+  .",\"board\":\"".&_webui_json_escape($board->{name})."\""
+  .",\"board_port\":\"".&_webui_json_escape($board->{port})."\""
+  .",\"board_max_tmds\":$board->{max_tmds_mhz}"
+  .",\"hdmi_vsdb\":".($ecaps->{hdmi}?"true":"false")
   .",\"scdc\":".($scdc?"true":"false")
   .",\"kms_output_format\":".($kms_output_format?"true":"false")
   .",\"kms_dovi_output_metadata\":".($kms_dovi_output_metadata?"true":"false")
@@ -11229,9 +11239,275 @@ sub webui_capabilities_json (@) {
 		  .",\"dv_transport\":\"$dv_transport_mode\""
 		  .",\"dv_transport_modes\":[$dv_transport_modes]"
 	  .",\"dv_vsvdb\":".&dolby_vsvdb_json($dv_vsvdb)
-	  .",\"edid_decode_available\":".($edid_decode_available?"true":"false")
+	  .",\"edid_decode_available\":true"
   .",\"edid_parsed\":".($edid_parsed?"true":"false")
 	  .",\"vic_420\":[".join(",",@v420)."]}";
+}
+
+# Refused settings and HDMI link events as a JSON fragment: the refusal a
+# calibration program is left in (command.pm signal_gate_conf) and the last
+# link interruption seen during a measurement (webui_hdmi_link_watch).
+sub webui_signal_state_json (@) {
+ my $f=&signal_refused_read();
+ my $refused="null";
+ if($f && ($f->{reason} || "") ne "") {
+  $refused="{".join(",",map {"\"$_\":\"".&_webui_json_escape(defined($f->{$_}) ? $f->{$_} : "")."\""} qw(source reason requested kept alternatives time restored))."}";
+ }
+ my $ev=&hdmi_link_last_event();
+ my $link="null";
+ if($ev) {
+  $link="{".join(",",map {"\"$_\":\"".&_webui_json_escape(defined($ev->{$_}) ? $ev->{$_} : "")."\""} qw(id time event during text))."}";
+ }
+ return "\"refused\":$refused,\"link_event\":$link";
+}
+
+# The vendor infoframe slot on the wire (pgen_hdmi_packet through
+# PGenerator_cmd.pl, root only), as the "slot=1 ..." line or undef while
+# unknown. The request never runs the reader itself: called from a request
+# thread it once hung the whole WebUI (the helper's timeout had exited, the
+# backtick read never saw EOF and no lane answered, not even /api/ping). A
+# detached worker reads it and leaves "key\ntime\nline" in
+# $signal_state_dir/vsif; the request reads that file and asks for a new
+# read after a modeset (renderer pid or infoframes changed) or after 15 s.
+# At most one worker runs at a time (vsif.pending, 30 s).
+our $webui_vsif_reader=sub { return &sudo("HDMI_PACKET",1); };
+our $webui_vsif_worker_limit=30;
+our $webui_vsif_spawn=sub {
+ my $work=shift;
+ return &webui_spawn_detached(sub {
+  # Single-threaded child of a threaded process: drop the fds it inherited
+  # (client sockets, other threads' pipes, the daemon's stdio) so it holds
+  # nothing open for anyone else, and bound its own life.
+  POSIX::close($_) for(3..1023);
+  open(STDIN,"<","/dev/null"); open(STDOUT,">","/dev/null"); open(STDERR,">","/dev/null");
+  $SIG{ALRM}='DEFAULT';
+  alarm($webui_vsif_worker_limit);
+  eval { $work->() };
+  POSIX::_exit(0);
+ });
+};
+sub webui_vsif_files () { return ("$signal_state_dir/vsif","$signal_state_dir/vsif.pending"); }
+sub webui_vsif_read_into (@) {
+ my $key=shift;
+ my ($f,$pending)=&webui_vsif_files();
+ my $out=eval { $webui_vsif_reader->() } // "";
+ my ($line)=$out=~/^(slot=1 .*)$/m;
+ if(open(my $fh,">","$f.tmp.$$")) {
+  print $fh "$key\n".time()."\n".($line // "")."\n";
+  close($fh);
+  rename("$f.tmp.$$",$f) || unlink("$f.tmp.$$");
+ }
+ unlink($pending);
+}
+sub webui_signal_vsif_line (@) {
+ my ($avi,$drm)=@_;
+ my $pid="";
+ if(open(my $pf,"<",$renderer_pid_file)) { $pid=<$pf> // ""; close($pf); $pid=~s/\s+//g; }
+ my $key="$pid|".($avi // "")."|".($drm // "");
+ $key=~s/[\r\n]//g;
+ my ($f,$pending)=&webui_vsif_files();
+ my ($fkey,$ftime,$line)=("",0,"");
+ if(open(my $fh,"<",$f)) {
+  ($fkey,$ftime,$line)=map { my $v=$_ // ""; chomp($v); $v } (scalar(<$fh>),scalar(<$fh>),scalar(<$fh>));
+  close($fh);
+ }
+ my $same=($fkey eq $key);
+ if(!$same || time()-($ftime || 0) >= 15) {
+  my @st=stat($pending);
+  if(!@st || time()-$st[9] >= 30) {
+   mkdir($signal_state_dir) if(!-d $signal_state_dir);
+   if(open(my $ph,">",$pending)) {
+    close($ph);
+    unlink($pending) if(!eval { $webui_vsif_spawn->(sub { &webui_vsif_read_into($key); }) });
+   }
+  }
+ }
+ return undef if(!$same || $line!~/^slot=1 /);
+ return $line;
+}
+
+# What the settings ask for and what is on the cable (AVI/DRM infoframes of
+# the last modeset, the encoder's depth and TMDS readback, the vendor frame
+# for Dolby Vision), with the quiet adjustments where the two differ.
+sub webui_signal_json (@) {
+ require PGSignalCheck;
+ my $req=&signal_request_from_conf(\%pgenerator_conf);
+ $req->{rgb_quant_range}=&effective_rgb_quant_range() if(defined &effective_rgb_quant_range);
+ my ($r)=eval { &signal_check_conf(\%pgenerator_conf) };
+ my ($connected,$avi,$drm)=&webui_last_infoframes();
+ my $link=$connected ? &webui_hdmi_link_info() : undef;
+ $link=undef if($link && !$link->{renderer});
+ my $vsif=($connected && $link) ? &webui_signal_vsif_line($avi,$drm) : undef;
+ my $w=PGSignalCheck::signal_wire_from_infoframes($connected ? $avi : "",$connected ? $drm : "",$link,$vsif);
+ my @adj=@{PGSignalCheck::signal_wire_adjustments($req,$w)};
+ unshift(@adj,@{$r->{adjustments} || []}) if($r);
+ my $mode=PGSignalCheck::signal_mode_label($req);
+ my $wire=PGSignalCheck::signal_wire_label($w,$mode,$req);
+ my $parts=PGSignalCheck::signal_wire_parts($w,$mode,$req);
+ my $num=sub { my $v=shift; return defined($v) ? $v+0 : "null"; };
+ return "{\"status\":\"ok\",\"connected\":".($connected ? "true" : "false")
+  .",\"requested\":\"".&_webui_json_escape(&signal_request_label($req))."\""
+  .",\"sending\":\"".&_webui_json_escape($wire)."\""
+  .",\"wire\":{\"format\":".$num->($w->{format}).",\"range\":".$num->($w->{range})
+  .",\"eotf\":".$num->($w->{eotf}).",\"bpc\":".$num->($w->{bpc})
+  .",\"tmds_mhz\":".(defined $w->{tmds_mhz} ? sprintf("%.3f",$w->{tmds_mhz}) : "null")
+  .",\"dv\":".(defined $w->{dv} ? "\"".($w->{dv} eq "" ? "none" : $w->{dv})."\"" : "null")
+  .",\"parts\":".($parts ? "{".join(",",map {"\"$_\":\"".&_webui_json_escape($parts->{$_})."\""} qw(format name depth range mode signal))."}" : "null")."}"
+  .",\"check\":".($r ? "{\"ok\":".($r->{ok} ? "true" : "false").",\"reason\":\"".&_webui_json_escape($r->{reason})."\"}" : "null")
+  .",\"adjustments\":[".join(",",map {"\"".&_webui_json_escape($_)."\""} @adj)."]"
+  .",\"port\":".&webui_signal_port_json()
+  .",".&webui_signal_state_json()."}";
+}
+
+# The HDMI port the display is on, what that port can carry and, while the
+# renderer runs, the port it actually drives (a different one after the
+# cable moved: nothing reaches the display until the output restarts).
+sub webui_signal_port_json (@) {
+ require PGSignalCheck;
+ my ($port)=eval { &signal_connected_port() };
+ my $p=PGSignalCheck::signal_port_info($device_model,$port);
+ return "null" if(!$p);
+ my $driving=&webui_renderer_alive() ? (eval { &signal_renderer_port() } || "") : "";
+ my $str=sub { my $v=shift; return defined($v) ? "\"".&_webui_json_escape($v)."\"" : "null"; };
+ my $f=$p->{faster};
+ my $driving_label=($driving=~/^HDMI-A-(\d+)$/) ? "HDMI".($1-1) : undef;
+ return "{\"name\":".$str->($p->{port}).",\"label\":".$str->($p->{label})
+  .",\"max_tmds_mhz\":".($p->{max_tmds_mhz}+0).",\"max_mode\":".$str->($p->{max_mode})
+  .",\"where\":".$str->($p->{where})
+  .",\"faster\":".($f ? "{\"label\":".$str->($f->{label}).",\"max_mode\":".$str->($f->{max_mode}).",\"where\":".$str->($f->{where})."}" : "null")
+  .",\"board\":".$str->($p->{board})
+  .",\"ports\":[".join(",",map { "{\"name\":".$str->($_->{port}).",\"label\":".$str->($_->{label})
+   .",\"max_tmds_mhz\":".($_->{max_tmds_mhz}+0).",\"max_mode\":".$str->($_->{max_mode}).",\"where\":".$str->($_->{where})."}" } @{$p->{ports}})."]"
+  .",\"renderer\":".$str->($driving eq "" ? undef : $driving)
+  .",\"renderer_label\":".$str->($driving_label)
+  .",\"renderer_elsewhere\":".(($driving ne "" && $driving ne $p->{port}) ? "true" : "false")."}";
+}
+
+#
+# HDMI link watch. A display that resets, changes input or is switched off
+# drops hot-plug, and with it the link. During a measurement (a calibration
+# program connected, a meter series or AutoCal running) that is recorded
+# with the time and shown in the WebUI: the display may have reset or changed
+# its picture settings, so readings taken across it can't be combined.
+# udevadm monitor delivers the kernel's hot-plug uevents; without it the
+# connector status is polled every second.
+#
+sub webui_hdmi_link_status (@) {
+ my %st;
+ my $sysfs=defined $hdmi_link_sysfs ? $hdmi_link_sysfs : "/sys/class/drm";
+ foreach my $status (sort glob("$sysfs/card*-HDMI-A-*/status")) {
+  my ($dir,$port)=$status=~m{^(.*card\d+-(HDMI-A-\d+))/status$};
+  next if(!$port);
+  open(my $fh,"<",$status) or next;
+  my $state=<$fh>;
+  close($fh);
+  $state="" if(!defined $state);
+  chomp($state);
+  my $edid="";
+  if($state eq "connected" && open(my $efh,"<:raw","$dir/edid")) {
+   local $/;
+   $edid=<$efh>;
+   close($efh);
+   $edid="" if(!defined $edid);
+  }
+  $st{$port}={state=>$state,edid=>$edid};
+ }
+ return \%st;
+}
+
+# What was being measured when the link changed ("" = nothing).
+sub webui_hdmi_link_during (@) {
+ return "$calibration_client_software session" if(defined $calibration_client_software && $calibration_client_software ne "");
+ return "measurement series" if(eval { &webui_meter_series_alive() });
+ return "AutoCal run" if(eval { &webui_meter_lg_autocal_running() || &webui_meter_lg_3d_autocal_running() });
+ return "";
+}
+
+sub webui_hdmi_link_record (@) {
+ my ($event,$port)=@_;
+ require POSIX;
+ my $t=time();
+ my $at=POSIX::strftime("%H:%M:%S",localtime($t));
+ my $during=&webui_hdmi_link_during();
+ my %what=(lost=>"The HDMI link to the display on $port was interrupted at $at",
+           reset=>"The display on $port re-announced itself (hot-plug) at $at",
+           back=>"The display on $port is back at $at",
+           changed=>"A different display answered on $port at $at");
+ my $text=$what{$event} || "HDMI $event on $port at $at";
+ $text.=" during the $during" if($during ne "");
+ $text.=".";
+ &hdmi_link_event_add(id=>"$t-$$-".int(rand(1000000)),time=>$t,event=>$event,during=>$during,text=>$text);
+ &log("HDMI link: $event on $port".($during ne "" ? " during the $during" : ""));
+ if($during ne "" && $event ne "back") {
+  &webui_notice("HDMI link interrupted","$text The display may have reset, changed input or its picture settings, so readings taken across it can't be combined.\nCheck the display, then run the measurements again from the start.");
+ }
+}
+
+# Compare with the previous state; $uevent: the kernel sent a hot-plug event.
+sub webui_hdmi_link_check (@) {
+ my ($prev,$uevent)=@_;
+ my $now=&webui_hdmi_link_status();
+ foreach my $port (sort keys %$now) {
+  my $was=$prev->{$port};
+  my $is=$now->{$port};
+  next if(!$was);
+  if($was->{state} ne $is->{state}) {
+   &webui_hdmi_link_record("lost",$port) if($was->{state} eq "connected");
+   &webui_hdmi_link_record("back",$port) if($is->{state} eq "connected");
+  } elsif($is->{state} eq "connected" && $was->{edid} ne $is->{edid}) {
+   &webui_hdmi_link_record("changed",$port);
+  } elsif($uevent && $is->{state} eq "connected") {
+   # Hot-plug went low and high again between two reads.
+   &webui_hdmi_link_record("reset",$port);
+  }
+ }
+ return $now;
+}
+
+# One line of "udevadm monitor --kernel --property": a block is
+#   KERNEL[1234.567890] change   /devices/platform/gpu/drm/card1 (drm)
+#   ACTION=change ... HOTPLUG=1
+# and a blank line. Returns undef until a change block ends, then 1 when it
+# was the display's hot-plug line (HOTPLUG=1) and 0 for other drm change
+# events (leases), which only make the status be read again.
+sub webui_hdmi_link_uevent (@) {
+ my ($ev,$line)=@_;
+ if($line=~/^KERNEL\[[\d.]+\]\s+(\S+)/) { %$ev=(change=>$1 eq "change" ? 1 : 0,hotplug=>0); return undef; }
+ $ev->{hotplug}=1 if($ev->{change} && $line=~/^HOTPLUG=1\s*$/);
+ return undef if(!$ev->{change} || $line!~/^\s*$/);
+ my $hotplug=$ev->{hotplug};
+ %$ev=();
+ return $hotplug;
+}
+
+sub webui_hdmi_link_watch (@) {
+ # A udevadm left behind by an earlier daemon (it only ends on its next
+ # write into the closed pipe, or after its timeout).
+ system("pkill -f '^udevadm monitor --kernel --subsystem-match=drm' >/dev/null 2>&1");
+ my $prev=&webui_hdmi_link_status();
+ while(1) {
+  my $ran=time();
+  my $pid=open(my $mon,"-|","timeout","600","udevadm","monitor","--kernel","--property","--subsystem-match=drm");
+  if($pid) {
+   my %ev;
+   while(my $line=<$mon>) {
+    my $hotplug=&webui_hdmi_link_uevent(\%ev,$line);
+    next if(!defined $hotplug);
+    # Let the connector status settle after the interrupt.
+    select(undef,undef,undef,0.3);
+    $prev=&webui_hdmi_link_check($prev,$hotplug);
+   }
+   close($mon);
+  }
+  # udevadm ended (timeout) or is missing: catch up, then poll until the
+  # next try so a missing udevadm costs one status read per second.
+  $prev=&webui_hdmi_link_check($prev,0);
+  next if(time() - $ran >= 590);
+  for(1..60) {
+   sleep(1);
+   $prev=&webui_hdmi_link_check($prev,0);
+  }
+ }
 }
 
 sub webui_wifi_scan_json (@) {
@@ -11511,6 +11787,21 @@ sub webui_bluetooth_pan_restart (@) {
 }
 
 sub webui_hdmi_link_json (@) {
+ my $l=&webui_hdmi_link_info();
+ return "" if(!$l);
+ return sprintf(",\"link\":{\"port\":\"HDMI-A-%d\",\"bpc\":%d,\"gcp\":%d,\"tmds_mhz\":%.3f,\"renderer\":%d,\"spd_sent\":%d}",@$l{qw(port bpc gcp tmds_mhz renderer spd_sent)});
+}
+
+our $renderer_pid_file="/run/PGenerator/PGeneratord.pid";
+our $renderer_proc_dir="/proc";
+sub webui_renderer_alive (@) {
+ return 0 if(!open(my $pf,"<",$renderer_pid_file));
+ my $pid=<$pf>;
+ close($pf);
+ return (defined($pid) && $pid=~/^\s*(\d+)/ && -e "$renderer_proc_dir/$1") ? 1 : 0;
+}
+
+sub webui_hdmi_link_info (@) {
  # What actually goes out on the wire, read from the vc4 HDMI encoder (Pi 4):
  # the deep colour field holds the bit depth (4/5/6 = 8/10/12 bpc, YCbCr 4:2:2
  # always reads 4 as it is a fixed 12-bit container), the PHY PLL the TMDS
@@ -11524,16 +11815,16 @@ sub webui_hdmi_link_json (@) {
   ($port)=$status=~/HDMI-A-(\d+)\/status$/;
   last;
  }
- return "" if(!defined($port) || $port eq "");
+ return undef if(!defined($port) || $port eq "");
  my $idx=$port - 1;
  my ($file)=glob("/sys/kernel/debug/dri/*/hdmi${idx}_regs");
- return "" if(!$file || !open(my $fh,"<",$file));
+ return undef if(!$file || !open(my $fh,"<",$file));
  my %reg;
  while(my $line=<$fh>) {
   $reg{$1}=hex($2) if($line=~/^\s*(\w+)\s*=\s*0x([0-9a-fA-F]+)/);
  }
  close($fh);
- return "" if(!defined($reg{"HDMI_DEEP_COLOR_CONFIG_1"}));
+ return undef if(!defined($reg{"HDMI_DEEP_COLOR_CONFIG_1"}));
  my %bpc_for_depth=(4=>8,5=>10,6=>12);
  my $bpc=$bpc_for_depth{$reg{"HDMI_DEEP_COLOR_CONFIG_1"} & 0xf} || 0;
  my $gcp=($reg{"HDMI_GCP_CONFIG"} || 0) & 0x80000000 ? 1 : 0;
@@ -11543,15 +11834,10 @@ sub webui_hdmi_link_json (@) {
  $tmds=($reg{"HDMI_RM_OFFSET"} & 0x7fffffff) * 54 / 2097152 / ($div * 10) if($div && $reg{"HDMI_RM_OFFSET"});
  # Without a renderer the link carries the console/splash mode, not the
  # configured signal.
- my $renderer=0;
- if(open(my $pf,"<","/run/PGenerator/PGeneratord.pid")) {
-  my $pid=<$pf>;
-  close($pf);
-  $renderer=1 if(defined($pid) && $pid=~/^\s*(\d+)/ && -e "/proc/$1");
- }
+ my $renderer=&webui_renderer_alive();
  # Packet id 3 (SPD, type 0x83) in the infoframe packet enable register.
  my $spd_sent=defined($reg{"HDMI_RAM_PACKET_CONFIG"}) ? (($reg{"HDMI_RAM_PACKET_CONFIG"} & 0x8) ? 1 : 0) : -1;
- return sprintf(",\"link\":{\"port\":\"HDMI-A-%d\",\"bpc\":%d,\"gcp\":%d,\"tmds_mhz\":%.3f,\"renderer\":%d,\"spd_sent\":%d}",$port,$bpc,$gcp,$tmds,$renderer,$spd_sent);
+ return {port=>$port,bpc=>$bpc,gcp=>$gcp,tmds_mhz=>$tmds,renderer=>$renderer,spd_sent=>$spd_sent};
 }
 
 #
@@ -11768,6 +12054,199 @@ sub webui_playlist_action (@) {
  }
  return &_webui_json_pp()->encode({status=>($ok ? "ok" : "error"),index=>$index,count=>scalar(@{$pl->{items}}),
                                    label=>$pl->{items}[$index]{label},($msg ne "" ? (message=>$msg) : ())});
+}
+
+#
+# Signal presets: named snapshots of the signal settings, kept on the Pi so
+# every browser sees the same list. They live in $var_dir/presets/presets.json
+# (a subdirectory: clean_files wipes the files directly in $var_dir). The
+# backend only stores them; the WebUI fills the form and the user applies.
+# Each handler returns (http code, response hashref).
+#
+our $WEBUI_PRESETS_MAX=50;
+# mode_label ("1920x1080-60") names the resolution independently of the
+# display's mode list, whose indices differ from one EDID to the next.
+our @WEBUI_PRESET_KEYS=qw(mode_idx mode_label signal_mode max_bpc color_format colorimetry rgb_quant_range eotf primaries
+ max_luma min_luma max_cll max_fall dv_transport dv_interface dv_map_mode);
+our $_webui_preset_seq=0;
+
+sub _webui_presets_file (@) {
+ my $dir=defined($var_dir) ? $var_dir : "";
+ $dir=~s{/+$}{};
+ return "$dir/presets/presets.json";
+}
+
+# (list, error). A missing file is an empty list; a damaged one is reported
+# and left alone.
+sub _webui_presets_read (@) {
+ my $path=&_webui_presets_file();
+ return ([],"") if(!-e $path);
+ my $fh;
+ return ([],"The presets file on the Pi cannot be read.") if(!open($fh,"<",$path));
+ my $raw=do { local $/; <$fh> };
+ close($fh);
+ $raw="" if(!defined($raw));
+ my $data=eval { &_webui_json_pp()->decode($raw) };
+ return ([],"The presets file on the Pi is damaged.") if(ref($data) ne "HASH" || ref($data->{presets}) ne "ARRAY");
+ my @out;
+ foreach my $p (@{$data->{presets}}) {
+  next if(ref($p) ne "HASH" || ref($p->{settings}) ne "HASH");
+  next if(!defined($p->{id}) || ref($p->{id}) || $p->{id}!~/^[0-9a-z]{1,40}\z/);
+  next if(!defined($p->{name}) || ref($p->{name}) || $p->{name} eq "");
+  my %s;
+  foreach my $k (keys %{$p->{settings}}) {
+   my $v=$p->{settings}{$k};
+   $s{$k}="$v" if(defined($v) && !ref($v));
+  }
+  push(@out,{id=>$p->{id},name=>"$p->{name}",settings=>\%s,updated=>int($p->{updated} || 0)});
+ }
+ return (\@out,"");
+}
+
+sub _webui_presets_sorted (@) {
+ my $list=shift;
+ return [sort { lc($a->{name}) cmp lc($b->{name}) || $a->{name} cmp $b->{name} || $a->{id} cmp $b->{id} } @$list];
+}
+
+# Atomic: temp file in the same directory, then rename. 1 on success; on
+# failure the old file is untouched.
+sub _webui_presets_write (@) {
+ my $list=shift;
+ my $path=&_webui_presets_file();
+ my $json=&_webui_json_pp()->encode({version=>1,presets=>&_webui_presets_sorted($list)});
+ my $tmp=$path.".".$$.".".threads->tid().".tmp";
+ my $fh;
+ return 0 if(!open($fh,">",$tmp));
+ my $ok=(print $fh $json) ? 1 : 0;
+ $ok=0 if(!close($fh));
+ $ok=0 if($ok && !rename($tmp,$path));
+ unlink($tmp) if(!$ok && -e $tmp);
+ return $ok;
+}
+
+# Runs $code under an exclusive flock on presets/.lock: the daemon forks
+# workers, and two saves must not read the same list and drop each other.
+sub _webui_presets_locked (@) {
+ my $code=shift;
+ my $dir=&_webui_presets_file();
+ $dir=~s{/[^/]+$}{};
+ if(!-d $dir) { require File::Path; eval { File::Path::make_path($dir) }; }
+ my $lk;
+ return (500,{status=>"error",message=>"The presets folder on the Pi cannot be written."})
+  if(!-d $dir || !open($lk,">>","$dir/.lock"));
+ if(!flock($lk,Fcntl::LOCK_EX())) {
+  close($lk);
+  return (500,{status=>"error",message=>"The presets file on the Pi is busy. Try again."});
+ }
+ my @r=eval { $code->() };
+ @r=(500,{status=>"error",message=>"The presets could not be updated on the Pi."}) if(!@r);
+ close($lk);
+ return @r;
+}
+
+# (request hashref, error).
+sub _webui_preset_body (@) {
+ my $body=shift;
+ return (undef,"The request body is empty.") if(!defined($body) || $body!~/\S/);
+ my $req=eval { &_webui_json_pp()->decode($body) };
+ return (undef,"The request body is not valid JSON.") if($@);
+ return (undef,"The request body must be a JSON object.") if(ref($req) ne "HASH");
+ return ($req,"");
+}
+
+# (trimmed name, error).
+sub _webui_preset_name (@) {
+ my $name=shift;
+ return (undef,"Give the preset a name.") if(!defined($name) || ref($name));
+ $name="$name";
+ return (undef,"The preset name must not contain control characters.") if($name=~/[\x00-\x1f\x7f-\x9f]/);
+ $name=~s/^\s+//;
+ $name=~s/\s+$//;
+ return (undef,"Give the preset a name.") if($name eq "");
+ return (undef,"The preset name can be at most 40 characters long.") if(length($name) > 40);
+ return ($name,"");
+}
+
+# (settings hashref with string values, error).
+sub _webui_preset_settings (@) {
+ my $s=shift;
+ return (undef,"The preset has no settings.") if(ref($s) ne "HASH" || !%$s);
+ my %known=map { $_=>1 } @WEBUI_PRESET_KEYS;
+ my %out;
+ foreach my $k (sort keys %$s) {
+  my $shown=substr($k,0,40);
+  $shown=~s/[^0-9A-Za-z._-]/?/g;
+  return (undef,"\"$shown\" is not a setting a preset can store.") if(!$known{$k});
+  my $v=$s->{$k};
+  return (undef,"The value of $k must be 1 to 32 letters, digits, dots, dashes or underscores.")
+   if(!defined($v) || ref($v) || "$v"!~/^[0-9A-Za-z._-]{1,32}\z/);
+  $out{$k}="$v";
+ }
+ # A preset without its resolution would load onto whatever mode is set
+ # (e.g. saved while no display was connected and the mode list was empty).
+ return (undef,"The preset has no resolution. Connect the display and choose a resolution first.")
+  if(!defined($out{mode_label}));
+ return (undef,"The resolution of the preset must look like 1920x1080-60.")
+  if($out{mode_label}!~/^\d{1,5}x\d{1,5}i?-\d{1,3}(?:\.\d{1,3})?\z/);
+ return (\%out,"");
+}
+
+sub _webui_preset_new_id (@) {
+ my $list=shift;
+ my %used=map { $_->{id}=>1 } @$list;
+ while(1) {
+  $_webui_preset_seq=($_webui_preset_seq+1) % 4096;
+  my $id=sprintf("%x%03x%04x",time(),$_webui_preset_seq,int(rand(65536)));
+  return $id if(!$used{$id});
+ }
+}
+
+sub webui_presets_list (@) {
+ my ($list,$err)=&_webui_presets_read();
+ my $out={presets=>&_webui_presets_sorted($list)};
+ $out->{error}=$err if($err ne "");
+ return (200,$out);
+}
+
+sub webui_presets_save (@) {
+ my ($req,$err)=&_webui_preset_body(shift);
+ return (400,{status=>"error",message=>$err}) if(!$req);
+ my ($name,$settings);
+ ($name,$err)=&_webui_preset_name($req->{name});
+ return (400,{status=>"error",message=>$err}) if(!defined($name));
+ ($settings,$err)=&_webui_preset_settings($req->{settings});
+ return (400,{status=>"error",message=>$err}) if(!$settings);
+ return &_webui_presets_locked(sub {
+  my ($list,$rerr)=&_webui_presets_read();
+  return (500,{status=>"error",message=>"$rerr The preset was not saved, so the file stays as it is."}) if($rerr ne "");
+  # Same name, any case: overwrite in place and keep the id.
+  my ($preset)=grep { lc($_->{name}) eq lc($name) } @$list;
+  if($preset) {
+   @$preset{qw(name settings updated)}=($name,$settings,time());
+  } else {
+   return (400,{status=>"error",message=>"You can keep up to $WEBUI_PRESETS_MAX presets. Delete one first."})
+    if(@$list >= $WEBUI_PRESETS_MAX);
+   $preset={id=>&_webui_preset_new_id($list),name=>$name,settings=>$settings,updated=>time()};
+   push(@$list,$preset);
+  }
+  return (500,{status=>"error",message=>"The preset could not be saved on the Pi."}) if(!&_webui_presets_write($list));
+  return (200,{status=>"ok",preset=>$preset});
+ });
+}
+
+sub webui_presets_delete (@) {
+ my ($req,$err)=&_webui_preset_body(shift);
+ return (400,{status=>"error",message=>$err}) if(!$req);
+ my $id=$req->{id};
+ return (400,{status=>"error",message=>"Say which preset to delete."}) if(!defined($id) || ref($id) || "$id" eq "");
+ return &_webui_presets_locked(sub {
+  my ($list,$rerr)=&_webui_presets_read();
+  return (500,{status=>"error",message=>"$rerr Nothing was deleted, so the file stays as it is."}) if($rerr ne "");
+  my @keep=grep { $_->{id} ne "$id" } @$list;
+  return (404,{status=>"error",message=>"That preset does not exist."}) if(@keep == @$list);
+  return (500,{status=>"error",message=>"The preset could not be deleted on the Pi."}) if(!&_webui_presets_write(\@keep));
+  return (200,{status=>"ok"});
+ });
 }
 
 #
@@ -12372,11 +12851,12 @@ sub webui_selftest_cancel (@) {
  return '{"status":"ok","running":true}';
 }
 
-sub webui_infoframes_json (@) {
- # The kernel log keeps the infoframes of every earlier modeset. Without a
- # display nothing is sent, so none of them is current. With a display only
- # the last burst counts: vc4 logs AVI, SPD, DRM, HVS per modeset and logs no
- # DRM frame for SDR, so a DRM frame before the last AVI frame is stale.
+# The infoframes of the last modeset: ($connected,$avi,$drm,$spd) as hex.
+# The kernel log keeps the infoframes of every earlier modeset. Without a
+# display nothing is sent, so none of them is current. With a display only
+# the last burst counts: vc4 logs AVI, SPD, DRM, HVS per modeset and logs no
+# DRM frame for SDR, so a DRM frame before the last AVI frame is stale.
+sub webui_last_infoframes (@) {
  my $connected=&webui_hdmi_connected();
  my ($avi_hex,$drm_hex,$spd_hex)=("","","");
  if($connected) {
@@ -12390,6 +12870,11 @@ sub webui_infoframes_json (@) {
  foreach my $hex ($avi_hex,$drm_hex,$spd_hex) {
   $hex=~s/[^0-9a-fA-F:]//g;
  }
+ return ($connected,$avi_hex,$drm_hex,$spd_hex);
+}
+
+sub webui_infoframes_json (@) {
+ my ($connected,$avi_hex,$drm_hex,$spd_hex)=&webui_last_infoframes();
  # The PGenerator+ vc4 module never writes SPD, so "spd" stays empty there;
  # "spd_sent" in the link block reads the packet enable bit back.
  return "{\"status\":\"ok\",\"connected\":".($connected ? "true" : "false").",\"avi\":\"$avi_hex\",\"drm\":\"$drm_hex\",\"spd\":\"$spd_hex\"".&webui_hdmi_link_json()."}";
@@ -13583,6 +14068,15 @@ sub webui_pattern (@) {
  my ($name)=$body=~/"name"\s*:\s*"([^"]+)"/;
  return '{"status":"error","message":"Missing pattern name"}' if(!$name);
  $name=~s/[^a-zA-Z0-9_ -]//g;
+ # Refused settings (command.pm signal_gate_conf): while a calibration
+ # program is left with settings that were refused, no patch is drawn on
+ # the unchanged output. The idle pattern and the TV menu still work.
+ if($name ne "stop" && !$_tvmenu_drawing) {
+  my $why=&signal_patches_refused();
+  if($why ne "") {
+   return '{"status":"error","refused":true,"message":"'.&_webui_json_escape("Patches are refused: $why Choose settings that work in the calibration software, or apply settings in Output.").'"}';
+  }
+ }
  if($name eq "stop" && $body=~/"only_if_idle"\s*:\s*true/i) {
   my ($allowed,$current)=&webui_pattern_idle_refresh_allowed();
   if(!$allowed) {

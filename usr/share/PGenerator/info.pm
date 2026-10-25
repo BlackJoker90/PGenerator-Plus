@@ -43,7 +43,11 @@ sub write_info (@) {
  # Get PGeneric Conf
  if($cmd eq "GET_PGENERATOR_CONF_ALL") {
   foreach my $key (keys(%pgenerator_conf)) {
-   &write_file_info("GET_PGENERATOR_CONF_".uc($key),$pgenerator_conf{$key});
+   my $value=$pgenerator_conf{$key};
+   # The cache answers GET_PGENERATOR_CONF_<KEY> directly, so it must hold
+   # what the uncached path sends: MIN_LUMA in 1.6 wire units, not nits.
+   $value=&pg_min_luma_cmd_nits_to_wire($value) if($key eq "min_luma");
+   &write_file_info("GET_PGENERATOR_CONF_".uc($key),$value);
   }
  }
  # Get Generic

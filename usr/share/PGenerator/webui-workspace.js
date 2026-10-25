@@ -21753,6 +21753,9 @@ function pgInitialRetry(name,fn,delays){
  // once right away when it becomes visible again.
  pgVisiblePoll(checkPing,10000);
  pgVisiblePoll(()=>loadStats(true),3000);
+ // What is on the cable (infoframes + link readback): heavier, so slower.
+ pgVisiblePoll(pgSignalSummaryRefresh,20000);
+ setTimeout(pgSignalSummaryRefresh,1200);
  pgVisiblePoll(syncRemoteConfig,10000);
  pgVisiblePoll(()=>loadInfo(true),30000);
  pgVisiblePoll(()=>loadCecStatus(),5000);

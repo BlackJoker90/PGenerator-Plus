@@ -656,6 +656,135 @@ sub renderer_has_applied_range (@) {
  return ($running eq $pid && $applied eq $range) ? 1 : 0;
 }
 
+# Classic port 85 clients send their settings and then RESTARTPGENERATOR, or
+# SET_MODE with the mode already set, on every connect (ColourSpace does both,
+# with unchanged values). A restart re-commits the same mode from the same
+# conf, so the signal on the cable stays the same, but the display resyncs
+# twice: the exiting renderer resets the connector to RGB 8 bpc. Remember the
+# conf the running renderer read ("<pid>" then its key=value lines), so such
+# a restart can be skipped. A file: WebUI applies run in forked workers.
+sub renderer_started_conf_path () { return "$var_dir/running/renderer-started-conf"; }
+
+# The conf file as the renderer reads it at startup: {key=>value}, undef when
+# it cannot be read or is empty.
+sub renderer_conf_read (@) {
+ my %c=();
+ open(my $fh,'<',$pattern_conf) or return undef;
+ while(my $l=<$fh>) {
+  $l=~s/\r|\n//g;
+  next if($l=~/^#/ || $l eq "");
+  $l=~s/^\s//;
+  $c{$1}=$2 if($l=~/(.*)=(.*)/);
+ }
+ close($fh);
+ return %c ? \%c : undef;
+}
+
+sub renderer_conf_text (@) {
+ my $c=shift;
+ return "" if(ref($c) ne "HASH");
+ return join("",map { "$_=$c->{$_}\n" } sort keys %$c);
+}
+
+sub renderer_running_pid (@) {
+ my $pid=&process_pid("$pattern_generator","get");
+ $pid=&process_pid("${pattern_generator}.dv","get") if($pid eq "" && -x "${pattern_generator}.dv");
+ return $pid;
+}
+
+# $conf: the conf read just before the spawn. Recorded only when the conf
+# still reads the same once the renderer runs; a write in between leaves no
+# record, so the next classic restart really restarts.
+sub renderer_started_conf_record (@) {
+ my $conf=shift;
+ my $path=&renderer_started_conf_path();
+ my $pid=&renderer_running_pid();
+ my $now=&renderer_conf_read();
+ if($pid eq "" || $pid=~/\s/ || ref($conf) ne "HASH" || &renderer_conf_text($now) ne &renderer_conf_text($conf)) {
+  unlink($path);
+  return 0;
+ }
+ if(open(my $fh,'>',"$path.tmp")) {
+  print $fh "$pid\n".&renderer_conf_text($conf);
+  close($fh);
+  return 1 if(rename("$path.tmp",$path));
+  unlink("$path.tmp");
+ }
+ unlink($path);
+ return 0;
+}
+
+# The record for the running renderer: {pid, conf}, undef when there is none
+# or it belongs to another process.
+sub renderer_started_conf_load (@) {
+ open(my $fh,'<',&renderer_started_conf_path()) or return undef;
+ my $pid=<$fh>;
+ my %c=();
+ while(my $l=<$fh>) {
+  chomp($l);
+  $c{$1}=$2 if($l=~/^([^=]*)=(.*)$/);
+ }
+ close($fh);
+ return undef if(!defined $pid);
+ chomp($pid);
+ my $running=&renderer_running_pid();
+ return undef if($pid !~ /^\d+$/ || $running ne $pid || !%c);
+ return {pid=>$pid,conf=>\%c};
+}
+
+# 1 when the running renderer started with exactly the conf on disk now.
+sub renderer_started_conf_current (@) {
+ my $rec=&renderer_started_conf_load();
+ my $now=&renderer_conf_read();
+ return 0 if(!$rec || !$now);
+ return (&renderer_conf_text($rec->{conf}) eq &renderer_conf_text($now)) ? 1 : 0;
+}
+
+# After an in-place reconfigure the renderer has re-read the keys it takes in
+# place ($in_place: {key=>1}). The record follows only when nothing else
+# differs; otherwise it is dropped and the next classic restart restarts.
+sub renderer_started_conf_refresh (@) {
+ my $in_place=shift || {};
+ my $rec=&renderer_started_conf_load();
+ my $now=&renderer_conf_read();
+ if(!$rec || !$now) {
+  unlink(&renderer_started_conf_path());
+  return 0;
+ }
+ my %keys=map { $_=>1 } (keys %{$rec->{conf}},keys %$now);
+ for my $k (keys %keys) {
+  my ($a,$b)=($rec->{conf}{$k},$now->{$k});
+  next if(defined $a && defined $b && $a eq $b);
+  if(!$in_place->{$k}) {
+   unlink(&renderer_started_conf_path());
+   return 0;
+  }
+ }
+ return &renderer_started_conf_record($now);
+}
+
+# RESTARTPGENERATOR and SET_MODE from classic clients: restart the renderer
+# unless the running one already sends these settings. "Running" means it
+# holds DRM master and is not stuck in the HDMI driver; anything else
+# restarts as before. Returns 1 when it restarted.
+sub pattern_generator_restart_unless_current (@) {
+ my $who=shift || "Restart";
+ my $current=0;
+ if($is_kms) {
+  &renderer_lock();
+  $current=(&pattern_generator_is_running() && !&renderer_stuck_in_kernel() &&
+            &pattern_generator_has_drm_master() && &renderer_started_conf_current()) ? 1 : 0;
+  &renderer_unlock();
+ }
+ if($current) {
+  &log("Renderer: $who with unchanged settings; the running renderer already sends them (no restart)");
+  return 0;
+ }
+ &pattern_generator_stop();
+ &pattern_generator_start();
+ return 1;
+}
+
 sub renderer_reconfigure_in_place (@) {
  my ($changed,$dv_before)=@_;
  my %in_place_keys=map{$_=>1} qw(color_format rgb_quant_range colorimetry max_bpc eotf
@@ -750,6 +879,7 @@ sub renderer_reconfigure_in_place (@) {
  if($result) {
   &log("Renderer reconfigure: applied $what in place in ${ms}ms (pid $pid)");
   &renderer_applied_range_record();
+  &renderer_started_conf_refresh(\%in_place_keys);
   return 1;
  }
  &log("Renderer reconfigure: $what not applied in place after ${ms}ms ($reason); falling back to a renderer restart");
@@ -832,6 +962,370 @@ sub hdmi_sink_connected (@) {
   return 1 if(defined $state && $state=~/^connected/);
  }
  return $seen ? 0 : 1;
+}
+
+###############################################
+#     Refused settings (PGSignalCheck.pm)     #
+###############################################
+# A setting the board or the display cannot carry is refused at the apply
+# point instead of going out changed: the output stays as it was, the WebUI
+# shows the reason, and while a calibration program is left in a refused
+# state its patches are refused too, so nothing is measured in a mode that
+# was not selected. The modules are loaded with require: command.pm is also
+# loaded by the sudo helper, which never needs them.
+
+# Keys that make up the signal on the cable; restored together when an
+# apply is refused.
+our @signal_conf_keys=qw(mode_idx signal_mode is_sdr is_hdr eotf colorimetry
+ primaries color_format max_bpc rgb_quant_range dv_status is_ll_dovi
+ is_std_dovi dv_interface dv_transport dv_metadata dv_map_mode dv_color_space
+ dv_profile);
+
+# Connected HDMI port and its EDID file.
+sub signal_connected_port (@) {
+ foreach my $status (sort glob("/sys/class/drm/card*-HDMI-A-*/status")) {
+  open(my $fh,"<",$status) or next;
+  my $state=<$fh>;
+  close($fh);
+  next if(!defined $state || $state!~/^connected/);
+  my ($dir,$port)=$status=~m{^(.*/card\d+-(HDMI-A-\d+))/status$};
+  return ($port,"$dir/edid") if($port);
+ }
+ return ("","");
+}
+
+# The connector the renderer drives: the one bound to a CRTC in the atomic
+# state, printed by drm_atomic_connector_print_state() as
+# "connector[N]: HDMI-A-x" then "\tcrtc=crtc-M" or "\tcrtc=(null)". When the
+# cable moves to the other port the renderer stays on the old connector
+# until it restarts, so the connector status alone cannot tell.
+our $dri_state_glob="/sys/kernel/debug/dri/*/state";
+sub signal_renderer_port (@) {
+ foreach my $st (glob($dri_state_glob)) {
+  open(my $fh,"<",$st) or next;
+  local $/;
+  my $t=<$fh>;
+  close($fh);
+  next if(!defined $t);
+  while($t=~/^connector\[\d+\]: (HDMI-A-\d+)\n\s*crtc=(\S+)/mg) {
+   return $1 if($2 ne "(null)");
+  }
+ }
+ return "";
+}
+
+# What the connected display declares (PGEdidCaps), its Dolby Vision block
+# and the port. {known=>0} without a display or EDID.
+sub signal_display_caps (@) {
+ require PGEdidCaps;
+ require PGEdidDolby;
+ my ($port,$edid_path)=&signal_connected_port();
+ my $raw="";
+ if($edid_path ne "" && open(my $fh,"<:raw",$edid_path)) {
+  local $/;
+  $raw=<$fh>;
+  close($fh);
+  $raw="" if(!defined $raw);
+ }
+ my $caps=PGEdidCaps::edid_caps_from_raw($raw);
+ my $dv=(length($raw) >= 256) ? PGEdidDolby::dolby_vsvdb_from_edid($raw) : undef;
+ return ($caps,$dv,$port,$raw);
+}
+
+# Mode $idx of the connected connector as modetest lists it; -1 or empty is
+# the mode the renderer falls back to (the preferred one).
+sub signal_mode_info (@) {
+ my $idx=shift;
+ my $out=shift;
+ $out=`timeout 3 $modetest -c 2>/dev/null` if(!defined $out);
+ $out="" if(!defined $out);
+ my ($first,$preferred,$hit);
+ while($out=~/^\s*#(\d+)\s+(\d+)x(\d+)(i?)\s+([\d.]+)\s+(?:\d+\s+){8}(\d+)\s+flags:[^;\n]*;\s*type:\s*([^\n]*)/gm) {
+  my $m={idx=>$1,width=>int($2),height=>int($3),interlaced=>($4 eq "i") ? 1 : 0,
+         refresh=>$5+0,clock_khz=>int($6),type=>$7};
+  $first=$m if(!$first);
+  $preferred=$m if(!$preferred && $m->{type}=~/preferred/);
+  if(defined $idx && $idx ne "" && $idx ne "-1" && $m->{idx} eq "$idx") {
+   $hit=$m;
+   last;
+  }
+ }
+ return $hit if($hit);
+ return {} if(defined $idx && $idx ne "" && $idx ne "-1");
+ return $preferred || $first || {};
+}
+
+# Signal mode from the flags the renderer reads.
+sub signal_mode_from_conf (@) {
+ my $conf=shift;
+ return "dv" if(int($conf->{"dv_status"} || 0) || int($conf->{"is_ll_dovi"} || 0) || int($conf->{"is_std_dovi"} || 0));
+ return (int($conf->{"eotf"} || 0) == 3) ? "hlg" : "hdr10" if(int($conf->{"is_hdr"} || 0));
+ return "sdr";
+}
+
+sub signal_request_from_conf (@) {
+ my $conf=shift || \%pgenerator_conf;
+ my $modetest_out=shift;
+ my $mode=&signal_mode_info($conf->{"mode_idx"},$modetest_out);
+ return {%$mode,
+  color_format=>int($conf->{"color_format"} || 0),
+  max_bpc=>int($conf->{"max_bpc"} || 8),
+  rgb_quant_range=>int($conf->{"rgb_quant_range"} || 0),
+  signal_mode=>&signal_mode_from_conf($conf),
+  dv_transport=>&pg_dv_transport_mode($conf->{"dv_transport"})};
+}
+
+# Check a conf (hashref; default the live one). Returns ($result,$request).
+sub signal_check_conf (@) {
+ my $conf=shift || \%pgenerator_conf;
+ my $modetest_out=shift;
+ require PGSignalCheck;
+ my ($caps,$dv,$port)=&signal_display_caps();
+ my $req=&signal_request_from_conf($conf,$modetest_out);
+ my $board=PGSignalCheck::signal_board_limits($device_model,$port);
+ my $r=PGSignalCheck::signal_check($req,$board,$caps,dv_vsvdb=>$dv);
+ return ($r,$req,$board,$caps);
+}
+
+# "10-bit RGB Full, 3840x2160 60 Hz, HDR10"
+sub signal_request_label (@) {
+ my $req=shift;
+ require PGSignalCheck;
+ my @p=(PGSignalCheck::signal_format_label($req->{color_format},$req->{color_format} == 2 ? 0 : $req->{max_bpc}));
+ my %range=(1=>"Limited",2=>"Full");
+ $p[0].=" ".$range{$req->{rgb_quant_range}} if($range{$req->{rgb_quant_range} || 0});
+ my $mode=PGSignalCheck::signal_mode_label($req);
+ push(@p,$mode) if($mode ne "");
+ push(@p,PGSignalCheck::signal_hdr_label($req));
+ return join(", ",@p);
+}
+
+sub _signal_state_escape (@) {
+ my $v=shift;
+ $v="" if(!defined $v);
+ $v=~s/\\/\\\\/g;
+ $v=~s/\n/\\n/g;
+ return $v;
+}
+
+sub _signal_state_write (@) {
+ my ($file,%f)=@_;
+ mkdir($signal_state_dir) if(!-d $signal_state_dir);
+ my $tmp="$file.$$.tmp";
+ open(my $fh,">",$tmp) or return 0;
+ print $fh "$_=".&_signal_state_escape($f{$_})."\n" foreach(sort keys %f);
+ close($fh) or return 0;
+ return rename($tmp,$file) ? 1 : 0;
+}
+
+sub _signal_state_read (@) {
+ my $file=shift;
+ open(my $fh,"<",$file) or return undef;
+ my %f;
+ while(my $line=<$fh>) {
+  chomp($line);
+  next if($line!~/^(\w+)=(.*)$/);
+  my ($k,$v)=($1,$2);
+  $v=~s/\\(n|\\)/$1 eq "n" ? "\n" : "\\"/ge;
+  $f{$k}=$v;
+ }
+ close($fh);
+ return \%f;
+}
+
+# The signal keys as last let through (or found at daemon start): what a
+# refused apply goes back to.
+sub signal_applied_snapshot_write (@) {
+ my $conf=shift || \%pgenerator_conf;
+ my %f=map {("conf_$_"=>defined($conf->{$_}) ? "$conf->{$_}" : "")} @signal_conf_keys;
+ $f{time}=time();
+ return 1 if(&_signal_state_write($signal_applied_file,%f));
+ # A later refusal then goes back to an older snapshot, or refuses without
+ # one (signal_gate_conf says so).
+ &log("Signal: could not write $signal_applied_file: $!") if(defined &log);
+ return 0;
+}
+
+sub signal_applied_snapshot_read (@) {
+ my $f=&_signal_state_read($signal_applied_file);
+ return undef if(!$f);
+ my %conf;
+ foreach my $k (@signal_conf_keys) {
+  return undef if(!exists $f->{"conf_$k"});
+  $conf{$k}=$f->{"conf_$k"};
+ }
+ return \%conf;
+}
+
+# Put the signal keys back to $snapshot (conf file and %pgenerator_conf).
+# Returns 1 when every key was written.
+sub signal_restore_conf (@) {
+ my $snapshot=shift;
+ return 0 if(!$snapshot);
+ my @batch;
+ foreach my $k (@signal_conf_keys) {
+  my $want=defined($snapshot->{$k}) ? "$snapshot->{$k}" : "";
+  my $cur=defined($pgenerator_conf{$k}) ? "$pgenerator_conf{$k}" : "";
+  next if($want eq $cur);
+  # sudo() joins its arguments with spaces: an empty value goes singly.
+  if($want eq "") { &sudo("SET_PGENERATOR_CONF",$k,""); }
+  else { push(@batch,$k,$want); }
+  $pgenerator_conf{$k}=$want;
+ }
+ &sudo("SET_PGENERATOR_CONF_MULTI",@batch) if(@batch);
+ # Read back: a failed write must not pass as restored, and memory follows
+ # the file the renderer reads, so the next check sees what is really set.
+ my %disk=&signal_conf_from_disk();
+ my $ok=1;
+ foreach my $k (@signal_conf_keys) {
+  my $want=defined($snapshot->{$k}) ? "$snapshot->{$k}" : "";
+  my $got=defined($disk{$k}) ? "$disk{$k}" : "";
+  next if($want eq $got);
+  $ok=0;
+  $pgenerator_conf{$k}=$got;
+ }
+ return $ok;
+}
+
+sub signal_conf_from_disk (@) {
+ my %c;
+ open(my $fh,"<",$pattern_conf) or return %c;
+ while(my $line=<$fh>) {
+  chomp($line);
+  $c{$1}=$2 if($line=~/^\s*([^=#\s]+)\s*=\s*(.*?)\s*$/);
+ }
+ close($fh);
+ return %c;
+}
+
+# HDMI link events (webui.pm webui_hdmi_link_watch): one line each, tab
+# separated: id, time, event (lost|back|changed), during (what was running,
+# "" when nothing was measured), text. The last 20 are kept.
+sub hdmi_link_event_add (@) {
+ my %e=@_;
+ mkdir($signal_state_dir) if(!-d $signal_state_dir);
+ my @lines;
+ if(open(my $fh,"<",$hdmi_link_events_file)) { @lines=<$fh>; close($fh); }
+ my $clean=sub { my $v=shift; $v="" if(!defined $v); $v=~s/[\t\r\n]+/ /g; return $v; };
+ push(@lines,join("\t",map {$clean->($_)} ($e{id},$e{time},$e{event},$e{during},$e{text}))."\n");
+ @lines=@lines[-20..-1] if(@lines > 20);
+ my $tmp="$hdmi_link_events_file.$$.tmp";
+ open(my $out,">",$tmp) or return 0;
+ print $out @lines;
+ close($out);
+ return rename($tmp,$hdmi_link_events_file) ? 1 : 0;
+}
+
+sub hdmi_link_events (@) {
+ my @ev;
+ open(my $fh,"<",$hdmi_link_events_file) or return @ev;
+ while(my $line=<$fh>) {
+  chomp($line);
+  my @f=split(/\t/,$line,5);
+  next if(@f < 4);
+  push(@ev,{id=>$f[0],time=>$f[1],event=>$f[2],during=>$f[3],text=>defined($f[4]) ? $f[4] : ""});
+ }
+ close($fh);
+ return @ev;
+}
+
+# The last interruption during a measurement, with its return if any.
+sub hdmi_link_last_event (@) {
+ my @ev=&hdmi_link_events();
+ for(my $i=$#ev;$i>=0;$i--) {
+  next if($ev[$i]{during} eq "" || $ev[$i]{event} eq "back");
+  return $ev[$i];
+ }
+ return undef;
+}
+
+# Daemon start: no refusal carries over, the conf found now is what a
+# refused apply goes back to.
+sub signal_state_reset (@) {
+ mkdir($signal_state_dir) if(!-d $signal_state_dir);
+ unlink($signal_refused_file);
+ unlink($hdmi_link_events_file);
+ &signal_applied_snapshot_write();
+}
+
+# Refused state: set by a refused apply from a calibration program, cleared
+# by the next apply that passes, when that program disconnects, or by a
+# daemon restart (signal_state_reset).
+sub signal_refused_set (@) {
+ my %f=@_;
+ $f{time}=time() if(!$f{time});
+ return &_signal_state_write($signal_refused_file,%f);
+}
+
+sub signal_refused_read (@) {
+ return undef if(!-e $signal_refused_file);
+ return &_signal_state_read($signal_refused_file);
+}
+
+sub signal_refused_clear (@) {
+ my $why=shift || "";
+ return 0 if(!-e $signal_refused_file);
+ unlink($signal_refused_file);
+ &log("Signal: refused state cleared".($why ne "" ? " ($why)" : "")) if(defined &log);
+ return 1;
+}
+
+# Reason text while patches are refused, "" otherwise.
+sub signal_patches_refused (@) {
+ return "" if(!-e $signal_refused_file);
+ # A state file that cannot be read still means refused (fail closed).
+ my $f=&signal_refused_read();
+ return ($f && $f->{reason}) ? $f->{reason} : "The requested signal settings were refused.";
+}
+
+# Name for the program asking: the given one, else the connected client.
+sub signal_source_label (@) {
+ my $name=shift;
+ return $name if(defined $name && $name ne "");
+ return $calibration_client_software if(defined $calibration_client_software && $calibration_client_software ne "");
+ return "Calibration software";
+}
+
+# The gate for calibration programs (Calman, port 85 clients): the conf
+# already holds what they asked for. Passes: snapshot it, end any refused
+# state, return 1. Refused: put the conf back to the snapshot, record the
+# refusal, leave a WebUI notice, return 0. The caller then skips the
+# renderer apply, so the output stays as it was.
+sub signal_gate_conf (@) {
+ my ($source,$modetest_out)=@_;
+ $source="Calibration software" if(!$source);
+ my ($r,$req)=eval { &signal_check_conf(\%pgenerator_conf,$modetest_out) };
+ if(!$r) {
+  # The check itself failing must not block calibration.
+  &log("Signal: check failed (".($@ || "no result")."), letting the apply through") if(defined &log);
+  return 1;
+ }
+ foreach my $a (@{$r->{adjustments} || []}) {
+  &log("Signal: $source: $a") if(defined &log);
+ }
+ if($r->{ok}) {
+  &signal_applied_snapshot_write(\%pgenerator_conf);
+  &signal_refused_clear("$source chose settings that work");
+  return 1;
+ }
+ my $requested=&signal_request_label($req);
+ my $snapshot=&signal_applied_snapshot_read();
+ my $restored=$snapshot ? &signal_restore_conf($snapshot) : 0;
+ my $kept=$snapshot ? &signal_request_label(&signal_request_from_conf($snapshot,$modetest_out)) : "";
+ my $alt=@{$r->{alternatives} || []} ? "Works here: ".join(", ",@{$r->{alternatives}})."." : "";
+ # The reply to the command that asked carries the refusal (daemon.pm
+ # send_key_to_client: NAK for Calman).
+ $signal_refused_pending=1;
+ &signal_refused_set(source=>$source,reason=>$r->{reason},code=>$r->{code},
+                     requested=>$requested,kept=>$kept,alternatives=>$alt,
+                     restored=>$restored ? 1 : 0);
+ &log("Signal: $source asked for $requested: refused: $r->{reason}".($restored ? " Output kept: $kept." : " Conf could not be restored.")) if(defined &log);
+ my $text="$source asked for $requested. $r->{reason}";
+ $text.="\n$alt" if($alt ne "");
+ $text.=$restored ? "\nThe output stays $kept, and patches are refused until settings that work are chosen."
+                  : "\nThe previous settings could not be restored. Patches are refused until settings that work are chosen.";
+ &webui_notice("Settings refused",$text) if(defined &webui_notice);
+ return 0;
 }
 
 # Marker for a renderer start that was deferred because no display was
@@ -1022,6 +1516,8 @@ sub pattern_generator_start(@) {
   # 512 KB (more than enough for startup diagnostics) then drain the rest
   # to /dev/null. The `exec cat >/dev/null` keeps the pipe's read end open
   # so the renderer never gets SIGPIPE once the cap is reached.
+  unlink(&renderer_started_conf_path());
+  my $started_conf=&renderer_conf_read();
   if($use_drm_override) {
    system("MALLOC_CHECK_=0 LD_PRELOAD=/usr/lib/drm_override.so LD_LIBRARY_PATH=/usr/lib $binary $w_s $h_s 2>&1 | ( head -c 524288 > /tmp/renderer-spawn.log; exec cat >/dev/null ) &");
   } else {
@@ -1055,6 +1551,7 @@ sub pattern_generator_start(@) {
    $renderer_is_master=&wait_for_renderer_drm_master(8) if(&pattern_generator_is_running());
    &blank_console_framebuffer() if($renderer_is_master);
    &renderer_applied_range_record();
+   &renderer_started_conf_record($started_conf) if($renderer_is_master);
  # Post-spawn connector reprogramming exists for sinks that miss the
  # pre-launch programming. But once the renderer holds DRM master it already
  # sets output format / Colorimetry / rgb quant range / max bpc / COLOR_RANGE
@@ -1279,7 +1776,14 @@ sub pgenerator_cmd (@) {
   if($conf_key eq "min_luma") {
    $conf_value=&pg_min_luma_cmd_wire_to_nits($conf_value);
   }
-  &sudo("SET_PGENERATOR_CONF",$conf_key,$conf_value);
+  # ColourSpace writes every setting on each connect, mostly unchanged, and
+  # waits only ~0.2 s per reply; a root-helper spawn takes ~0.4 s on the Pi.
+  # Skip the write when the conf file (not the memory copy) already holds
+  # exactly this value; a missing file or key writes as before.
+  my $file_conf=&renderer_conf_read();
+  if(!(ref($file_conf) eq "HASH" && exists($file_conf->{$conf_key}) && $file_conf->{$conf_key} eq "$conf_value")) {
+   &sudo("SET_PGENERATOR_CONF",$conf_key,$conf_value);
+  }
   $pgenerator_conf{$conf_key}=$conf_value;
   if($conf_key eq "dv_metadata") {
    my $map_mode=&dv_map_mode_for_metadata($conf_value);
@@ -1341,7 +1845,14 @@ sub pgenerator_cmd (@) {
    &sudo("SET_CEA_DMT","$2");
   # Start for RPI p4
   } else {
-   &sudo("SET_PGENERATOR_CONF","mode_idx",$2);
+   # ColourSpace sends SET_MODE with the current mode on every connect; skip
+   # the root-helper spawn (~0.4 s) when the conf file already holds it, as
+   # for SET_PGENERATOR_CONF_*. The caches below are cleared either way.
+   my $mode_idx="$2";
+   my $file_conf=&renderer_conf_read();
+   if(!(ref($file_conf) eq "HASH" && exists($file_conf->{"mode_idx"}) && $file_conf->{"mode_idx"} eq $mode_idx)) {
+    &sudo("SET_PGENERATOR_CONF","mode_idx",$mode_idx);
+   }
    $pgenerator_conf{"mode_idx"}=$2;
    unlink("$info_dir/GET_MODES_AVAILABLE.info");
    unlink("$info_dir/GET_MODE.info");
@@ -1352,8 +1863,15 @@ sub pgenerator_cmd (@) {
    &invalidate_hdmi_info_cache();
   }
   # End for RPI p4
-  &pattern_generator_stop();
-  &pattern_generator_start();
+  # Refused settings: a mode the link cannot carry at the current format
+  # and bit depth is put back and not applied (signal_gate_conf). The mode
+  # already running needs no restart (ColourSpace sends SET_MODE with the
+  # current mode on every connect).
+  if(!$is_kms || &signal_gate_conf(&signal_source_label())) {
+   &pattern_generator_restart_unless_current("SET_MODE:$2");
+  } else {
+   $response="$error_response:Refused: ".&signal_patches_refused();
+  }
  }
  if($cmd =~/SET_REFRESH:(.*)/) {
   if(!$is_kms && $tvservice_is_working) {

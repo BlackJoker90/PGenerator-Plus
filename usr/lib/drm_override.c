@@ -142,9 +142,27 @@ static uint32_t colorimetry_prop_id = 0;
 static uint64_t colorimetry_override = 0;
 static int colorimetry_found = 0;
 
+/* The conf keeps one colorimetry for every output format; the connector gets
+ * the form the format allows. CTA-861-G Table 14: RGB takes only C=0, opRGB,
+ * BT.2020 R'G'B' or DCI-P3 R'G'B' (C=1/2 with RGB is "Reserved"), so the SDR
+ * default BT709_YCC (2) must not reach an RGB AVI. Same mapping as the
+ * renderer's AviColorimetryForFormat(); this library overrides the renderer's
+ * value on every commit, so both have to agree. */
 static uint64_t map_connector_colorimetry(uint64_t colorimetry, uint64_t output_fmt) {
     if (output_fmt == 0) {
-        return colorimetry;
+        switch (colorimetry) {
+        case 0:  /* Default */
+        case 7:  /* opRGB */
+        case 9:  /* BT2020_RGB */
+        case 11: /* DCI-P3 RGB D65 */
+        case 12: /* DCI-P3 RGB Theater */
+            return colorimetry;
+        case 8:  /* BT2020_CYCC */
+        case 10: /* BT2020_YCC */
+            return 9;
+        default:
+            return 0;
+        }
     }
     if (colorimetry == 9) {
         return 10;

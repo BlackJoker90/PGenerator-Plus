@@ -306,6 +306,17 @@ $renderer_default_range_file="/var/lib/PGenerator/running/default-rgb-quant-rang
 # Notice for the WebUI (id, title, text lines), shown once per browser as a
 # popup; written by the daemon, read by /api/stats.
 $webui_notice_file="/var/lib/PGenerator/running/webui-notice";
+# Refused settings (command.pm signal_gate_conf): the signal keys last let
+# through, and the refusal a calibration program is left in. A subdirectory:
+# clean_files empties running/ on every renderer stop and start. The daemon
+# start resets both (daemon.pm fork_pattern_daemon).
+$signal_state_dir="/var/lib/PGenerator/signal";
+$signal_applied_file="$signal_state_dir/applied";
+$signal_refused_file="$signal_state_dir/refused";
+# HDMI link events (hotplug) seen while the daemon runs, newest last.
+$hdmi_link_events_file="$signal_state_dir/hdmi-link-events";
+# HDMI connectors for the link watcher (tests point it elsewhere).
+$hdmi_link_sysfs="/sys/class/drm";
 
 $ok_response="OK";
 $error_response="ERR";
@@ -334,6 +345,9 @@ $calman_last_pattern_cmd="";
 $calman_replaying_last_pattern=0;
 $calibration_client_ip="";
 $calibration_client_software="";
+# Set by a refused apply (command.pm signal_gate_conf); the next reply to
+# the program that asked carries the refusal (daemon.pm send_key_to_client).
+$signal_refused_pending=0;
 
 $pattern_plugins="$var_dir/plugins";
 $plugin_archive_file="PGenerator-plugin-.*.tar.gz";

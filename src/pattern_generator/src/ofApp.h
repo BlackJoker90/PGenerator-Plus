@@ -181,7 +181,11 @@ class ofApp : public ofBaseApp{
 	int dv_minpq=62;
 	int dv_maxpq=3696;
 	int dv_diagonal=42;
-  int dv_color_space=0;
+	// The values the templates above carry (byte 66 is 1). Leaving it at 0
+	// made dv_color_space=0 look unchanged in Relative, so the raw template
+	// went out (colour space 1, L1 2/3383/819) instead of the rewritten
+	// packet PGenerator 1.6 sends.
+	int dv_color_space=1;
   };
   struct dv_metadata dv_metadata;
   unsigned char dv_metadata_active[128];

@@ -418,6 +418,12 @@ sub resolve_draw_pattern (@) {
  }
  my $rgb_str="$r_p,$g_p,$b_p";
  my $bg_str="$r_bg,$g_bg,$b_bg";
+ # Refused settings (command.pm signal_gate_conf): no patch on an output
+ # the calibration program did not choose. The protocol has no reply.
+ if((my $why=&signal_patches_refused()) ne "") {
+  &log("Resolve: patch $rgb_str not drawn, settings are refused: $why");
+  return;
+ }
  &clean_pattern_files();
  # Full field pattern (geometry covers entire screen)
  if($geom_cx >= 0.99 && $geom_cy >= 0.99) {

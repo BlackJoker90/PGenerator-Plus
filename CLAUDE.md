@@ -8,7 +8,28 @@ scripts in `usr/bin/`. The Pi runs Perl 5 and Python 3.5: no f-strings, no
 newer stdlib in anything under `usr/`.
 
 The fork's promise is the **signal on the cable**: codes must be bit-exact,
-and that is proven by reading back the scanout, never assumed.
+and that is proven by reading back the scanout, never assumed. This is the
+top priority, above any feature, in SDR, HDR10, HLG and Dolby Vision alike:
+- Bit-exact: codes, ranges, matrices, bit depths.
+- Standards-compliant: the signalling follows the standards:
+  - BT.709, BT.2020 and BT.2100 for colour;
+  - ST 2084 and ST 2086 for HDR10, ARIB STD-B67 for HLG;
+  - CTA-861 for the AVI and DRM infoframes;
+  - ETSI GS CCM 001 for the Dolby Vision metadata.
+- Where a standard is silent, PGenerator 1.6 is the reference (see
+  "Research, don't guess").
+
+## Research, don't guess
+
+- Never state a spec value, packet field, device or client behaviour, or
+  code path from memory or plausibility. Look it up, above all when unsure:
+  the code, the Pi's logs, a readback at the cable, or a primary source
+  (standard, vendor document, reference implementation).
+- Name the source of each statement. Mark what could not be confirmed and
+  say where you searched.
+- A test only proves what it actually varied: confirm the setting under
+  test took effect (log, conf, readback) before drawing a conclusion. In
+  DV, for example, Calman's `CONF_LEVEL:Range` is ignored by design.
 
 ## Local-only material
 
@@ -73,9 +94,19 @@ the Pi. The release refuses to run without `t/` or `prove`.
 
 ## Working on the Pi
 
-- Before probes or restarts: `sh /root/pi_calman_busy.sh`. On BUSY, do not
-  touch the device; ask. (It also counts "Calman G1:" log lines, so a
-  recent G1 plate can show BUSY without a Calman connection.)
+- Before probes or restarts: `sh /root/pi_calman_busy.sh` (source
+  `tools/pi_calman_busy.sh`). It counts only client traffic and prints the
+  log line behind each reason; read that line before telling the user the
+  Pi is in use (an older copy on the Pi matched every "Calman" log line):
+  - In use: an established socket from a foreign peer on 2100/2101, or
+    client traffic (`Calman RAW:`/`UPGCI:`/RPC, `INIT` without a close)
+    from a foreign peer within the last minutes.
+  - Not in use: `Calman G1: basic_alignment …` (the alignment plate drawn
+    at every daemon start), `Calman GCI: suppressed save …` (written by
+    WebUI/API config posts), and our own probes (`peer=127.0.0.1` or the
+    Mac's IP).
+  If a real session is found, do not touch the device; ask. If it is
+  still unclear after checking, ask and say what you found.
 - Deploy safely: diff the Pi's file against the branch first, back up to
   `/root/pgen-backups/`, upload, guard against empty files, compare md5.
 - OLED: test on screen with dim windows (20 IRE, 10 %), not full white.

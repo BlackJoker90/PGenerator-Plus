@@ -3,6 +3,9 @@ let config={};
 let modes=[];
 let caps=null;
 
+// Bluetooth radio on (true), off or absent (false), not read yet (null);
+// set by loadBluetooth, read by the device info tiles.
+var pgBtPowered=null;
 const IFACE_NAMES={
  eth0:'Ethernet',
  usb0:'Ethernet (USB)',
@@ -266,14 +269,14 @@ function applySettingsModalSuccess(detail,holdMs){
  if(status) status.textContent=detail||'New signal mode is live on the display.';
  setTimeout(()=>applySettingsModalHide(),holdMs||1500);
 }
-function applySettingsModalError(detail){
+function applySettingsModalError(detail,heading){
  const overlay=document.getElementById('applySettingsOverlay');
  if(!overlay) return;
  document.body.classList.add('apply-settings-error');
  document.body.classList.remove('apply-settings-success');
  const title=document.getElementById('applySettingsTitle');
  const status=document.getElementById('applySettingsStatus');
- if(title) title.textContent='Apply failed';
+ if(title) title.textContent=heading||'Apply failed';
  if(status) status.textContent=detail||'The renderer did not accept the new settings.';
  // Leave the modal up so the operator can read the error -- the corner
  // toast often scrolls off the visible area on long autocal sessions.
@@ -788,6 +791,7 @@ function webuiAutoColorimetryForSignalMode(signalMode){
 function applyConfigState(nextConfig){
  config=nextConfig;
  window._remoteConfigSnapshot=JSON.stringify(nextConfig);
+ selftestMarkStale();
  const rfc=document.getElementById('resolveForceCenter');
  if(rfc) rfc.checked=String(config.resolve_force_center||'0')==='1';
  const rps=document.getElementById('resolvePatchSize');
@@ -989,10 +993,47 @@ function shouldPauseAutoRefresh(){
  return !!window._configApplyPending||isSettingsFieldActive()||hasUnsavedSettings()||isCalibrationWorkflowActive();
 }
 
+// The Apply bar names what will change, in the labels of the fields.
+const APPLY_BAR_FIELDS=[['mode_idx','Resolution'],['signal_mode','Signal Mode'],['max_bpc','Bit Depth'],
+ ['color_format','Color Format'],['colorimetry','Colorimetry'],['rgb_quant_range','Range'],['eotf','EOTF'],
+ ['primaries','Primaries'],['max_luma','Max Luma'],['min_luma','Min Luma'],['max_cll','MaxCLL'],['max_fall','MaxFALL'],
+ ['dv_transport','DV Transport'],['dv_interface','DV Interface'],['dv_map_mode','DV Map Mode']];
+function applyBarValueText(id,value){
+ const el=document.getElementById(id);
+ const opt=el&&el.options?Array.from(el.options).find(o=>o.value===String(value)):null;
+ if(opt) return (opt.textContent||'').replace(/\s*\((?:p|n)vsync\)/,'').trim();
+ if(value==null||value==='') return '–';
+ return /luma|cll|fall/.test(id)?value+' cd/m²':String(value);
+}
+function applyBarChanges(){
+ let saved={},now={};
+ try{ saved=JSON.parse(window._savedConfig||'{}'); now=JSON.parse(captureSettings()); }catch(e){ return []; }
+ return APPLY_BAR_FIELDS.filter(([k])=>String(saved[k]??'')!==String(now[k]??''))
+  .map(([k,label])=>({label,from:applyBarValueText(k,saved[k]),to:applyBarValueText(k,now[k])}));
+}
+function renderApplyBarChanges(){
+ const host=document.getElementById('applyBarChanges');
+ if(!host) return;
+ host.textContent='';
+ applyBarChanges().forEach((c,i)=>{
+  if(i) host.append(' · ');
+  const b=document.createElement('b'); b.textContent=c.label;
+  host.append(b,' '+c.from+' → '+c.to);
+ });
+}
+// Discard: the fields go back to the settings the generator runs now.
+function discardSettings(){
+ if(config) applyConfigState(config);
+}
+
 function checkSettingsChanged(){
  if(!window._savedConfig)return;
  var changed=captureSettings()!==window._savedConfig;
  document.getElementById('applyBar').style.display=changed?'':'none';
+ if(changed) renderApplyBarChanges();
+ else pgApplyAskSnoozed=false;
+ if(typeof pgPresetMarkActive==='function') pgPresetMarkActive();
+ if(typeof pgPresetSaveRefresh==='function') pgPresetSaveRefresh();
  if(typeof meterUpdateReadButtons==='function') meterUpdateReadButtons();
  // Defensive: a stale or in-flight LG Connect modal from a previous
  // click must not obstruct the display-settings card. The operator's
@@ -1002,6 +1043,49 @@ function checkSettingsChanged(){
  // orphaned lgConnect() doesn't hang in the background.
  if(typeof lgConnectModalHide==='function') lgConnectModalHide();
 }
+
+// A changed output setting asks right away, like a reboot or an update: a
+// dialog lists the changes and applies them on "Apply & Restart". "Keep
+// editing" closes it for this round of edits (the Apply bar stays) until the
+// settings are applied or discarded. Only the user's own edits ask: a change
+// event counts while the page has a user activation (click, key, tap), and
+// loading a preset asks once for the whole set (pgPresetLoad).
+const PG_APPLY_ASK_FIELDS=['mode_idx','signal_mode','max_bpc','color_format','colorimetry','rgb_quant_range',
+ 'eotf','primaries','max_luma','min_luma','max_cll','max_fall','dv_transport','dv_interface','dv_map_mode',
+ 'dv_max_luma','dv_min_luma','dv_max_cll','dv_max_fall'];
+const PG_APPLY_ASK_ICON='<rect x="3" y="4" width="18" height="12" rx="1.5"/><path d="M8.5 20h7M12 16v4"/>';
+// var: checkSettingsChanged can run before this line has executed.
+var pgApplyAskSnoozed=false,pgApplyAskOpen=false,pgApplyAskTimer=0;
+function pgApplyAskSoon(){
+ if(pgApplyAskTimer) clearTimeout(pgApplyAskTimer);
+ // After the field's own handlers (dependent fields, Apply bar) have run.
+ pgApplyAskTimer=setTimeout(()=>{ pgApplyAskTimer=0; pgApplyAsk(); },150);
+}
+async function pgApplyAsk(){
+ if(pgApplyAskOpen||pgApplyAskSnoozed||window._configApplyPending||!hasUnsavedSettings()) return;
+ const changes=applyBarChanges();
+ if(!changes.length) return;
+ pgApplyAskOpen=true;
+ let ok=false;
+ try{
+  ok=await pgConfirmReboot({
+   title:changes.length===1?'Apply the new setting?':'Apply '+changes.length+' new settings?',
+   changes:changes,
+   body:'The display shows no picture for a few seconds while the output restarts.',
+   acceptLabel:'Apply & Restart',acceptClass:'btn-primary',cancelLabel:'Keep editing',
+   tone:'accent',icon:PG_APPLY_ASK_ICON
+  });
+ }finally{ pgApplyAskOpen=false; }
+ if(!ok){ pgApplyAskSnoozed=true; return; }
+ if(hasUnsavedSettings()) applySettings();
+}
+document.addEventListener('change',e=>{
+ const id=e.target&&e.target.id;
+ if(!id||!PG_APPLY_ASK_FIELDS.includes(id)||window.pgPresetLoading) return;
+ const ua=navigator.userActivation;
+ if(ua&&!ua.isActive) return;
+ pgApplyAskSoon();
+});
 
 // Output changes can rebuild every patch thumbnail and chart. Running that
 // work in the same change event prevents the browser from painting the dirty
@@ -1036,10 +1120,25 @@ function meterQueueOutputSettingsRefresh(saveMeterPrefs){
  else afterPaint();
 }
 
+// HLG carries no mastering metadata: the ST 2086 / CTA-861.3 values stay
+// visible but locked, with the reason under them.
+function pgSyncHlgMetadataFields(){
+ const hlg=getVal('signal_mode')==='hlg'||getVal('eotf')==='3';
+ ['max_luma','min_luma','max_cll','max_fall'].forEach(function(id){
+  const el=document.getElementById(id);
+  if(!el) return;
+  el.disabled=hlg;
+  if(hlg) el.title='Not used with HLG'; else el.removeAttribute('title');
+ });
+ const note=document.getElementById('hdrHlgNote');
+ if(note) note.hidden=!hlg;
+}
+
 function updateModeVisibility(){
  const sm=getVal('signal_mode');
  document.getElementById('hdrCard').style.display=(sm==='hdr10'||sm==='hlg')?'':'none';
  document.getElementById('dvCard').style.display=(sm==='dv')?'':'none';
+ pgSyncHlgMetadataFields();
  meterSyncHcfrFixedCodesUi();
  syncDvOutputEotfState();
  meterSyncTargetGammaControl();
@@ -1050,6 +1149,7 @@ function updateModeVisibility(){
 	 'eotf','primaries','dv_transport','dv_interface','dv_map_mode'].forEach(function(id){
 	 document.getElementById(id).addEventListener('change',checkSettingsChanged);
 	});
+document.getElementById('eotf').addEventListener('change',pgSyncHlgMetadataFields);
 ['max_luma','min_luma','max_cll','max_fall'].forEach(function(id){
  const el=document.getElementById(id);
  if(!el) return;
@@ -1274,7 +1374,8 @@ document.getElementById('signal_mode').addEventListener('change',function(){
  meterQueueOutputSettingsRefresh(true);
  // updateDropdowns() may have adjusted the preset to what the resolution
  // allows, so report the values that are actually selected now.
- toast('Recommended '+meterSelectLabel('signal_mode')+' settings loaded: '+pgSignalModePresetSummary()+(lumaFromDisplay?' · Max/Min Luma from the display\u2019s EDID':'')+'. Click Apply to output them.');
+ // A signal preset being loaded reports its own result.
+ if(!window.pgPresetLoading) toast('Recommended '+meterSelectLabel('signal_mode')+' settings loaded: '+pgSignalModePresetSummary()+(lumaFromDisplay?' · Max/Min Luma from the display\u2019s EDID':'')+'. Click Apply to output them.');
 });
 
 // Switching the DV transport loads that transport's wire format. Done here as
@@ -1312,17 +1413,65 @@ async function loadModes(quiet){
  modes=fetched;
  const sel=document.getElementById('mode_idx');
  sel.innerHTML='';
- modes.forEach(m=>{
+ // One group per resolution, largest first. Sync polarity is named only
+ // where two timings share resolution and refresh (the two 1080p60).
+ const seen={};
+ modes.forEach(m=>{ const k=m.resolution+'@'+m.refresh; seen[k]=(seen[k]||0)+1; });
+ let group=null,groupKey='';
+ pgModesDescending(modes).forEach(m=>{
+  const key=String(m.resolution||'').replace(/i$/,'');
+  if(!group||key!==groupKey){
+   groupKey=key;
+   group=document.createElement('optgroup');
+   group.label=pgModeGroupLabel(key);
+   sel.appendChild(group);
+  }
   const o=document.createElement('option');
   o.value=m.idx;
-  o.textContent=formatModeLabel(m);
+  o.textContent=formatModeLabel(m,seen[m.resolution+'@'+m.refresh]>1);
   o.title=m.resolution+' @ '+m.refresh+'Hz';
-  sel.appendChild(o);
+  group.appendChild(o);
  });
  syncModeSelectValue();
+ // Chips of presets saved before mode_label name the mode through this list.
+ if(typeof pgPresetRender==='function') pgPresetRender();
+ if(typeof pgPresetSaveRefresh==='function') pgPresetSaveRefresh();
 }
 
-function formatModeLabel(m){
+const PG_MODE_GROUP_NAMES={'4096x2160':'4K DCI','3840x2160':'4K UHD','2560x1440':'QHD','1920x1080':'Full HD','1280x720':'HD','720x576':'SD 576','720x480':'SD 480','1440x576':'SD 576','1440x480':'SD 480'};
+function pgModeGroupLabel(res){
+ const name=PG_MODE_GROUP_NAMES[res];
+ const dims=String(res).replace('x','\u00d7');
+ return name?name+' \u00b7 '+dims:dims;
+}
+
+// The mode list did not arrive: after a while say so and offer a retry
+// instead of "Reading display modes…" forever.
+const PG_MODES_WAIT_MS=15000;
+let pgModesWaitSince=0,pgModesWaitTimer=0;
+async function pgRetryModes(){
+ pgModesWaitSince=Date.now();
+ const btn=document.getElementById('modeRetryBtn');
+ if(btn) btn.hidden=true;
+ pgSyncModeSelectEmpty();
+ await loadModes(false);
+ updateModeSelectLabel();
+}
+
+// Display order of the mode list: largest resolution first, then the higher
+// refresh, progressive before interlaced. `modes` itself keeps the EDID order
+// (preferred mode first), which the fallbacks below rely on.
+function pgModesDescending(list){
+ const key=m=>{
+  const r=String((m&&m.resolution)||'').match(/^(\d+)x(\d+)(i?)/);
+  return r?{w:+r[1],h:+r[2],i:r[3]?1:0}:{w:0,h:0,i:0};
+ };
+ return list.map((m,n)=>({m:m,n:n,k:key(m),hz:parseFloat(m&&m.refresh)||0}))
+  .sort((a,b)=>(b.k.w*b.k.h-a.k.w*a.k.h)||(b.k.w-a.k.w)||(a.k.i-b.k.i)||(b.hz-a.hz)||(a.n-b.n))
+  .map(x=>x.m);
+}
+
+function formatModeLabel(m,showSync){
  const refresh=parseFloat(m&&m.refresh);
  let hz=String((m&&m.refresh)||'');
  if(!Number.isNaN(refresh)){
@@ -1333,7 +1482,7 @@ function formatModeLabel(m){
  // only in sync polarity (e.g. the two 1080p60 timings) are distinguishable.
  const flags=String((m&&m.flags)||'');
  const vsync=(flags.match(/\bpvsync\b/))?'pvsync':((flags.match(/\bnvsync\b/))?'nvsync':'');
- if(vsync) label+=' ('+vsync+')';
+ if(vsync&&showSync) label+=' ('+vsync+')';
  return label;
 }
 
@@ -1354,7 +1503,10 @@ function modeOptionIsSelectable(sel,value){
 function firstEnabledModeIdx(){
  const sel=document.getElementById('mode_idx');
  if(!sel||!sel.options.length)return '';
- const first=Array.from(sel.options).find(o=>!o.disabled&&o.style.display!=='none');
+ // EDID order, not display order: the display's preferred mode comes first.
+ const opts=Array.from(sel.options);
+ const order=(Array.isArray(modes)?modes:[]).map(m=>opts.find(o=>o.value===String(m.idx))).filter(Boolean);
+ const first=(order.length?order:opts).find(o=>!o.disabled&&o.style.display!=='none');
  return first?String(first.value):'';
 }
 
@@ -1381,9 +1533,16 @@ function pgSyncModeSelectEmpty(){
  sel.disabled=empty;
  if(wrap){wrap.classList.toggle('is-empty',empty);wrap.classList.toggle('is-no-display',noDisplay);}
  if(field) field.classList.toggle('is-no-display',noDisplay);
+ const retry=document.getElementById('modeRetryBtn');
+ const waiting=empty&&!noDisplay;
+ if(!waiting){ pgModesWaitSince=0; if(pgModesWaitTimer){ clearTimeout(pgModesWaitTimer); pgModesWaitTimer=0; } }
+ else if(!pgModesWaitSince) pgModesWaitSince=Date.now();
+ const stuck=waiting&&Date.now()-pgModesWaitSince>=PG_MODES_WAIT_MS;
+ if(waiting&&!stuck&&!pgModesWaitTimer) pgModesWaitTimer=setTimeout(()=>{ pgModesWaitTimer=0; pgSyncModeSelectEmpty(); },PG_MODES_WAIT_MS-(Date.now()-pgModesWaitSince)+50);
+ if(retry) retry.hidden=!stuck;
  if(empty){
-  label.textContent=noDisplay?'No display detected':'Reading display modes\u2026';
-  label.title=noDisplay?'Plug in an HDMI display; its resolutions appear here':'';
+  label.textContent=noDisplay?'No display detected':(stuck?'Display modes not received':'Reading display modes\u2026');
+  label.title=noDisplay?'Plug in an HDMI display; its resolutions appear here':(stuck?'The generator has not reported the display\u2019s modes yet':'');
  }
 }
 
@@ -1579,7 +1738,31 @@ function getValidBpc(modeIdx,fmt){
  return valid;
 }
 
-// Update the dropdowns to only show valid options
+// Why a colour format + bit depth cannot go out at this mode ('' when it
+// can), as a short note for the locked option. Mirrors PGSignalCheck.pm:
+// the daemon refuses the same settings from Calman and other programs.
+function pgSignalWhyNot(modeIdx,fmt,bpc){
+ if(!caps||caps.edid_parsed===false) return '';
+ const mode=modes.find(m=>String(m.idx)===String(modeIdx));
+ const clock=mode?mode.clock:148500;
+ if(fmt===1&&!caps.has_ycbcr444) return 'Not in the display\u2019s EDID';
+ if(fmt===2&&!caps.has_ycbcr422) return 'Not in the display\u2019s EDID';
+ if(fmt!==2&&bpc>8){
+  if(caps.hdmi_vsdb===false) return 'Display takes 8-bit RGB only';
+  if(!(bpc===10?caps.dc_30bit:caps.dc_36bit)) return 'Display has no '+bpc+'-bit';
+  if(fmt===1&&!caps.dc_y444) return 'Display: '+bpc+'-bit for RGB only';
+ }
+ const tmds=(fmt===2?clock:clock*bpc/8)/1000;
+ const mhz=v=>(Math.round(v*10)/10)+' MHz';
+ const boardMax=caps.board_max_tmds||600;
+ if(tmds>boardMax+0.0005) return 'Needs '+mhz(tmds)+', the Pi sends '+boardMax+' MHz';
+ const disp=caps.display_max_tmds||0;
+ if(disp&&tmds>disp+0.0005) return 'Needs '+mhz(tmds)+', the display takes '+disp+' MHz';
+ return '';
+}
+
+// Update the dropdowns: options that cannot go out stay visible, locked
+// with the reason.
 function updateDropdowns(){
  if(!caps||!modes.length)return;
  const modeIdx=getVal('mode_idx');
@@ -1594,7 +1777,9 @@ function updateDropdowns(){
  const smOpts=capsKnown
   ? {sdr:true,hdr10:caps.has_hdr_st2084,hlg:caps.has_hdr_hlg,dv:caps.has_dv&&dvKernelOk}
   : {sdr:true,hdr10:true,hlg:true,dv:false};
- Array.from(smSel.options).forEach(function(o){o.disabled=!smOpts[o.value];o.style.display=smOpts[o.value]?'':'none';});
+ const smWhy={hdr10:'Not in the display\u2019s EDID',hlg:'Not in the display\u2019s EDID',
+  dv:!capsKnown?'Display unknown':(caps.has_dv?'HDMI driver has no Dolby Vision':'Not in the display\u2019s EDID')};
+ Array.from(smSel.options).forEach(function(o){pgSetOptionUnavailable(o,smOpts[o.value]?'':(smWhy[o.value]||'Not available'));});
 
  // In DV mode, calibration uses the platform Dolby Vision transport.
  const fmtSel=document.getElementById('color_format');
@@ -1622,14 +1807,25 @@ function updateDropdowns(){
    pgSetOptionUnavailable(o,o.value===targetRange?'':'Set by Dolby Vision');
   });
   pgSyncRangeDefaultOption(rngSel);
+  // What Dolby Vision fixes is shown fixed, not left editable and then
+  // overwritten on Apply (applySettings sends these values in DV).
+  const colSel=document.getElementById('colorimetry');
+  setVal('colorimetry','9');
+  pgDvLockFields([fmtSel,rngSel,colSel].concat(allowedBpc.length===1?[bpcSel]:[]),dvTransport);
   // The platform DV transport uses its configured TMDS bandwidth.
   const maxTmds=(caps&&caps.max_tmds)?caps.max_tmds*1000:600000;
+  // TV-led DV at 2160p60 only where a version 0/1 Dolby block says so
+  // (PGSignalCheck.pm refuses it the same way).
+  const vsvdb=caps&&caps.dv_vsvdb;
+  const no2160p60=dvTransport.dv_transport!=='lldv'&&vsvdb&&!vsvdb.error&&vsvdb.supports_2160p60!==undefined&&vsvdb.supports_2160p60!==null&&!Number(vsvdb.supports_2160p60);
   let curModeValid=false;
   Array.from(modeSel.options).forEach(function(o){
    const m=modes.find(x=>String(x.idx)===o.value);
-   const ok=m?(m.clock<=maxTmds):true;
-   o.disabled=!ok;o.style.display=ok?'':'none';
-   if(ok&&o.value===modeIdx)curModeValid=true;
+   let why='';
+   if(m&&m.clock>maxTmds) why='Needs more than '+(maxTmds/1000)+' MHz';
+   else if(m&&no2160p60&&parseInt(String(m.resolution).split('x')[1])>=2160&&parseFloat(m.refresh)>30.5) why='Display: TV-led DV up to 30 Hz at 4K';
+   pgSetModeOptionUnavailable(o,m,why);
+   if(!why&&o.value===modeIdx)curModeValid=true;
   });
   if(!curModeValid){
    setModeSelectValue(firstEnabledModeIdx());
@@ -1638,8 +1834,9 @@ function updateDropdowns(){
   checkSettingsChanged();
   return;
  }
+ pgDvLockFields([],null);
  // Non-DV: re-enable all mode options
- Array.from(modeSel.options).forEach(function(o){o.disabled=false;o.style.display='';});
+ Array.from(modeSel.options).forEach(function(o){pgSetModeOptionUnavailable(o,modes.find(x=>String(x.idx)===o.value),'');});
  // Re-enable all range options
  const rngSel=document.getElementById('rgb_quant_range');
  Array.from(rngSel.options).forEach(function(o){o.disabled=false;o.style.display='';});
@@ -1648,8 +1845,8 @@ function updateDropdowns(){
  const validFmts=getValidFormats(modeIdx,curBpc);
  Array.from(fmtSel.options).forEach(function(o){
   const v=parseInt(o.value);
-  o.disabled=validFmts.indexOf(v)<0;
-  o.style.display=validFmts.indexOf(v)>=0?'':'none';
+  if(validFmts.indexOf(v)>=0){pgSetOptionUnavailable(o,'');return;}
+  pgSetOptionUnavailable(o,pgSignalWhyNot(modeIdx,v,v===2?10:curBpc)||(v===2?'10-bit only':(v===3?'No 4:2:0 output':'Not at '+curBpc+'-bit')));
  });
  // If current format is no longer valid, switch to first valid
  if(validFmts.indexOf(curFmt)<0&&validFmts.length>0){
@@ -1668,8 +1865,8 @@ function updateDropdowns(){
  });
  Array.from(bpcSel.options).forEach(function(o){
   const v=parseInt(o.value);
-  o.disabled=validBpc.indexOf(v)<0;
-  o.style.display=validBpc.indexOf(v)>=0?'':'none';
+  if(validBpc.indexOf(v)>=0){pgSetOptionUnavailable(o,'');return;}
+  pgSetOptionUnavailable(o,pgSignalWhyNot(modeIdx,curFmt===2?0:curFmt,v)||pgSignalWhyNot(modeIdx,0,v)||'Not at this resolution');
  });
  // If current bpc is no longer valid, switch to first valid
  if(validBpc.indexOf(curBpc)<0&&validBpc.length>0){
@@ -1769,7 +1966,7 @@ async function loadInfo(quiet){
  // Rebuild the tiles only when a fact changed. A rebuild on every poll
  // replaced DOM above the viewport while a phone was scrolling, and iOS
  // Safari (no scroll anchoring) let the page jump.
- const factsKey=JSON.stringify([info.model,info.hostname,info.resolution,info.total_ram,info.interfaces||null]);
+ const factsKey=JSON.stringify([info.model,info.hostname,info.resolution,info.total_ram,info.interfaces||null,pgBtPowered]);
  if(g.dataset.factsKey===factsKey&&g.querySelector('.devinfo-fact')){
   const up=ctl('deviceInfoUptime');
   if(up){ up.textContent=formatUptime(info.uptime); up.title=up.textContent; }
@@ -1799,9 +1996,13 @@ async function loadInfo(quiet){
  if(info.interfaces){
   Object.entries(info.interfaces).forEach(([iface,ip])=>{
    if(iface==='usb0') return;
+   // The PAN bridge keeps its address with the radio off: only while
+   // Bluetooth is on (loadBluetooth) is it a way in.
+   if(/^bnep/.test(iface)&&pgBtPowered!==true) return;
    const name=IFACE_NAMES[iface]||iface;
    const icon=iface==='ap0'?'ap':/^wlan/.test(iface)?'wifi':/^bnep/.test(iface)?'bt':iface==='usb0'?'usb':'eth';
    addDeviceFact(g,icon,name,ip,iface==='ap0'?'deviceInfoApAddress':'');
+   pgAddFactCopy(g.lastElementChild,name+' address');
   });
   pgSyncDeviceInfoAp();
  }
@@ -1842,7 +2043,8 @@ async function loadInfo(quiet){
   calDot.style.background='#4caf50';
   calText.style.color='';
   calText.textContent=(info.calibration.software||'Calibration software')+' connected';
-  calWrap.title=(info.calibration.software||'Calibration software')+' connected from '+info.calibration.ip;
+  calWrap.dataset.pgBaseTitle=(info.calibration.software||'Calibration software')+' connected from '+info.calibration.ip;
+  calWrap.title=calWrap.dataset.pgBaseTitle+pgSignalTipText();
   pgAnnounceStatus('calibration','on:'+(info.calibration.software||''),(info.calibration.software||'Calibration software')+' connected.');
   // External software drives its own patches; the page no longer knows what is on the TV.
   pgSetHeaderPattern('');
@@ -1850,6 +2052,7 @@ async function loadInfo(quiet){
   calDot.style.background='var(--text2)';
   calText.style.color='var(--text2)';
   calText.textContent='No calibration software';
+  delete calWrap.dataset.pgBaseTitle;
   calWrap.title='No calibration software connected';
   pgAnnounceStatus('calibration','off','Calibration software disconnected.');
  }
@@ -1872,11 +2075,8 @@ async function loadInfo(quiet){
   }
  }
    __PG_LG_LOAD_INFO__
- // HDMI port check
- if(info.hdmi_port) updateHdmiPortWarning(info.hdmi_port);
 }
 
-let _hdmiIgnored=false;
 const uiBlockingOverlayIds=[
  'meterGreyProfileModal','meterCustomSeriesModal','meterCustomSeriesManagerModal',
  'meterImportWizardModal','meterLutToolsModal','lutSolveProgressModal',
@@ -1935,22 +2135,28 @@ function uiSyncBodyScrollLock(){
  }
 }
 
-function updateHdmiPortWarning(hp){
- const overlay=document.getElementById('hdmiOverlay');
+// The header badge and its dialog follow /api/signal (pgRenderSignalPort):
+// shown when the display is on a port that carries less than the other one,
+// or when the output is still on the port the cable left. Opened on request
+// only: both ports carry every format, depth and range.
+function pgSyncHdmiPortBadge(p){
  const badge=document.getElementById('hdmiWarnBadge');
- const prefSpan=document.getElementById('hdmiPreferred');
- if(prefSpan) prefSpan.textContent=hp.preferred;
- if(hp.wrong_port){
-  badge.style.display='inline';
-  if(!_hdmiIgnored) overlay.classList.add('active');
- }else{
-  badge.style.display='none';
-  overlay.classList.remove('active');
+ if(!badge) return;
+ const show=!!(p&&(p.faster||p.renderer_elsewhere));
+ badge.style.display=show?'inline':'none';
+ if(!show){
+  document.getElementById('hdmiOverlay').classList.remove('active');
+  uiSyncBodyScrollLock();
+  return;
  }
- uiSyncBodyScrollLock();
+ badge.textContent=p.renderer_elsewhere?'Output on '+(p.renderer_label||p.renderer):p.label+': up to '+p.max_mode;
+ badge.title=p.renderer_elsewhere?'The display is on '+p.label+', the output still on '+(p.renderer_label||p.renderer):p.label+' stops at '+p.max_tmds_mhz+' MHz';
+ document.getElementById('hdmiOverlayTitle').textContent=p.renderer_elsewhere?'Output still on '+(p.renderer_label||p.renderer):p.label+': up to '+p.max_mode;
+ document.getElementById('hdmiOverlayText').textContent=p.renderer_elsewhere
+  ?'The display is on '+p.label+', the output still goes to '+(p.renderer_label||p.renderer)+'. Recheck restarts the output on '+p.label+'; check the resolution afterwards, each port lists its own.'
+  :'The display is on '+p.label+', which stops at '+p.max_tmds_mhz+' MHz: 4K at up to 30 Hz. Formats, bit depths and ranges work on both ports. For '+p.faster.max_mode+' move the cable to '+p.faster.label+(p.faster.where?', '+p.faster.where:'')+', then Recheck.';
 }
 function hdmiIgnore(){
- _hdmiIgnored=true;
  document.getElementById('hdmiOverlay').classList.remove('active');
  uiSyncBodyScrollLock();
 }
@@ -1959,31 +2165,27 @@ async function hdmiRecheck(){
  btn.disabled=true;btn.textContent='Checking\u2026';
  let ok=false;
  for(let i=0;i<20;i++){
-  try{
-   const info=await fetchJSON('/api/info',{_timeoutMs:5000});
-   if(info&&info.hdmi_port){
-    if(!info.hdmi_port.wrong_port){
-     btn.textContent='Restarting display\u2026';
-     // Restart pattern generator so it re-targets the correct connector
-     await fetchJSON('/api/restart',{method:'POST',_timeoutMs:10000}).catch(function(){});
-     _hdmiIgnored=false;
-     document.getElementById('hdmiOverlay').classList.remove('active');
-    uiSyncBodyScrollLock();
-     document.getElementById('hdmiWarnBadge').style.display='none';
-     toast('Correct port detected \u2014 display restarted');loadInfo();ok=true;break;
-    }else{
-     toast('Still on wrong port \u2014 please switch to '+info.hdmi_port.preferred,'error');
-     ok=true;break;
-    }
+  const r=await fetchJSON('/api/signal',{_quiet:true,_timeoutMs:10000}).catch(function(){ return null; });
+  const p=r&&r.status==='ok'?r.port:null;
+  if(p){
+   if(p.faster&&!p.renderer_elsewhere){
+    toast('Still on '+p.label+' \u2014 for '+p.faster.max_mode+' move the cable to '+p.faster.label,'error');
+   }else{
+    btn.textContent='Restarting output\u2026';
+    // The renderer takes the first connected connector when it starts.
+    await fetchJSON('/api/restart',{method:'POST',_timeoutMs:10000}).catch(function(){});
+    hdmiIgnore();
+    toast('Display on '+p.label+' \u2014 output restarted');
+    setTimeout(function(){ pgSignalSummaryRefresh(); if(typeof loadModes==='function') loadModes(true); },8000);
    }
-  }catch(e){}
-  await new Promise(r=>setTimeout(r,2000));
+   ok=true;break;
+  }
+  await new Promise(res=>setTimeout(res,2000));
  }
- btn.disabled=false;btn.textContent="I've switched \u2014 Recheck";
- if(!ok) toast('Could not reconnect \u2014 try refreshing the page','error');
+ btn.disabled=false;btn.textContent='Recheck';
+ if(!ok) toast('Could not reach the display port state \u2014 try refreshing the page','error');
 }
 function hdmiShowOverlay(){
- _hdmiIgnored=false;
  document.getElementById('hdmiOverlay').classList.add('active');
  uiSyncBodyScrollLock();
 }
@@ -2061,6 +2263,7 @@ function pgUpdateNoHdmiBanner(connected){
  pgSyncModeSelectEmpty();
  // Plugging or unplugging changes what is on the wire: re-read the infoframes.
  if(changed&&typeof loadInfoframes==='function') loadInfoframes();
+ if(changed) setTimeout(pgSignalSummaryMaybeRefresh,1500);
  pgRenderHeaderSignal();
 }
 // Header status: the output signal as last applied (config from the Pi, not
@@ -2096,9 +2299,181 @@ function pgRenderHeaderSignal(){
  }
  wrap.hidden=!pgHeaderSignal;
  if(!pgHeaderSignal) return;
- if(dot) dot.style.background='var(--green)';
+ // Refused settings or a quiet adjustment: the dot says so, the tip says
+ // what is on the cable (PGSignalCheck.pm, /api/signal).
+ const refused=pgSignalState&&pgSignalState.refused;
+ const adjusted=pgSignalWire&&pgSignalWire.adjustments&&pgSignalWire.adjustments.length;
+ if(dot) dot.style.background=refused?'var(--status-error)':(adjusted?'var(--status-warning)':'var(--green)');
  text.textContent=pgHeaderSignal.text;
- wrap.title=pgHeaderSignal.title;
+ wrap.title=pgHeaderSignal.title+pgSignalTipText();
+}
+
+// Refused settings, HDMI link interruptions and what is on the cable.
+// pgSignalState comes with every /api/stats poll (two small files on the
+// Pi); pgSignalWire is /api/signal (infoframes + link readback), read after
+// an apply, when Calman changes settings and every 20 s while visible.
+let pgSignalState=null;
+let pgSignalWire=null;
+let pgSignalWireAt=0;
+function pgSignalTipText(){
+ const lines=[];
+ const w=pgSignalWire;
+ if(w&&w.port) lines.push('Port: '+w.port.label+' (up to '+w.port.max_mode+')'+(w.port.renderer_elsewhere?', output still on '+(w.port.renderer_label||w.port.renderer):''));
+ if(w&&w.sending) lines.push('On the cable: '+w.sending);
+ else if(w&&w.connected) lines.push('On the cable: not readable here');
+ if(w&&w.adjustments&&w.adjustments.length) lines.push('Adjusted: '+w.adjustments.join(' '));
+ const r=pgSignalState&&pgSignalState.refused;
+ if(r) lines.push('Refused: '+(r.source||'Calibration software')+' asked for '+(r.requested||'other settings')+'. '+(r.reason||''));
+ return lines.length?'\n'+lines.join('\n'):'';
+}
+async function pgSignalSummaryRefresh(){
+ pgSignalWireAt=Date.now();
+ const r=await fetchJSON('/api/signal',{_quiet:true,_timeoutMs:10000});
+ if(!r||r.status!=='ok') return;
+ pgSignalWire=r;
+ pgApplySignalState({refused:r.refused,link_event:r.link_event},true);
+}
+function pgSignalSummaryMaybeRefresh(){
+ if(Date.now()-pgSignalWireAt>3000) pgSignalSummaryRefresh();
+}
+function pgApplySignalState(sig,force){
+ const before=JSON.stringify(pgSignalState||null);
+ pgSignalState=sig||null;
+ if(!force&&JSON.stringify(pgSignalState)===before) return;
+ // A refusal starts or ends: what is on the cable may have changed too.
+ if(!force&&before!=='null') setTimeout(pgSignalSummaryMaybeRefresh,500);
+ pgRenderSignalAlerts();
+ pgRenderHeaderSignal();
+ pgRenderCalibrationTip();
+}
+function pgSignalLinkDismiss(){
+ const ev=pgSignalState&&pgSignalState.link_event;
+ if(ev&&ev.id){ try{localStorage.setItem('pg_link_event_seen',ev.id);}catch(e){} }
+ pgRenderSignalAlerts();
+}
+function pgRenderSignalAlerts(){
+ const st=pgSignalState||{};
+ const ra=document.getElementById('signalRefusedAlert');
+ if(ra){
+  const r=st.refused;
+  ra.hidden=!r;
+  if(r){
+   const kept=r.kept?' The output stays '+r.kept+'.':'';
+   const restore=String(r.restored)==='0'?' The previous settings could not be restored.':'';
+   document.getElementById('signalRefusedText').textContent=(r.source||'Calibration software')+' asked for '+(r.requested||'other settings')+'. '
+    +(r.reason||'')+(r.alternatives?' '+r.alternatives:'')+kept+restore
+    +' Patches are refused until settings that work are chosen, in '+(r.source||'the calibration software')+' or here.';
+  }
+ }
+ const la=document.getElementById('signalLinkAlert');
+ if(la){
+  const ev=st.link_event;
+  let seen='';
+  try{seen=localStorage.getItem('pg_link_event_seen')||'';}catch(e){}
+  la.hidden=!ev||ev.id===seen;
+  if(ev&&ev.id!==seen){
+   document.getElementById('signalLinkText').textContent=(ev.text||'')+' The display may have reset or changed its picture settings, so readings taken across it can\u2019t be combined: check the display, then run the measurements again from the start.';
+  }
+ }
+ pgRenderSignalPort();
+ const line=document.getElementById('signalWireLine');
+ if(line){
+  const w=pgSignalWire;
+  line.hidden=!(w&&w.connected&&w.sending);
+  if(!line.hidden){
+   pgRenderSignalWireTiles(w);
+   document.getElementById('signalWireAdjusted').textContent=(w.adjustments||[]).join(' ');
+  }
+ }
+}
+// "On the cable" as tiles from wire.parts (PGSignalCheck::signal_wire_parts);
+// without parts the sentence stands alone.
+function pgRenderSignalWireTiles(w){
+ const wire=w.wire||{}, p=wire.parts;
+ document.getElementById('signalWireTiles').hidden=!p;
+ const text=document.getElementById('signalWireText');
+ text.hidden=!!p;
+ text.textContent=p?'':w.sending;
+ if(!p) return;
+ const set=function(id,v){ document.getElementById(id).textContent=v; };
+ const m=/^(\d+)x(\d+)(i?) (.+)$/.exec(p.mode||'');
+ set('signalWireMode',m?m[1]+' × '+m[2]+m[3]+' · '+m[4]:(p.mode||'—'));
+ // name/depth split the format for the tiles; older daemons send only format.
+ const split=p.name!==undefined;
+ set('signalWireFormat',(split?p.name:p.format)||'—');
+ document.getElementById('signalWireDepthTile').hidden=!split;
+ set('signalWireDepth',(split&&p.depth)||'—');
+ set('signalWireRange',p.range||'—');
+ // Dolby Vision before its vendor frame is read: no EOTF is claimed.
+ const sig=document.getElementById('signalWireSignalTile');
+ set('signalWireSignal',p.signal||'Checking…');
+ sig.dataset.signal=!p.signal?'unknown':/^Dolby/.test(p.signal)?'dv':p.signal==='SDR'?'sdr':'hdr';
+ const mhz=wire.tmds_mhz;
+ document.getElementById('signalWireLinkTile').hidden=mhz==null;
+ if(mhz!=null) set('signalWireLink',(Math.round(mhz*10)/10)+' MHz');
+}
+// The HDMI port the display is on and what it carries (/api/signal port:
+// PGSignalCheck::signal_port_info). The renderer keeps the connector it
+// started on, so after the cable moves it says where the output still goes.
+function pgRenderSignalPort(){
+ const box=document.getElementById('signalPort');
+ if(!box) return;
+ const p=pgSignalWire&&pgSignalWire.port;
+ box.hidden=!p;
+ if(!p){ pgSyncHdmiPortBadge(null); return; }
+ // Both sockets: live = display and output here (theme colour), plugged =
+ // display but no renderer, stray = display here, output on the other one,
+ // output = output here without the display.
+ const ports=p.ports||[];
+ const said=[];
+ ports.forEach(function(q){
+  const g=document.querySelector('#signalPortBoard .sp-port[data-port="'+q.name+'"]');
+  if(!g) return;
+  const here=q.name===p.name, out=q.name===p.renderer;
+  const state=here&&out?'live':here?(p.renderer?'stray':'plugged'):out?'output':'idle';
+  g.dataset.state=state;
+  g.querySelector('.sp-cap').textContent=q.max_mode+' · '+q.max_tmds_mhz+' MHz';
+  said.push(q.label+' '+q.max_mode+({live:', connected, output',plugged:', connected',stray:', connected, no output',output:', output, no display'}[state]||''));
+ });
+ document.getElementById('signalPortBoardTitle').textContent='HDMI ports: '+said.join('; ');
+ // USB-C as the landmark only where the socket order is known (Pi 4 B);
+ // without it the two HDMI sockets are centred at the same scale.
+ const usbc=ports.some(function(q){ return q.where; });
+ document.getElementById('signalPortUsbc').style.display=usbc?'':'none';
+ document.getElementById('signalPortBoard').setAttribute('viewBox',usbc?'0 54 300 68':'38 54 300 68');
+ let tone='',note='';
+ if(p.renderer_elsewhere){
+  tone='elsewhere';
+  note='The output still goes to '+(p.renderer_label||p.renderer)+', so nothing reaches this display. Restart the output to send it to '+p.label
+   +'. Each port lists its own resolutions: check the resolution afterwards.';
+ }else if(p.faster){
+  tone='limited';
+  note=p.label+' stops at '+p.max_tmds_mhz+' MHz. For '+p.faster.max_mode+' use '+p.faster.label+(p.faster.where?', '+p.faster.where:'')+'.';
+ }
+ box.dataset.tone=tone;
+ const n=document.getElementById('signalPortNote');
+ n.textContent=note;
+ n.hidden=!note;
+ document.getElementById('signalPortRestart').hidden=!p.renderer_elsewhere;
+ pgSyncHdmiPortBadge(p);
+}
+async function pgSignalPortRestart(){
+ const btn=document.getElementById('signalPortRestart');
+ if(btn){ btn.disabled=true; btn.textContent='Restarting…'; }
+ const r=await fetchJSON('/api/restart',{method:'POST',_timeoutMs:10000}).catch(function(){ return null; });
+ if(!r||r.status!=='ok') toast('Could not restart the output','error');
+ // The renderer needs a few seconds to come up on the new connector.
+ setTimeout(function(){
+  if(btn){ btn.disabled=false; btn.textContent='Restart output'; }
+  pgSignalSummaryRefresh();
+  if(typeof loadModes==='function') loadModes(true);
+ },8000);
+}
+// Hover over the calibration program in the header: what it is measuring.
+function pgRenderCalibrationTip(){
+ const calWrap=document.getElementById('calStatusWrap');
+ if(!calWrap||!calWrap.dataset.pgBaseTitle) return;
+ calWrap.title=calWrap.dataset.pgBaseTitle+pgSignalTipText();
 }
 function pgSetHeaderPattern(label){
  const wrap=document.getElementById('patternStatusWrap');
@@ -2152,10 +2527,11 @@ function pgApplyStats(stats){
  // The conf file changed (Calman, another browser, ...): reload the
  // settings now instead of waiting for the 10s config poll.
  if(stats.config_rev){
-  if(window._configRev&&stats.config_rev!==window._configRev) syncRemoteConfig();
+  if(window._configRev&&stats.config_rev!==window._configRev){ syncRemoteConfig(); setTimeout(pgSignalSummaryMaybeRefresh,1500); }
   window._configRev=stats.config_rev;
  }
  if(stats.notice&&stats.notice.id) pgShowDaemonNotice(stats.notice);
+ if(stats.signal) pgApplySignalState(stats.signal);
  if(stats.hdmi===0||stats.hdmi===1) pgUpdateNoHdmiBanner(stats.hdmi===1);
  const cpuPct=Number(stats.cpu_percent),memPct=Number(stats.memory_percent);
  const cpuVal=document.getElementById('cpuUsageValue');
@@ -2238,6 +2614,46 @@ function addDeviceFact(g,icon,label,value,valueId){
  Object.entries({fill:'none',stroke:'currentColor','stroke-width':'1.8','stroke-linecap':'round','stroke-linejoin':'round'}).forEach(([k,v])=>svg.setAttribute(k,v));
  svg.innerHTML=PG_DEVICE_FACT_ICONS[icon]||'';
  d.insertBefore(svg,d.firstChild);
+}
+// Copy button on a fact tile: copies the tile's value; the copy icon turns
+// into a check for a moment as the confirmation.
+const PG_COPY_ICON='<rect x="8.5" y="8.5" width="11" height="11" rx="2"/><path d="M15.5 8.5V6a1.5 1.5 0 0 0-1.5-1.5H6A1.5 1.5 0 0 0 4.5 6v8A1.5 1.5 0 0 0 6 15.5h2.5"/>';
+const PG_CHECK_ICON='<path d="m5 12.5 4.5 4.5L19 7.5"/>';
+function pgAddFactCopy(tile,what){
+ if(!tile) return;
+ const value=tile.querySelector('.value');
+ const b=document.createElement('button');
+ b.type='button';b.className='fact-copy';
+ b.setAttribute('aria-label','Copy '+what);b.title='Copy '+what;
+ b.innerHTML='<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">'+PG_COPY_ICON+'</svg>';
+ b.addEventListener('click',async function(){
+  const ok=await pgCopyText(value?value.textContent.trim():'');
+  if(!ok){ toast('Copying failed; select the address manually.','err'); return; }
+  clearTimeout(b._pgCopied);
+  b.dataset.state='copied';
+  b.firstChild.innerHTML=PG_CHECK_ICON;
+  b.setAttribute('aria-label','Copied');
+  b._pgCopied=setTimeout(function(){
+   delete b.dataset.state;
+   b.firstChild.innerHTML=PG_COPY_ICON;
+   b.setAttribute('aria-label','Copy '+what);
+  },1800);
+ });
+ tile.classList.add('has-copy');
+ tile.appendChild(b);
+}
+// The WebUI is plain http on the LAN, where navigator.clipboard is missing
+// (secure contexts only): fall back to a selected textarea.
+async function pgCopyText(text){
+ if(!text) return false;
+ try{ if(navigator.clipboard&&window.isSecureContext){ await navigator.clipboard.writeText(text); return true; } }catch(e){}
+ const ta=document.createElement('textarea');
+ ta.value=text;ta.setAttribute('readonly','');ta.style.position='fixed';ta.style.opacity='0';
+ document.body.appendChild(ta);ta.select();
+ let ok=false;
+ try{ ok=document.execCommand('copy'); }catch(e){}
+ ta.remove();
+ return ok;
 }
 function addInfo(g,label,value,valueId){
  const d=document.createElement('div');d.className='info-item';
@@ -2772,6 +3188,23 @@ function dvTransportMode(value){
 function dvRgbMaxBpc(value){
  return String(value||'').trim()==='10' ? '10' : '8';
 }
+// Lock the fields Dolby Vision sets and say why under the settings; an
+// empty list unlocks only the fields this function locked.
+function pgDvLockFields(sels,dvTransport){
+ document.querySelectorAll('select[data-dv-locked]').forEach(sel=>{
+  if(sels.includes(sel)) return;
+  sel.disabled=false; sel.removeAttribute('data-dv-locked');
+ });
+ sels.forEach(sel=>{ sel.disabled=true; sel.setAttribute('data-dv-locked','1'); });
+ const note=document.getElementById('dvLockedNote');
+ if(!note) return;
+ if(!sels.length||!dvTransport){ note.hidden=true; note.textContent=''; return; }
+ note.textContent=dvTransport.dv_transport==='lldv'
+  ?'Set by Dolby Vision Low Latency: YCbCr 4:2:2, 12-bit, Limited range, BT.2020.'
+  :'Set by Dolby Vision Standard: RGB, Full range, BT.2020. Bit depth: 8 or 10.';
+ note.hidden=false;
+}
+
 function dvTransportDefaults(mode){
  if(String(mode||'').toLowerCase()==='lldv'){
   // Low-latency (source-led) DV: PQ YCbCr 4:2:2 12-bit limited range, LL bit in the VSIF.
@@ -2877,8 +3310,13 @@ async function applySettings(){
    if(typeof meterRefreshStabilizationIdlePattern==='function') await meterRefreshStabilizationIdlePattern(false);
    // No display connected: the settings are saved but nothing is on the
    // wire yet, so show the server's message instead of "live on the display".
+   // A quiet adjustment (e.g. 8-bit YCbCr 4:2:2 sent as 10-bit) is said
+   // once here; the Calibration Patches tip keeps showing it.
+   const adjusted=Array.isArray(r.adjusted)?r.adjusted.join(' '):'';
    if(restart&&restart.hdmi===0) applySettingsModalSuccess(restart.message,6000);
+   else if(adjusted) applySettingsModalSuccess(adjusted,6000);
    else applySettingsModalSuccess();
+   pgSignalSummaryRefresh();
   }catch(e){
    applySettingsModalError((e&&e.message)||'Apply failed while reloading config.');
    // Fall through to finally so _configApplyPending clears and the modal
@@ -2889,7 +3327,10 @@ async function applySettings(){
   }
   return true;
  }else{
-  applySettingsModalError((r&&r.message)||'The daemon rejected the new settings.');
+  // Refused settings: the output stayed as it was; the reason names what
+  // the board or the display cannot carry.
+  if(r&&r.refused) applySettingsModalError(r.message+' The output stays as it was.','Settings refused');
+  else applySettingsModalError((r&&r.message)||'The daemon rejected the new settings.');
   window._configApplyPending=false;
   meterUpdateReadButtons();
   return false;
@@ -3277,7 +3718,10 @@ function selftestRender(st){
  if(running){
   title.textContent=selftestState.current?'Testing '+selftestState.current:'Starting the self-test';
  }else if(state==='passed'){
-  title.textContent='Bit-exact in '+passed+' of '+modes.length+' modes';
+  // Lead with what was proven: modes the link cannot carry are not failures.
+  const skipped=modes.filter(m=>results[m.id]&&results[m.id].status==='skip').length;
+  title.textContent=!skipped?'All '+passed+' modes are bit-exact'
+   :passed===1?'The 1 testable mode is bit-exact':'All '+passed+' testable modes are bit-exact';
  }else if(state==='failed'){
   title.textContent=failedModes.length===1?'1 mode does not match':failedModes.length+' modes do not match';
  }else if(state==='error'){
@@ -3288,6 +3732,7 @@ function selftestRender(st){
   title.textContent='Not run yet';
  }
  sub.textContent=selftestState.message||'Run the test with a display connected and no calibration software attached.';
+ selftestMarkStale();
  const pct=running&&selftestState.steps?Math.round(100*(selftestState.step||0)/selftestState.steps):(state==='idle'?0:100);
  const fill=document.getElementById('selftestProgress');
  if(fill) fill.style.transform='scaleX('+(pct/100)+')';
@@ -3303,8 +3748,24 @@ function selftestRender(st){
  foot.hidden=!done;
  if(done){
   const when=selftestState.finished?new Date(selftestState.finished*1000):null;
-  document.getElementById('selftestFootNote').textContent=when?'Last run '+when.toLocaleString([],{dateStyle:'medium',timeStyle:'short'}):'';
+  document.getElementById('selftestFootNote').textContent=(when?'Last run '+when.toLocaleString([],{dateStyle:'medium',timeStyle:'short'}):'')
+   +(selftestState.resolution?(when?' at ':'Ran at ')+selftestState.resolution:'');
  }
+}
+// A result proves the modes at the output resolution it ran at. Once the
+// output runs another mode, say so instead of letting the old verdict stand.
+function selftestMarkStale(){
+ const st=selftestState||{};
+ const verdict=document.getElementById('selftestVerdict');
+ const sub=document.getElementById('selftestSub');
+ if(!verdict||!sub) return;
+ const done=st.state==='passed'||st.state==='failed';
+ const now=(config&&config.mode_idx!=null)?String(config.mode_idx):'';
+ const stale=done&&st.mode_idx!=null&&now!==''&&String(st.mode_idx)!==now;
+ verdict.toggleAttribute('data-stale',stale);
+ if(stale) sub.textContent='This result is for '+(st.resolution||'the previous output resolution')+'. The output now runs another resolution, so run the test again to prove it.';
+ else if(verdict.dataset.staleShown) sub.textContent=st.message||'';
+ if(stale) verdict.dataset.staleShown='1'; else delete verdict.dataset.staleShown;
 }
 function selftestPoll(delay){
  if(selftestPollTimer) clearTimeout(selftestPollTimer);
@@ -3339,7 +3800,7 @@ async function selftestCopyReport(){
  const st=selftestState;
  if(!st||!st.scenarios) return;
  const ver=(document.getElementById('verDisplay')||{}).textContent||'';
- const lines=['PGenerator+ '+ver+' signal self-test: '+(st.state||'')+(st.finished?' ('+new Date(st.finished*1000).toISOString()+')':''),st.message||''];
+ const lines=['PGenerator+ '+ver+' signal self-test: '+(st.state||'')+(st.resolution?' at '+st.resolution:'')+(st.finished?' ('+new Date(st.finished*1000).toISOString()+')':''),st.message||''];
  st.scenarios.forEach(r=>{
   lines.push('');
   lines.push(r.group+' '+r.label+' '+r.depth+'-bit: '+(SELFTEST_STATUS_TEXT[r.status]||r.status)+(r.total?' '+r.passed+'/'+r.total:''));
@@ -3579,13 +4040,15 @@ async function applyMemory(){
 
 // Reboot confirmation: a themed dialog that shows the change (old -> new)
 // and resolves true on "Apply & Reboot" (or o.acceptLabel; o.notesNode adds
-// scrolling release notes). Esc, Cancel or a backdrop click
+// scrolling release notes, o.changes a list of {label,from,to}, o.cancelLabel
+// renames Cancel, o.tone='accent' and o.icon (inner SVG) restyle it for a
+// change that is not a reboot). Esc, Cancel or a backdrop click
 // resolve false. Focus starts on Cancel and stays inside the dialog.
 function pgConfirmReboot(o){
  return new Promise(resolve=>{
   const opener=document.activeElement;
   const root=document.createElement('div');
-  root.className='pg-reboot-dialog';
+  root.className='pg-reboot-dialog'+(o.tone==='accent'?' tone-accent':'');
   root.innerHTML='<div class="pg-reboot-backdrop"></div>'
    +'<div class="pg-reboot-card" role="alertdialog" aria-modal="true" aria-labelledby="pgRebootTitle" aria-describedby="pgRebootBody">'
    +'<div class="pg-reboot-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 12a8 8 0 1 1-2.34-5.66"/><path d="M20 4v4.5h-4.5"/></svg></div>'
@@ -3595,6 +4058,24 @@ function pgConfirmReboot(o){
    +'<div class="pg-reboot-actions"><button type="button" class="btn btn-secondary pg-reboot-cancel">Cancel</button><button type="button" class="btn btn-warning pg-reboot-accept">Apply &amp; Reboot</button></div>'
    +'</div>';
   root.querySelector('.pg-reboot-title').textContent=o.title||'Reboot to apply?';
+  if(o.icon) root.querySelector('.pg-reboot-icon svg').innerHTML=o.icon;
+  if(o.cancelLabel) root.querySelector('.pg-reboot-cancel').textContent=o.cancelLabel;
+  if(Array.isArray(o.changes)&&o.changes.length){
+   const ul=document.createElement('ul');ul.className='pg-reboot-changes';
+   o.changes.forEach(c=>{
+    const li=document.createElement('li');
+    const k=document.createElement('span');k.className='pg-reboot-changes-label';k.textContent=c.label;
+    const v=document.createElement('span');v.className='pg-reboot-changes-vals';
+    const f=document.createElement('span');f.className='pg-reboot-from';f.textContent=c.from;
+    const t=document.createElement('span');t.className='pg-reboot-to';t.textContent=c.to;
+    const sr=document.createElement('span');sr.className='sr-only';sr.textContent=' to ';
+    const ar=document.createElementNS('http://www.w3.org/2000/svg','svg');
+    ar.setAttribute('viewBox','0 0 24 24');ar.setAttribute('aria-hidden','true');
+    ar.innerHTML='<path d="M5 12h14M13 6l6 6-6 6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>';
+    v.append(f,sr,ar,t);li.append(k,v);ul.appendChild(li);
+   });
+   root.querySelector('.pg-reboot-body').before(ul);
+  }
   root.querySelector('.pg-reboot-body').textContent=o.body||'';
   const accept0=root.querySelector('.pg-reboot-accept');
   if(o.acceptLabel) accept0.textContent=o.acceptLabel;
@@ -3992,6 +4473,10 @@ async function onApToggle(el){
 
 async function loadBluetooth(){
  const r=await fetchJSON('/api/bluetooth/status',{_quiet:true,_timeoutMs:10000});
+ if(r&&r.status==='ok'){
+  const powered=!!(r.available!==false&&r.powered);
+  if(powered!==pgBtPowered){ pgBtPowered=powered; if(window._lastInfo) loadInfo(true); }
+ }
  const el=document.getElementById('btStatus');
  if(!el||!r||r.status!=='ok') return;
  const bt=document.getElementById('btPowerToggle');
@@ -7873,6 +8358,12 @@ function pgSetOptionUnavailable(opt,reason){
  opt.disabled=!!reason;
  if(reason){ opt.dataset.pgNote=reason; opt.title=reason; }
  else{ delete opt.dataset.pgNote; opt.removeAttribute('title'); }
+}
+
+// Mode options keep their "WxH @ Hz" tooltip when they are not locked.
+function pgSetModeOptionUnavailable(opt,mode,reason){
+ pgSetOptionUnavailable(opt,reason);
+ if(!reason&&mode) opt.title=mode.resolution+' @ '+mode.refresh+'Hz';
 }
 
 // Default (0) is not offered: the dropdown lists the ranges that go on the
@@ -22400,6 +22891,15 @@ function meterCloseLutTools(){
     label.appendChild(note);
    }
    li.append(mark,label);
+   // data-pg-tag: a quiet tag at the end that does not flag the item
+   // (data-pg-tag-tone colours it, e.g. the signal type of a preset)
+   if(opt.dataset.pgTag){
+    const tag=document.createElement('span');
+    tag.className='pg-dd-tag';
+    if(opt.dataset.pgTagTone) tag.dataset.tone=opt.dataset.pgTagTone;
+    tag.textContent=opt.dataset.pgTag;
+    li.appendChild(tag);
+   }
    if(opt.dataset.pgBadge){
     const badge=document.createElement('span');
     badge.className='pg-dd-badge';
@@ -22649,3 +23149,631 @@ function meterCloseLutTools(){
  window.addEventListener('blur',()=>close(true));
  document.addEventListener('pgen:themechange',()=>close(true));
 })();
+
+/* ---------------------------------------------------------------------------
+   Command palette (Cmd/Ctrl+K, "/") and keyboard shortcuts.
+   The index is read from the page when the palette opens: workspaces, cards,
+   card sections, labelled settings, actions and signal presets. Choosing an
+   entry switches to its workspace, scrolls it into view and focuses it.
+   ------------------------------------------------------------------------- */
+const PG_IS_MAC=/Mac|iPhone|iPad/.test(navigator.platform||navigator.userAgent||'');
+const PG_MOD_LABEL=PG_IS_MAC?'⌘':'Ctrl';
+const PG_ALT_LABEL=PG_IS_MAC?'\u2325':'Alt';
+let pgPalette=null;
+
+function pgTypingTarget(el){
+ if(!el) return false;
+ const tag=el.tagName||'';
+ if(tag==='TEXTAREA'||el.isContentEditable) return true;
+ if(tag==='SELECT') return true;
+ return tag==='INPUT'&&!/^(checkbox|radio|button|submit|reset|range|color|file)$/i.test(el.type||'');
+}
+function pgPaletteText(el){
+ if(!el) return '';
+ const c=el.cloneNode(true);
+ c.querySelectorAll('button,.drag-handle,.meter-help-tip,svg,.sr-only,select,input').forEach(n=>n.remove());
+ return (c.textContent||'').replace(/\s+/g,' ').trim();
+}
+// Hidden by the signal mode or a missing feature (inline display:none or the
+// hidden attribute), as opposed to a card that only sits in another workspace.
+function pgPaletteAvailable(el){
+ for(let n=el;n&&n!==document.body;n=n.parentElement){
+  if(n.hidden||(n.style&&n.style.display==='none')) return false;
+ }
+ return true;
+}
+function pgPaletteWorkspaceOf(el){
+ const card=el&&el.closest('.dashboard > .card[data-desktop-workspace]');
+ let ws=card?card.getAttribute('data-desktop-workspace'):'';
+ if(typeof PG_DESKTOP_WORKSPACE_ALIASES==='object'&&PG_DESKTOP_WORKSPACE_ALIASES[ws]) ws=PG_DESKTOP_WORKSPACE_ALIASES[ws];
+ return ws;
+}
+function pgPaletteWorkspaceVisible(ws){
+ if(!ws) return true;
+ if(pgHideMeasure&&PG_MEASURE_WORKSPACES.indexOf(ws)>=0) return false;
+ const nav=document.querySelector('.desktop-nav-btn[data-workspace-target="'+ws+'"]');
+ return !nav||!nav.hidden;
+}
+// Sidebar order; Alt+n and the numbers in the palette count only these.
+function pgPaletteWorkspaceButtons(){
+ return Array.from(document.querySelectorAll('.desktop-nav-btn[data-workspace-target]')).filter(b=>pgPaletteWorkspaceVisible(b.getAttribute('data-workspace-target')));
+}
+function pgPaletteGoWorkspace(ws){
+ if(!ws) return;
+ if(document.body.classList.contains('layout-desktop')) pgSelectDesktopWorkspace(ws);
+ else pgJumpToTabletWorkspace(ws);
+}
+// Bring an element on screen: its workspace first, then scroll, flash, focus.
+function pgPaletteReveal(el,focusEl){
+ if(!el) return;
+ const ws=pgPaletteWorkspaceOf(el);
+ if(ws&&document.body.classList.contains('layout-desktop')&&ws!==pgDesktopWorkspace) pgSelectDesktopWorkspace(ws);
+ requestAnimationFrame(()=>{
+  const reduce=!!(window.matchMedia&&window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+  const box=el.closest('.field,.info-item,.card-section-head,.card')||el;
+  try{ box.scrollIntoView({block:'center',behavior:reduce?'auto':'smooth'}); }catch(e){ box.scrollIntoView(); }
+  box.classList.remove('pg-found');
+  void box.offsetWidth;
+  box.classList.add('pg-found');
+  setTimeout(()=>box.classList.remove('pg-found'),1600);
+  const target=focusEl||el;
+  if(target&&typeof target.focus==='function'){
+   if(!target.matches('a,button,input,select,textarea,[tabindex]')) target.setAttribute('tabindex','-1');
+   try{ target.focus({preventScroll:true}); }catch(e){}
+  }
+ });
+}
+
+function pgPaletteActions(){
+ const bar=document.getElementById('applyBar');
+ const dirty=!!(bar&&bar.style.display!=='none');
+ const list=[
+  {title:'Apply & Restart',hint:'Apply the changed signal settings',kbd:PG_MOD_LABEL+' Enter',when:dirty,run:()=>applySettings()},
+  {title:'Discard changes',hint:'Back to the settings the generator runs now',when:dirty,run:()=>discardSettings()},
+  {title:'Save as preset',hint:'Store the current signal settings under a name',when:typeof pgPresetSavePrompt==='function',run:()=>pgPresetSavePrompt()},
+  {title:'Run full self-test',hint:'Read back every signal mode at the HDMI output',when:!!document.getElementById('selftestRunBtn'),run:()=>{ pgPaletteReveal(document.getElementById('selftestCard')); selftestStart('full'); }},
+  {title:'Run quick check',hint:'Three modes, about 40 seconds',when:!!document.getElementById('selftestQuickBtn'),run:()=>{ pgPaletteReveal(document.getElementById('selftestCard')); selftestStart('quick'); }},
+  {title:'Reset display settings to defaults',hint:'Asks first; nothing changes until Apply',when:typeof resetDefaults==='function',run:()=>resetDefaults()},
+  {title:'Keyboard shortcuts',hint:'Show every shortcut',kbd:'?',when:true,run:()=>pgPaletteOpen('help')}
+ ];
+ return list.filter(a=>a.when).map(a=>({group:'Actions',title:a.title,hint:a.hint,kbd:a.kbd,run:a.run}));
+}
+
+function pgPaletteIndex(){
+ const items=[];
+ pgPaletteWorkspaceButtons().forEach((btn,i)=>{
+  const ws=btn.getAttribute('data-workspace-target');
+  items.push({group:'Workspaces',title:PG_DESKTOP_WORKSPACES[ws]||btn.title||ws,hint:'Go to workspace',kbd:i<9?PG_ALT_LABEL+' '+(i+1):'',run:()=>pgPaletteGoWorkspace(ws)});
+ });
+ document.querySelectorAll('.dashboard > .card[data-desktop-workspace]').forEach(card=>{
+  if(!pgPaletteAvailable(card)) return;
+  const ws=pgPaletteWorkspaceOf(card);
+  if(!pgPaletteWorkspaceVisible(ws)) return;
+  const wsName=PG_DESKTOP_WORKSPACES[ws]||'';
+  const h2=card.querySelector('h2');
+  const cardTitle=pgPaletteText(h2);
+  if(cardTitle) items.push({group:'Cards',title:cardTitle,hint:wsName,run:()=>pgPaletteReveal(card,h2)});
+  card.querySelectorAll('.card-section-title').forEach(t=>{
+   if(!pgPaletteAvailable(t)) return;
+   const name=pgPaletteText(t);
+   if(name) items.push({group:'Sections',title:name,hint:[wsName,cardTitle].filter(Boolean).join(' › '),run:()=>pgPaletteReveal(t)});
+  });
+  card.querySelectorAll('label[for]').forEach(l=>{
+   const ctl=document.getElementById(l.getAttribute('for'));
+   if(!ctl||!pgPaletteAvailable(l)||!pgPaletteAvailable(ctl)) return;
+   const name=pgPaletteText(l);
+   if(!name||name.length>48) return;
+   let value='';
+   if(ctl.tagName==='SELECT'){ const o=ctl.options[ctl.selectedIndex]; value=o?(o.textContent||'').trim():''; }
+   else if(ctl.type!=='checkbox'&&ctl.type!=='radio'&&ctl.value) value=ctl.value;
+   items.push({group:'Settings',title:name,hint:[cardTitle,value].filter(Boolean).join(' · '),run:()=>pgPaletteReveal(ctl,ctl)});
+  });
+ });
+ items.push(...pgPaletteActions());
+ (window.pgPresetList||[]).forEach(p=>items.push({group:'Signal presets',title:p.name,hint:pgPresetSummary(p.settings||{}),run:()=>pgPresetLoad(p.id)}));
+ // One entry per title within a group (the same label in two cards keeps both, they differ by hint).
+ const seen=new Set();
+ return items.filter(it=>{ const k=it.group+'|'+it.title+'|'+(it.hint||''); if(seen.has(k)) return false; seen.add(k); return true; });
+}
+
+// Subsequence match with bonuses for word starts and contiguous runs; 0 = no match.
+function pgPaletteScore(query,text){
+ const q=query.toLowerCase(),t=text.toLowerCase();
+ if(!q) return 1;
+ const at=t.indexOf(q);
+ if(at>=0) return 1000-at+(at===0||/\W/.test(t[at-1])?200:0);
+ let score=0,ti=0,run=0;
+ for(let qi=0;qi<q.length;qi++){
+  const c=q[qi];
+  if(c===' ') continue;
+  const found=t.indexOf(c,ti);
+  if(found<0) return 0;
+  run=(found===ti)?run+1:0;
+  score+=1+run*3+((found===0||/\W/.test(t[found-1]))?5:0);
+  ti=found+1;
+ }
+ return score;
+}
+
+const PG_PALETTE_GROUP_ORDER=['Actions','Signal presets','Workspaces','Cards','Sections','Settings'];
+const PG_SHORTCUTS=[
+ [PG_MOD_LABEL+' K','Open search (also in text fields)'],
+ ['/','Open search'],
+ [PG_MOD_LABEL+' Enter','Apply & Restart changed settings'],
+ [PG_ALT_LABEL+' 1…9','Go to workspace 1…9 (in sidebar order)'],
+ ['?','Show these shortcuts'],
+ ['Esc','Close search or dialog']
+];
+
+function pgPaletteBuild(){
+ const root=document.createElement('div');
+ root.className='pg-palette';
+ root.hidden=true;
+ root.innerHTML='<div class="pg-palette-scrim" data-close></div>'+
+  '<div class="pg-palette-panel" role="dialog" aria-modal="true" aria-label="Search">'+
+   '<div class="pg-palette-search"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></svg>'+
+    '<input type="text" class="pg-palette-input" role="combobox" aria-expanded="true" aria-controls="pgPaletteList" aria-autocomplete="list" autocomplete="off" spellcheck="false" placeholder="Search settings, workspaces, actions…">'+
+    '<kbd class="pg-palette-esc">Esc</kbd></div>'+
+   '<ul class="pg-palette-list" id="pgPaletteList" role="listbox" aria-label="Results"></ul>'+
+   '<div class="pg-palette-foot"><span><kbd>↑</kbd><kbd>↓</kbd> move</span><span><kbd>Enter</kbd> open</span><span><kbd>?</kbd> shortcuts</span></div>'+
+  '</div>';
+ document.body.appendChild(root);
+ const input=root.querySelector('.pg-palette-input');
+ const list=root.querySelector('.pg-palette-list');
+ const st={root,input,list,items:[],shown:[],active:0,mode:'search',back:null};
+ root.addEventListener('mousedown',e=>{ if(e.target.hasAttribute('data-close')){ e.preventDefault(); pgPaletteClose(); } });
+ input.addEventListener('input',()=>{ st.mode='search'; pgPaletteRender(); });
+ input.addEventListener('keydown',e=>{
+  if(e.key==='ArrowDown'||e.key==='ArrowUp'){ e.preventDefault(); pgPaletteMove(e.key==='ArrowDown'?1:-1); }
+  else if(e.key==='PageDown'||e.key==='PageUp'){ e.preventDefault(); pgPaletteMove(e.key==='PageDown'?6:-6); }
+  else if(e.key==='Enter'){ e.preventDefault(); pgPaletteChoose(st.active); }
+  else if(e.key==='Escape'){ e.preventDefault(); e.stopPropagation(); pgPaletteClose(); }
+  else if(e.key==='?'&&!input.value){ e.preventDefault(); st.mode=st.mode==='help'?'search':'help'; pgPaletteRender(); }
+  else if(e.key==='Tab'){ e.preventDefault(); }
+ });
+ list.addEventListener('mousemove',e=>{ const li=e.target.closest('[data-i]'); if(li) pgPaletteSetActive(+li.getAttribute('data-i'),false); });
+ list.addEventListener('click',e=>{ const li=e.target.closest('[data-i]'); if(li) pgPaletteChoose(+li.getAttribute('data-i')); });
+ return st;
+}
+
+function pgPaletteRender(){
+ const st=pgPalette;
+ const list=st.list;
+ list.textContent='';
+ st.shown=[];
+ if(st.mode==='help'){
+  const head=document.createElement('li');
+  head.className='pg-palette-group'; head.setAttribute('role','presentation'); head.textContent='Keyboard shortcuts';
+  list.appendChild(head);
+  PG_SHORTCUTS.forEach(([k,what])=>{
+   const li=document.createElement('li');
+   li.className='pg-palette-shortcut'; li.setAttribute('role','presentation');
+   const kb=document.createElement('span'); kb.className='pg-palette-keys';
+   k.split(' ').forEach(part=>{ const e=document.createElement('kbd'); e.textContent=part; kb.appendChild(e); });
+   const t=document.createElement('span'); t.textContent=what;
+   li.append(kb,t); list.appendChild(li);
+  });
+  st.input.removeAttribute('aria-activedescendant');
+  return;
+ }
+ const q=st.input.value.trim();
+ let scored=st.items.map(it=>({it,s:Math.max(pgPaletteScore(q,it.title),q?Math.round(pgPaletteScore(q,it.title+' '+(it.hint||''))*0.6):0)})).filter(x=>x.s>0);
+ if(q) scored.sort((a,b)=>b.s-a.s);
+ const groups={};
+ scored.forEach(x=>{ (groups[x.it.group]=groups[x.it.group]||[]).push(x.it); });
+ const order=q?Object.keys(groups).sort((a,b)=>scored.findIndex(x=>x.it.group===a)-scored.findIndex(x=>x.it.group===b))
+  :PG_PALETTE_GROUP_ORDER.filter(g=>groups[g]);
+ const limit=q?8:(g=>g==='Settings'||g==='Sections'?0:20);
+ order.forEach(g=>{
+  const max=typeof limit==='function'?limit(g):limit;
+  const entries=groups[g].slice(0,max);
+  if(!entries.length) return;
+  const head=document.createElement('li');
+  head.className='pg-palette-group'; head.setAttribute('role','presentation'); head.textContent=g;
+  list.appendChild(head);
+  entries.forEach(it=>{
+   const i=st.shown.length; st.shown.push(it);
+   const li=document.createElement('li');
+   li.className='pg-palette-item'; li.id='pgPaletteOpt'+i; li.setAttribute('role','option'); li.setAttribute('data-i',i);
+   const t=document.createElement('span'); t.className='pg-palette-title'; t.textContent=it.title;
+   li.appendChild(t);
+   if(it.hint){ const h=document.createElement('span'); h.className='pg-palette-hint'; h.textContent=it.hint; li.appendChild(h); }
+   if(it.kbd){ const kb=document.createElement('span'); kb.className='pg-palette-keys'; it.kbd.split(' ').forEach(part=>{ const e=document.createElement('kbd'); e.textContent=part; kb.appendChild(e); }); li.appendChild(kb); }
+   list.appendChild(li);
+  });
+ });
+ if(!st.shown.length){
+  const li=document.createElement('li');
+  li.className='pg-palette-empty'; li.setAttribute('role','presentation');
+  li.textContent='Nothing matches “'+q+'”. Try a setting name such as “bit depth” or “range”.';
+  list.appendChild(li);
+ }
+ pgPaletteSetActive(0,true);
+}
+function pgPaletteSetActive(i,scroll){
+ const st=pgPalette;
+ if(!st.shown.length){ st.input.removeAttribute('aria-activedescendant'); return; }
+ st.active=Math.max(0,Math.min(st.shown.length-1,i));
+ st.list.querySelectorAll('.pg-palette-item').forEach(li=>{
+  const on=+li.getAttribute('data-i')===st.active;
+  li.classList.toggle('is-active',on);
+  li.setAttribute('aria-selected',on?'true':'false');
+  if(on&&scroll) li.scrollIntoView({block:'nearest'});
+ });
+ st.input.setAttribute('aria-activedescendant','pgPaletteOpt'+st.active);
+}
+function pgPaletteMove(d){ if(pgPalette) pgPaletteSetActive(pgPalette.active+d,true); }
+function pgPaletteChoose(i){
+ const st=pgPalette;
+ const it=st&&st.shown[i];
+ if(!it) return;
+ pgPaletteClose(true);
+ try{ it.run(); }catch(e){ console.error(e); }
+}
+function pgPaletteOpen(mode){
+ if(!pgPalette) pgPalette=pgPaletteBuild();
+ const st=pgPalette;
+ if(st.root.hidden) st.back=document.activeElement;
+ st.items=pgPaletteIndex();
+ st.mode=mode||'search';
+ st.input.value='';
+ st.root.hidden=false;
+ document.body.classList.add('pg-palette-open');
+ pgPaletteRender();
+ st.input.focus();
+}
+function pgPaletteClose(keepFocus){
+ const st=pgPalette;
+ if(!st||st.root.hidden) return;
+ st.root.hidden=true;
+ document.body.classList.remove('pg-palette-open');
+ if(!keepFocus&&st.back&&st.back.isConnected&&typeof st.back.focus==='function'){ try{ st.back.focus({preventScroll:true}); }catch(e){} }
+ st.back=null;
+}
+
+document.addEventListener('keydown',e=>{
+ const mod=PG_IS_MAC?e.metaKey:e.ctrlKey;
+ const open=pgPalette&&!pgPalette.root.hidden;
+ if(mod&&!e.altKey&&!e.shiftKey&&(e.key==='k'||e.key==='K')){
+  e.preventDefault();
+  if(open) pgPaletteClose(); else pgPaletteOpen();
+  return;
+ }
+ if(open) return;
+ // Other shortcuts never fire while a dialog is up or while typing.
+ if(Array.from(document.querySelectorAll('[aria-modal="true"]')).some(d=>d.getClientRects().length&&!d.closest('.pg-palette'))) return;
+ if(mod&&e.key==='Enter'){
+  const bar=document.getElementById('applyBar');
+  if(bar&&bar.style.display!=='none'){ e.preventDefault(); applySettings(); }
+  return;
+ }
+ if(pgTypingTarget(e.target)) return;
+ if(e.altKey&&!mod&&!e.shiftKey&&/^Digit[1-9]$/.test(e.code||'')){
+  const btn=pgPaletteWorkspaceButtons()[+e.code.slice(5)-1];
+  if(btn){ e.preventDefault(); pgPaletteGoWorkspace(btn.getAttribute('data-workspace-target')); }
+  return;
+ }
+ if(e.ctrlKey||e.metaKey||e.altKey) return;
+ if(e.key==='/'){ e.preventDefault(); pgPaletteOpen(); }
+ else if(e.key==='?'){ e.preventDefault(); pgPaletteOpen('help'); }
+});
+// The drag handle glyph is decoration: keep it out of heading names.
+document.querySelectorAll('.drag-handle').forEach(h=>h.setAttribute('aria-hidden','true'));
+
+/* ---------------------------------------------------------------------------
+   Signal presets: named snapshots of Display Settings, kept on the Pi
+   (/api/presets). Loading one fills the fields the way a user would pick
+   them; nothing reaches the cable until Apply & Restart.
+   ------------------------------------------------------------------------- */
+window.pgPresetList=[];
+const PG_PRESET_ORDER=['signal_mode','dv_transport','dv_interface','dv_map_mode','mode_idx','max_bpc','color_format',
+ 'colorimetry','rgb_quant_range','eotf','primaries','max_luma','min_luma','max_cll','max_fall'];
+const PG_PRESET_META=['max_luma','min_luma','max_cll','max_fall'];
+
+// "1920x1080-60": the resolution and rate of a display mode, independent of
+// the index the mode has in this display's list.
+function pgPresetModeLabel(m){
+ if(!m||!m.resolution) return '';
+ const r=parseFloat(m.refresh);
+ const hz=Number.isNaN(r)?String(m.refresh||''):(Math.abs(r-Math.round(r))<0.01?String(Math.round(r)):String(r).replace(/0+$/,'').replace(/\.$/,''));
+ const label=String(m.resolution)+'-'+hz;
+ return /^[0-9A-Za-z._-]{1,32}$/.test(label)?label:'';
+}
+function pgPresetModeById(idx){ return (modes||[]).find(m=>String(m.idx)===String(idx)); }
+// The mode index a preset means on this display: its own index while that
+// still has the saved resolution and rate, else the first mode that has.
+function pgPresetModeIdx(s){
+ if(!s.mode_label) return s.mode_idx!=null?String(s.mode_idx):null;
+ const own=pgPresetModeById(s.mode_idx);
+ if(own&&pgPresetModeLabel(own)===s.mode_label) return String(own.idx);
+ const m=(modes||[]).find(x=>pgPresetModeLabel(x)===s.mode_label);
+ return m?String(m.idx):null;
+}
+function pgPresetSettingsNow(){
+ let now={};
+ try{ now=JSON.parse(captureSettings()); }catch(e){}
+ const settings={};
+ Object.keys(now).forEach(k=>{ const v=String(now[k]==null?'':now[k]); if(/^[0-9A-Za-z._-]{1,32}$/.test(v)) settings[k]=v; });
+ const label=pgPresetModeLabel(pgPresetModeById(settings.mode_idx));
+ if(label) settings.mode_label=label;
+ return settings;
+}
+
+// Chips: what the preset puts on the cable, in the order of the header.
+function pgPresetChips(s){
+ const chips=[];
+ const sm=String(s.signal_mode||'sdr');
+ chips.push({text:({sdr:'SDR',hdr10:'HDR10',hlg:'HLG',dv:'Dolby Vision'})[sm]||sm.toUpperCase(),kind:sm==='dv'?'dv':(sm==='sdr'?'sdr':'hdr')});
+ if(sm==='dv') chips.push({text:s.dv_transport==='lldv'?'LLDV':'DV Standard'});
+ let res='';
+ const lm=String(s.mode_label||'').match(/^(\d+)x(\d+)(i?)-([\d.]+)$/);
+ if(lm) res=(lm[1]==='4096'?'DCI ':'')+lm[2]+(lm[3]?'i':'p')+lm[4];
+ else {
+  const m=pgPresetModeById(s.mode_idx);
+  const mm=m&&String(m.resolution).match(/^(\d+)x(\d+)(i?)$/);
+  if(mm) res=(mm[1]==='4096'?'DCI ':'')+mm[2]+(mm[3]?'i':'p')+pgPresetModeLabel(m).replace(/^.*-/,'');
+ }
+ if(res) chips.push({text:res});
+ let bpc=String(s.max_bpc||'');
+ // Outside Dolby Vision 12 bpc goes out as 10 bpc (see pgCaptureHeaderSignal).
+ if(sm!=='dv'&&bpc==='12') bpc='10';
+ if(bpc) chips.push({text:bpc+'-bit',bits:bpc});
+ const fmt=({'0':'RGB','1':'YCbCr 4:4:4','2':'YCbCr 4:2:2'})[String(s.color_format)];
+ if(fmt) chips.push({text:fmt});
+ const range=({'1':'Limited','2':'Full'})[String(s.rgb_quant_range)];
+ if(range) chips.push({text:range});
+ if(sm!=='dv'){
+  const gamut=({'2':'BT.709','9':'BT.2020'})[String(s.colorimetry)];
+  if(gamut) chips.push({text:gamut});
+ }
+ if(sm==='hdr10'&&s.max_luma) chips.push({text:s.max_luma+' nits'});
+ return chips;
+}
+function pgPresetSummary(s){ return pgPresetChips(s).map(c=>c.text).join(' · '); }
+
+// The preset the fields match now (stored keys equal, mode by resolution).
+function pgPresetActiveId(){
+ const now=pgPresetSettingsNow();
+ const hit=(window.pgPresetList||[]).find(p=>{
+  const s=p.settings||{};
+  return Object.keys(s).every(k=>{
+   if(k==='mode_label') return true;
+   if(k==='mode_idx') return s.mode_label?now.mode_label===s.mode_label:String(now.mode_idx)===String(s.mode_idx);
+   return String(now[k])===String(s[k]);
+  });
+ });
+ return hit?hit.id:'';
+}
+// Filter chips above the dropdown: one signal type at a time.
+const PG_PRESET_FILTERS=[['all','All'],['sdr','SDR'],['hdr','HDR'],['dv','Dolby Vision']];
+let pgPresetFilter='all';
+try{ const f=localStorage.getItem('pgPresetFilter'); if(PG_PRESET_FILTERS.some(x=>x[0]===f)) pgPresetFilter=f; }catch(e){}
+function pgPresetKind(s){
+ const sm=String((s||{}).signal_mode||'sdr');
+ return sm==='dv'?'dv':(sm==='hdr10'||sm==='hlg'?'hdr':'sdr');
+}
+function pgPresetSetFilter(kind){
+ pgPresetFilter=kind;
+ try{ localStorage.setItem('pgPresetFilter',kind); }catch(e){}
+ pgPresetRender();
+}
+// One chip of a preset's format: signal type and bit depth take the colours
+// the Self-Test uses for them (selftest-group / selftest-bits).
+function pgPresetChipEl(c){
+ const chip=document.createElement('span');
+ chip.className='preset-chip';
+ if(c.kind) chip.dataset.kind=c.kind;
+ if(c.bits) chip.dataset.bits=c.bits;
+ chip.textContent=c.text;
+ return chip;
+}
+function pgPresetRenderChips(){
+ const sel=document.getElementById('presetSelect');
+ const box=document.getElementById('presetChips');
+ const del=document.getElementById('presetDeleteBtn');
+ const p=sel&&(window.pgPresetList||[]).find(x=>x.id===sel.value);
+ if(del) del.disabled=!p;
+ if(!box) return;
+ box.textContent='';
+ // While a name is asked, the form's own chips say what is saved.
+ box.hidden=!p||pgPresetSaveOpen();
+ if(box.hidden) return;
+ pgPresetChips(p.settings||{}).forEach(c=>box.appendChild(pgPresetChipEl(c)));
+}
+// The dropdown shows the preset the fields match now, if the filter shows it.
+function pgPresetMarkActive(){
+ const sel=document.getElementById('presetSelect');
+ if(!sel||!(window.pgPresetList||[]).length) return;
+ const id=pgPresetActiveId();
+ const want=Array.from(sel.options).some(o=>o.value===id)?id:'';
+ if(sel.value!==want) sel.value=want;
+ pgPresetRenderChips();
+}
+
+function pgPresetRender(){
+ const sel=document.getElementById('presetSelect');
+ const bar=document.getElementById('presetFilter');
+ if(!sel) return;
+ const presets=window.pgPresetList||[];
+ const count={all:presets.length,sdr:0,hdr:0,dv:0};
+ presets.forEach(p=>{ count[pgPresetKind(p.settings)]++; });
+ if(pgPresetFilter!=='all'&&!count[pgPresetFilter]) pgPresetFilter='all';
+ if(bar){
+  bar.textContent='';
+  bar.hidden=!presets.length;
+  PG_PRESET_FILTERS.forEach(([kind,label])=>{
+   const b=document.createElement('button');
+   b.type='button';
+   b.className='preset-filter-chip';
+   b.dataset.kind=kind;
+   b.setAttribute('aria-pressed',pgPresetFilter===kind?'true':'false');
+   b.disabled=kind!=='all'&&!count[kind];
+   const t=document.createElement('span');
+   t.textContent=label;
+   const n=document.createElement('span');
+   n.className='preset-filter-count';
+   n.textContent=count[kind];
+   b.append(t,n);
+   b.onclick=()=>pgPresetSetFilter(kind);
+   bar.appendChild(b);
+  });
+ }
+ const shown=presets.filter(p=>pgPresetFilter==='all'||pgPresetKind(p.settings)===pgPresetFilter);
+ sel.textContent='';
+ const first=document.createElement('option');
+ first.value='';
+ first.textContent=presets.length?'Choose a preset…':'No presets saved yet';
+ sel.appendChild(first);
+ shown.forEach(p=>{
+  const chips=pgPresetChips(p.settings||{});
+  const o=document.createElement('option');
+  o.value=p.id;
+  o.textContent=p.name;
+  o.title=pgPresetSummary(p.settings||{});
+  o.dataset.pgTag=chips[0].text;
+  o.dataset.pgTagTone=chips[0].kind;
+  o.dataset.pgNote=chips.slice(1).map(c=>c.text).join(' · ');
+  sel.appendChild(o);
+ });
+ sel.disabled=!presets.length;
+ const id=pgPresetActiveId();
+ sel.value=shown.some(p=>p.id===id)?id:'';
+ pgPresetRenderChips();
+}
+
+async function pgPresetsLoad(){
+ const r=await fetchJSON('/api/presets',{_quiet:true});
+ if(!r||!Array.isArray(r.presets)) return;
+ window.pgPresetList=r.presets;
+ if(r.error) toast('Signal presets could not be read on the Pi: '+r.error,'warn');
+ pgPresetRender();
+}
+function pgPresetFieldEl(key,mode){
+ return document.getElementById(PG_PRESET_META.includes(key)?meterHdrMetadataFieldId(key,mode):key);
+}
+function pgPresetLoad(id){
+ const p=(window.pgPresetList||[]).find(x=>x.id===id);
+ if(!p) return;
+ const s=Object.assign({},p.settings||{});
+ const idx=pgPresetModeIdx(s);
+ if(idx!=null) s.mode_idx=idx; else delete s.mode_idx;
+ const mode=s.signal_mode||getVal('signal_mode');
+ window.pgPresetLoading=true;
+ try{
+ PG_PRESET_ORDER.forEach(key=>{
+  if(s[key]==null) return;
+  const el=pgPresetFieldEl(key,mode);
+  if(!el) return;
+  const v=String(s[key]);
+  if(el.tagName==='SELECT'){
+   const o=Array.from(el.options).find(x=>x.value===v);
+   if(!o||o.disabled||el.value===v) return;
+   if(key==='mode_idx') setModeSelectValue(v); else el.value=v;
+   el.dispatchEvent(new Event('change',{bubbles:true}));
+  }else if(el.value!==v){
+   el.value=v;
+   el.dispatchEvent(new Event('input',{bubbles:true}));
+   el.dispatchEvent(new Event('change',{bubbles:true}));
+  }
+ });
+ updateModeVisibility();
+ updateDropdowns();
+ }finally{ window.pgPresetLoading=false; }
+ checkSettingsChanged();
+ // A preset is one deliberate change of the whole set: always ask.
+ pgApplyAskSnoozed=false;
+ pgApplyAskSoon();
+ // Say which values this display or mode could not take.
+ const missed=PG_PRESET_ORDER.filter(key=>{
+  if(s[key]==null) return false;
+  const el=pgPresetFieldEl(key,mode);
+  return el&&String(el.value)!==String(s[key]);
+ }).map(key=>(APPLY_BAR_FIELDS.find(f=>f[0]===key)||[key,key])[1]);
+ if(idx==null&&(p.settings||{}).mode_label) missed.unshift('Resolution '+pgPresetChips(p.settings).filter(c=>/^(DCI )?\d+[pi]/.test(c.text)).map(c=>c.text).join(''));
+ const sel=document.getElementById('presetSelect');
+ if(sel&&Array.from(sel.options).some(o=>o.value===p.id)) sel.value=p.id;
+ pgPresetRenderChips();
+ if(missed.length) toast('Loaded “'+p.name+'”. Not available here: '+missed.join(', ')+'.','warn');
+ else toast(hasUnsavedSettings()?'Loaded “'+p.name+'”. Apply & Restart sends it.':'“'+p.name+'” matches the current settings.');
+}
+// Saving asks for a name inline, under the dropdown: the field starts empty
+// (the chips already say what the preset holds) and Save stays off until a
+// name is typed and a resolution is chosen (the Pi refuses a preset without
+// one). The form shows what will be saved and follows the fields.
+function pgPresetSaveOpen(){ const f=document.getElementById('presetSaveForm'); return !!(f&&!f.hidden); }
+function pgPresetSaveRefresh(){
+ if(!pgPresetSaveOpen()) return;
+ const box=document.getElementById('presetSaveChips');
+ if(!box) return;
+ box.textContent='';
+ pgPresetChips(pgPresetSettingsNow()).forEach(c=>box.appendChild(pgPresetChipEl(c)));
+ pgPresetSaveValidate();
+}
+// Why a preset cannot be saved yet, or '' when it can.
+function pgPresetSaveBlocked(){
+ if(pgPresetSettingsNow().mode_label) return '';
+ return (modes||[]).length?'Choose a resolution first: a preset always stores one.'
+  :'No display detected, so there is no resolution to store. Connect the display and choose a resolution first.';
+}
+function pgPresetSaveValidate(){
+ const input=document.getElementById('presetSaveName');
+ const btn=document.getElementById('presetSaveBtn');
+ const note=document.getElementById('presetSaveBlock');
+ const why=pgPresetSaveBlocked();
+ if(note){ note.textContent=why; note.hidden=!why; }
+ if(btn&&input) btn.disabled=!input.value.trim()||!!why;
+}
+function pgPresetSavePrompt(){
+ const form=document.getElementById('presetSaveForm');
+ const input=document.getElementById('presetSaveName');
+ const opener=document.getElementById('presetSaveOpenBtn');
+ if(!form||!input) return;
+ form.hidden=false;
+ if(opener) opener.setAttribute('aria-expanded','true');
+ pgPresetRenderChips();
+ input.value='';
+ pgPresetSaveValidate();
+ pgPresetSaveRefresh();
+ if(typeof pgPaletteReveal==='function') pgPaletteReveal(document.getElementById('presetBar'),input);
+ else input.focus();
+}
+function pgPresetSaveClose(){
+ const form=document.getElementById('presetSaveForm');
+ const opener=document.getElementById('presetSaveOpenBtn');
+ if(!form||form.hidden) return;
+ form.hidden=true;
+ pgPresetRenderChips();
+ if(opener){ opener.setAttribute('aria-expanded','false'); opener.focus(); }
+}
+async function pgPresetSaveSubmit(){
+ const input=document.getElementById('presetSaveName');
+ const btn=document.getElementById('presetSaveBtn');
+ const name=input?input.value.trim():'';
+ if(!name){ if(input) input.focus(); return; }
+ if(pgPresetSaveBlocked()){ pgPresetSaveValidate(); return; }
+ const settings=pgPresetSettingsNow();
+ const same=(window.pgPresetList||[]).find(x=>x.name.toLowerCase()===name.toLowerCase());
+ if(same&&!(await pgConfirm({title:'Replace “'+same.name+'”?',body:'A preset with this name exists. Saving replaces its settings with '+pgPresetSummary(settings)+'.',acceptLabel:'Replace',tone:'caution'}))){ if(input) input.focus(); return; }
+ if(btn) btn.disabled=true;
+ const r=await fetchJSON('/api/presets/save',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name,settings})});
+ pgPresetSaveValidate();
+ if(!r) return;
+ if(r.status!=='ok'){ toast(r.message||'The preset was not saved.','err'); if(input) input.focus(); return; }
+ toast('Saved preset “'+r.preset.name+'”.');
+ pgPresetSaveClose();
+ await pgPresetsLoad();
+}
+document.addEventListener('keydown',ev=>{
+ if(ev.key==='Escape'&&pgPresetSaveOpen()&&ev.target&&ev.target.closest&&ev.target.closest('#presetSaveForm')){ ev.preventDefault(); pgPresetSaveClose(); }
+});
+async function pgPresetDelete(id){
+ const p=(window.pgPresetList||[]).find(x=>x.id===id);
+ if(!p) return;
+ if(!(await pgConfirm({title:'Delete preset “'+p.name+'”?',body:'The preset is removed from the Pi for every browser. The signal does not change.',acceptLabel:'Delete',destructive:true}))) return;
+ const r=await fetchJSON('/api/presets/delete',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:p.id})});
+ if(!r) return;
+ if(r.status!=='ok'){ toast(r.message||'The preset was not deleted.','err'); return; }
+ toast('Deleted preset “'+p.name+'”.');
+ await pgPresetsLoad();
+}
+pgPresetsLoad();

@@ -96,8 +96,83 @@ body.layout-desktop.desktop-utility-open .desktop-utility-drawer{transform:trans
 .desktop-utility-section h3{margin:0 0 9px;color:var(--accent);font-size:.76rem;text-transform:uppercase;letter-spacing:.55px}
 .desktop-utility-alert{margin:0 0 10px;padding:9px 11px;border:1px solid var(--border);border-left:3px solid var(--orange);border-radius:6px;background:var(--surface-inset);color:var(--text-primary);font-size:.76rem;line-height:1.45}
 .desktop-utility-alert strong{color:var(--orange)}
+/* Refused settings and HDMI link interruptions (Display Settings), and what
+   is on the cable. */
+.signal-alert{margin:0 0 10px;padding:9px 11px;border:1px solid color-mix(in srgb,var(--orange) 45%,var(--border));border-radius:6px;background:color-mix(in srgb,var(--orange) 7%,var(--surface-inset));color:var(--text-primary);font-size:.82rem;line-height:1.45}
+.signal-alert[data-tone="refused"]{border-color:color-mix(in srgb,var(--status-error) 50%,var(--border));background:color-mix(in srgb,var(--status-error) 8%,var(--surface-inset))}
+.signal-alert strong{color:var(--orange)}
+.signal-alert[data-tone="refused"] strong{color:var(--status-error)}
+.signal-alert-dismiss{display:block;margin:8px 0 0 auto}
+/* The HDMI port the display is on: the board's own label, large, then what
+   that port carries. A port that carries less, or that the output is not
+   on, says so in the warning/alert tones the card already uses. */
+/* The ports and what is on the cable side by side; each wraps to full width
+   when the card is narrow. Both share the setting tiles' surface. */
+.signal-overview{display:flex;flex-wrap:wrap;align-items:stretch;gap:10px;margin:0 0 12px}
+/* One column of the setting tiles below (.grid.setting-tiles: 3/2/1 columns,
+   10px gap), so the port box lines up with Resolution. */
+.signal-port{flex:0 0 calc((100% - 20px) / 3);max-width:100%;min-width:0;display:flex;flex-direction:column;gap:8px;margin:0}
+.signal-port-box{flex:1;display:flex;flex-wrap:wrap;align-content:center;align-items:baseline;gap:2px 12px;padding:12px 14px;border:1px solid color-mix(in srgb,var(--text-primary) 6%,transparent);border-radius:12px;background:var(--surface-inset)}
+.signal-port[hidden]{display:none}
+.signal-port-board{display:block;flex-basis:100%;width:100%;max-width:340px;height:auto;margin:0 auto;overflow:visible}
+.signal-port-board text{text-anchor:middle;font-family:inherit;font-variant-numeric:tabular-nums}
+.signal-port-board .sp-socket{fill:var(--surface-card);stroke:var(--text-secondary);stroke-width:1.75;stroke-linejoin:round}
+.signal-port-board .sp-mouth{fill:var(--surface-inset)}
+.signal-port-board .sp-tongue{fill:color-mix(in srgb,var(--text-secondary) 55%,transparent)}
+.signal-port-board .sp-label{font-size:14px;font-weight:800;letter-spacing:-.01em;fill:var(--text-primary)}
+.signal-port-board .sp-cap{font-size:10.5px;font-weight:600;fill:var(--text-secondary)}
+.signal-port-board .sp-usbc{opacity:.7}
+.signal-port-board [data-state="live"] .sp-socket{stroke:var(--accent);fill:color-mix(in srgb,var(--accent) 16%,var(--surface-card));animation:sp-live 2.8s ease-in-out infinite}
+.signal-port-board [data-state="live"] .sp-mouth{fill:color-mix(in srgb,var(--accent) 10%,var(--surface-inset))}
+.signal-port-board [data-state="live"] .sp-tongue{fill:var(--accent)}
+.signal-port-board [data-state="live"] .sp-label{fill:var(--accent)}
+.signal-port-board [data-state="live"] .sp-cap{fill:var(--text-primary)}
+.signal-port-board [data-state="stray"] .sp-socket{stroke:var(--orange)}
+.signal-port-board [data-state="stray"] .sp-tongue{fill:var(--orange)}
+.signal-port-board [data-state="output"] .sp-socket{stroke:var(--accent);stroke-dasharray:4 3}
+/* The live socket breathes: its tint rises and falls, nothing moves. */
+@keyframes sp-live{50%{fill:color-mix(in srgb,var(--accent) 38%,var(--surface-card))}}
+@media (prefers-reduced-motion:reduce){.signal-port-board [data-state="live"] .sp-socket{animation:none}}
+.signal-port-note{flex-basis:100%;margin:4px 0 0;font-size:.8rem;line-height:1.45;color:var(--text-secondary)}
+.signal-port-note[hidden]{display:none}
+.signal-port[data-tone="limited"] .signal-port-note{color:var(--warning-text)}
+.signal-port[data-tone="elsewhere"] .signal-port-box{border-color:color-mix(in srgb,var(--orange) 45%,var(--border));background:color-mix(in srgb,var(--orange) 7%,var(--surface-inset))}
+.signal-port[data-tone="elsewhere"] .signal-port-note{color:var(--text-primary)}
+.signal-port-restart{margin:8px 0 0}
+.signal-port-restart[hidden]{display:none}
+.signal-wire{flex:1 1 380px;min-width:0;display:flex;flex-direction:column;gap:8px;margin:0}
+.signal-wire[hidden]{display:none}
+.signal-wire-title,.signal-port-title{margin:0;font-size:.72rem;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.06em}
+.signal-wire-tiles{flex:1;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin:0}
+.signal-wire-tiles[hidden]{display:none}
+.sw-tile{display:flex;flex-direction:column;justify-content:center;gap:3px;min-width:0;margin:0;padding:9px 12px;border-radius:12px;background:var(--surface-inset);border:1px solid color-mix(in srgb,var(--text-primary) 6%,transparent)}
+.sw-tile[hidden]{display:none}
+.sw-tile dt{font-size:.72rem;color:var(--text2);text-transform:uppercase;letter-spacing:.04em}
+.sw-tile dd{margin:0;font-size:.88rem;font-weight:650;line-height:1.25;color:var(--text-primary);font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
+/* Link right of Resolution, Bit depth right of Format; a missing reading
+   lets its neighbour take the space. */
+.sw-mode:has(+.sw-link[hidden]),.sw-format:has(+.sw-depth[hidden]){grid-column:span 2}
+/* The signal type leads: it is what a calibration run hinges on. */
+.sw-signal{--sw:var(--accent);background:color-mix(in srgb,var(--sw) 12%,var(--surface-inset));border-color:color-mix(in srgb,var(--sw) 34%,transparent)}
+.sw-signal dd{font-size:1.05rem;font-weight:800;letter-spacing:-.01em;color:var(--sw-text,var(--sw))}
+/* Same colours as the signal chips in the self-test (.selftest-group):
+   SDR grey, HDR10/HLG orange, Dolby Vision violet. The value text takes the
+   palette's text-safe variant where the raw hue misses 4.5:1 on the tint. */
+.sw-signal[data-signal="sdr"]{--sw:var(--text2)}
+.sw-signal[data-signal="hdr"]{--sw:var(--status-warning);--sw-text:var(--warning-text)}
+.sw-signal[data-signal="dv"]{--sw:var(--status-dv);--sw-text:color-mix(in oklab,var(--status-dv) 80%,var(--text-primary))}
+.sw-signal[data-signal="unknown"]{--sw:var(--text-secondary)}
+.sw-signal[data-signal="unknown"] dd{font-weight:600}
+.signal-wire-text{margin:0;font-size:.85rem;color:var(--text-primary);font-variant-numeric:tabular-nums}
+.signal-wire-text[hidden]{display:none}
+.signal-wire-adjusted{margin:0;font-size:.78rem;line-height:1.45;color:var(--warning-text)}
+@container (max-width:720px){.signal-port{flex-basis:calc((100% - 10px) / 2)}.signal-wire{flex-basis:0}}
+@container (max-width:420px){.signal-port{flex-basis:100%}}
+@container (max-width:520px){.signal-wire-tiles{grid-template-columns:repeat(2,minmax(0,1fr))}.sw-signal,.sw-tile:last-child{grid-column:span 2}}
+.signal-wire-adjusted:empty{display:none}
+#hdrCard input:disabled{opacity:.5;cursor:not-allowed}
 .desktop-utility-alert[hidden]{display:none}
-.desktop-utility-subtitle{margin:10px 0 6px;color:var(--text2);font-size:.65rem;font-weight:700;text-transform:uppercase;letter-spacing:.45px}
+.desktop-utility-subtitle{margin:10px 0 6px;color:var(--text2);font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.45px}
 .desktop-utility-grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.25fr);gap:5px 10px;font-size:.72rem;line-height:1.35}
 .desktop-utility-label{color:var(--text2);min-width:0}
 .desktop-utility-value{color:var(--text);min-width:0;text-align:right;overflow-wrap:anywhere}
@@ -128,7 +203,7 @@ body.meter-stop-active.layout-desktop .desktop-sidebar{filter:grayscale(.25);opa
 [data-theme="light"] .header{background:#e3e7ed;color:var(--text-primary)}
 [data-theme="light"] .logo > img:first-child{display:none!important}
 [data-theme="light"] .logo .logo-light{display:block}
-[data-theme="light"] #hdmiWarnBadge{color:var(--status-hdmi)}
+[data-theme="light"] #hdmiWarnBadge{color:var(--warning-text)}
 [data-theme="light"] #meterUsbWarnBadge{color:#8a4500}
 [data-theme="light"] .offline-mask-card{background:var(--surface-modal);color:var(--text-primary);border-color:var(--border);box-shadow:0 12px 30px var(--shadow)}
 [data-theme="light"] .meter-scroll-sync,[data-theme="light"] #meterGreyRgbLegacyWrap,[data-theme="light"] #meterGreyTvWrap,[data-theme="light"] #meterRGBColorWrap,[data-theme="light"] #meterXYYColorWrap,[data-theme="light"] #colorReadingDetail{background:var(--chart-bg)!important}
@@ -414,6 +489,9 @@ body.layout-tablet .tablet-jump-nav.is-compact:not([hidden]){justify-content:str
 .tablet-more-item:focus-visible{outline:2px solid var(--focus-ring);outline-offset:-2px}
 @media(hover:hover) and (pointer:fine){.tablet-more-item:hover{background:var(--hover-bg);color:var(--text-primary)}}
 body.has-tablet-nav{padding-bottom:calc(62px + env(safe-area-inset-bottom))}
+/* Pending settings stay in reach while scrolling: the Apply bar sticks above the bottom nav. */
+body.layout-tablet .dashboard>#applyBar{position:sticky;bottom:calc(8px + env(safe-area-inset-bottom));z-index:45;box-shadow:0 8px 28px var(--shadow)}
+body.has-tablet-nav .dashboard>#applyBar{bottom:calc(70px + env(safe-area-inset-bottom))}
 body.layout-tablet .dashboard > .card[tabindex="-1"]:focus{outline:none}
 body.layout-tablet .dashboard > .card[tabindex="-1"]:focus-visible{outline:2px solid var(--focus-ring);outline-offset:2px}
 body.layout-tablet .dashboard > .card[data-desktop-workspace]{scroll-margin-top:calc(var(--pg-header-height,61px) + 8px)}

@@ -1855,6 +1855,32 @@ void ofxRPI4Window::setup(const ofGLESWindowSettings & settings)
     
 }
 
+/*
+ * Connector "Colorimetry" value for the AVI InfoFrame (DRM_MODE_COLORIMETRY_*).
+ * CTA-861-G Table 14: RGB takes only C=0 (default RGB), opRGB, BT.2020 R'G'B'
+ * or DCI-P3 R'G'B'; C=1/2 with RGB is "Reserved". The SDR conf keeps BT709_YCC
+ * (2) for YCbCr output, so RGB output sent C=2. YCC-only values fall back to
+ * the RGB form: BT2020_YCC/CYCC -> BT2020_RGB, the others -> Default.
+ */
+static int AviColorimetryForFormat(int output_format, int colorimetry)
+{
+	if (output_format != 0)
+		return colorimetry;
+	switch (colorimetry) {
+		case 0:  // Default
+		case 7:  // opRGB
+		case 9:  // BT2020_RGB
+		case 11: // DCI-P3 RGB D65
+		case 12: // DCI-P3 RGB Theater
+			return colorimetry;
+		case 8:  // BT2020_CYCC
+		case 10: // BT2020_YCC
+			return 9;
+		default:
+			return 0;
+	}
+}
+
 void ofxRPI4Window::LimitHDROutputTo10bpc()
 {
 	// HDR10/HLG at 12 bpc asked for an ABGR16161616F surface: the Pi 4 Mesa has
@@ -2413,9 +2439,15 @@ void ofxRPI4Window::HDRWindowSetup()
 		EGL_GREEN_SIZE,10,
 		EGL_BLUE_SIZE,10,
 		EGL_ALPHA_SIZE,2,
-		EGL_DEPTH_SIZE,24,
+		/* No depth or stencil buffer: nothing here uses the depth test or the
+		   stencil, and with them the GPU writes a depth/stencil buffer back
+		   on every frame. Measured on the Pi 4 at 3840x2160 (ftrace, v3d
+		   render job): an empty frame 26.4 -> 13.6 ms, the G1 Warm-Up
+		   68.2 -> 48.5 ms; at 1080p the Warm-Up 17.0 -> 12.2 ms, so it
+		   keeps up with 60 Hz. Colour codes are not affected. */
+		EGL_DEPTH_SIZE,0,
 		EGL_BUFFER_SIZE,32,
-		EGL_STENCIL_SIZE,8,
+		EGL_STENCIL_SIZE,0,
 		EGL_SAMPLES,0,
 		EGL_SAMPLE_BUFFERS,0,
 //		EGL_BIND_TO_TEXTURE_RGBA,EGL_TRUE,
@@ -2659,9 +2691,15 @@ void ofxRPI4Window::Bit10_16WindowSetup()
 		EGL_GREEN_SIZE,16,
 		EGL_BLUE_SIZE,16,
 		EGL_ALPHA_SIZE,16,
-		EGL_DEPTH_SIZE,24,
+		/* No depth or stencil buffer: nothing here uses the depth test or the
+		   stencil, and with them the GPU writes a depth/stencil buffer back
+		   on every frame. Measured on the Pi 4 at 3840x2160 (ftrace, v3d
+		   render job): an empty frame 26.4 -> 13.6 ms, the G1 Warm-Up
+		   68.2 -> 48.5 ms; at 1080p the Warm-Up 17.0 -> 12.2 ms, so it
+		   keeps up with 60 Hz. Colour codes are not affected. */
+		EGL_DEPTH_SIZE,0,
 		EGL_BUFFER_SIZE,64,
-		EGL_STENCIL_SIZE,8,
+		EGL_STENCIL_SIZE,0,
 		EGL_SAMPLES,0,
 		EGL_SAMPLE_BUFFERS,0,
 //		EGL_BIND_TO_TEXTURE_RGBA,EGL_TRUE,
@@ -2933,7 +2971,9 @@ int ret;
         EGL_RED_SIZE, 8,
         EGL_GREEN_SIZE, 8,
         EGL_BLUE_SIZE, 8,
-        EGL_DEPTH_SIZE, 16,
+        /* No depth or stencil buffer, see HDRWindowSetup(). */
+        EGL_DEPTH_SIZE, 0,
+        EGL_STENCIL_SIZE, 0,
 		EGL_ALPHA_SIZE, 8,
         EGL_RENDERABLE_TYPE, EGL_OPENGL_ES3_BIT_KHR,
         EGL_NONE
@@ -4015,11 +4055,11 @@ void ofxRPI4Window::SetModeProperties()
 			updateDoVi_Infoframe(dv_status, dv_interface); // Disable DOVI infoframe if on, for some reason destroying blob doesn't clear the infoframe
 //			updateHDR_Infoframe(ofxRPI4Window::eotf, 0); // Display Gamut Rec709
 			struct avi_infoframe avi_infoframe;
-			avi_infoframe.colorimetry = avi_info.colorimetry; //Default
+			avi_infoframe.colorimetry = AviColorimetryForFormat(avi_info.output_format, avi_info.colorimetry);
 			avi_infoframe.rgb_quant_range = avi_info.rgb_quant_range;  //Full range [0-255] = 2
 			avi_infoframe.output_format = avi_info.output_format; //1; //YCrCb444
 			avi_infoframe.max_bpc = avi_info.max_bpc; //8 bit
-			avi_infoframe.c_enc = (avi_infoframe.colorimetry == 9) ? 2 : ((avi_infoframe.colorimetry == 2) ? 1 : 0); // 0=BT.601, 1=BT.709, 2=BT.2020
+			avi_infoframe.c_enc = (avi_info.colorimetry == 9) ? 2 : ((avi_info.colorimetry == 2) ? 1 : 0); // 0=BT.601, 1=BT.709, 2=BT.2020
 			avi_infoframe.c_range = (avi_infoframe.rgb_quant_range == 2) ? 1 : 0;
 			updateAVI_Infoframe(SDRplaneId, avi_infoframe);	
 		}
@@ -4154,10 +4194,10 @@ void ofxRPI4Window::updateHDR_Infoframe(hdmi_eotf eotf, int idx)
 		meta.hdmi_metadata_type1.metadata_type = HDMI_STATIC_METADATA_TYPE1;
 
 		if (static_cast<int>(eotf) == 3) {
-			// HLG: per CTA-861-G, the static metadata block's
-			// primaries/white_point are zeroed; mastering luminance,
-			// CLL and FALL still come from conf so the panel has a
-			// consistent reference range across EOTF switches.
+			// HLG carries no mastering metadata: Data Bytes 3-26 are all
+			// zero, which CTA-861-G 6.9.1 defines as "not provided" /
+			// unknown per group. PGenerator 1.6 sends the same; the WebUI
+			// shows Max/Min Luma, MaxCLL and MaxFALL as not used with HLG.
 			meta.hdmi_metadata_type1.display_primaries[0].x = 0;
 			meta.hdmi_metadata_type1.display_primaries[0].y = 0;
 			meta.hdmi_metadata_type1.display_primaries[1].x = 0;
@@ -4177,10 +4217,11 @@ void ofxRPI4Window::updateHDR_Infoframe(hdmi_eotf eotf, int idx)
 			meta.hdmi_metadata_type1.white_point.y = std::round(DisplayChromacityList[idx].WhiteY * EGL_METADATA_SCALING_EXT);
 		}
 
-		meta.hdmi_metadata_type1.max_display_mastering_luminance = pg_max_dml;
-		meta.hdmi_metadata_type1.min_display_mastering_luminance = pg_min_dml;
-		meta.hdmi_metadata_type1.max_fall = (uint16_t)pg_max_fall;
-		meta.hdmi_metadata_type1.max_cll  = (uint16_t)pg_max_cll;
+		const bool hlg = static_cast<int>(eotf) == 3;
+		meta.hdmi_metadata_type1.max_display_mastering_luminance = hlg ? 0 : pg_max_dml;
+		meta.hdmi_metadata_type1.min_display_mastering_luminance = hlg ? 0 : pg_min_dml;
+		meta.hdmi_metadata_type1.max_fall = hlg ? 0 : (uint16_t)pg_max_fall;
+		meta.hdmi_metadata_type1.max_cll  = hlg ? 0 : (uint16_t)pg_max_cll;
 
 		drmModeCreatePropertyBlob(device, &meta, sizeof(meta), (uint32_t*)&blob_id);
 		first_req = 1; // allocate for atomic requests

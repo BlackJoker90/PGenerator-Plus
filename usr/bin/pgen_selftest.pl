@@ -131,12 +131,15 @@ sub calibration_busy {
 }
 
 # Apply signal settings through the WebUI path and wait for the renderer.
+# Returns (error, refusal): a refusal is a mode the board or display cannot
+# carry (PGSignalCheck.pm), not a failure.
 sub apply_config {
  my $config=shift;
  # "selftest" tells the daemon this switch is ours: it keeps the user's
  # pre-Dolby-Vision values (pre_dv_*) instead of saving the scenario's.
  my $body=$JSON->encode({%$config,selftest=>1});
  my ($code,$res)=&http_json("POST","/api/config",$body);
+ return ("",$res->{message} || "Not possible with this display.") if($code == 200 && $res->{refused});
  return "The settings were refused (HTTP $code)." if($code != 200 || ($res->{status} || "") ne "ok");
  if($res->{restart_id}) {
   my $deadline=time()+75;
@@ -343,6 +346,11 @@ sub save_user_state {
  foreach my $k (qw(color_format max_bpc rgb_quant_range colorimetry dv_transport)) {
   $restore{$k}="$cfg->{$k}" if(defined($cfg->{$k}) && "$cfg->{$k}" ne "");
  }
+ # The result holds for this output mode: the WebUI names it and flags the
+ # result once the output runs another mode.
+ $state{mode_idx}="$cfg->{mode_idx}" if(defined($cfg->{mode_idx}));
+ my ($icode,$info)=&http_json("GET","/api/info");
+ $state{resolution}=$info->{resolution} if($icode == 200 && ($info->{resolution} || "") ne "");
  return 1;
 }
 
@@ -403,6 +411,7 @@ if(!&save_user_state()) {
 
 my $failed=0;
 my $skipped=0;
+my $refused=0;
 for(my $n=0;$n<@scenarios;$n++) {
  my $sc=$scenarios[$n];
  my $entry=$state{scenarios}[$n];
@@ -415,8 +424,14 @@ for(my $n=0;$n<@scenarios;$n++) {
  $state{message}="Switching to $sc->{group} $sc->{label}, ".($sc->{depth})."-bit.";
  &write_state();
 
- my $err=&apply_config($sc->{config});
+ my ($err,$refusal)=&apply_config($sc->{config});
  $state{step}++;
+ if($refusal) {
+  $entry->{status}="skip"; $entry->{refused}=1; $entry->{note}="Not possible here: $refusal"; $refused++;
+  $state{step}+=scalar(@{$sc->{codes} || []})+scalar(@{$sc->{codes8} || []});
+  &write_state();
+  next;
+ }
  # Without a display every further switch would fail the same way after a
  # long wait; stop and say why.
  if($err && !&hdmi_connected()) {
@@ -561,5 +576,7 @@ my $total=scalar(@scenarios);
 if($failed) {
  &finish("failed","$failed of $total modes did not match. Your signal settings are back.");
 }
-&finish("passed",$skipped ? "All provable modes are bit-exact; $skipped could not be read back. Your signal settings are back."
-                          : "Every mode is bit-exact. Your signal settings are back.");
+my $refused_text=$refused ? " $refused ".($refused == 1 ? "mode is" : "modes are")." not possible with this display and resolution." : "";
+&finish("passed",$skipped ? "All provable modes are bit-exact; $skipped could not be read back.$refused_text Your signal settings are back."
+                          : ($refused ? "Every possible mode is bit-exact.$refused_text Your signal settings are back."
+                                      : "Every mode is bit-exact. Your signal settings are back."));

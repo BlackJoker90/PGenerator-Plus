@@ -1,4 +1,6 @@
 *{margin:0;padding:0;box-sizing:border-box}
+/* The hidden attribute always wins over a component's display rule. */
+[hidden]{display:none!important}
 :root,[data-theme="dark"]{color-scheme:dark;--bg:#0a0a0f;--card:#14141f;--panel:#14141f;--border:#2a2a3a;--accent:#5b7fff;--accent2:#7c5bff;
 --text:#e0e0e8;--text2:#888898;--green:#4caf50;--red:#f44;--orange:#ff9800;--dv:#b388ff;
 --surface-page:#0a0a0f;--surface-header:#101019;--surface-sidebar:#0d0d15;--surface-card:#14141f;--surface-drawer:#101019;--surface-modal:#14141f;--surface-popover:#181824;--surface-inset:#0d0d15;--surface-field:#080a11;
@@ -83,7 +85,7 @@
 --scroll-track:#0d0913;--scroll-thumb:#352a45;--scroll-thumb-border:#4a3d5e;--scroll-thumb-hover:#4a3d5e}
 [data-palette="volt"] .btn,[data-palette="volt"] .update-btn{border-radius:999px}
 [data-palette="contrast"] .btn-secondary{box-shadow:inset 0 0 0 1px var(--border)}
-[data-palette="nord"] #hdmiWarnBadge{color:var(--red)}
+[data-palette="nord"] #hdmiWarnBadge{color:var(--warning-text)}
 /* Natrium and the secondaries have light accents: text on them uses the dark foreground. */
 [data-palette^="natrium"] .btn-primary,[data-palette^="natrium"] .layout-switch-btn[aria-pressed="true"],
 [data-palette="volt"] .btn-primary,[data-palette="volt"] .layout-switch-btn[aria-pressed="true"],
@@ -370,7 +372,7 @@ body.ui-offline #signalStatusWrap,body.ui-offline #patternStatusWrap,body.ui-off
 .dashboard{max-width:1200px;margin:0 auto;padding:12px;display:grid;
 grid-template-columns:1fr 1fr;gap:12px}
 .card{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px;min-width:0}
-.card h2{font-size:.95rem;margin-bottom:10px;color:var(--accent);
+.card h2{font-size:1.06rem;margin-bottom:10px;color:var(--accent);
 display:flex;align-items:center;gap:6px;cursor:pointer;user-select:none}
 .card h2 .icon{font-size:1rem}
 .card h2::after{content:'';display:block;flex:0 0 30px;width:30px;height:30px;margin-left:auto;background-color:var(--text2);-webkit-mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E") center/20px 20px no-repeat;mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E") center/20px 20px no-repeat;transition:transform .2s}
@@ -387,7 +389,7 @@ body.layout-tablet .dashboard > .card > h2:has(> .pg-switch)::after{margin-left:
 .net-card>.net-merged>.lg-card-title-actions{margin:0 0 10px}
 .dashboard>.card.net-merged-source{display:none!important}
 .card-section-head{display:flex;align-items:center;justify-content:space-between;gap:12px;min-height:28px;margin-bottom:8px}
-.card-section-title{display:flex;align-items:center;gap:8px;margin:0;font-size:.9rem;font-weight:600;color:var(--text-primary);letter-spacing:normal;text-transform:none}
+.card-section-title{display:flex;align-items:center;gap:8px;margin:0;font-size:.94rem;font-weight:600;color:var(--text-primary);letter-spacing:normal;text-transform:none}
 .card-section-icon{flex:0 0 18px;width:18px;height:18px;color:var(--accent)}
 body.layout-tablet .card-section-head{min-height:44px}
 /* RGB primaries icon: three overlapping circles in the accent like every section icon */
@@ -460,7 +462,7 @@ body.layout-tablet .meter-ccss-profile-control-row > #meterCcssProfile{width:100
 body.layout-desktop .meter-card-header-row .meter-xyz-gear{width:30px;height:30px;font-size:.95rem}
 .meter-autocal-ccss-row{display:block;width:100%;max-width:100%}
 #meterCard.meter-patterns-only .meter-card-header-row{display:none}
-.meter-header-label{display:block;font-size:.65rem;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;margin:0 0 2px}
+.meter-header-label{display:block;font-size:.72rem;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;margin:0 0 2px}
 #meterCard.meter-patterns-only .meter-header-label{display:none}
 .card.span2{grid-column:span 2}
 .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:8px}
@@ -469,15 +471,16 @@ body.layout-desktop .meter-card-header-row .meter-xyz-gear{width:30px;height:30p
 #displaySettingsCard{container-type:inline-size}
 .grid.setting-tiles{grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
 .setting-tiles>.field{display:grid;grid-template-columns:36px minmax(0,1fr);grid-template-rows:auto auto;column-gap:12px;row-gap:6px;align-items:center;padding:12px 14px;border-radius:12px;background:var(--surface-inset);border:1px solid color-mix(in srgb,var(--text-primary) 6%,transparent);min-width:0}
-.setting-tiles>.field>.setting-icon{grid-row:span 2;box-sizing:border-box;width:36px;height:36px;padding:8px;border-radius:10px;color:var(--accent);background:color-mix(in srgb,var(--accent) 13%,transparent)}
-.setting-tiles>.field>label{font-size:.62rem;letter-spacing:.06em;align-self:end}
-.setting-tiles>.field>select,.setting-tiles>.field>.mode-select-wrap{grid-column:2;width:100%;min-width:0}
+/* The icon sits beside the dropdown, not centred on label + dropdown. */
+.setting-tiles>.field>.setting-icon{grid-column:1;grid-row:2;box-sizing:border-box;width:36px;height:36px;padding:8px;border-radius:10px;color:var(--accent);background:color-mix(in srgb,var(--accent) 13%,transparent)}
+.setting-tiles>.field>label{grid-column:2;grid-row:1;font-size:.72rem;letter-spacing:.04em;align-self:end}
+.setting-tiles>.field>select,.setting-tiles>.field>.mode-select-wrap{grid-column:2;grid-row:2;width:100%;min-width:0}
 .setting-tiles>.field select{background-color:var(--surface-card,var(--surface-field));font-weight:600}
 @container (max-width:720px){.grid.setting-tiles{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @container (max-width:420px){.grid.setting-tiles{grid-template-columns:minmax(0,1fr)}}
 .grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
 .field{display:flex;flex-direction:column;gap:3px}
-.field label{font-size:.65rem;color:var(--text2);text-transform:uppercase;letter-spacing:.5px}
+.field label{font-size:.72rem;color:var(--text2);text-transform:uppercase;letter-spacing:.04em}
 /* Base look for every drop-down select, so unclassed ones match .field select.
    Zero specificity: class and inline styles still win, except for the chevron. */
 :where(select:not([multiple]):not([size])){background-color:var(--surface-inset);border:1px solid var(--border);color:var(--text-primary);
@@ -540,7 +543,7 @@ padding:4px 24px 4px 8px;border-radius:6px;font-size:.74rem;outline:none;transit
 #meterSettingsGrid .field-gamma{width:150px}
 #meterSettingsGrid .field-chromaticity{width:150px}
 #meterSettingsGrid .meter-target-white-row,#meterSettingsGrid .meter-target-black-row{display:flex;align-items:center;gap:8px;flex-wrap:nowrap;margin-top:4px;width:min(420px,calc(100vw - 70px));max-width:none}
-#meterSettingsGrid .meter-target-inline-label{font-size:.65rem;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;flex:0 0 112px;min-width:112px;margin-right:2px;white-space:nowrap}
+#meterSettingsGrid .meter-target-inline-label{font-size:.72rem;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;flex:0 0 112px;min-width:112px;margin-right:2px;white-space:nowrap}
 #meterSettingsGrid .meter-target-white-row input[type=number],#meterSettingsGrid .meter-target-black-row input[type=number]{width:62px;min-width:62px;padding-left:7px;padding-right:7px}
 #meterSettingsGrid .meter-target-white-row input[type=number].meter-input-disabled,#meterSettingsGrid .meter-target-black-row input[type=number].meter-input-disabled{opacity:.45;background:var(--bg2,#1b1b26);cursor:not-allowed}
 #meterSettingsGrid .meter-target-measure-btn{padding:3px 6px;line-height:1.15;font-size:.68rem;white-space:nowrap}
@@ -636,13 +639,13 @@ body.layout-tablet .meter-live-primary-values{flex-wrap:nowrap!important;overflo
 	#meterProfileGearPopover{width:280px;max-height:72vh;overflow-y:auto;left:0;right:auto}
 	#meterCompanionGearPopover{width:320px;max-width:min(320px,calc(100vw - 32px));max-height:72vh;overflow-y:auto;left:auto;right:0}
 	#meterCompanionGearPopover .field{margin-bottom:9px;display:flex;flex-direction:column;align-items:stretch;gap:4px}
-	#meterCompanionGearPopover .field label{font-size:.62rem;color:var(--text2);text-transform:uppercase;letter-spacing:.45px}
+	#meterCompanionGearPopover .field label{font-size:.72rem;color:var(--text2);text-transform:uppercase;letter-spacing:.45px}
 	#meterCompanionGearPopover .meter-card-header-select{width:100%}
 	.meter-companion-settings-note{font-size:.64rem;color:var(--text2);line-height:1.4;margin:0 0 9px}
 	.meter-profile-title{font-size:.78rem;font-weight:600;color:#dfe6f6;text-transform:uppercase;letter-spacing:.5px;margin-bottom:10px}
 	#meterProfileGearPopover .field{margin-bottom:10px;display:flex;flex-direction:column;align-items:stretch;gap:4px}
 	.meter-profile-section{border-top:1px solid var(--border);margin-top:10px;padding-top:10px;display:flex;flex-direction:column;gap:8px}
-	.meter-profile-section-title{font-size:.65rem;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:.5px}
+	.meter-profile-section-title{font-size:.72rem;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:.5px}
 	#meterProfileGearPopover .meter-profile-section .field{margin-bottom:0}
 	#meterProfileGearPopover .meter-profile-section label.meter-toggle{font-size:.72rem;color:var(--text);display:flex;align-items:center;gap:6px}
 	#meterProfileGearPopover .meter-profile-section .meter-toggle-label{font-size:.72rem;color:var(--text2);user-select:none;cursor:pointer}
@@ -737,6 +740,11 @@ font-weight:600;transition:all .2s;display:flex;align-items:center;gap:4px;white
 .btn-push-end{margin-left:auto}
 /* Action button inside a card heading, pushed to the end before the collapse chevron. */
 .card h2 .card-h2-action{margin-left:auto}
+/* Reset Defaults: tinted in the warning colour like the reboot button, so
+   it reads as "puts things back", not as one more neutral control. */
+.card h2 .btn-reset{--rst:var(--status-warning);gap:6px;padding:6px 14px 6px 12px;min-height:30px;color:var(--warning-text);background:color-mix(in srgb,var(--rst) 14%,transparent);box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--rst) 32%,transparent);transition:background .18s ease-out,box-shadow .18s ease-out}
+.card h2 .btn-reset:hover,.card h2 .btn-reset:focus-visible{background:color-mix(in srgb,var(--rst) 24%,transparent);box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--rst) 55%,transparent)}
+.card h2 .btn-reset svg{flex:0 0 auto;width:14px;height:14px}
 .card:not(.collapsed) h2:has(.card-h2-action)::after{margin-left:0}
 /* One keyboard ring for buttons and header icon buttons, from the theme's focus token. */
 .btn:focus-visible,.icon-btn:focus-visible{outline:2px solid var(--focus-ring);outline-offset:2px}
@@ -797,14 +805,18 @@ transition:opacity .18s ease-in,transform .22s ease-in;z-index:999;pointer-event
    rises in, the change as two chips, Cancel focused first. */
 .pg-reboot-dialog{position:fixed;inset:0;z-index:100002;display:flex;align-items:center;justify-content:center;padding:20px}
 .pg-reboot-backdrop{position:absolute;inset:0;background:color-mix(in srgb,var(--surface-page,#000) 62%,transparent);-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px);opacity:0;transition:opacity .22s ease-out}
-.pg-reboot-card{position:relative;box-sizing:border-box;width:min(420px,100%);padding:26px 24px 20px;border-radius:16px;background:var(--surface-modal);border:1px solid color-mix(in srgb,var(--status-warning) 28%,var(--border));box-shadow:0 24px 64px -16px var(--shadow),0 4px 14px var(--shadow);color:var(--text-primary);text-align:center;opacity:0;transform:translateY(14px) scale(.97);transition:opacity .22s ease-out,transform .32s cubic-bezier(.16,1,.3,1)}
+.pg-reboot-dialog{--dlg-tone:var(--status-warning)}
+.pg-reboot-dialog.tone-accent{--dlg-tone:var(--accent)}
+.pg-reboot-card{position:relative;box-sizing:border-box;width:min(420px,100%);padding:26px 24px 20px;border-radius:16px;background:var(--surface-modal);border:1px solid color-mix(in srgb,var(--dlg-tone) 28%,var(--border));box-shadow:0 24px 64px -16px var(--shadow),0 4px 14px var(--shadow);color:var(--text-primary);text-align:center;opacity:0;transform:translateY(14px) scale(.97);transition:opacity .22s ease-out,transform .32s cubic-bezier(.16,1,.3,1)}
 .pg-reboot-dialog.is-open .pg-reboot-backdrop{opacity:1}
 .pg-reboot-dialog.is-open .pg-reboot-card{opacity:1;transform:none}
 .pg-reboot-dialog.is-leaving .pg-reboot-backdrop{opacity:0;transition-duration:.16s}
 .pg-reboot-dialog.is-leaving .pg-reboot-card{opacity:0;transform:translateY(8px) scale(.98);transition-duration:.16s}
-.pg-reboot-icon{width:52px;height:52px;margin:0 auto 14px;border-radius:50%;display:grid;place-items:center;color:var(--status-warning);background:color-mix(in srgb,var(--status-warning) 14%,transparent)}
+.pg-reboot-icon{width:52px;height:52px;margin:0 auto 14px;border-radius:50%;display:grid;place-items:center;color:var(--dlg-tone);background:color-mix(in srgb,var(--dlg-tone) 14%,transparent)}
 .pg-reboot-icon svg{width:26px;height:26px}
 .pg-reboot-dialog.is-open .pg-reboot-icon svg{animation:pg-reboot-spin .9s cubic-bezier(.16,1,.3,1) .12s both}
+.pg-reboot-dialog.tone-accent.is-open .pg-reboot-icon svg{animation-name:pg-dlg-rise}
+@keyframes pg-dlg-rise{from{transform:translateY(5px) scale(.85);opacity:0}to{transform:none;opacity:1}}
 @keyframes pg-reboot-spin{from{transform:rotate(-140deg);opacity:0}to{transform:none;opacity:1}}
 .pg-reboot-title{margin:0 0 14px;font-size:1.1rem;font-weight:700;line-height:1.3;color:var(--text-primary);text-wrap:balance}
 .pg-reboot-change{display:flex;align-items:center;justify-content:center;gap:10px;margin:0 0 14px}
@@ -812,6 +824,12 @@ transition:opacity .18s ease-in,transform .22s ease-in;z-index:999;pointer-event
 .pg-reboot-from{color:var(--text2);background:color-mix(in srgb,var(--text-primary) 7%,transparent);text-decoration:line-through;text-decoration-color:color-mix(in srgb,var(--text2) 60%,transparent)}
 .pg-reboot-to{color:var(--accent);background:color-mix(in srgb,var(--accent) 15%,transparent);box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--accent) 40%,transparent)}
 .pg-reboot-change svg{width:18px;height:18px;color:var(--text2);flex:none}
+.pg-reboot-changes{list-style:none;margin:0 0 16px;padding:0;max-height:min(40vh,300px);overflow-y:auto;text-align:left;border-top:1px solid var(--divider,var(--border))}
+.pg-reboot-changes li{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:6px 12px;padding:9px 2px;border-bottom:1px solid var(--divider,var(--border))}
+.pg-reboot-changes-label{font-size:.78rem;font-weight:600;color:var(--text2)}
+.pg-reboot-changes-vals{display:flex;flex-wrap:wrap;align-items:center;justify-content:flex-end;gap:6px;margin-left:auto}
+.pg-reboot-changes-vals span:not(.sr-only){padding:3px 10px;border-radius:999px;font-size:.8rem;font-weight:700;font-variant-numeric:tabular-nums}
+.pg-reboot-changes-vals svg{width:14px;height:14px;color:var(--text2);flex:none}
 .pg-reboot-body{margin:0 auto 20px;max-width:34ch;font-size:.84rem;line-height:1.55;color:var(--text2)}
 /* Release notes inside the dialog (install / roll back): wider card, notes scroll on their own */
 .pg-reboot-card.has-notes{width:min(540px,100%)}
@@ -970,12 +988,12 @@ body.apply-settings-error .apply-settings-pin-hint{color:#e08184}
 body.apply-settings-success .apply-settings-actions{display:none}
 .info-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(145px,1fr));gap:6px}
 .info-item{background:var(--surface-inset);padding:8px;border-radius:6px;min-width:0}
-.info-item .label{font-size:.6rem;color:var(--text2);text-transform:uppercase}
+.info-item .label{font-size:.72rem;color:var(--text2);text-transform:uppercase}
 .info-item .value{font-size:.82rem;margin-top:1px;line-height:1.2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;word-break:normal;overflow-wrap:normal}
 .stat-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:6px}
 .stat-card{background:var(--surface-inset);padding:8px;border-radius:8px}
 #colorReadingsTable tr.color-reading-selected{background:var(--selected-bg)}
-.stat-label{font-size:.6rem;color:var(--text2);text-transform:uppercase;letter-spacing:.5px}
+.stat-label{font-size:.72rem;color:var(--text2);text-transform:uppercase;letter-spacing:.5px}
 .stat-value{font-size:1.05rem;font-weight:700;margin:3px 0 4px}
 .stat-value.warn{color:#ffeb3b}.stat-value.hot{color:var(--orange)}.stat-value.bad{color:var(--red)}
 .stat-sub{font-size:.68rem;color:var(--text2);line-height:1.3}
@@ -990,7 +1008,7 @@ body.apply-settings-success .apply-settings-actions{display:none}
 .devinfo-vital:first-child{padding-left:0}
 .devinfo-vital:last-child{padding-right:0}
 .devinfo-vital+.devinfo-vital{border-left:1px solid var(--divider,var(--border))}
-.devinfo-vital-head{display:flex;align-items:center;gap:8px;font-size:.68rem;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:.07em}
+.devinfo-vital-head{display:flex;align-items:center;gap:8px;font-size:.72rem;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:.07em}
 .devinfo-icon{width:18px;height:18px;flex:none;color:var(--accent)}
 .devinfo-card .devinfo-value{font-size:2.1rem;font-weight:700;line-height:1.05;letter-spacing:-.025em;margin:10px 0 12px;font-variant-numeric:tabular-nums;white-space:nowrap}
 .devinfo-meter{height:6px;border-radius:999px;overflow:hidden;background:color-mix(in srgb,var(--text-primary) 10%,transparent)}
@@ -998,11 +1016,36 @@ body.apply-settings-success .apply-settings-actions{display:none}
 :is(.devinfo-card,.facts-host) .devinfo-facts{grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}
 :is(.devinfo-card,.facts-host) .devinfo-facts .info-item{display:grid;grid-template-columns:36px minmax(0,1fr);column-gap:12px;align-items:center;padding:12px 14px;border-radius:12px;background:var(--surface-inset);border:1px solid color-mix(in srgb,var(--text-primary) 6%,transparent)}
 :is(.devinfo-card,.facts-host) .devinfo-facts .devinfo-icon{grid-row:span 2;box-sizing:border-box;width:36px;height:36px;padding:8px;border-radius:10px;background:color-mix(in srgb,var(--accent) 13%,transparent)}
-:is(.devinfo-card,.facts-host) .devinfo-facts .label{font-size:.62rem;letter-spacing:.06em}
+:is(.devinfo-card,.facts-host) .devinfo-facts .label{font-size:.72rem;letter-spacing:.04em}
 :is(.devinfo-card,.facts-host) .devinfo-facts .value{font-size:.9rem;font-weight:600;margin-top:2px;font-variant-numeric:tabular-nums}
+/* Copy on a fact tile: the header icon-button tint (accent at 14 % with a 30 % ring). */
+:is(.devinfo-card,.facts-host) .devinfo-facts .info-item.has-copy{grid-template-columns:36px minmax(0,1fr) auto}
+.fact-copy{--cp:var(--accent);grid-column:3;grid-row:2;display:grid;place-items:center;width:34px;height:34px;padding:0;border:0;border-radius:10px;cursor:pointer;color:var(--cp);background:color-mix(in srgb,var(--cp) 14%,transparent);box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--cp) 30%,transparent);transition:background .18s ease-out,box-shadow .18s ease-out,transform .08s}
+.fact-copy svg{width:17px;height:17px}
+.fact-copy:hover,.fact-copy:focus-visible{background:color-mix(in srgb,var(--cp) 24%,transparent);box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--cp) 55%,transparent);outline:none}
+.fact-copy:active{transform:scale(.94)}
+.fact-copy[data-state="copied"]{--cp:var(--status-success)}
+.fact-copy[data-state="copied"] svg{animation:pgFactCopied .32s cubic-bezier(.16,1,.3,1)}
+@keyframes pgFactCopied{from{transform:scale(.6);opacity:.3}}
+@media (prefers-reduced-motion:reduce){.fact-copy,.fact-copy[data-state="copied"] svg{transition:none;animation:none}}
 /* Setting tiles (GPU memory, scaling type): the select takes the value's place, as in Output */
-.devinfo-facts .devinfo-control>.label{display:flex;align-items:center;gap:6px;margin:0;align-self:end}
-.devinfo-facts .devinfo-control>select{grid-column:2;width:100%;min-width:0;margin-top:6px;background-color:var(--surface-card,var(--surface-field));font-weight:600}
+/* The icon sits beside the dropdown, not centred on label + dropdown. */
+:is(.devinfo-card,.facts-host) .devinfo-facts .devinfo-control{row-gap:6px}
+:is(.devinfo-card,.facts-host) .devinfo-facts .devinfo-control>.devinfo-icon{grid-column:1;grid-row:2}
+.devinfo-facts .devinfo-control>.label{grid-column:2;grid-row:1;display:flex;align-items:center;gap:6px;margin:0;align-self:end}
+.devinfo-facts .devinfo-control>select{grid-column:2;grid-row:2;width:100%;min-width:0;background-color:var(--surface-card,var(--surface-field));font-weight:600}
+/* Fact tiles follow the same rows: label on top, icon beside the value, so
+   every icon in a row of tiles sits at the height of the dropdowns. */
+:is(.devinfo-card,.facts-host) .devinfo-facts .info-item{align-content:center}
+:is(.devinfo-card,.facts-host) .devinfo-facts .info-item:not(.devinfo-control){row-gap:6px}
+/* Tiles in one row share the label and the value/dropdown row, also where
+   a label wraps or the dropdown is taller (touch). */
+@supports (grid-template-rows:subgrid){
+ :is(.devinfo-card,.facts-host) .devinfo-facts .info-item{grid-row:span 2;grid-template-rows:subgrid;row-gap:6px}
+}
+:is(.devinfo-card,.facts-host) .devinfo-facts .info-item:not(.devinfo-control)>.devinfo-icon{grid-column:1;grid-row:2}
+.devinfo-facts .info-item:not(.devinfo-control)>.label{grid-column:2;grid-row:1;margin:0;align-self:end}
+.devinfo-facts .info-item:not(.devinfo-control)>.value{grid-column:2;grid-row:2;margin-top:0}
 /* Narrow card (phone, half-width tablet column): vitals stack, hairlines turn horizontal */
 @container facts (max-width:560px){
  .devinfo-vitals{grid-template-columns:1fr;margin-bottom:16px}
@@ -1015,7 +1058,22 @@ body.apply-settings-success .apply-settings-actions{display:none}
  :is(.devinfo-card,.facts-host) .devinfo-facts .info-item{grid-template-columns:minmax(0,1fr);align-content:start;padding:12px}
  :is(.devinfo-card,.facts-host) .devinfo-facts .devinfo-icon{grid-row:auto;width:32px;height:32px;padding:7px;margin-bottom:10px}
  :is(.devinfo-card,.facts-host) .devinfo-facts .value{white-space:normal;overflow:visible;text-overflow:clip}
- .devinfo-facts .devinfo-control>select{grid-column:auto}
+ /* Setting tiles keep the icon beside the dropdown, so they take a full row
+    (as Output does on a phone); the label runs across the top. */
+ :is(.devinfo-card,.facts-host) .devinfo-facts .info-item.devinfo-control{grid-column:1 / -1;grid-template-columns:32px minmax(0,1fr);column-gap:10px}
+ :is(.devinfo-card,.facts-host) .devinfo-facts .devinfo-control>.devinfo-icon{margin-bottom:0}
+ .devinfo-facts .devinfo-control>.label{grid-column:1 / -1}
+ /* Fact tiles: icon back above the text, one column. */
+ :is(.devinfo-card,.facts-host) .devinfo-facts .info-item:not(.devinfo-control)>.devinfo-icon,
+ .devinfo-facts .info-item:not(.devinfo-control)>.label,
+ .devinfo-facts .info-item:not(.devinfo-control)>.value{grid-column:1;grid-row:auto}
+ :is(.devinfo-card,.facts-host) .devinfo-facts .info-item:not(.devinfo-control){row-gap:0}
+ :is(.devinfo-card,.facts-host) .devinfo-facts .info-item{grid-row:auto;grid-template-rows:none}
+ .devinfo-facts .info-item:not(.devinfo-control)>.value{margin-top:2px}
+ /* Icon above the text here: the copy button takes the top-right corner. */
+ :is(.devinfo-card,.facts-host) .devinfo-facts .info-item.has-copy{position:relative;grid-template-columns:minmax(0,1fr)}
+ /* An absolutely placed grid item sits in its grid area; reset it so the tile is the frame. */
+ .fact-copy{position:absolute;grid-row:auto;grid-column:auto;top:11px;right:12px}
 }
 .wifi-list{max-height:150px;overflow-y:auto;margin:6px 0}
 .wifi-item{display:flex;justify-content:space-between;align-items:center;
@@ -1059,7 +1117,7 @@ background:color-mix(in srgb,var(--dv) 20%,transparent);box-shadow:inset 0 0 0 1
 .pat-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(100px,1fr));gap:6px}
 .diag-pattern-layout{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:12px;align-items:start}
 .diag-pattern-column{min-width:0}
-.diag-pattern-title{font-size:.62rem;color:var(--text2);margin:0 0 6px 2px;letter-spacing:.04em;text-transform:uppercase}
+.diag-pattern-title{font-size:.72rem;color:var(--text2);margin:0 0 6px 2px;letter-spacing:.04em;text-transform:uppercase}
 .diag-pattern-title-gap{margin-top:16px}
 .diag-pattern-title label{font:inherit;color:inherit;letter-spacing:inherit;text-transform:inherit}
 .diag-pattern-layout .pat-btn{min-height:44px;display:flex;flex-direction:column;align-items:stretch;justify-content:flex-start;gap:7px;padding:6px 6px 8px}
@@ -1098,7 +1156,7 @@ background:color-mix(in srgb,var(--dv) 20%,transparent);box-shadow:inset 0 0 0 1
 .diag-now[data-state="live"] .diag-now-screen:not(.pat-thumb){background:color-mix(in srgb,var(--accent) 55%,#000);box-shadow:inset 0 0 0 1px var(--accent)}
 .diag-now .diag-now-screen.pat-thumb{height:27px;border-radius:4px}
 .diag-now-text{display:flex;flex-direction:column;min-width:0;flex:1 1 auto;gap:1px}
-.diag-now-label{font-size:.62rem;letter-spacing:.04em;text-transform:uppercase;color:var(--text2)}
+.diag-now-label{font-size:.72rem;letter-spacing:.04em;text-transform:uppercase;color:var(--text2)}
 .diag-now[data-state="live"] .diag-now-label{color:var(--accent)}
 .diag-now-name{font-size:.95rem;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .diag-now[data-state="idle"] .diag-now-name{font-size:.8rem;font-weight:400;color:var(--text2)}
@@ -1114,7 +1172,7 @@ transition:all .2s;line-height:1.2;font-weight:500;-webkit-tap-highlight-color:t
 .pat-btn.active{border-color:var(--accent);background:var(--selected-bg)}
 .pat-btn-sm{padding:5px 2px;font-size:.65rem}
 .pat-section{margin-bottom:8px}
-.pat-section-title{font-size:.65rem;color:var(--text2);text-transform:uppercase;
+.pat-section-title{font-size:.72rem;color:var(--text2);text-transform:uppercase;
 letter-spacing:.5px;margin-bottom:4px;padding-bottom:2px;border-bottom:1px solid var(--border);
 cursor:pointer;user-select:none;display:flex;align-items:center;gap:4px}
 .pat-section-title::before{content:'\25BE';font-size:.8em;transition:transform .2s}
@@ -1127,7 +1185,7 @@ cursor:pointer;user-select:none;display:flex;align-items:center;gap:4px}
 .diag-asset-delete{display:flex;align-items:center;justify-content:center;padding:0;min-height:0;color:var(--text2)}
 .diag-asset-delete:disabled{opacity:.35;cursor:not-allowed}
 .diag-asset-delete:not(:disabled):hover{color:var(--on-danger);background:var(--danger-fill);border-color:var(--danger-fill)}
-.diag-custom-hint{font-size:.64rem;color:var(--text2);margin:4px 0 0 2px;line-height:1.4}
+.diag-custom-hint{font-size:.72rem;color:var(--text2);margin:4px 0 0 2px;line-height:1.4}
 @media (max-width:720px){.diag-pattern-layout{grid-template-columns:1fr}}
 @media (hover:hover) and (pointer:fine){.pat-btn:hover{border-color:var(--accent);background:#1a1a2e;transform:translateY(-1px)}}
 .sat-row{display:flex;align-items:center;gap:4px;margin-bottom:4px}
@@ -1156,7 +1214,7 @@ color:var(--upd);font-size:.7rem;font-weight:600;line-height:1.2}
    short accent flash instead of a status line */
 .update-facts .info-item{position:relative}
 .update-facts .info-item{container:tile / inline-size}
-.fact-chip{grid-column:1 / -1;justify-self:start;max-width:100%;overflow:hidden;text-overflow:ellipsis;box-sizing:border-box;margin-top:8px;padding:3px 9px;border-radius:999px;font-size:.6rem;font-weight:700;letter-spacing:.05em;text-transform:uppercase;line-height:1.5;white-space:nowrap;color:var(--green);background:color-mix(in srgb,var(--green) 14%,transparent);box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--green) 35%,transparent)}
+.fact-chip{grid-column:1 / -1;justify-self:start;max-width:100%;overflow:hidden;text-overflow:ellipsis;box-sizing:border-box;margin-top:8px;padding:3px 9px;border-radius:999px;font-size:.68rem;font-weight:700;letter-spacing:.05em;text-transform:uppercase;line-height:1.5;white-space:nowrap;color:var(--green);background:color-mix(in srgb,var(--green) 14%,transparent);box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--green) 35%,transparent)}
 .fact-chip[data-state="available"]{color:var(--on-accent);background:var(--accent-fill);box-shadow:0 0 0 0 color-mix(in srgb,var(--accent) 0%,transparent);animation:pgUpdateChipPulse 2.6s ease-in-out infinite}
 @keyframes pgUpdateChipPulse{50%{box-shadow:0 0 0 4px color-mix(in srgb,var(--accent) 22%,transparent),0 0 14px color-mix(in srgb,var(--accent) 30%,transparent)}}
 @media (prefers-reduced-motion:reduce){.fact-chip[data-state="available"]{animation:none}}
@@ -1222,10 +1280,10 @@ body.is-widget-dragging *{cursor:grabbing!important}
 background:rgba(0,0,0,.75);z-index:9999;justify-content:center;align-items:center;
 backdrop-filter:blur(4px)}
 #hdmiOverlay.active{display:flex}
-#hdmiOverlay .hdmi-box{background:var(--card);border:1px solid #ff6b35;border-radius:14px;
+#hdmiOverlay .hdmi-box{background:var(--card);border:1px solid color-mix(in srgb,var(--orange) 45%,var(--border));border-radius:14px;
 padding:32px 36px;max-width:480px;width:90%;text-align:center;position:relative;
-box-shadow:0 8px 32px rgba(255,107,53,.2)}
-#hdmiOverlay .hdmi-box h2{color:#ff6b35;font-size:1.3rem;margin-bottom:12px;
+box-shadow:0 8px 32px rgba(0,0,0,.35)}
+#hdmiOverlay .hdmi-box h2{color:var(--warning-text);font-size:1.3rem;margin-bottom:12px;
 display:flex;align-items:center;justify-content:center;gap:8px}
 #hdmiOverlay .hdmi-box p{color:var(--text);font-size:.9rem;line-height:1.5;margin-bottom:20px}
 #hdmiOverlay .hdmi-box .hdmi-port{font-weight:700;color:var(--accent)}
@@ -1236,8 +1294,10 @@ border-radius:8px;cursor:pointer;font-size:.85rem;font-weight:600}
 #hdmiOverlay .hdmi-ignore{color:var(--text2);background:none;border:none;cursor:pointer;
 font-size:.75rem;text-decoration:underline}
 #hdmiOverlay .hdmi-ignore:hover{color:var(--text)}
-#hdmiWarnBadge{display:none;color:#ff5a52;font-size:.75rem;font-weight:700;
-cursor:pointer;animation:updatePulse 2s ease-in-out infinite}
+#hdmiWarnBadge{display:none;padding:0;border:0;background:none;color:var(--warning-text);font:inherit;font-size:.75rem;font-weight:700;
+cursor:pointer;font-variant-numeric:tabular-nums}
+#hdmiWarnBadge:hover{text-decoration:underline;text-underline-offset:3px}
+#hdmiWarnBadge:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:3px}
 #meterUsbWarnBadge{display:none;color:#fb8c00;font-size:.75rem;font-weight:700;cursor:help}
 .hdmi-note{color:var(--text2);font-size:.8rem;line-height:1.4;margin-bottom:16px;font-style:italic}
 .hdmi-downtime{color:var(--text2);font-size:.75rem;margin-top:12px;opacity:.8}
@@ -1324,7 +1384,7 @@ body.layout-desktop #meter3dLutWorkspaceCard[data-desktop-active="true"]{padding
 .meter-3dlut-workspace-head h2{margin:0 0 5px;font-size:1.05rem;color:var(--text)}
 .meter-3dlut-workspace-head p{margin:0;color:var(--text2);font-size:.78rem;line-height:1.45}
 .meter-3dlut-workspace-section{padding:14px;background:var(--surface-inset);border-radius:8px;margin-bottom:16px}
-.meter-3dlut-workspace-label{margin-bottom:9px;color:var(--text2);font-size:.68rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em}
+.meter-3dlut-workspace-label{margin-bottom:9px;color:var(--text2);font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em}
 .meter-3dlut-workspace-status{margin-top:9px;color:var(--text2);font-size:.74rem}
 body.layout-desktop #meter3dLutWorkspaceCard #meterSeriesGroup3dLut{display:flex!important;width:100%;align-items:center}
 /* Keep both profiling entry points available in the desktop workspace: Select
@@ -1369,8 +1429,8 @@ transition:transform .28s cubic-bezier(.2,.9,.3,1.5);transition-delay:calc(var(-
 -webkit-mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpolyline points='1.75,6.25 4.75,9.25 10.25,2.75' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") center/9px 9px no-repeat;mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpolyline points='1.75,6.25 4.75,9.25 10.25,2.75' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") center/9px 9px no-repeat}
 .pg-dd-item.is-flagged{background:color-mix(in srgb,var(--accent) 12%,transparent);box-shadow:inset 3px 0 0 var(--accent);font-weight:600}
 .pg-dd-item.is-flagged.is-active{background:var(--selected-bg)}
-.pg-dd-badge{margin-left:auto;padding:2px 7px;border-radius:999px;background:var(--accent-fill);color:var(--on-accent);font-size:.62rem;font-weight:700;letter-spacing:.04em;text-transform:uppercase;flex:0 0 auto}
-.pg-dd-group{padding:8px 10px 4px;font-size:.66rem;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--text-muted)}
+.pg-dd-badge{margin-left:auto;padding:2px 7px;border-radius:999px;background:var(--accent-fill);color:var(--on-accent);font-size:.68rem;font-weight:700;letter-spacing:.04em;text-transform:uppercase;flex:0 0 auto}
+.pg-dd-group{padding:8px 10px 4px;font-size:.72rem;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--text-muted)}
 .pg-dd-menu.no-motion,.pg-dd-menu.no-motion *{transition:none!important}
 .pg-dd-menu.no-motion .pg-dd-item,.pg-dd-menu.no-motion .pg-dd-group{opacity:1;transform:none}
 .pg-dd-menu.no-motion .pg-dd-mark{transform:none}
@@ -1396,14 +1456,25 @@ background:linear-gradient(135deg,var(--sw-bg) 0 50%,var(--sw-card) 50% 100%)}
 @media (hover:hover) and (pointer:fine){[data-palette] .pat-btn:hover{background:var(--hover-bg)}}
 .pg-dd-menu.no-stagger .pg-dd-item,.pg-dd-menu.no-stagger .pg-dd-group,.pg-dd-menu.no-stagger .pg-dd-mark{transition-delay:0s!important}
 /* Signal Self-Test (Output). The verdict carries the header power-button tint: status colour at 14 % with a 30 % ring. */
-.selftest-lede{max-width:72ch;margin:0 0 8px;font-size:.78rem;line-height:1.5;color:var(--text2)}
-.selftest-note{display:flex;gap:7px;align-items:flex-start;max-width:72ch;margin:0 0 14px;font-size:.72rem;line-height:1.5;color:var(--text-muted)}
-.selftest-note svg{flex:0 0 auto;width:14px;height:14px;margin-top:2px}
-.selftest-note strong{color:var(--text2);font-weight:600}
+.selftest-card{container-type:inline-size}
+.selftest-facts{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;margin:0 0 10px;padding:0;list-style:none}
+.selftest-facts li{display:flex;gap:10px;align-items:center;min-width:0;padding:10px 12px;border-radius:12px;background:var(--surface-inset);border:1px solid color-mix(in srgb,var(--text-primary) 6%,transparent)}
+.selftest-facts svg{flex:0 0 auto;box-sizing:border-box;width:32px;height:32px;padding:7px;border-radius:9px;color:var(--accent);background:color-mix(in srgb,var(--accent) 13%,transparent)}
+.selftest-facts span{display:flex;flex-direction:column;gap:1px;min-width:0;font-size:.7rem;line-height:1.35;color:var(--text-secondary)}
+.selftest-facts strong{font-size:.8rem;font-weight:700;color:var(--text-primary)}
+@container (max-width:820px){.selftest-facts{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@container (max-width:420px){.selftest-facts{grid-template-columns:minmax(0,1fr)}}
+/* The limit of the proof, styled as a warning so it is not read past; full
+   width and the same radius as the verdict card below it. */
+.selftest-note{display:flex;gap:10px;align-items:flex-start;margin:0 0 14px;padding:10px 14px 10px 12px;border-radius:12px;font-size:.74rem;line-height:1.5;color:var(--text-secondary);background:color-mix(in srgb,var(--orange) 9%,var(--surface-inset));border:1px solid color-mix(in srgb,var(--orange) 40%,transparent)}
+.selftest-note svg{flex:0 0 auto;width:17px;height:17px;margin-top:1px;color:var(--warning-text)}
+.selftest-note strong{display:block;margin-bottom:1px;color:var(--text-primary);font-weight:650}
 .selftest-verdict{--st:var(--text2);position:relative;display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:center;gap:16px;padding:16px 18px;border:1px solid var(--border);border-radius:12px;background:var(--surface-inset);overflow:hidden;transition:border-color .3s ease-out}
 .selftest-verdict[data-state="running"]{--st:var(--accent)}
 .selftest-verdict[data-state="passed"]{--st:var(--status-success);border-color:color-mix(in srgb,var(--status-success) 45%,var(--border))}
 .selftest-verdict[data-state="failed"]{--st:var(--status-error);border-color:color-mix(in srgb,var(--status-error) 45%,var(--border))}
+/* Ran at another output resolution: the verdict no longer covers what is on the cable. */
+.selftest-verdict[data-stale]{--st:var(--status-warning);border-color:color-mix(in srgb,var(--status-warning) 45%,var(--border))}
 .selftest-mark{display:grid;place-items:center;width:48px;height:48px;border-radius:50%;color:var(--st);background:color-mix(in srgb,var(--st) 14%,transparent);box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--st) 30%,transparent);transition:color .3s ease-out,background .3s ease-out}
 .selftest-mark-icon{display:none;width:24px;height:24px;grid-area:1/1}
 .selftest-verdict[data-state="idle"] [data-icon="idle"],.selftest-verdict[data-state="running"] [data-icon="running"],
@@ -1435,16 +1506,18 @@ background:linear-gradient(135deg,var(--sw-bg) 0 50%,var(--sw-card) 50% 100%)}
 .selftest-mode[data-status="running"] .selftest-mode-head{background:var(--selected-bg)}
 .selftest-mode-head:focus-visible{outline:2px solid var(--focus-ring);outline-offset:-2px}
 .selftest-mode-id{display:flex;align-items:baseline;gap:8px;min-width:0}
-.selftest-group{--grp:var(--text2);justify-self:start;flex:0 0 auto;padding:2px 7px;border-radius:999px;font-size:.6rem;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--grp);background:color-mix(in srgb,var(--grp) 14%,transparent)}
+.selftest-group{--grp:var(--text2);justify-self:start;flex:0 0 auto;padding:4px 10px;border-radius:999px;font-size:.7rem;line-height:1.2;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--grp);background:color-mix(in srgb,var(--grp) 14%,transparent)}
 .selftest-mode[data-group="hdr"] .selftest-group{--grp:var(--status-warning)}
 .selftest-mode[data-group="dv"] .selftest-group{--grp:var(--status-dv)}
 .selftest-mode-name{font-size:.86rem;font-weight:600;color:var(--text-primary);white-space:nowrap}
 /* Link depth chip: one hue per depth, kept apart from the group chips (grey,
    HDR orange, DV violet) and the result colours; the text mixes towards the
-   theme's text colour so it stays legible on light and dark themes. */
-.selftest-bits{--bits:#3aa99f;justify-self:start;flex:0 0 auto;padding:2px 8px;border-radius:999px;font-size:.66rem;font-weight:700;font-variant-numeric:tabular-nums;white-space:nowrap;color:color-mix(in oklab,var(--bits) 58%,var(--text-primary));background:color-mix(in srgb,var(--bits) 16%,transparent);box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--bits) 38%,transparent)}
-.selftest-bits[data-bits="10"]{--bits:#4f8ff0}
-.selftest-bits[data-bits="12"]{--bits:#d062b8}
+   theme's text colour so it stays legible on light and dark themes. The
+   hues are shared with the signal preset chips. */
+:root{--bits-8:#3aa99f;--bits-10:#4f8ff0;--bits-12:#d062b8}
+.selftest-bits{--bits:var(--bits-8);justify-self:start;flex:0 0 auto;padding:4px 10px;border-radius:999px;font-size:.76rem;line-height:1.2;font-weight:700;font-variant-numeric:tabular-nums;white-space:nowrap;color:color-mix(in oklab,var(--bits) 58%,var(--text-primary));background:color-mix(in srgb,var(--bits) 16%,transparent);box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--bits) 38%,transparent)}
+.selftest-bits[data-bits="10"]{--bits:var(--bits-10)}
+.selftest-bits[data-bits="12"]{--bits:var(--bits-12)}
 .selftest-mode-link{min-width:0;font-size:.72rem;color:var(--text2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .selftest-mode[data-status="fail"] .selftest-mode-link{color:var(--status-error);white-space:normal}
 .selftest-strip{display:flex;align-items:center;justify-content:flex-end;gap:3px;min-height:16px}
@@ -1466,7 +1539,7 @@ background:linear-gradient(135deg,var(--sw-bg) 0 50%,var(--sw-card) 50% 100%)}
 .selftest-detail-meta code{font-family:inherit;font-variant-numeric:tabular-nums;color:var(--text-primary)}
 .selftest-table{width:100%;max-width:760px;border-collapse:collapse;font-size:.74rem;font-variant-numeric:tabular-nums}
 .selftest-table th,.selftest-table td{padding:6px 10px 6px 0;text-align:left;border-bottom:1px solid color-mix(in srgb,var(--border) 60%,transparent);white-space:nowrap}
-.selftest-table thead th{font-size:.62rem;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--text2)}
+.selftest-table thead th{font-size:.72rem;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--text2)}
 .selftest-table tbody th{font-weight:500;color:var(--text-primary)}
 .selftest-chans{margin-left:4px;font-weight:500;letter-spacing:.02em;text-transform:none;color:var(--text-muted)}
 .selftest-table tbody th .selftest-swatch{margin-right:8px}
@@ -1480,17 +1553,18 @@ background:linear-gradient(135deg,var(--sw-bg) 0 50%,var(--sw-card) 50% 100%)}
 .selftest-verdict{grid-template-columns:auto minmax(0,1fr)}
 .selftest-actions{grid-column:1/-1;justify-content:stretch}
 .selftest-actions .btn{flex:1 1 0;min-height:44px;justify-content:center}
-/* Phones: three lines per mode on the same shared columns (group | mode and
-   depth | result), so the group chips and mode names still line up. */
+/* Phones: three lines per mode on shared columns, so the group chips and mode
+   names still line up: group | mode and depth, then link | result, then
+   strip | score. The depth chip gets the first line to itself. */
 .selftest-modes{grid-template-columns:auto minmax(0,1fr) auto;column-gap:10px}
 .selftest-modes .selftest-mode-head{row-gap:6px}
 .selftest-modes .selftest-group{grid-column:1;grid-row:1}
-.selftest-modes .selftest-mode-title{grid-column:2;grid-row:1;display:flex;align-items:center;gap:8px;min-width:0}
+.selftest-modes .selftest-mode-title{grid-column:2/4;grid-row:1;display:flex;align-items:center;gap:8px;min-width:0}
 .selftest-modes .selftest-bits{justify-self:start}
-.selftest-modes .selftest-state{grid-column:3;grid-row:1;justify-self:end}
+.selftest-modes .selftest-state{grid-column:3;grid-row:2;justify-self:end}
 .selftest-modes .selftest-mode-link{grid-column:1/3;grid-row:2}
-.selftest-modes .selftest-score{grid-column:3;grid-row:2}
-.selftest-modes .selftest-strip{grid-column:1/-1;grid-row:3;justify-content:flex-start}
+.selftest-modes .selftest-score{grid-column:3;grid-row:3;justify-self:end}
+.selftest-modes .selftest-strip{grid-column:1/3;grid-row:3;justify-content:flex-start}
 .selftest-table{display:block;overflow-x:auto}
 }
 @media(prefers-reduced-motion:reduce){.selftest-verdict[data-state="running"] [data-icon="running"],.selftest-mode[data-status="running"] .selftest-dot{animation:none}.selftest-progress-fill{transition:none}}
@@ -1534,7 +1608,7 @@ background:linear-gradient(135deg,var(--sw-bg) 0 50%,var(--sw-card) 50% 100%)}
 .playlist-row{display:grid;grid-template-columns:minmax(0,1fr) 236px 84px 156px;align-items:center;gap:16px;padding:12px 6px;border-bottom:1px solid var(--border)}
 .playlist-row.is-active{background:var(--selected-bg)}
 .playlist-row-name{font-size:.88rem;font-weight:600;line-height:1.3;color:var(--text-primary);text-wrap:balance}
-.playlist-tag{display:inline-block;margin-left:8px;vertical-align:1px;white-space:nowrap;padding:1px 7px;border-radius:999px;font-size:.6rem;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--accent);background:color-mix(in srgb,var(--accent) 14%,transparent)}
+.playlist-tag{display:inline-block;margin-left:8px;vertical-align:1px;white-space:nowrap;padding:1px 7px;border-radius:999px;font-size:.68rem;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--accent);background:color-mix(in srgb,var(--accent) 14%,transparent)}
 .playlist-row-desc{margin-top:2px;font-size:.74rem;line-height:1.4;color:var(--text2);display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
 .playlist-row-note{margin-top:4px;font-size:.72rem;color:var(--status-warning)}
 .playlist-row-strip{display:flex;align-items:center;gap:4px;min-width:0}
@@ -1570,7 +1644,7 @@ background:linear-gradient(135deg,var(--sw-bg) 0 50%,var(--sw-card) 50% 100%)}
 .playlist-name-field{flex:1 1 260px;max-width:420px}
 .playlist-name-field input{width:100%;min-height:34px;font-size:.86rem;font-weight:600}
 .playlist-editor-grid{display:grid;grid-template-columns:minmax(0,1.25fr) minmax(0,1fr);gap:20px}
-.playlist-pane-title{margin-bottom:8px;font-size:.66rem;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--text2)}
+.playlist-pane-title{margin-bottom:8px;font-size:.72rem;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--text2)}
 .playlist-count{text-transform:none;letter-spacing:normal;font-weight:500}
 .playlist-catalog{display:flex;flex-direction:column;gap:12px;max-height:360px;overflow-y:auto;padding-right:4px}
 .playlist-catalog-title{margin-bottom:6px;font-size:.72rem;font-weight:600;color:var(--text-primary)}
@@ -1607,3 +1681,123 @@ background:linear-gradient(135deg,var(--sw-bg) 0 50%,var(--sw-card) 50% 100%)}
 .playlist-editor-grid{grid-template-columns:1fr}
 }
 @media(prefers-reduced-motion:reduce){.playlist-live-dot{animation:none}.playlist-rail-step .pat-thumb{transition:none}}
+/* Keyboard focus on form controls: the same 2px ring as .btn, so a keyboard
+   user can follow focus through a row of selects. A border tint alone is too
+   faint (WCAG 2.4.7 / 1.4.11). Listed after the outline:none rules above. */
+select:focus-visible,input:focus-visible,textarea:focus-visible,
+.inline-select:focus-visible,.meter-inline-value input:focus-visible,
+.meter-chart-inline-input:focus-visible,.meter-lg-rgb-tv-input:focus-visible{outline:2px solid var(--focus-ring);outline-offset:1px}
+/* Apply bar: what changes, a way back, and what the restart does to the picture. */
+.apply-bar-row{display:flex;align-items:center;justify-content:space-between;gap:10px 16px;flex-wrap:wrap}
+.apply-bar-text{display:flex;flex-direction:column;gap:3px;min-width:0;flex:1 1 280px}
+.apply-bar-title{font-size:.85rem;font-weight:600;color:var(--text-primary)}
+.apply-bar-changes{font-size:.8rem;line-height:1.45;color:var(--text-primary);overflow-wrap:anywhere}
+.apply-bar-changes b{font-weight:600;color:var(--text2)}
+.apply-bar-note{font-size:.74rem;line-height:1.4;color:var(--text2)}
+.apply-bar-actions{display:flex;gap:8px;flex:0 0 auto;margin-left:auto}
+/* Phones: the sticky bar must not cover a fifth of the screen. Title and
+   buttons share one row, the change list keeps two lines, the blackout
+   note goes (the Apply overlay says the renderer restarts). */
+@media (max-width:560px){
+ .apply-bar-row{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:6px 10px}
+ .apply-bar-text{display:contents}
+ .apply-bar-title{grid-column:1;grid-row:1}
+ .apply-bar-actions{grid-column:2;grid-row:1;margin-left:0}
+ .apply-bar-changes{grid-column:1 / -1;grid-row:2;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;line-clamp:2;overflow:hidden}
+ .apply-bar-note{display:none}
+}
+/* Fields Dolby Vision sets: still readable, visibly fixed, no dropdown arrow. */
+.field select:disabled{cursor:not-allowed}
+.field select[data-dv-locked]{cursor:default;opacity:1;background-image:none!important;padding-right:10px!important;border-style:dashed;color:var(--text-primary)}
+.dv-locked-note{display:flex;gap:8px;align-items:baseline;margin:10px 0 0;font-size:.76rem;line-height:1.45;color:var(--text2)}
+.dv-locked-note::before{content:"";flex:0 0 8px;height:8px;border-radius:50%;background:var(--status-dv);transform:translateY(-1px)}
+.setting-tiles>.field>.mode-retry{grid-column:2;grid-row:1;justify-self:end;align-self:end;min-height:24px;padding:2px 10px}
+/* Command palette (Cmd/Ctrl+K): a floating panel in the active theme's
+   popover surface; results grouped, the active row on the selection colour. */
+.pg-palette{position:fixed;inset:0;z-index:1200}
+.pg-palette[hidden]{display:none}
+.pg-palette-scrim{position:absolute;inset:0;background:color-mix(in srgb,var(--overlay) 70%,transparent)}
+.pg-palette-panel{position:relative;margin:min(12vh,96px) auto 0;width:min(640px,calc(100vw - 24px));max-height:min(70vh,560px);display:flex;flex-direction:column;overflow:hidden;
+ border-radius:14px;background:var(--surface-popover,var(--surface-modal));color:var(--text-primary);border:1px solid var(--border);box-shadow:0 24px 64px -12px var(--shadow);
+ animation:pgPaletteIn .16s cubic-bezier(.16,1,.3,1)}
+@keyframes pgPaletteIn{from{opacity:0;transform:translateY(-6px) scale(.985)}}
+.pg-palette-search{display:flex;align-items:center;gap:10px;padding:12px 14px;border-bottom:1px solid var(--divider,var(--border))}
+.pg-palette-search svg{flex:0 0 18px;width:18px;height:18px;fill:none;stroke:var(--text2);stroke-width:2;stroke-linecap:round}
+.pg-palette-input{flex:1;min-width:0;border:0;background:transparent;color:var(--text-primary);font:inherit;font-size:1rem;padding:4px 0;caret-color:var(--accent)}
+.pg-palette-input::placeholder{color:var(--text-muted)}
+.pg-palette-input:focus,.pg-palette-input:focus-visible{outline:none}
+.pg-palette-list{list-style:none;margin:0;padding:6px;overflow-y:auto;overscroll-behavior:contain}
+.pg-palette-group{padding:10px 10px 4px;font-size:.72rem;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:var(--text-muted)}
+.pg-palette-item{display:grid;grid-template-columns:minmax(0,1fr) auto;grid-template-rows:auto auto;column-gap:12px;align-items:center;padding:8px 10px;border-radius:9px;cursor:pointer}
+.pg-palette-item.is-active{background:var(--selected-bg)}
+.pg-palette-title{grid-column:1;font-size:.88rem;font-weight:550;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pg-palette-hint{grid-column:1;font-size:.76rem;color:var(--text2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pg-palette-item .pg-palette-keys{grid-column:2;grid-row:1 / span 2}
+.pg-palette-keys{display:inline-flex;gap:4px}
+.pg-palette kbd{display:inline-flex;align-items:center;justify-content:center;min-width:22px;height:22px;padding:0 6px;border-radius:6px;border:1px solid var(--border);background:var(--surface-inset);color:var(--text2);font:600 .72rem/1 inherit;font-variant-numeric:tabular-nums}
+.pg-palette-esc{flex:0 0 auto}
+.pg-palette-shortcut{display:grid;grid-template-columns:132px minmax(0,1fr);gap:12px;align-items:center;padding:7px 10px;font-size:.86rem}
+.pg-palette-empty{padding:18px 12px;font-size:.84rem;color:var(--text2)}
+.pg-palette-foot{display:flex;gap:16px;flex-wrap:wrap;padding:8px 14px;border-top:1px solid var(--divider,var(--border));font-size:.74rem;color:var(--text2)}
+/* Nord's --text2 and --text-muted reach 3.9-4.1:1 on its lighter popover surface; its Snow
+   tone keeps hints and the footer above 4.5:1, also on the selected row. */
+[data-palette="nord"] .pg-palette-panel{--text2:#d8dee9;--text-muted:#d8dee9}
+/* The selection tint lowers hint contrast below 4.5:1 in the dark themes. */
+.pg-palette-item.is-active .pg-palette-hint{color:var(--text-primary)}
+.pg-palette-foot span{display:inline-flex;align-items:center;gap:4px}
+.pg-palette-foot kbd{min-width:18px;height:18px;font-size:.68rem}
+body.pg-palette-open{overflow:hidden}
+@media(max-width:600px){.pg-palette-panel{margin-top:max(10px,env(safe-area-inset-top));max-height:calc(100dvh - 20px)}.pg-palette-foot{display:none}.pg-palette-item{padding:11px 10px}}
+@media(prefers-reduced-motion:reduce){.pg-palette-panel{animation:none}}
+/* Where the palette jumped to: a short accent ring that fades out. */
+.pg-found{outline:2px solid var(--accent);outline-offset:3px;animation:pgFound 1.6s ease-out forwards}
+@keyframes pgFound{0%,40%{outline-color:var(--accent)}100%{outline-color:transparent}}
+@media(prefers-reduced-motion:reduce){.pg-found{animation:none}}
+/* Signal presets: filter chips by signal type, a dropdown, and the format
+   of the chosen preset as chips. */
+.preset-bar{margin:0 0 14px}
+.preset-bar-head{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px 12px;margin-bottom:8px}
+.preset-bar-title{margin:0;font-size:.72rem;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--text2)}
+.preset-filter{display:flex;flex-wrap:wrap;gap:6px}
+.preset-filter[hidden]{display:none}
+.preset-filter-chip{--chip:var(--text2);display:inline-flex;align-items:center;gap:6px;min-height:28px;padding:3px 10px;border:0;border-radius:999px;font:inherit;font-size:.74rem;font-weight:600;cursor:pointer;color:color-mix(in oklab,var(--chip) 58%,var(--text-primary));background:color-mix(in srgb,var(--chip) 10%,transparent);box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--chip) 26%,transparent);transition:background-color .15s ease-out,box-shadow .15s ease-out}
+.preset-filter-chip[data-kind="hdr"]{--chip:var(--status-warning)}
+.preset-filter-chip[data-kind="dv"]{--chip:var(--status-dv)}
+.preset-filter-chip:hover:not(:disabled){background:color-mix(in srgb,var(--chip) 18%,transparent)}
+.preset-filter-chip[aria-pressed="true"]{background:color-mix(in srgb,var(--chip) 24%,transparent);box-shadow:inset 0 0 0 1.5px color-mix(in srgb,var(--chip) 70%,transparent)}
+.preset-filter-chip:disabled{cursor:default;opacity:.45}
+.preset-filter-chip:focus-visible{outline:2px solid var(--focus-ring);outline-offset:1px}
+.preset-filter-count{min-width:1.4em;padding:0 5px;border-radius:999px;color:var(--text-primary);font-size:.66rem;line-height:1.5;text-align:center;font-variant-numeric:tabular-nums;background:color-mix(in srgb,var(--chip) 16%,transparent)}
+.preset-row{display:flex;flex-wrap:wrap;align-items:center;gap:8px}
+.preset-row>select{flex:1 1 220px;min-width:0;max-width:360px}
+#presetSaveOpenBtn{gap:6px}
+#presetSaveOpenBtn svg{flex:0 0 auto;width:14px;height:14px}
+.preset-chips{display:flex;flex-wrap:wrap;align-items:center;gap:4px;margin-top:8px}
+.preset-chips[hidden]{display:none}
+/* Format chips: neutral, except the signal type (as .selftest-group: grey,
+   HDR orange, DV violet) and the bit depth (as .selftest-bits). */
+.preset-chip{--chip:var(--text2);padding:3px 8px;border-radius:999px;font-size:.7rem;font-weight:600;line-height:1.3;white-space:nowrap;color:color-mix(in oklab,var(--chip) 58%,var(--text-primary));background:color-mix(in srgb,var(--chip) 12%,transparent);box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--chip) 24%,transparent);font-variant-numeric:tabular-nums}
+.preset-chip[data-kind]{font-size:.66rem;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:color-mix(in oklab,var(--chip) 60%,var(--text-primary));background:color-mix(in srgb,var(--chip) 14%,transparent);box-shadow:none}
+.preset-chip[data-kind="hdr"]{--chip:var(--status-warning)}
+.preset-chip[data-kind="dv"]{--chip:var(--status-dv)}
+.preset-chip[data-bits]{--chip:var(--bits-8);font-weight:700;background:color-mix(in srgb,var(--chip) 16%,transparent);box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--chip) 38%,transparent)}
+.preset-chip[data-bits="10"]{--chip:var(--bits-10)}
+.preset-chip[data-bits="12"]{--chip:var(--bits-12)}
+.preset-bar-hint{margin:8px 0 0;font-size:.74rem;line-height:1.4;color:var(--text2)}
+/* Save: the name is asked inline, with the format it will store. */
+.preset-save{margin-top:12px}
+.preset-save[hidden]{display:none}
+.preset-save-label{display:block;margin-bottom:6px;font-size:.76rem;font-weight:600;color:var(--text-primary)}
+.preset-save-row{display:flex;flex-wrap:wrap;align-items:center;gap:8px}
+.preset-save-row .ccss-input{flex:1 1 220px;min-width:0;max-width:360px}
+.preset-save-block{margin:8px 0 0;font-size:.76rem;line-height:1.4;color:var(--warning-text)}
+.preset-save-what{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin-top:8px}
+.preset-save-what-label{font-size:.72rem;color:var(--text2)}
+.preset-save-what .preset-chips{margin-top:0}
+@media (max-width:560px){.preset-row>select,.preset-save-row .ccss-input{flex-basis:100%;max-width:none}}
+@media (pointer:coarse){.preset-filter-chip{min-height:36px;padding:4px 12px}}
+@media (prefers-reduced-motion:reduce){.preset-filter-chip{transition:none}}
+/* Quiet tag in the custom dropdown (data-pg-tag), e.g. a preset's signal type. */
+.pg-dd-tag{--tag:var(--text2);margin-left:auto;padding:2px 7px;border-radius:999px;flex:0 0 auto;font-size:.62rem;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:color-mix(in oklab,var(--tag) 40%,var(--text-primary));background:color-mix(in srgb,var(--tag) 10%,transparent)}
+.pg-dd-tag[data-tone="hdr"]{--tag:var(--status-warning)}
+.pg-dd-tag[data-tone="dv"]{--tag:var(--status-dv)}

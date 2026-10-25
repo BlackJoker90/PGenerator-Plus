@@ -24,7 +24,7 @@ use POSIX qw(floor);
 
 our @EXPORT_OK=qw(g1_pattern_key g1_pattern_render g1_pattern_keys g1_pattern_level g1_pattern_has_10bit);
 
-our $VERSION="2";
+our $VERSION="7";
 
 # Calman token (SPECIALTY:<token> or IMAGE:<token>) -> pattern key.
 my %TOKEN=(
@@ -179,36 +179,90 @@ sub _row_copy {
  }
 }
 
+# Curves and diagonals are drawn with coverage, so their edges carry the
+# share of each pixel the shape covers instead of stair steps. Coordinates
+# are continuous: pixel (x,y) spans [x,x+1) x [y,y+1) and its centre is at
+# x+0.5, so the screen centre of a W x H output is (W/2,H/2) whether W is
+# even or odd. Edge codes lie between the background and the line colour.
+
+# Share of a pixel, centred at distance d from a line's centre line, that a
+# band of width t covers (box filter across the line).
+sub _cover {
+ my ($d,$t)=@_;
+ my $lo=$d-0.5;
+ my $hi=$d+0.5;
+ $lo=-$t/2 if($lo < -$t/2);
+ $hi=$t/2 if($hi > $t/2);
+ return $hi > $lo ? $hi-$lo : 0;
+}
+
+# Mix colour c into pixel (x,y) with weight a (0..1).
+sub _blend {
+ my ($im,$x,$y,$c,$a)=@_;
+ return if($a <= 0 || $x < 0 || $y < 0 || $x >= $im->{w} || $y >= $im->{h});
+ $a=1 if($a > 1);
+ my $deep=(($im->{depth} || 8) == 16);
+ my $bpp=$deep ? 6 : 3;
+ my $off=($y*$im->{w}+$x)*$bpp;
+ if($a == 1) { substr($im->{buf},$off,$bpp,_px($c,$im->{depth})); return; }
+ my $fmt=$deep ? "n3" : "C3";
+ my @old=unpack($fmt,substr($im->{buf},$off,$bpp));
+ my @new=$deep ? map { _s16($_) } @$c : @$c;
+ my @mix=map { floor($old[$_]+($new[$_]-$old[$_])*$a+0.5) } 0..2;
+ substr($im->{buf},$off,$bpp,pack($fmt,@mix));
+}
+
 # Annulus of radius r (centre line), thickness t, centred on cx,cy.
 sub _ring {
  my ($im,$cx,$cy,$r,$t,$c)=@_;
- my $ro=$r+$t/2;
- my $ri=$r-$t/2;
- $ri=0 if($ri < 0);
- for(my $y=int($cy-$ro)-1;$y<=int($cy+$ro)+1;$y++) {
+ my $ro=$r+$t/2+1;
+ my $ri=$r-$t/2-1;
+ for(my $y=floor($cy-$ro);$y<=floor($cy+$ro);$y++) {
   my $dy=$y+0.5-$cy;
   next if(abs($dy) > $ro);
   my $xo=sqrt($ro*$ro-$dy*$dy);
-  if(abs($dy) >= $ri) {
-   _fill($im,int($cx-$xo+0.5),$y,int($cx+$xo+0.5),$y+1,$c);
-   next;
+  my $xi=($ri > 0 && abs($dy) < $ri) ? sqrt($ri*$ri-$dy*$dy) : 0;
+  # The band crosses this row left and right of the centre (or once,
+  # through the middle, near the top and bottom of the ring).
+  my @span=$xi > 0
+   ? ([floor($cx-$xo-0.5),floor($cx-$xi+0.5)],[floor($cx+$xi-0.5),floor($cx+$xo+0.5)])
+   : ([floor($cx-$xo-0.5),floor($cx+$xo+0.5)]);
+  for my $sp (@span) {
+   for(my $x=$sp->[0];$x<=$sp->[1];$x++) {
+    my $dx=$x+0.5-$cx;
+    _blend($im,$x,$y,$c,_cover(sqrt($dx*$dx+$dy*$dy)-$r,$t));
+   }
   }
-  my $xi=sqrt($ri*$ri-$dy*$dy);
-  _fill($im,int($cx-$xo+0.5),$y,int($cx-$xi+0.5),$y+1,$c);
-  _fill($im,int($cx+$xi+0.5),$y,int($cx+$xo+0.5),$y+1,$c);
  }
 }
 
-# Straight line of thickness t from (x1,y1) to (x2,y2).
+# Straight line of thickness t from (x1,y1) to (x2,y2), with round ends.
 sub _line {
  my ($im,$x1,$y1,$x2,$y2,$t,$c)=@_;
- my $len=sqrt(($x2-$x1)**2+($y2-$y1)**2);
- my $steps=int($len*2)+1;
- my $half=$t/2;
- for(my $i=0;$i<=$steps;$i++) {
-  my $x=$x1+($x2-$x1)*$i/$steps;
-  my $y=$y1+($y2-$y1)*$i/$steps;
-  _fill($im,int($x-$half+0.5),int($y-$half+0.5),int($x-$half+0.5)+$t,int($y-$half+0.5)+$t,$c);
+ my ($vx,$vy)=($x2-$x1,$y2-$y1);
+ my $ll=$vx*$vx+$vy*$vy;
+ my $m=$t/2+1;
+ my ($xa,$xb)=$x1 < $x2 ? ($x1,$x2) : ($x2,$x1);
+ my ($ya,$yb)=$y1 < $y2 ? ($y1,$y2) : ($y2,$y1);
+ for(my $y=floor($ya-$m);$y<=floor($yb+$m);$y++) {
+  my $py=$y+0.5;
+  my ($lx,$rx)=(floor($xa-$m),floor($xb+$m));
+  # Only the strip around the line on this row can be covered.
+  if(abs($vy) > 1e-9) {
+   my $xc=$x1+($py-$y1)*$vx/$vy;
+   my $hw=$m*sqrt($ll)/abs($vy)+1;
+   $lx=floor($xc-$hw) if(floor($xc-$hw) > $lx);
+   $rx=floor($xc+$hw) if(floor($xc+$hw) < $rx);
+  }
+  for(my $x=$lx;$x<=$rx;$x++) {
+   my $px=$x+0.5;
+   my $u=$ll > 0 ? (($px-$x1)*$vx+($py-$y1)*$vy)/$ll : 0;
+   $u=0 if($u < 0); $u=1 if($u > 1);
+   my ($ex,$ey)=($px-$x1-$u*$vx,$py-$y1-$u*$vy);
+   my $d=sqrt($ex*$ex+$ey*$ey);
+   next if($d > $m);
+   _blend($im,$x,$y,$c,_cover($d,$t));
+  }
  }
 }
 
@@ -265,6 +319,80 @@ sub _text {
 sub _text_center {
  my ($im,$text,$cx,$cy,$s,$c)=@_;
  _text($im,$text,int($cx-_text_width($text,$s)/2+0.5),int($cy-3.5*$s+0.5),$s,$c);
+}
+
+# Stroke digits, drawn with coverage like the rings. Each glyph is a list
+# of strokes in a unit box (u right, v down, 0..1); a stroke is a list of
+# points and arcs [cx,cy,rx,ry,from,to] (degrees, counter-clockwise from
+# +u, v pointing down, so 90 is the top). Points snap to the pixel grid so
+# straight strokes have sharp edges; arcs stay continuous.
+my %SFONT=(
+ "0" => [[["arc",0.5,0.5,0.5,0.5,0,360]]],
+ "1" => [[[0.15,0.2],[0.5,0],[0.5,1]]],
+ "2" => [[["arc",0.5,0.27,0.5,0.27,165,-35],[0,1],[1,1]]],
+ "3" => [[["arc",0.5,0.25,0.44,0.25,150,-90]],[["arc",0.5,0.74,0.5,0.26,90,-150]]],
+ "4" => [[[0.1,0],[0,0.66],[1,0.66]],[[0.74,0.32],[0.74,1]]],
+ "5" => [[[0.92,0],[0.12,0],[0.06,0.47],["arc",0.49,0.69,0.51,0.31,140,-145]]],
+ "6" => [[[0.76,0],[0.09,0.58]],[["arc",0.5,0.69,0.5,0.31,0,360]]],
+ "7" => [[[0,0],[1,0],[0.32,1]]],
+ "8" => [[["arc",0.5,0.25,0.43,0.25,0,360]],[["arc",0.5,0.75,0.5,0.25,0,360]]],
+ "9" => [[[0.24,1],[0.91,0.42]],[["arc",0.5,0.31,0.5,0.31,0,360]]],
+);
+
+sub _sglyph_width { my $dh=shift; return int($dh*0.7+0.5); }
+
+# Text of stroke digits, height dh, stroke width sw, centred on cx,cy.
+sub _stext_center {
+ my ($im,$text,$cx,$cy,$dh,$sw,$c)=@_;
+ my $dw=_sglyph_width($dh);
+ my $adv=$dw+int($dh*0.3+0.5);
+ my @ch=split(//,"$text");
+ my $x=$cx-(@ch*$adv-($adv-$dw))/2;
+ my $y=$cy-$dh/2;
+ # Stroke centres on the grid: integer for an even width, .5 for an odd one.
+ my $snap=sub { my $v=shift; my $o=(int($sw+0.5) % 2) ? 0.5 : 0; return floor($v-$o+0.5)+$o; };
+ for my $g (@ch) {
+  my @seg;
+  for my $stroke (@{$SFONT{$g} || []}) {
+   my @pt;
+   for my $it (@$stroke) {
+    if($it->[0] eq "arc") {
+     my (undef,$acx,$acy,$rx,$ry,$a0,$a1)=@$it;
+     my $n=int(abs($a1-$a0)/6)+1;
+     for my $i (0..$n) {
+      my $a=($a0+($a1-$a0)*$i/$n)*3.14159265358979/180;
+      push(@pt,[$acx+$rx*cos($a),$acy-$ry*sin($a),0]);
+     }
+    } else {
+     push(@pt,[@$it,1]);
+    }
+   }
+   my @p=map {
+    my ($px,$py)=($x+$sw/2+$_->[0]*($dw-$sw),$y+$sw/2+$_->[1]*($dh-$sw));
+    $_->[2] ? [$snap->($px),$snap->($py)] : [$px,$py];
+   } @pt;
+   push(@seg,[@{$p[$_-1]},@{$p[$_]}]) for(1..$#p);
+  }
+  my $m=$sw/2+1;
+  for(my $py=floor($y-$m);$py<=floor($y+$dh+$m);$py++) {
+   for(my $px=floor($x-$m);$px<=floor($x+$dw+$m);$px++) {
+    my ($qx,$qy)=($px+0.5,$py+0.5);
+    my $d=1e9;
+    for my $s (@seg) {
+     my ($x1,$y1,$x2,$y2)=@$s;
+     my ($vx,$vy)=($x2-$x1,$y2-$y1);
+     my $ll=$vx*$vx+$vy*$vy;
+     my $u=$ll > 0 ? (($qx-$x1)*$vx+($qy-$y1)*$vy)/$ll : 0;
+     $u=0 if($u < 0); $u=1 if($u > 1);
+     my ($ex,$ey)=($qx-$x1-$u*$vx,$qy-$y1-$u*$vy);
+     my $e=sqrt($ex*$ex+$ey*$ey);
+     $d=$e if($e < $d);
+    }
+    _blend($im,$px,$py,$c,_cover($d,$sw)) if($d < $m);
+   }
+  }
+  $x+=$adv;
+ }
 }
 
 ###############################################
@@ -476,13 +604,26 @@ sub _color_bars {
  return $im;
 }
 
+# Nearest whole width to v (at least 1) with the parity of size n: a band
+# of that width centred on n/2 covers whole pixels only.
+sub _parity_width {
+ my ($v,$n)=@_;
+ my $lo=floor($v);
+ $lo-- if(($lo % 2) != ($n % 2));
+ my $hi=$lo+2;
+ return $hi if($lo < 1 || $hi-$v <= $v-$lo);
+ return $lo;
+}
+
 sub _target {
  my ($im,$w,$h,$ring_c,$spoke_c)=@_;
  my ($cx,$cy)=($w/2,$h/2);
  my $t=int($h/576+0.5); $t=1 if($t < 1);
  _ring($im,$cx,$cy,$h*$_/27,$t,$ring_c) for(2..6);
  my $len=$h*0.2135;
- my $st=int($h*1.5/576+0.5); $st=1 if($st < 1);
+ # The vertical spoke marks the centre column: with the parity of the
+ # width it fills whole pixels (959-960 at 1920) and its edges are sharp.
+ my $st=_parity_width($h*1.5/576,$w);
  for my $deg (90,210,330) {
   my $a=$deg*3.14159265358979/180;
   _line($im,$cx,$cy,$cx+$len*cos($a),$cy-$len*sin($a),$st,$spoke_c);
@@ -496,10 +637,48 @@ sub _alignment {
  return $im;
 }
 
+# Overscan rings: five rectangles inside the frame, one per percent. Ring k
+# has its outer edge k % in from each edge (of the width for left/right, of
+# the height for top/bottom), so a display that crops c % still shows every
+# ring k >= c whole, and the frame is the 0 % ring. Every ring is as wide as
+# the frame on all four sides; only the gaps differ, because 1 % of the
+# width is more pixels than 1 % of the height. Ring k is numbered at the
+# middle of the left and right edge, in the gap just outside it. The gaps
+# differ by a pixel from rounding, so the numbers are drawn for all rings
+# or, where the narrowest gap has no room for a digit, for none.
+sub _overscan_rings {
+ my ($im,$w,$h,$c,$lc,$rw)=@_;
+ my $dh=int($h*0.013+0.5);
+ my $dw=_sglyph_width($dh);
+ # Label stroke: bold, a fifth of the digit height (whole pixels, so
+ # straight strokes stay sharp); small digits get a lighter, soft stroke.
+ my $sw=$dh >= 12 ? int($dh*0.2+0.5) : $dh/6;
+ my @x=map { int($w*$_/100+0.5) } 0..5;
+ my @y=map { int($h*$_/100+0.5) } 0..5;
+ # Gap k runs from the inner edge of ring k-1 (the frame for k=1) to ring k.
+ my @in=map { $x[$_-1]+$rw } 1..5;
+ my $narrow=(sort { $a <=> $b } map { $x[$_]-$in[$_-1] } 1..5)[0];
+ my $labels=($dh >= 7 && $narrow >= $dw+2);
+ for my $k (1..5) {
+  my ($x,$y)=($x[$k],$y[$k]);
+  _fill($im,$x,$y,$w-$x,$y+$rw,$c);
+  _fill($im,$x,$h-$y-$rw,$w-$x,$h-$y,$c);
+  _fill($im,$x,$y+$rw,$x+$rw,$h-$y-$rw,$c);
+  _fill($im,$w-$x-$rw,$y+$rw,$w-$x,$h-$y-$rw,$c);
+  next if(!$labels);
+  my $lx=($in[$k-1]+$x)/2;
+  _stext_center($im,$k,$lx,$h/2,$dh,$sw,$lc);
+  _stext_center($im,$k,$w-$lx,$h/2,$dh,$sw,$lc);
+ }
+}
+
 sub _basic_alignment {
  my ($w,$h,$o)=@_;
  my $im=_img($w,$h,_lc($o,70,70,70));
- _frame($im,int($h/288+0.5) || 1,_lc($o,100,100,100));
+ my $ft=int($h/288+0.5) || 1;
+ my $edge=_lc($o,100,100,100);
+ _frame($im,$ft,$edge);
+ _overscan_rings($im,$w,$h,$edge,_lc($o,124,124,124),$ft);
  _target($im,$w,$h,_lc($o,112,112,112),_lc($o,160,16,16));
  return $im;
 }

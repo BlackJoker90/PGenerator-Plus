@@ -1116,7 +1116,7 @@ int ofApp::dv_map_mode=2;
 int ofApp::dv_minpq=62;
 int ofApp::dv_maxpq=3696;
 int ofApp::dv_diagonal=42;
-int ofApp::dv_color_space=0;
+int ofApp::dv_color_space=1;
 
 /*
  ##########################################################

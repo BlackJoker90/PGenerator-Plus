@@ -51,7 +51,7 @@ std::string dv_map_mode="2";
 std::string dv_minpq="62";
 std::string dv_maxpq="3696";
 std::string dv_diagonal="42";
-std::string dv_color_space="0";
+std::string dv_color_space="1";
 /* Include RPI p4 header file */
 #include "ofxRPI4Window.h"
 // End Patch RPI p4

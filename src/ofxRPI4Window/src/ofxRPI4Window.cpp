@@ -1314,7 +1314,7 @@ bool ofxRPI4Window::InitDRM()
 	}
 #endif	
 	// Start BiasiLinux patch for compatibility with old version
-	mode = connector->modes[0];
+	if (connector->count_modes > 0) mode = connector->modes[0];
 	for (int i=0;i<connector->count_modes;i++) {
 		drmModeModeInfo *current_mode = &connector->modes[i];
 		if (current_mode->type & DRM_MODE_TYPE_USERDEF) {
@@ -1333,7 +1333,23 @@ bool ofxRPI4Window::InitDRM()
 			drmModeFreeEncoder(encoder_tmp);
 		}
 	}
-	if(ofxRPI4Window::mode_idx!= -1) mode = connector->modes[ofxRPI4Window::mode_idx];
+	/* mode_idx indexes the connector's mode list as the EDID gave it. The
+	   list can be shorter now (a display that answers without its EDID
+	   leaves only the video= mode): an index past its end read beyond the
+	   array and sized the window 0x0, and the renderer died on its first
+	   frame. Fall back like the daemon does (get_hdmi_info, which sizes
+	   the patterns): the preferred mode, else the one chosen above. */
+	if (ofxRPI4Window::mode_idx >= 0 && ofxRPI4Window::mode_idx < connector->count_modes)
+		mode = connector->modes[ofxRPI4Window::mode_idx];
+	else if (ofxRPI4Window::mode_idx != -1) {
+		for (int i = 0; i < connector->count_modes; i++) {
+			if (connector->modes[i].type & DRM_MODE_TYPE_PREFERRED) {
+				mode = connector->modes[i];
+				break;
+			}
+		}
+		ofLogError() << "DRM: mode index " << ofxRPI4Window::mode_idx << " is not among the connector's " << connector->count_modes << " modes; using " << mode.hdisplay << "x" << mode.vdisplay;
+	}
 	/* Default (0) is resolved here, so the CSC, the infoframe and the codes
 	   the renderer draws all follow the range the kernel would pick. */
 	default_rgb_quant_range = cea_default_rgb_quant_range(&mode);

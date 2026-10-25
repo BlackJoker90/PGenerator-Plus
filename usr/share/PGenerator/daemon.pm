@@ -818,9 +818,17 @@ sub calman_render_g1_pattern (@) {
 }
 
 # After the daemon starts, show the G1 Basic Alignment plate instead of
-# black, drawn in the range the WebUI has set.
+# black, drawn in the range the WebUI has set. Not when the renderer start
+# just before it failed: drawing it would run load_new_pattern_file's retry
+# ladder (five starts, about a minute) before the WebUI and the pattern
+# ports open, and the watchdog restarted a daemon that was still in it.
+# The next pattern request runs the ladder from its own thread instead.
 sub show_boot_pattern (@) {
  return if(!&hdmi_sink_connected());
+ if(!&pattern_generator_is_running()) {
+  &log("Boot: renderer not running, Basic Alignment skipped; the next pattern request starts it");
+  return;
+ }
  &log("Boot: showing Basic Alignment") if(&calman_render_g1_pattern("basic_alignment"));
 }
 

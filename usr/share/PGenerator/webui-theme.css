@@ -1794,7 +1794,9 @@ body.pg-palette-open{overflow:hidden}
 .preset-save-what{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin-top:8px}
 .preset-save-what-label{font-size:.72rem;color:var(--text2)}
 .preset-save-what .preset-chips{margin-top:0}
-@media (max-width:560px){.preset-row>select,.preset-save-row .ccss-input{flex-basis:100%;max-width:none}}
+/* Narrow card (phone, tablet column): the select takes its own line, so the
+   buttons stay together on the next one instead of one wrapping alone. */
+@container (max-width:520px){.preset-row>select,.preset-save-row .ccss-input{flex-basis:100%;max-width:none}}
 @media (pointer:coarse){.preset-filter-chip{min-height:36px;padding:4px 12px}}
 @media (prefers-reduced-motion:reduce){.preset-filter-chip{transition:none}}
 /* Quiet tag in the custom dropdown (data-pg-tag), e.g. a preset's signal type. */

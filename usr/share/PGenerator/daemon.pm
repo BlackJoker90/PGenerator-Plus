@@ -1355,10 +1355,16 @@ sub pattern_daemon {
       # Capabilities. Calman stores the tokens as the device's command set
       # (with no usable CAP reply it falls back to the same UPGCI list), so
       # report the UPGCI commands first, then the PGenerator+ extensions.
-      # Calman only sends GET_SETTINGS when CAP lists it.
+      # Calman only sends GET_SETTINGS when CAP lists it, and it ignores a
+      # CAP reply that does not start with ACK.
       my $caps="GET_SETTINGS,STATUS,CONF_FORMAT,CONF_HDR,CONF_LEVEL,CONF_DV,HDR_ENABLE,IMAGE,PUSH,RGB_S,RGB_B,RGB_A,SPECIALTY,UPDATE,YCC_A,YCC_B,YCC_S,HDR,DOLBYVISION,SIZE,10_SIZE,11_APL,CommandRGB,BITDEPTH,COLORSPACE,RANGE";
+      # The G1 source (port 2101) has so far always run on its built-in
+      # list, because this reply went out without ACK. It now gets that
+      # list plus GET_SETTINGS, so it reads the current signal at connect
+      # and nothing else in its command set changes.
+      $caps="GET_SETTINGS,STATUS,CONF_FORMAT,CONF_HDR,CONF_LEVEL,CONF_DV,HDR_ENABLE,IMAGE,PUSH,RGB_S,RGB_B,RGB_A,SPECIALTY,UPDATE,YCC_A,YCC_B,YCC_S" if($rpc_client{$connection});
       &log("Calman: CAP request, returning $caps");
-      &send_calman_payload_to_client($connection,$caps);
+      &send_calman_payload_to_client($connection,$caps,1);
       last;
      }
      if($clean_key eq "ENABLE PATTERNS" || $clean_key eq "ENABLEPATTERNS") {
@@ -1432,12 +1438,14 @@ sub pattern_daemon {
        $cur_format=$ycc_format{$cf};
        $cur_format.="_10" if($cur_bits ne "8");
       }
-      my $cur_range=(($pgenerator_conf{"rgb_quant_range"} || "") eq "1") ? "Limited" : "Full";
+      # The range on the cable: "Default" is Limited for YCbCr and the
+      # renderer's default for RGB.
+      my $cur_range=(&effective_rgb_quant_range() == 1) ? "Limited" : "Full";
       my $cur_hdr=(($pgenerator_conf{"is_hdr"} || "") eq "1") ? "On" : "Off";
       my $cur_dolby=(($pgenerator_conf{"dv_status"} || "") eq "1") ? "On" : "Off";
       my $settings="Resolution $cur_res,Refresh $cur_refresh,Format $cur_format,Range $cur_range,Bits $cur_bits,HDR $cur_hdr,Dolby $cur_dolby";
       &log("Calman: GET_SETTINGS returning: $settings");
-      &send_calman_payload_to_client($connection,$settings);
+      &send_calman_payload_to_client($connection,$settings,1);
       last;
      }
     }
@@ -2132,11 +2140,12 @@ sub pattern_daemon {
      return 0;
     };
 
-    # The G1 source does not send GET_SETTINGS after its handshake. It
-    # starts every connection at RGB 8-bit (its constructor default),
-    # sends only Range Limited and sends CONF_LEVEL:Format only when the
-    # user changes the colour format. Match that default on the first
-    # command so the output agrees with what Calman shows.
+    # Without GET_SETTINGS after its handshake (CAP not read, or an
+    # older reply without ACK) the G1 source starts the connection at
+    # RGB 8-bit (its constructor default), sends only Range Limited and
+    # sends CONF_LEVEL:Format only when the user changes the colour
+    # format. Match that default on the first command so the output
+    # agrees with what Calman shows.
     if($type ne "INIT" && delete $calman_g1_startup{$connection}) {
      &log("Calman G1: no GET_SETTINGS after the handshake, using Calman's start-up format RGB 8-bit");
      $calman_apply_source_payload->("RGB",1);
@@ -2184,7 +2193,16 @@ sub pattern_daemon {
       if($type eq "HDR_ENABLE") {
        if($pattern_cmd =~/^False$/i) {
          &log("Calman: HDR_ENABLE=False — switching to SDR");
-         $calman_set_non_dv_mode->("sdr",0,"2","8");
+         # The G1 source sends HDR_ENABLE:False in every handshake, right
+         # after GET_SETTINGS, and it carries no bit depth. Already in SDR
+         # it must not reset the depth the WebUI set; leaving HDR or DV
+         # still falls back to 8 bpc.
+         my $sdr_bpc="8";
+         if(int($pgenerator_conf{"dv_status"} || 0) != 1 && ($pgenerator_conf{"is_hdr"} || "0") ne "1") {
+          my $cur_bpc=&calman_valid_bpc($pgenerator_conf{"max_bpc"});
+          $sdr_bpc=$cur_bpc if($cur_bpc ne "");
+         }
+         $calman_set_non_dv_mode->("sdr",0,"2",$sdr_bpc);
          # Apply immediately — DRM properties must change now, not on next pattern
          $calman_apply->();
        }
@@ -3160,11 +3178,16 @@ sub signal_refuse_patch (@) {
 sub send_calman_payload_to_client (@) {
  my $connection = shift;
  my $response = shift;
+ my $framed = shift || 0;
  $response="" if(!defined($response));
  # UPGCI replies are ACK + payload + ETX. Calman only reads a payload whose
  # first byte is ACK, and it reads each reply with a single recv(), so the
  # whole reply goes out in one write.
- $response=$ack_cmd_string.$response.$end_cmd_string_calman if(!$rpc_client{$connection});
+ # On the RPC port (Calman's G1 source) only the replies passed with
+ # $framed are framed: CAP and GET_SETTINGS. SN, FIRMWARE and STATUS stay
+ # bare there. With an SN stored, the G1 source switches to its
+ # obfuscated "CryptoII" transport, which PGenerator+ does not speak.
+ $response=$ack_cmd_string.$response.$end_cmd_string_calman if(!$rpc_client{$connection} || $framed);
  eval { $connection->send("$response"); };
  if($@) {
   my $send_error="$@";

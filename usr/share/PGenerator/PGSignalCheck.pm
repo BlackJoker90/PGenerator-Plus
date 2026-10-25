@@ -560,7 +560,9 @@ sub signal_range_expectation {
 
 # The two lines the Range Check draws for signal_range_expectation, in the
 # glyphs of its stroke font (PGG1Patterns %SFONT): the verdict, then the
-# basis ("AUTO DECODES LIMITED   QS 1   Q LIMITED   VIC 16").
+# basis ("DECODES LIMITED   QS 1   Q LIMITED   VIC 16"). The plate labels
+# the row IF TV ON AUTO: a range set by hand on the display never reaches
+# the Pi, so the verdict is a prediction for Auto, not a reading.
 sub signal_range_plate_lines {
  my ($e)=@_;
  return undef if(!$e);
@@ -568,7 +570,7 @@ sub signal_range_plate_lines {
  my $word=$word{$e->{verdict} || "unknown"} || "NO DATA";
  return [$word,"NO INFOFRAME READ"] if(!defined $e->{format});
  my $sp="   ";
- my $auto="AUTO DECODES ".(defined $e->{expect} ? uc($RANGE_NAME{$e->{expect}}) : "FULL OR LIMITED");
+ my $auto="DECODES ".(defined $e->{expect} ? uc($RANGE_NAME{$e->{expect}}) : "FULL OR LIMITED");
  my @p=($auto);
  if($e->{format} == 0) {
   push(@p,defined $e->{qs} ? "QS $e->{qs}" : "NO EDID","Q ".uc($Q_NAME{$e->{q}}),"VIC $e->{vic}");

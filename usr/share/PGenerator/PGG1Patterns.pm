@@ -1179,10 +1179,12 @@ sub _range_check {
  }
  # What the EDID and the AVI infoframe predict for a display on Auto
  # (PGSignalCheck signal_range_plate_lines): the verdict, then its basis.
+ # The row names that condition: a range set by hand on the display does
+ # not reach the Pi, so the verdict says nothing about it (the panel does).
  my $check=$o->{check};
  if(ref($check) eq "ARRAY" && @$check == 2) {
   my $ey=$my+$mh+int($h*0.06+0.5);
-  my @row=("EDID CHECK",$check->[0]);
+  my @row=("IF TV ON AUTO",$check->[0]);
   my @rw=map { _stext_width($_,$lh,$lsw,$ltr) } @row;
   my $rx=$w/2-($rw[0]+$lh+$rw[1])/2;
   _stext($im,$row[0],$rx,$ey,$lh,$lsw,$title,$ltr);

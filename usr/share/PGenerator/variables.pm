@@ -345,6 +345,9 @@ $calman_last_pattern_cmd="";
 $calman_replaying_last_pattern=0;
 $calibration_client_ip="";
 $calibration_client_software="";
+# Calibration sessions per pattern socket, one line each:
+# software|protocol|port|ip|since|last_rx (daemon.pm calibration_sessions_publish).
+$calibration_sessions="";
 # Set by a refused apply (command.pm signal_gate_conf); the next reply to
 # the program that asked carries the refusal (daemon.pm send_key_to_client).
 $signal_refused_pending=0;
@@ -419,6 +422,7 @@ share($calman_last_pattern_cmd);
 share($calman_replaying_last_pattern);
 share($calibration_client_ip);
 share($calibration_client_software);
+share($calibration_sessions);
 # Signal-range ownership (command.pm apply_source_rgb_quant_range). The WebUI
 # serves requests from a pool of worker threads; without share() each worker
 # keeps its own copy of the "preferred" range, so a pattern request that omits

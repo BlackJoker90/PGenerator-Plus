@@ -163,6 +163,8 @@ Press **OK or Menu on the TV remote** and a menu of every pattern appears on the
 ### 🚫 Refused settings, with the reason
 A setting the Pi or the display cannot carry is **refused instead of quietly changed**: 10-bit RGB at 4K 60 Hz needs 742.5 MHz on the link and the Pi 4 sends at most 600 MHz; a YCbCr format, a bit depth or an HDR mode missing from the display's EDID; TV-led Dolby Vision at 4K 60 Hz or low-latency DV in RGB where the display's Dolby block does not list it. The output stays as it was, the WebUI says why and what works instead, and **patches are refused until working settings arrive** (Calman gets a NAK). In Output, options that cannot go out stay visible but locked, with the reason next to them.
 
+While **Calman, ColourSpace or LightSpace is connected, it sets the signal**: the Output settings, presets and Apply are locked with the reason, and `/api/config` refuses signal changes, so the cable keeps what the software shows. Settings other than the signal still save; HCFR and Resolve only send patches and leave the signal to the WebUI. Sessions are tracked per socket and port: Calman from its `INIT` on 2100 (UPGCI) or 2101 (G1), not from its discovery probe; port 85 clients from their first pattern. A session ends with Calman's `SHUTDOWN` or when its socket closes, and a client that vanishes without closing (VM paused, network gone) is dropped after about a minute by TCP keepalive instead of staying "connected". The header tooltip lists each session with port, protocol and when data last came.
+
 </td>
 <td valign="top">
 
@@ -187,6 +189,7 @@ Next to the settings, **On the cable** shows what is actually sent (format, rang
 | Calman UPGCI | settings replies Calman could not parse | ACK + parseable settings, `GET_SETTINGS` |
 | Calman YCbCr 4:2:0 request | no defined answer | clean NAK, current format kept, WebUI notice |
 | Settings the Pi or display can't carry | applied anyway: vc4 quietly lowers the depth, or the display shows nothing | **refused with the reason** (link bandwidth, EDID), output kept, patches refused until working settings arrive |
+| WebUI signal change during a Calman / ColourSpace session | applied, so the cable no longer matched what the software showed | **locked with the reason**: the software sets the signal while it is connected |
 | What goes out on the cable | – | **shown next to the settings**, quiet adjustments named (e.g. 12-bit sent as 10-bit) |
 | Range mismatch between Pi and display | – | **Range Check** test image: shows whether the display decodes Limited or Full, next to the range on the cable, plus an EDID check that predicts from the display's EDID (QS/QY) and the Pi's AVI infoframe (Q/YQ, VIC) whether the display on Auto matches |
 | HDMI link drop during a measurement | – | **recorded with the time**, notice and banner: readings across it can't be combined |
@@ -531,9 +534,9 @@ All endpoints are on port 80 and return JSON.
 | Method | Endpoint | Description |
 |---|---|---|
 | GET | `/api/ping` | Health check; `boot` is the kernel boot id, new after every reboot |
-| GET | `/api/info` | Device info (hostname, temp, IPs, Wi-Fi, resolution, calibration status) |
+| GET | `/api/info` | Device info (hostname, temp, IPs, Wi-Fi, resolution, calibration status with `sessions`: software, protocol, port, peer, start and last data per session) |
 | GET | `/api/config` | Current configuration |
-| POST | `/api/config` | Apply configuration changes (only the keys you send). Signal settings the Pi or display cannot carry are refused (`"refused":true` with the reason, nothing written); quiet adjustments come back in `adjusted` |
+| POST | `/api/config` | Apply configuration changes (only the keys you send). Signal settings the Pi or display cannot carry are refused (`"refused":true` with the reason, nothing written); so are signal changes while Calman, ColourSpace or LightSpace is connected (`"locked":true`; `/api/info` reports it as `calibration.owns_signal`); quiet adjustments come back in `adjusted` |
 | GET | `/api/modes` | HDMI modes from the display EDID |
 | POST | `/api/restart` | Restart the pattern generator |
 | POST | `/api/reboot` | Reboot the device |

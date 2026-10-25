@@ -103,6 +103,14 @@ body.layout-desktop.desktop-utility-open .desktop-utility-drawer{transform:trans
 .signal-alert strong{color:var(--orange)}
 .signal-alert[data-tone="refused"] strong{color:var(--status-error)}
 .signal-alert-dismiss{display:block;margin:8px 0 0 auto}
+.signal-alert[data-tone="owner"]{border-color:color-mix(in srgb,var(--status-calibration) 45%,var(--border));background:color-mix(in srgb,var(--status-calibration) 8%,var(--surface-inset))}
+.signal-alert[data-tone="owner"] strong{color:var(--status-calibration)}
+/* Signal field groups (Display Settings, HDR, DV): a fieldset, so the lock
+   while calibration software owns the signal overrides each field's own
+   disabled state without touching it (pgSignalOwnerSync). */
+fieldset.signal-fields{border:0;margin:0;padding:0;min-width:0;min-inline-size:0}
+fieldset.signal-fields:disabled>.field{opacity:.66}
+fieldset.signal-fields:disabled select,fieldset.signal-fields:disabled input{cursor:not-allowed}
 /* The HDMI port the display is on: the board's own label, large, then what
    that port carries. A port that carries less, or that the output is not
    on, says so in the warning/alert tones the card already uses. */

@@ -2046,7 +2046,7 @@ async function loadInfo(quiet){
   calDot.style.background='#4caf50';
   calText.style.color='';
   calText.textContent=(info.calibration.software||'Calibration software')+' connected';
-  calWrap.dataset.pgBaseTitle=(info.calibration.software||'Calibration software')+' connected from '+info.calibration.ip;
+  calWrap.dataset.pgBaseTitle=(info.calibration.software||'Calibration software')+' connected from '+info.calibration.ip+pgCalibrationSessionsText(info.calibration);
   calWrap.title=calWrap.dataset.pgBaseTitle+pgSignalTipText();
   pgAnnounceStatus('calibration','on:'+(info.calibration.software||''),(info.calibration.software||'Calibration software')+' connected.');
   // External software drives its own patches; the page no longer knows what is on the TV.
@@ -2059,6 +2059,7 @@ async function loadInfo(quiet){
   calWrap.title='No calibration software connected';
   pgAnnounceStatus('calibration','off','Calibration software disconnected.');
  }
+ pgSignalOwnerSync(info);
  // Update Resolve card status
  const rBadge=document.getElementById('resolveStatusBadge');
  const rConn=document.getElementById('resolveConnectBtn');
@@ -3228,6 +3229,7 @@ function dvTransportDefaults(mode){
 }
 
 async function resetDefaults(){
+ if(pgSignalOwnerRefuse()) return;
  if(!await pgConfirm({title:'Reset display settings to defaults?',body:'Signal mode, format, range, HDR metadata and Dolby Vision fields return to the SDR defaults: YCbCr 4:4:4, 8-bit, Limited, BT.709. Unsaved edits in this card are lost; the output changes only after Apply & Restart.',acceptLabel:'Reset Defaults',destructive:true,tone:'caution'})) return;
  // The same output the SDR mode preset loads (CTA-861 default for CE
  // formats: Limited range, BT.709, 8-bit).
@@ -3249,8 +3251,56 @@ async function resetDefaults(){
  toast('Defaults loaded. Click Apply & Restart to use them.');
 }
 
+// One line per pattern socket session (daemon.pm calibration_sessions_publish):
+// port, protocol and when data last came, so a session can be told apart
+// from a socket nobody uses any more.
+function pgCalibrationSessionsText(cal){
+ const list=Array.isArray(cal&&cal.sessions)?cal.sessions:[];
+ const now=Number(cal&&cal.now)||Math.round(Date.now()/1000);
+ const ago=t=>{const s=Math.max(0,now-Number(t||now));return s<60?'just now':s<3600?Math.round(s/60)+' min ago':Math.round(s/3600)+' h ago';};
+ return list.map(x=>'\n'+x.software+': '+x.protocol+' on port '+x.port+' from '+x.ip+', last data '+ago(x.last_rx)).join('');
+}
+
+// Calibration software that sets the signal (Calman, ColourSpace and other
+// port 85 clients, LightSpace) owns it while connected: the daemon refuses
+// signal changes (webui_signal_owner in webui.pm), so the fields, presets,
+// Reset and Apply are locked with the reason. Resolve only sends patches
+// and leaves the signal to this page.
+let pgSignalOwner='';
+function pgSignalOwnerSync(info){
+ const cal=info&&info.calibration;
+ const owner=(cal&&cal.connected&&cal.owns_signal)?String(cal.software||'Calibration software'):'';
+ if(owner===pgSignalOwner) return;
+ pgSignalOwner=owner;
+ ['displaySignalFields','hdrSignalFields','dvSignalFields'].forEach(id=>{
+  const f=document.getElementById(id);
+  if(!f) return;
+  f.disabled=!!owner;
+  if(owner) f.setAttribute('aria-describedby','signalOwnerAlert'); else f.removeAttribute('aria-describedby');
+ });
+ const alert=document.getElementById('signalOwnerAlert');
+ if(alert){
+  alert.hidden=!owner;
+  document.getElementById('signalOwnerTitle').textContent=owner?owner+' sets the signal.':'';
+  document.getElementById('signalOwnerText').textContent=owner?'The settings here are locked while it is connected, so the cable keeps what '+owner+' shows. Change the signal in '+owner+', or disconnect it to change it here.':'';
+ }
+ const why=owner?owner+' is connected and sets the signal':'';
+ const reset=document.querySelector('#displaySettingsCard .btn-reset');
+ if(reset){ reset.disabled=!!owner; reset.title=owner?why:'Reset the display settings below to SDR defaults (applied only after Apply & Restart)'; }
+ const apply=document.getElementById('applySettingsBtn');
+ if(apply){ apply.disabled=!!owner; if(owner) apply.title=why; else apply.removeAttribute('title'); }
+ const presets=document.getElementById('presetSelect');
+ if(presets) presets.disabled=!!owner||!(window.pgPresetList||[]).length;
+}
+function pgSignalOwnerRefuse(){
+ if(!pgSignalOwner) return false;
+ toast(pgSignalOwner+' is connected and sets the signal. Change it in '+pgSignalOwner+', or disconnect it to change it here.','err');
+ return true;
+}
+
 async function applySettings(){
  if(window._configApplyPending) return false;
+ if(pgSignalOwnerRefuse()) return false;
  // A running continuous/series read measures the CURRENT signal mode; applying
  // new output settings mid-read would silently restart the generator under it.
  // Mirror the series-selector behavior: ask, then stop the read before applying.
@@ -23649,7 +23699,7 @@ function pgPresetRender(){
   o.dataset.pgNote=chips.slice(1).map(c=>c.text).join(' · ');
   sel.appendChild(o);
  });
- sel.disabled=!presets.length;
+ sel.disabled=!presets.length||!!pgSignalOwner;
  const id=pgPresetActiveId();
  sel.value=shown.some(p=>p.id===id)?id:'';
  pgPresetRenderChips();
@@ -23668,6 +23718,7 @@ function pgPresetFieldEl(key,mode){
 function pgPresetLoad(id){
  const p=(window.pgPresetList||[]).find(x=>x.id===id);
  if(!p) return;
+ if(pgSignalOwnerRefuse()) return;
  const s=Object.assign({},p.settings||{});
  const idx=pgPresetModeIdx(s);
  if(idx!=null) s.mode_idx=idx; else delete s.mode_idx;

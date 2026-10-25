@@ -96,6 +96,7 @@ __PG_LOGO_DARK__
   <h2><span class="drag-handle">&#9776;</span>Display Settings <button type="button" class="btn btn-sm card-h2-action btn-reset" onclick="resetDefaults()" title="Reset the display settings below to SDR defaults (applied only after Apply &amp; Restart)"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 12a8.5 8.5 0 1 0 2.6-6.1"/><path d="M3.5 4v5h5"/></svg>Reset Defaults</button></h2>
   <div id="displayNoHdmiBanner" style="display:none;background:var(--surface-inset);border:1px solid var(--border);border-left:3px solid var(--orange);border-radius:6px;padding:10px 12px;margin-bottom:10px;font-size:.82rem;color:var(--text);line-height:1.45"><strong>No HDMI display connected.</strong> Settings can still be changed and saved; the renderer starts when a display is plugged in. The resolution list appears once the display is detected.</div>
   <div id="signalRefusedAlert" class="signal-alert" data-tone="refused" role="alert" hidden><strong>Settings refused</strong> <span id="signalRefusedText"></span></div>
+  <div id="signalOwnerAlert" class="signal-alert" data-tone="owner" role="status" hidden><strong id="signalOwnerTitle"></strong> <span id="signalOwnerText"></span></div>
   <div id="signalLinkAlert" class="signal-alert" role="alert" hidden><strong>HDMI link interrupted</strong> <span id="signalLinkText"></span> <button type="button" class="btn btn-sm btn-secondary signal-alert-dismiss" onclick="pgSignalLinkDismiss()">Dismiss</button></div>
   <div class="signal-overview">
     <section id="signalPort" class="signal-port" aria-labelledby="signalPortTitle" hidden>
@@ -167,7 +168,7 @@ __PG_LOGO_DARK__
    </form>
    <p class="preset-bar-hint" id="presetBarHint">Set the fields below and save them under a name, no Apply needed. Loading a preset fills the fields; Apply &amp; Restart sends it.</p>
   </section>
-  <div class="grid setting-tiles">
+  <fieldset class="grid setting-tiles signal-fields" id="displaySignalFields">
   <div class="field field-display">
     <svg class="setting-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="12" rx="1.5"/><path d="M8.5 20h7M12 16v4"/></svg>
     <label for="mode_idx">Resolution</label>
@@ -222,14 +223,14 @@ __PG_LOGO_DARK__
      <option value="1">Limited (16-235)</option>
     </select>
    </div>
-  </div>
+  </fieldset>
   <p class="dv-locked-note" id="dvLockedNote" hidden></p>
  </div>
 
  <!-- HDR Metadata -->
  <div class="card" id="hdrCard" data-desktop-workspace="output" data-desktop-order="20">
   <h2>HDR Metadata</h2>
-  <div class="grid">
+  <fieldset class="grid signal-fields" id="hdrSignalFields">
    <div class="field">
     <label for="eotf">EOTF</label>
     <select id="eotf">
@@ -264,14 +265,14 @@ __PG_LOGO_DARK__
     <label for="max_fall">MaxFALL</label>
     <input type="number" id="max_fall" min="0" max="10000" step="1">
    </div>
-  </div>
+  </fieldset>
   <p id="hdrHlgNote" class="signal-wire" hidden>HLG has no mastering metadata, so Max/Min Luma, MaxCLL and MaxFALL are not used.</p>
  </div>
 
  <!-- Dolby Vision Settings -->
  <div class="card" id="dvCard" data-desktop-workspace="output" data-desktop-order="30">
 	  <h2><span class="dv-badge">DV</span> Dolby Vision</h2>
-	  <div class="grid">
+	  <fieldset class="grid signal-fields" id="dvSignalFields">
 	   <input type="hidden" id="dv_interface" value="0">
 	   <div class="field">
 	    <label for="dv_transport">Transport</label>
@@ -304,7 +305,7 @@ __PG_LOGO_DARK__
       <label for="dv_max_fall">MaxFALL</label>
       <input type="number" id="dv_max_fall" min="0" max="10000" step="1">
      </div>
-  </div>
+  </fieldset>
   <!-- What the display declares in its EDID Dolby Vision block (webui-app.js pgRenderDvDisplayInfo). -->
   <div class="dv-display" id="dvDisplayInfo" hidden>
    <div class="dv-display-title">Display (EDID Dolby Vision block)</div>
@@ -333,7 +334,7 @@ __PG_LOGO_DARK__
    </div>
    <div class="apply-bar-actions">
     <button class="btn btn-sm btn-secondary" type="button" onclick="discardSettings()">Discard</button>
-    <button class="btn btn-sm btn-primary" type="button" onclick="applySettings()">Apply &amp; Restart</button>
+    <button class="btn btn-sm btn-primary" type="button" id="applySettingsBtn" onclick="applySettings()">Apply &amp; Restart</button>
    </div>
   </div>
  </div>

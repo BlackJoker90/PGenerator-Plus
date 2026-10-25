@@ -908,8 +908,101 @@ sub legacy_external_set_status (@) {
  if($software eq "DeviceControl" && ($legacy_external_client_name{$connection} || "") ne "") {
   $software=$legacy_external_client_name{$connection};
  }
- $calibration_client_ip=$client_ip{$connection} || $client_address;
- $calibration_client_software=$software;
+ &calibration_session_open($connection,$software);
+}
+
+###############################################
+#        Calibration sessions per socket      #
+###############################################
+# One entry per pattern socket that opened a session; the status bar and the
+# WebUI signal lock (webui_signal_owner) read the published summary. Each
+# port has its own protocol and its own start:
+#  - port 85 (classic: ColourSpace, HCFR, DeviceControl): the first pattern
+#    or client identity (legacy_external_set_status), not the bare connect;
+#  - port 2100 (Calman UPGCI) and 2101 (Calman G1 RPC): INIT or the first
+#    command that is not a probe. Calman's G1 discovery (SN, CAP,
+#    GET_SETTINGS, then close) and the STATUS/FIRMWARE queries open nothing.
+# A session ends with SHUTDOWN/QUIT/TERM or when its socket closes; one of
+# several sockets from the same peer closing ends only its own session.
+# A peer that vanishes without closing (VM paused, cable pulled) is found by
+# TCP keepalive (calibration_socket_keepalive) and closed like any other.
+our %calibration_session=();
+our $calibration_sessions_owner="";
+sub calibration_session_protocol (@) {
+ my $connection=shift;
+ my $kind=$pattern_socket_kind{$connection} || "";
+ return "G1 RPC" if($kind eq "rpc" || $rpc_client{$connection});
+ return "UPGCI" if($kind eq "calman");
+ return "classic";
+}
+sub calibration_session_port (@) {
+ my $connection=shift;
+ my $port=eval { $connection->sockport() };
+ return (defined $port && $port=~/^\d+$/) ? $port : "";
+}
+sub calibration_session_open (@) {
+ my ($connection,$software)=@_;
+ return if(!$connection);
+ my $now=time();
+ my $s=$calibration_session{$connection};
+ if(!$s) {
+  $s=$calibration_session{$connection}={since=>$now,ip=>($client_ip{$connection} || $client_address || ""),
+   protocol=>&calibration_session_protocol($connection),port=>&calibration_session_port($connection)};
+  &log("Calibration session open: software=$software protocol=$s->{protocol} port=$s->{port} peer=$s->{ip}");
+ }
+ $s->{software}=$software;
+ $s->{last_rx}=$now;
+ &calibration_sessions_publish();
+}
+sub calibration_session_touch (@) {
+ my $connection=shift;
+ my $s=$calibration_session{$connection};
+ return if(!$s);
+ my $now=time();
+ return if(($s->{last_rx} || 0) == $now);
+ $s->{last_rx}=$now;
+ &calibration_sessions_publish();
+}
+# Returns 1 when the socket had a session.
+sub calibration_session_close (@) {
+ my ($connection,$reason)=@_;
+ my $s=delete $calibration_session{$connection};
+ return 0 if(!$s);
+ &log("Calibration session closed: software=$s->{software} protocol=$s->{protocol} port=$s->{port} peer=$s->{ip}".(($reason || "") ne "" ? " reason=$reason" : ""));
+ &calibration_sessions_publish();
+ return 1;
+}
+# Newest session wins the status bar. Resolve (resolve.pm) and LightSpace
+# (discovery.pm) set the status from their own threads: it is cleared here
+# only if this thread wrote it.
+sub calibration_sessions_publish (@) {
+ my @s=sort { $b->{since} <=> $a->{since} } values %calibration_session;
+ $calibration_sessions=join("\n",map { join("|",map { my $v=defined($_) ? "$_" : ""; $v=~s/[|\n]//g; $v } @$_{qw(software protocol port ip since last_rx)}) } @s);
+ if(@s) {
+  $calibration_client_ip=$s[0]->{ip};
+  $calibration_client_software=$s[0]->{software};
+  $calibration_sessions_owner="$s[0]->{ip}|$s[0]->{software}";
+ } elsif($calibration_sessions_owner ne "") {
+  if("$calibration_client_ip|$calibration_client_software" eq $calibration_sessions_owner) {
+   $calibration_client_ip="";
+   $calibration_client_software="";
+  }
+  $calibration_sessions_owner="";
+ }
+}
+# Dead peers: probe after 30 s idle, 3 probes 10 s apart, so a vanished
+# client is closed after about a minute. A live client answers the probes
+# from its TCP stack even while its program sends nothing (Calman stays
+# silent for minutes between patterns), so an idle session is kept.
+sub calibration_socket_keepalive (@) {
+ my $sock=shift;
+ eval { setsockopt($sock,Socket::SOL_SOCKET(),Socket::SO_KEEPALIVE(),1) } or return 0;
+ eval {
+  setsockopt($sock,Socket::IPPROTO_TCP(),Socket::TCP_KEEPIDLE(),30);
+  setsockopt($sock,Socket::IPPROTO_TCP(),Socket::TCP_KEEPINTVL(),10);
+  setsockopt($sock,Socket::IPPROTO_TCP(),Socket::TCP_KEEPCNT(),3);
+ };
+ return 1;
 }
 
 sub legacy_external_set_client_name (@) {
@@ -1144,6 +1237,7 @@ sub pattern_daemon {
     my $pattern_socket_type=($connection == $server_rpc) ? "rpc" : (($connection == $server_calman) ? "calman" : "classic");
     $pattern_socket_kind{$client_socket}=$pattern_socket_type;
     $client_socket->setsockopt(SOL_SOCKET, SO_RCVTIMEO, pack('l!l!', 30, 0)) if($pattern_socket_type ne "classic");
+    &calibration_socket_keepalive($client_socket);
     $client_address=$client_socket->peerhost();
     $client_port=$client_socket->peerport();
     $client_ip{$client_socket}=$client_address;
@@ -1161,7 +1255,9 @@ sub pattern_daemon {
     my $rv=$connection->recv($key,1024);
     if(!defined $rv) {
      my $recv_error="$!";
-     my $recv_timeout=($!{EAGAIN} || $!{EWOULDBLOCK} || $recv_error=~/timed out|temporarily unavailable|would block/i) ? 1 : 0;
+     # ETIMEDOUT ("Connection timed out") is keepalive finding a dead peer,
+     # not SO_RCVTIMEO (EAGAIN): that socket is closed on every port.
+     my $recv_timeout=(!$!{ETIMEDOUT} && ($!{EAGAIN} || $!{EWOULDBLOCK} || $recv_error=~/temporarily unavailable|would block/i)) ? 1 : 0;
      if($recv_timeout && ($pattern_socket_kind{$connection} || "") eq "classic") {
       next;
      }
@@ -1181,8 +1277,14 @@ sub pattern_daemon {
     $calman{$connection}=0;
     if($key =~/$end_cmd_string_calman$/ || $rpc_client{$connection}) {
      $calman{$connection}=1;
-     $calibration_client_ip=$client_ip{$connection} || $client_address;
-     $calibration_client_software="Calman";
+     my $probe_key=$key;
+     $probe_key=~s/[\x02\x03]//g;
+     $probe_key=~s/^\s+|\s+$//g;
+     # EOF arrives here as an empty key: it ends the socket, it opens nothing.
+     if($probe_key=~/^(?:|SN|CAP|GET_SETTINGS|STATUS|FIRMWARE)$/) { &calibration_session_touch($connection); }
+     else { &calibration_session_open($connection,"Calman"); }
+    } else {
+     &calibration_session_touch($connection);
     }
     #
     # GET HTML IMAGE LIST
@@ -1325,8 +1427,7 @@ sub pattern_daemon {
     if($calman{$connection} && $key=~/TERM/) {
      &calman_reset_pattern_state("TERM");
      &release_source_rgb_quant_range("calman");
-     $calibration_client_ip="";
-     $calibration_client_software="";
+     &calibration_session_close($connection,"TERM");
      &send_key_to_client($connection,"");
      &calman_clear_gci_connection($connection);
      &close_connection($connection,"calman TERM");
@@ -1408,8 +1509,7 @@ sub pattern_daemon {
       &log("Calman: $clean_key received, closing connection");
       &calman_reset_pattern_state($clean_key);
       &release_source_rgb_quant_range("calman");
-      $calibration_client_ip="";
-      $calibration_client_software="";
+      &calibration_session_close($connection,$clean_key);
       &send_key_to_client($connection,"");
       &calman_clear_gci_connection($connection);
       &close_connection($connection,"calman $clean_key");
@@ -3222,12 +3322,12 @@ sub close_connection {
  &log("Pattern socket close: type=$socket_kind peer=$conn_ip reason=$reason") if($reason ne "");
  my $is_hcfr=delete $hcfr_client{$connection};
  delete $legacy_external_client_name{$connection};
- if($calman{$connection} || ($conn_ip ne "" && $conn_ip eq $calibration_client_ip)) {
-  &log("Calman: socket disconnected, preserving pattern state");
+ my $session_software=$calibration_session{$connection} ? ($calibration_session{$connection}->{software} || "") : "";
+ my $had_session=&calibration_session_close($connection,$reason);
+ if($calman{$connection} || $had_session) {
+  &log("Calman: socket disconnected, preserving pattern state") if($calman{$connection});
   # A refusal belongs to the session of the program that asked.
-  &signal_refused_clear(($calibration_client_software || "calibration software")." disconnected");
-  $calibration_client_ip="";
-  $calibration_client_software="";
+  &signal_refused_clear(($session_software || "calibration software")." disconnected");
  }
  &release_source_rgb_quant_range("hcfr") if($is_hcfr);
  $calman{$connection}=0;

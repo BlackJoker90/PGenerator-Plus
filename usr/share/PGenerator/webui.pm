@@ -10127,6 +10127,34 @@ sub webui_config_body_valid (@) {
  return (ref($decoded) eq "HASH") ? 1 : 0;
 }
 
+# Calibration sessions on the pattern ports, newest first (daemon.pm
+# calibration_sessions_publish): Calman on 2100 (UPGCI) and 2101 (G1 RPC),
+# port 85 clients (ColourSpace, HCFR, DeviceControl).
+sub webui_calibration_sessions (@) {
+ my @out=();
+ foreach my $line (split(/\n/,$calibration_sessions || "")) {
+  my @f=split(/\|/,$line,-1);
+  next if(@f < 6 || $f[0] eq "");
+  push(@out,{software=>$f[0],protocol=>$f[1],port=>$f[2],ip=>$f[3],since=>$f[4],last_rx=>$f[5]});
+ }
+ return @out;
+}
+
+# Calibration software that sets the signal over its own connection
+# (Calman: CONF_FORMAT/CONF_LEVEL/CONF_HDR, ColourSpace and other port 85
+# clients: SET_PGENERATOR_CONF_*, LightSpace). While it is connected the
+# software shows the signal it set; a WebUI change would put something else
+# on the cable than what it displays. HCFR and Resolve only send patches, so
+# the WebUI keeps the signal then. Returns the software name, or "".
+sub webui_signal_owner (@) {
+ foreach my $s (&webui_calibration_sessions()) {
+  return $s->{software} if($s->{software} ne "HCFR" && $s->{software} ne "Resolve");
+ }
+ # LightSpace: the Pi's own connection to it (discovery.pm), no pattern socket.
+ return "LightSpace" if(($calibration_client_software || "") eq "LightSpace" && ($calibration_client_ip || "") ne "");
+ return "";
+}
+
 sub webui_apply_config (@) {
  my $body=shift;
  my $need_restart=0;
@@ -10146,6 +10174,27 @@ sub webui_apply_config (@) {
   # As posted, before the derivations below: what was quietly changed is
   # reported back (adjusted).
   my %posted=%changes;
+ # Calibration software owns the signal while it is connected (see
+ # webui_signal_owner): a posted signal value that differs from the current
+ # one is refused before anything is derived or written. Judged on what was
+ # posted, so another setting still saves. The self-test stops on its own
+ # when such a session starts; its restore passes.
+ if($body!~/"selftest"\s*:\s*"?1/) {
+  my $owner_change=0;
+  foreach my $k (@signal_conf_keys,qw(min_luma max_luma max_cll max_fall)) {
+   next if(!exists $posted{$k});
+   my ($new,$cur)=("$posted{$k}",defined($pgenerator_conf{$k}) ? "$pgenerator_conf{$k}" : "");
+   ($new,$cur)=(lc($new),&signal_mode_from_conf(\%pgenerator_conf)) if($k eq "signal_mode");
+   ($new,$cur)=(&pg_dv_transport_mode($new),&pg_dv_transport_mode($cur)) if($k eq "dv_transport");
+   $owner_change=1 if($new ne $cur);
+  }
+  my $signal_owner=$owner_change ? &webui_signal_owner() : "";
+  if($signal_owner ne "") {
+   &log("WebUI: signal change refused, $signal_owner is connected");
+   my $result='{"status":"error","refused":true,"locked":true,"message":"'.&_webui_json_escape("$signal_owner is connected and sets the signal. Change it in $signal_owner, or disconnect it to change it here.").'"}';
+   return wantarray ? ($result,0) : $result;
+  }
+ }
   my $requested_dv_transport=&pg_dv_transport_mode($changes{"dv_transport"} || $pgenerator_conf{"dv_transport"});
  # HDR10/HLG and DV force BT.2020 colorimetry below. Remember the SDR choice
  # when leaving SDR and give it back on the way in, else SDR kept signalling
@@ -10550,6 +10599,9 @@ sub webui_info_json (@) {
  my $cal_ip=$calibration_client_ip; $cal_ip=~s/"/\\"/g;
  my $cal_sw=$calibration_client_software; $cal_sw=~s/"/\\"/g;
  my $cal_conn=($cal_ip ne "")?"true":"false";
+ # The WebUI locks its signal fields while this is true (webui_signal_owner).
+ my $cal_owns=(&webui_signal_owner() ne "")?"true":"false";
+ my $cal_sessions=join(",",map { my $x=$_; '{'.join(",",map { '"'.$_.'":'.(/^(?:port|since|last_rx)$/ && $x->{$_}=~/^\d+$/ ? $x->{$_} : '"'.&_webui_json_escape($x->{$_}).'"') } qw(software protocol port ip since last_rx)).'}' } &webui_calibration_sessions());
  my $meminfo=&read_from_file("/proc/meminfo");
  my $total_ram="";
  if($meminfo=~/MemTotal:\s*(\d+)/) { $total_ram=int($1/1024); }
@@ -10569,7 +10621,7 @@ sub webui_info_json (@) {
  my $model=&read_from_file($proc_device_model);
  $model="" if(!defined $model);
  $model=~s/[\x00\r\n]+//g; $model=~s/["\\]//g;
- return "{\"hostname\":\"$hostname\",\"model\":\"$model\",\"version\":\"$ver\",\"temperature\":\"$temp\",\"uptime\":\"$uptime\",\"resolution\":\"$resolution\",\"interfaces\":$ip_json,\"wifi\":{\"ssid\":\"$wifi_ssid\",\"freq\":\"$wifi_freq\",\"band\":\"$wifi_band\",\"signal\":\"$wifi_signal\",\"state\":\"$wifi_state\"},\"calibration\":{\"connected\":$cal_conn,\"ip\":\"$cal_ip\",\"software\":\"$cal_sw\"},\"total_ram\":\"$total_ram\",\"gpu_mem\":\"$gpu_mem\",\"cma_mb\":$cma_json,\"hdmi_port\":$hdmi_port_json}";
+ return "{\"hostname\":\"$hostname\",\"model\":\"$model\",\"version\":\"$ver\",\"temperature\":\"$temp\",\"uptime\":\"$uptime\",\"resolution\":\"$resolution\",\"interfaces\":$ip_json,\"wifi\":{\"ssid\":\"$wifi_ssid\",\"freq\":\"$wifi_freq\",\"band\":\"$wifi_band\",\"signal\":\"$wifi_signal\",\"state\":\"$wifi_state\"},\"calibration\":{\"connected\":$cal_conn,\"ip\":\"$cal_ip\",\"software\":\"$cal_sw\",\"owns_signal\":$cal_owns,\"sessions\":[$cal_sessions],\"now\":".time()."},\"total_ram\":\"$total_ram\",\"gpu_mem\":\"$gpu_mem\",\"cma_mb\":$cma_json,\"hdmi_port\":$hdmi_port_json}";
 }
 
 sub _webui_log_ipv4_class (@) {

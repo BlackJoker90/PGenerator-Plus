@@ -1125,6 +1125,9 @@ sub webui_spawn_detached (@) {
 sub webui_complete_renderer_restart (@) {
  my $restart_id=shift;
  my $apply_hint=shift;
+ # The Range Check draws its EDID check from the AVI infoframe of the new
+ # modeset: note the kernel log's last one to see when it has come.
+ my $avi_before=(&webui_pattern_current_name() eq "range_check") ? &webui_avi_log_stamp() : "";
  # Signal-setting changes the running renderer can apply itself (format,
  # range, colorimetry, bpc, HDR metadata; DV off before and after) skip the
  # multi-second stop/start. Anything else, a renderer without SIGHUP support,
@@ -1134,14 +1137,17 @@ sub webui_complete_renderer_restart (@) {
   if(&renderer_reconfigure_in_place($apply_hint->{changed},$apply_hint->{dv_before})) {
    # Re-push the current pattern so it is redrawn with the new bit depth /
    # range defaults (the renderer is running, so this does not restart it).
+   &webui_range_check_refresh({check => 0});
    &load_new_pattern_file("webui apply");
    &webui_renderer_restart_status_write($restart_id,"ready","Applied without restarting the renderer.");
    &log("WebUI: apply $restart_id applied in place (".join(",",sort keys %{$apply_hint->{changed}}).")");
+   &webui_range_check_follow_wire($avi_before);
    return 1;
   }
  }
  &webui_renderer_restart_status_write($restart_id,"starting","Restarting the renderer and waiting for DRM readiness.");
  &pattern_generator_stop();
+ &webui_range_check_refresh({check => 0});
  &load_new_pattern_file("webui apply");
  if(!&pattern_generator_is_running() && !&hdmi_sink_connected()) {
   &webui_renderer_restart_status_write($restart_id,"ready","Settings saved. No HDMI display is connected; the renderer starts when one is plugged in.",0);
@@ -1179,6 +1185,7 @@ sub webui_complete_renderer_restart (@) {
   }
   &webui_renderer_restart_status_write($restart_id,"ready","The renderer is running and owns DRM master.");
   &log("WebUI: renderer restart $restart_id is ready");
+  &webui_range_check_follow_wire($avi_before);
   return 1;
  }
  if(&renderer_stuck_in_kernel()) {
@@ -12358,8 +12365,8 @@ sub webui_tvmenu_thumb (@) {
   @src=($upload."[0]","-resize","${sw}x${sh}!");
  } elsif($photo ne "") {
   @src=($photo,"-resize","${sw}x${sh}!");
- } elsif($name=~/^g1_(.+)$/) {
-  my $key=$1;
+ } elsif($name=~/^g1_(.+)$/ || $name eq "range_check") {
+  my $key=($name=~/^g1_(.+)$/) ? $1 : $name;
   my %opt=(range => "full", hz => 60);
   $opt{ip}=&calman_g1_ip() if($key eq "warmup");
   my $out=PGG1Patterns::g1_pattern_render($key,$sw,$sh,\%opt);
@@ -13571,8 +13578,8 @@ sub webui_meter_stabilization_code (@) {
  return &webui_grey_code_for_stimulus($stimulus,$signal_mode,"",$signal_range,\%opts);
 }
 
-sub webui_pattern_idle_refresh_allowed (@) {
- return (1,"") if(!-f $command_file);
+# PATTERN_NAME of the pattern in the command file ("" when it has none).
+sub webui_pattern_current_name (@) {
  my $current="";
  if(open(my $fh,"<",$command_file)) {
   while(my $line=<$fh>) {
@@ -13581,6 +13588,12 @@ sub webui_pattern_idle_refresh_allowed (@) {
   close($fh);
  }
  $current=~s/[\r\n]+//g;
+ return $current;
+}
+
+sub webui_pattern_idle_refresh_allowed (@) {
+ return (1,"") if(!-f $command_file);
+ my $current=&webui_pattern_current_name();
  return (1,$current) if($current eq "" || $current eq "stop" || $current eq "stabilization");
  return (0,$current);
 }
@@ -14062,6 +14075,111 @@ sub webui_pattern_uploaded_diag_video_sequence_pattern (@) {
  return &webui_pattern_frame_sequence_pattern($dir,$w,$h);
 }
 
+# vc4 with the RGB Limited passthrough patch: the renderer's
+# rgbLimitedPassthroughSupported test (RQ3V1 in the module's srcversion).
+our $webui_vc4_srcversion_file="/sys/module/vc4/srcversion";
+sub webui_rgb_limited_passthrough (@) {
+ open(my $fh,"<",$webui_vc4_srcversion_file) or return 0;
+ my $v=<$fh> // "";
+ close($fh);
+ return ($v=~/RQ3V1/) ? 1 : 0;
+}
+
+# Range Check (PGG1Patterns range_check): its codes are wire codes, so it
+# is drawn for the range on the cable. Returns (source_range, why): YCbCr
+# is always Limited on the wire (a Full request is compressed by the
+# renderer), RGB follows the effective range. On RGB Limited the sub-black
+# field only reaches the cable without the vc4 compression CSC: with it the
+# renderer clamps codes below 16 to black (ofApp::normalizeImageSourcePixels)
+# and FULL could never show, so the plate is refused instead of reporting
+# a match. why is "" when the plate can be drawn.
+sub webui_range_check_source_range (@) {
+ return ("LIMITED","") if(($pgenerator_conf{"color_format"} || "0") ne "0");
+ return ("","") if(&effective_rgb_quant_range() != 1);
+ return ("LIMITED","") if(&webui_rgb_limited_passthrough());
+ return ("","The Range Check needs the patched vc4 driver for RGB Limited: without it codes below 16 are clipped before the cable. Use YCbCr or RGB Full.");
+}
+
+# The EDID check (PGSignalCheck signal_range_expectation): how the display
+# decodes on Auto, from what it declares in its EDID and the AVI infoframe
+# of the last modeset, against the codes on the cable (1 Limited, 2 Full).
+sub webui_range_expectation (@) {
+ my $codes=shift;
+ require PGSignalCheck;
+ my ($caps)=eval { &signal_display_caps() };
+ my ($connected,$avi)=&webui_last_infoframes();
+ return PGSignalCheck::signal_range_expectation($caps,$connected ? $avi : "",$codes);
+}
+
+sub webui_range_expectation_json (@) {
+ my $e=shift;
+ return "null" if(!$e);
+ my %range=(1=>"Limited",2=>"Full");
+ my $str=sub { my $v=shift; return defined($v) ? "\"".&_webui_json_escape($v)."\"" : "null"; };
+ my $num=sub { my $v=shift; return defined($v) ? $v+0 : "null"; };
+ return "{\"verdict\":".$str->($e->{verdict})
+  .",\"expect\":".$str->(defined $e->{expect} ? $range{$e->{expect}} : undef)
+  .",\"codes\":".$str->(defined $e->{codes} ? $range{$e->{codes}} : undef)
+  .",\"format\":".$num->($e->{format}).",\"q\":".$num->($e->{q}).",\"yq\":".$num->($e->{yq})
+  .",\"vic\":".$num->($e->{vic}).",\"qs\":".$num->($e->{qs}).",\"qy\":".$num->($e->{qy})
+  .",\"basis\":".$str->($e->{basis}).",\"reason\":".$str->($e->{reason})."}";
+}
+
+# The last AVI infoframe line of the kernel log and how many there are:
+# changes when a modeset has logged a new one.
+sub webui_avi_log_stamp (@) {
+ my $dmesg=`timeout 3 /bin/dmesg 2>/dev/null`;
+ my @avi=(defined $dmesg ? $dmesg : "")=~/^(.*AVI IF:.*)$/mg;
+ return scalar(@avi).":".(@avi ? $avi[-1] : "");
+}
+
+# After a signal change: the Range Check on screen names the range it was
+# drawn for, so draw it again for the range now on the cable, or clear it
+# to black where it cannot be drawn (not SDR, refused). Only writes the
+# command file; the caller loads it. Returns 1 if it wrote one. $o: check
+# => 0 leaves the EDID check out, for a draw before the new modeset has
+# logged its AVI infoframe (webui_range_check_follow_wire adds it).
+sub webui_range_check_refresh (@) {
+ my $o=shift;
+ $o={} if(ref($o) ne "HASH");
+ return 0 if(&webui_pattern_current_name() ne "range_check");
+ my ($source_range,$why)=&webui_range_check_source_range();
+ $why="the output is not SDR" if($why eq "" && &webui_pattern_signal_mode("") ne "sdr");
+ my %draw=(source_range => $source_range,load => 0);
+ if($why eq "" && (!exists $o->{check} || $o->{check})) {
+  require PGSignalCheck;
+  $draw{check}=PGSignalCheck::signal_range_plate_lines(&webui_range_expectation($source_range eq "LIMITED" ? 1 : 2));
+ }
+ return 1 if($why eq "" && &calman_render_g1_pattern("range_check","range_check",\%draw));
+ &log("WebUI: Range Check cleared after the signal change".($why ne "" ? ": $why" : ""));
+ my ($w,$h)=(int($w_s) || 1920,int($h_s) || 1080);
+ # Black of the link: 16 as a video level on YCbCr and RGB Limited, 0 on
+ # RGB Full.
+ my $lim=(($pgenerator_conf{"color_format"} || "0") ne "0" || &effective_rgb_quant_range() == 1);
+ my $k=$lim ? 16 : 0;
+ &create_tmp_file("PATTERN_NAME=stop\nBITS=8\nDRAW=RECTANGLE\nDIM=$w,$h\nRGB=$k,$k,$k\nBG=$k,$k,$k\nPOSITION=0,0\nEND=1\n",$lim ? "LIMITED" : "");
+ return 1;
+}
+
+# Once the renderer is back after a signal change: wait until the new
+# modeset has logged its AVI infoframe ($before: webui_avi_log_stamp() from
+# before the change; at most $wait seconds, then the log is taken as it
+# is), then draw the Range Check again with the EDID check for it.
+# Returns 1 if it loaded a pattern.
+sub webui_range_check_follow_wire (@) {
+ my ($before,$wait)=@_;
+ return 0 if(!defined $before || $before eq "" || &webui_pattern_current_name() ne "range_check");
+ $wait=3 if(!defined $wait);
+ require Time::HiRes;
+ my $until=Time::HiRes::time()+$wait;
+ while(&webui_avi_log_stamp() eq $before && Time::HiRes::time() < $until) {
+  Time::HiRes::sleep(0.25);
+ }
+ return 0 if(!&webui_range_check_refresh());
+ &load_new_pattern_file("range check");
+ return 1;
+}
+
 sub webui_pattern (@) {
  my $body=shift;
  &webui_reload_pgenerator_conf();
@@ -14137,6 +14255,17 @@ sub webui_pattern (@) {
   local $calman_rgb_quant_range=(int($transport_signal_range || 0) == 1) ? 1 : 2;
   return '{"status":"error","message":"Failed to render G1 pattern"}' if(!&calman_render_g1_pattern($g1_key,$name));
   return '{"status":"ok","pattern":"'.$name.'"}';
+ }
+ # Range Check: drawn like the G1 plates (raw codes, no normalisation), for
+ # the range on the cable.
+ if($name eq "range_check") {
+  return '{"status":"error","message":"The Range Check is available only in SDR"}' if($signal_mode ne "sdr");
+  my ($source_range,$why)=&webui_range_check_source_range();
+  return '{"status":"error","message":"'.&_webui_json_escape($why).'"}' if($why ne "");
+  require PGSignalCheck;
+  my $e=&webui_range_expectation($source_range eq "LIMITED" ? 1 : 2);
+  return '{"status":"error","message":"Failed to render the Range Check"}' if(!&calman_render_g1_pattern("range_check",$name,{source_range => $source_range,check => PGSignalCheck::signal_range_plate_lines($e)}));
+  return '{"status":"ok","pattern":"'.$name.'","range_check":'.&webui_range_expectation_json($e).'}';
  }
  my $white_rgb=($signal_mode eq "dv") ? "3760,3760,3760" : &webui_pattern_named_triplet(255,255,255,$pat_bits,$source_range eq "LIMITED");
  my $black_rgb=($signal_mode eq "dv") ? "256,256,256" : &webui_pattern_named_triplet(0,0,0,$pat_bits,$source_range eq "LIMITED");

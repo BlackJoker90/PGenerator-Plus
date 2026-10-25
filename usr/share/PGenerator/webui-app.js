@@ -2672,6 +2672,7 @@ function formatUptime(s){
 const DIAG_DESCRIPTIONS={
  white_clipping:'<b>White Clipping (Contrast)</b> &mdash; Labeled near-white bars from 232 to 255 on a reference-white field. Set HDMI output to RGB, then lower Contrast/White Level until the 236+ bars separate cleanly and 255 is not clipped into the background.',
  black_clipping:'<b>Black Clipping / PLUGE (Brightness)</b> &mdash; Labeled near-black bars from 2 to 25 on black. Set HDMI output to RGB, then raise Brightness until the first few bars above black become barely visible without turning the whole background gray.',
+ range_check:'<b>Range Check (SDR)</b> &mdash; Shows whether the display decodes the signal in the range the Pi sends; the caption names the range on the cable. A display that decodes Full shows a dark grey panel with the word FULL, one that decodes Limited only the empty outline. The legend below shows which of the two is a match; the EDID check under it predicts from the display\u2019s EDID and the Pi\u2019s AVI infoframe how the display decodes with its range on Auto. On a mismatch, set the display\u2019s HDMI range or black level to the signal\u2019s range (or Auto). FULL showing only faintly on a Limited signal can also mean Brightness is far too high: check Black Clipping.',
  overscan:'<b>Overscan</b> &mdash; Border lines at 0%, 2.5%, and 5% from screen edges with corner L-brackets and center crosshair. Use HDMI RGB output, and all lines should be visible &mdash; if not, disable overscan in your TV settings.',
 };
 const DIAG_UPLOAD_SENTINEL='__upload__';
@@ -2682,6 +2683,15 @@ const DIAG_VIDEO_SEQUENCE_MAX_SECONDS=3;
 let diagCustomAssets={video:[],image:[]};
 let activePattern=null;
 function clearActive(){document.querySelectorAll('.pat-btn').forEach(b=>b.classList.remove('active'));if(document.activeElement&&document.activeElement.classList&&document.activeElement.classList.contains('pat-btn'))document.activeElement.blur();activePattern=null;pgSetHeaderPattern('');}
+// The EDID check the Range Check draws (/api/pattern range_check,
+// PGSignalCheck signal_range_expectation): how the display decodes with
+// its range on Auto, against the codes on the cable.
+function rangeCheckEdidHtml(rc){
+ if(!rc||!rc.verdict) return '';
+ const label={match:'Match',mismatch:'Mismatch',uncertain:'Uncertain'}[rc.verdict]||'No data';
+ const color={match:'var(--status-success)',mismatch:'var(--status-error)',uncertain:'var(--status-warning)'}[rc.verdict]||'var(--text2)';
+ return '<div style="margin-top:6px"><b>EDID check: <span style="color:'+color+'">'+label+'</span></b> &mdash; '+selftestEsc(rc.reason||'')+'</div>';
+}
 function diagSetInfoHtml(html){
  const el=document.getElementById('diagInfo');
  if(!el) return;
@@ -3077,6 +3087,7 @@ async function showPattern(name,ev){
     max_luma:document.getElementById('max_luma').value})});
   if(r&&r.status==='ok'){
    toast('Pattern: '+label);
+   if(name==='range_check'&&activePattern==='range_check'&&r.range_check) diagSetInfoHtml(DIAG_DESCRIPTIONS.range_check+rangeCheckEdidHtml(r.range_check));
    const thumb=btn&&btn.querySelector('.pat-thumb');
    pgDiagRemember(label,thumb?thumb.getAttribute('data-thumb'):'',()=>showPattern(name,btn?{currentTarget:btn}:null));
    pgSetHeaderPattern(label);

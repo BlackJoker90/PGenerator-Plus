@@ -717,10 +717,14 @@ sub calman_g1_ip (@) {
 }
 
 # Show a G1 pattern. Returns 0 if it could not be drawn so the caller can
-# fall back.
+# fall back. $o (optional): source_range => "LIMITED" or "" to draw for that
+# range instead of the configured one; load => 0 to only write the command
+# file (the caller loads it); check => [verdict,basis] for the Range Check
+# (PGG1Patterns g1_pattern_render).
 sub calman_render_g1_pattern (@) {
- my ($key,$pattern_name)=@_;
- my $source_range=&calman_pattern_source_range();
+ my ($key,$pattern_name,$o)=@_;
+ $o={} if(ref($o) ne "HASH");
+ my $source_range=exists $o->{source_range} ? $o->{source_range} : &calman_pattern_source_range();
  my $range=($source_range eq "LIMITED") ? "limited" : "full";
  my ($w,$h)=(int($w_s),int($h_s));
  return 0 if($w < 64 || $h < 64);
@@ -729,6 +733,11 @@ sub calman_render_g1_pattern (@) {
  # Animations step once per refresh, so they need the output rate.
  $opt{hz}=$1 + 0 if($preferred_mode =~/\s([\d.]+)Hz/);
  my $tag="${key}_${w}x${h}_$range";
+ if(ref($o->{check}) eq "ARRAY") {
+  $opt{check}=$o->{check};
+  (my $check_tag=join("_",@{$o->{check}}))=~s/[^0-9A-Za-z]+/-/g;
+  $tag.="_$check_tag";
+ }
  # Granger is a smooth field: render a quarter of the pixels and let
  # convert scale it, which keeps the first draw well inside Calman's
  # 10 s command timeout on a Pi.
@@ -803,7 +812,7 @@ sub calman_render_g1_pattern (@) {
   $ps.="FRAME_NAME=G1_${key}_$i\nFRAME=$f->{ms}\n";
  }
  &create_tmp_file($ps,$source_range);
- &load_new_pattern_file("calman");
+ &load_new_pattern_file("calman") if(!exists $o->{load} || $o->{load});
  &log("Calman G1: $key ${w}x${h} range=$range bits=$bits frames=".scalar(@frames).(scalar(@frames) > 1 ? " hz=".($opt{hz} || "default") : ""));
  return 1;
 }

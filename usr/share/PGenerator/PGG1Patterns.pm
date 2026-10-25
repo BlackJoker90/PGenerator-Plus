@@ -24,7 +24,7 @@ use POSIX qw(floor);
 
 our @EXPORT_OK=qw(g1_pattern_key g1_pattern_render g1_pattern_keys g1_pattern_level g1_pattern_has_10bit);
 
-our $VERSION="7";
+our $VERSION="8";
 
 # Calman token (SPECIALTY:<token> or IMAGE:<token>) -> pattern key.
 my %TOKEN=(
@@ -75,6 +75,12 @@ my %RENDER=(
  "granger"         => \&_granger,
 );
 
+# Plates drawn the same way that are not G1 plates: no Calman token, not in
+# g1_pattern_keys, offered by the WebUI and the TV menu on their own.
+my %PLATE=(
+ "range_check"     => \&_range_check,
+);
+
 sub g1_pattern_keys { return sort keys %RENDER; }
 
 # Output code for a video-level code (as measured with Range=Limited).
@@ -92,17 +98,20 @@ sub g1_pattern_key {
 # g1_pattern_render($key,$w,$h,\%opt)
 #  opt: range  => "limited" | "full"   (default limited)
 #       ip     => address shown on the Warm-Up box
+#       check  => [verdict,basis] drawn under the Range Check legend
+#                 (PGSignalCheck signal_range_plate_lines; optional)
 #       photo  => {w,h,buf} at $w x $h for Skintones (optional)
 #       logo   => {w,h,buf} for Screensaver (optional)
 #       bits   => 10 for the 10-bit Brightness/Contrast plates (see
 #                 g1_pattern_has_10bit); their img has depth=>16 and a
 #                 buf of 16-bit big-endian samples carrying 10-bit codes
 # Returns {frames => [{img=>{w,h,buf}, ms=>N, x=>X, y=>Y}, ...], bg=>[r,g,b]}
-# or undef for an unknown key. A frame with x/y set is drawn at that offset
+# or undef for an unknown key. key is a G1 key or a %PLATE key
+# (range_check). A frame with x/y set is drawn at that offset
 # over a background filled with bg (used for the moving patterns).
 sub g1_pattern_render {
  my ($key,$w,$h,$opt)=@_;
- my $render=$RENDER{$key || ""};
+ my $render=$RENDER{$key || ""} || $PLATE{$key || ""};
  return undef if(!$render);
  $w=int($w); $h=int($h);
  return undef if($w < 64 || $h < 64);
@@ -321,8 +330,9 @@ sub _text_center {
  _text($im,$text,int($cx-_text_width($text,$s)/2+0.5),int($cy-3.5*$s+0.5),$s,$c);
 }
 
-# Stroke digits, drawn with coverage like the rings. Each glyph is a list
-# of strokes in a unit box (u right, v down, 0..1); a stroke is a list of
+# Stroke glyphs, drawn with coverage like the rings: digits for the
+# overscan rings, letters for the Range Check. Each glyph is a list of
+# strokes in a unit box (u right, v down, 0..1); a stroke is a list of
 # points and arcs [cx,cy,rx,ry,from,to] (degrees, counter-clockwise from
 # +u, v pointing down, so 90 is the top). Points snap to the pixel grid so
 # straight strokes have sharp edges; arcs stay continuous.
@@ -337,62 +347,132 @@ my %SFONT=(
  "7" => [[[0,0],[1,0],[0.32,1]]],
  "8" => [[["arc",0.5,0.25,0.43,0.25,0,360]],[["arc",0.5,0.75,0.5,0.25,0,360]]],
  "9" => [[[0.24,1],[0.91,0.42]],[["arc",0.5,0.31,0.5,0.31,0,360]]],
+ "A" => [[[0,1],[0.5,0],[1,1]],[[0.2,0.64],[0.8,0.64]]],
+ "C" => [[["arc",0.5,0.5,0.5,0.5,45,315]]],
+ "D" => [[[0,0],[0,1],[0.4,1],["arc",0.4,0.5,0.6,0.5,270,450],[0,0]]],
+ "E" => [[[1,0],[0,0],[0,1],[1,1]],[[0,0.48],[0.82,0.48]]],
+ "F" => [[[1,0],[0,0],[0,1]],[[0,0.48],[0.82,0.48]]],
+ "G" => [[["arc",0.5,0.5,0.5,0.5,40,360],[0.56,0.5]]],
+ "H" => [[[0,0],[0,1]],[[1,0],[1,1]],[[0,0.48],[1,0.48]]],
+ "I" => [[[0.5,0],[0.5,1]]],
+ "K" => [[[0,0],[0,1]],[[1,0],[0,0.62]],[[0.32,0.42],[1,1]]],
+ "L" => [[[0,0],[0,1],[1,1]]],
+ "M" => [[[0,1],[0,0],[0.5,0.62],[1,0],[1,1]]],
+ "N" => [[[0,1],[0,0],[1,1],[1,0]]],
+ "O" => [[["arc",0.5,0.5,0.5,0.5,0,360]]],
+ "Q" => [[["arc",0.5,0.5,0.5,0.5,0,360]],[[0.58,0.64],[1,1]]],
+ "R" => [[[0,1],[0,0],[0.52,0],["arc",0.52,0.25,0.48,0.25,90,-90],[0,0.5]],[[0.45,0.5],[1,1]]],
+ "S" => [[["arc",0.5,0.25,0.48,0.25,30,270],["arc",0.5,0.75,0.5,0.25,90,-150]]],
+ "T" => [[[0,0],[1,0]],[[0.5,0],[0.5,1]]],
+ "U" => [[[0,0],[0,0.62],["arc",0.5,0.62,0.5,0.38,180,360],[1,0]]],
+ "V" => [[[0,0],[0.5,1],[1,0]]],
+ "Y" => [[[0,0],[0.5,0.5],[1,0]],[[0.5,0.5],[0.5,1]]],
+ "-" => [[[0,0.52],[1,0.52]]],
+ " " => [],
 );
 
-sub _sglyph_width { my $dh=shift; return int($dh*0.7+0.5); }
+# Glyph width as a share of the height; 0.7 for the ones not listed.
+my %SWIDTH=(
+ "A" => 0.74, "C" => 0.68, "E" => 0.6, "F" => 0.6, "G" => 0.72, "H" => 0.68,
+ "I" => 0, "K" => 0.66, "L" => 0.58, "M" => 0.84, "O" => 0.8, "Q" => 0.8,
+ "R" => 0.68, "S" => 0.66, "U" => 0.68, "V" => 0.72, "Y" => 0.72, "-" => 0.5,
+ " " => 0.35,
+);
 
-# Text of stroke digits, height dh, stroke width sw, centred on cx,cy.
-sub _stext_center {
- my ($im,$text,$cx,$cy,$dh,$sw,$c)=@_;
- my $dw=_sglyph_width($dh);
- my $adv=$dw+int($dh*0.3+0.5);
+# Width of a glyph of height dh; a bare stroke (I) is as wide as its line.
+sub _sglyph_width {
+ my ($dh,$g,$sw)=@_;
+ my $f=(defined $g && exists $SWIDTH{$g}) ? $SWIDTH{$g} : 0.7;
+ my $dw=int($dh*$f+0.5);
+ return (defined $sw && $dw < $sw) ? $sw : $dw;
+}
+
+# Width of a stroke text: glyphs plus track between them.
+sub _stext_width {
+ my ($text,$dh,$sw,$track)=@_;
  my @ch=split(//,"$text");
- my $x=$cx-(@ch*$adv-($adv-$dw))/2;
- my $y=$cy-$dh/2;
+ return 0 if(!@ch);
+ my $w=(@ch-1)*$track;
+ $w+=_sglyph_width($dh,$_,$sw) for(@ch);
+ return $w;
+}
+
+# Draw one glyph with its box at x,y. Each pixel takes the distance to the
+# nearest stroke; only the pixels near a segment are visited, so a large
+# glyph costs its outline, not its box times its segments.
+sub _sglyph {
+ my ($im,$g,$x,$y,$dw,$dh,$sw,$c)=@_;
  # Stroke centres on the grid: integer for an even width, .5 for an odd one.
  my $snap=sub { my $v=shift; my $o=(int($sw+0.5) % 2) ? 0.5 : 0; return floor($v-$o+0.5)+$o; };
- for my $g (@ch) {
-  my @seg;
-  for my $stroke (@{$SFONT{$g} || []}) {
-   my @pt;
-   for my $it (@$stroke) {
-    if($it->[0] eq "arc") {
-     my (undef,$acx,$acy,$rx,$ry,$a0,$a1)=@$it;
-     my $n=int(abs($a1-$a0)/6)+1;
-     for my $i (0..$n) {
-      my $a=($a0+($a1-$a0)*$i/$n)*3.14159265358979/180;
-      push(@pt,[$acx+$rx*cos($a),$acy-$ry*sin($a),0]);
-     }
-    } else {
-     push(@pt,[@$it,1]);
+ my @seg;
+ for my $stroke (@{$SFONT{$g} || []}) {
+  my @pt;
+  for my $it (@$stroke) {
+   if($it->[0] eq "arc") {
+    my (undef,$acx,$acy,$rx,$ry,$a0,$a1)=@$it;
+    my $n=int(abs($a1-$a0)/6)+1;
+    for my $i (0..$n) {
+     my $a=($a0+($a1-$a0)*$i/$n)*3.14159265358979/180;
+     push(@pt,[$acx+$rx*cos($a),$acy-$ry*sin($a),0]);
     }
-   }
-   my @p=map {
-    my ($px,$py)=($x+$sw/2+$_->[0]*($dw-$sw),$y+$sw/2+$_->[1]*($dh-$sw));
-    $_->[2] ? [$snap->($px),$snap->($py)] : [$px,$py];
-   } @pt;
-   push(@seg,[@{$p[$_-1]},@{$p[$_]}]) for(1..$#p);
-  }
-  my $m=$sw/2+1;
-  for(my $py=floor($y-$m);$py<=floor($y+$dh+$m);$py++) {
-   for(my $px=floor($x-$m);$px<=floor($x+$dw+$m);$px++) {
-    my ($qx,$qy)=($px+0.5,$py+0.5);
-    my $d=1e9;
-    for my $s (@seg) {
-     my ($x1,$y1,$x2,$y2)=@$s;
-     my ($vx,$vy)=($x2-$x1,$y2-$y1);
-     my $ll=$vx*$vx+$vy*$vy;
-     my $u=$ll > 0 ? (($qx-$x1)*$vx+($qy-$y1)*$vy)/$ll : 0;
-     $u=0 if($u < 0); $u=1 if($u > 1);
-     my ($ex,$ey)=($qx-$x1-$u*$vx,$qy-$y1-$u*$vy);
-     my $e=sqrt($ex*$ex+$ey*$ey);
-     $d=$e if($e < $d);
-    }
-    _blend($im,$px,$py,$c,_cover($d,$sw)) if($d < $m);
+   } else {
+    push(@pt,[@$it,1]);
    }
   }
-  $x+=$adv;
+  my @p=map {
+   my ($px,$py)=($x+$sw/2+$_->[0]*($dw-$sw),$y+$sw/2+$_->[1]*($dh-$sw));
+   $_->[2] ? [$snap->($px),$snap->($py)] : [$px,$py];
+  } @pt;
+  push(@seg,[@{$p[$_-1]},@{$p[$_]}]) for(1..$#p);
  }
+ my $m=$sw/2+1;
+ my ($bx0,$by0,$bx1,$by1)=(floor($x-$m),floor($y-$m),floor($x+$dw+$m),floor($y+$dh+$m));
+ my $bw=$bx1-$bx0+1;
+ my @d;
+ for my $s (@seg) {
+  my ($x1,$y1,$x2,$y2)=@$s;
+  my ($vx,$vy)=($x2-$x1,$y2-$y1);
+  my $ll=$vx*$vx+$vy*$vy;
+  my $px0=floor(($x1 < $x2 ? $x1 : $x2)-$m); $px0=$bx0 if($px0 < $bx0);
+  my $px1=floor(($x1 > $x2 ? $x1 : $x2)+$m); $px1=$bx1 if($px1 > $bx1);
+  my $py0=floor(($y1 < $y2 ? $y1 : $y2)-$m); $py0=$by0 if($py0 < $by0);
+  my $py1=floor(($y1 > $y2 ? $y1 : $y2)+$m); $py1=$by1 if($py1 > $by1);
+  for(my $py=$py0;$py<=$py1;$py++) {
+   my $qy=$py+0.5;
+   for(my $px=$px0;$px<=$px1;$px++) {
+    my $qx=$px+0.5;
+    my $u=$ll > 0 ? (($qx-$x1)*$vx+($qy-$y1)*$vy)/$ll : 0;
+    $u=0 if($u < 0); $u=1 if($u > 1);
+    my ($ex,$ey)=($qx-$x1-$u*$vx,$qy-$y1-$u*$vy);
+    my $e=sqrt($ex*$ex+$ey*$ey);
+    my $i=($py-$by0)*$bw+$px-$bx0;
+    $d[$i]=$e if(!defined $d[$i] || $e < $d[$i]);
+   }
+  }
+ }
+ for my $i (0..$#d) {
+  next if(!defined $d[$i] || $d[$i] >= $m);
+  _blend($im,$bx0+$i % $bw,$by0+int($i/$bw),$c,_cover($d[$i],$sw));
+ }
+}
+
+# Stroke text, height dh, stroke width sw, glyphs track apart, starting
+# at x (left edge) with its box centred on cy.
+sub _stext {
+ my ($im,$text,$x,$cy,$dh,$sw,$c,$track)=@_;
+ my $y=$cy-$dh/2;
+ for my $g (split(//,"$text")) {
+  my $dw=_sglyph_width($dh,$g,$sw);
+  _sglyph($im,$g,$x,$y,$dw,$dh,$sw,$c);
+  $x+=$dw+$track;
+ }
+}
+
+# Stroke text centred on cx,cy; track defaults to 0.3 of the height.
+sub _stext_center {
+ my ($im,$text,$cx,$cy,$dh,$sw,$c,$track)=@_;
+ $track=int($dh*0.3+0.5) if(!defined $track);
+ _stext($im,$text,$cx-_stext_width($text,$dh,$sw,$track)/2,$cy,$dh,$sw,$c,$track);
 }
 
 ###############################################
@@ -1024,6 +1104,92 @@ sub _warmup {
   push(@frames,{img => $vs, ms => $ms, x => 0, y => -int(($strip_h-$h)*($n-1-$i)/$n+0.5)});
  }
  return {frames => \@frames, bg => [0,0,0]};
+}
+
+###############################################
+#                 Range Check                 #
+###############################################
+
+# Shows whether the display decodes the signal in the range it is sent in.
+# The field and the word FULL are the lowest code the link carries, the
+# panel behind FULL is video black (16): on a Limited link the field is 1,
+# the lowest video data code (BT.709-6 item 4.7: 1-254 in 8 bit, 4-1019 in
+# 10 bit; 0 and 255 are timing references), on a Full link it is 0. A
+# display that decodes Limited shows every code up to 16 as black, so the
+# panel and FULL vanish into the field and only the outline stays; one
+# that decodes Full shows 16 as a dark grey with FULL in black. What the
+# display shows depends only on how it decodes, whichever range is sent,
+# and the caption names the range on the cable, so a mismatch reads
+# directly. The codes are wire codes: the caller sends them unchanged
+# (SOURCE_RANGE=LIMITED on a Limited link). Everything apart from the panel
+# and FULL is a video level above black and reads under both decodes.
+
+# Outlined panel [x1,x2) x [y1,y2) in fill, with FULL in word at height dh
+# (none when word is undef).
+sub _range_panel {
+ my ($im,$x1,$y1,$x2,$y2,$t,$edge,$fill,$word,$dh)=@_;
+ _fill($im,$x1-$t,$y1-$t,$x2+$t,$y2+$t,$edge);
+ _fill($im,$x1,$y1,$x2,$y2,$fill);
+ return if(!$word);
+ _stext_center($im,"FULL",($x1+$x2)/2,($y1+$y2)/2,$dh,int($dh*0.15+0.5) || 1,$word,int($dh*0.22+0.5));
+}
+
+sub _range_check {
+ my ($w,$h,$o)=@_;
+ my $lim=($o->{range} ne "full");
+ my $low=$lim ? 1 : 0;
+ my $field=[$low,$low,$low];
+ my $black=[16,16,16];
+ my $im=_img($w,$h,$field);
+ my ($edge,$title,$label,$value)=map { _lc($o,$_,$_,$_) } (48,72,100,124);
+ my $t=int($h/540+0.5) || 1;
+ my ($px1,$px2)=(int($w*0.25+0.5),$w-int($w*0.25+0.5));
+ my ($py1,$py2)=(int($h*0.28+0.5),int($h*0.6+0.5));
+ _range_panel($im,$px1,$py1,$px2,$py2,$t,$edge,$black,$field,int($h*0.15+0.5));
+ # Title above the panel, letter-spaced.
+ my $th=int($h*0.016+0.5);
+ _stext_center($im,"RANGE CHECK",$w/2,$py1-int($h*0.065+0.5),$th,int($th*0.16+0.5) || 1,$title,int($th*0.6+0.5));
+ # Caption: the range on the cable.
+ my $ch=int($h*0.024+0.5);
+ my ($csw,$ctr)=(int($ch*0.15+0.5) || 1,int($ch*0.28+0.5));
+ my @cap=("SIGNAL",$lim ? "LIMITED 16-235" : "FULL 0-255");
+ my @cw=map { _stext_width($_,$ch,$csw,$ctr) } @cap;
+ my $cx=$w/2-($cw[0]+$ch+$cw[1])/2;
+ my $cy=$py2+int($h*0.08+0.5);
+ _stext($im,$cap[0],$cx,$cy,$ch,$csw,$title,$ctr);
+ _stext($im,$cap[1],$cx+$cw[0]+$ch,$cy,$ch,$csw,$value,$ctr);
+ # Legend: the two pictures the display can show, small, drawn in levels
+ # above black so both read under either decode.
+ my $mh=int($h*0.05+0.5);
+ my $mw=int($mh*($px2-$px1)/($py2-$py1)+0.5);
+ my $lh=int($h*0.02+0.5);
+ my ($lsw,$ltr)=(int($lh*0.15+0.5) || 1,int($lh*0.28+0.5));
+ my $gap=int($h*0.018+0.5);
+ my @item=([$lim ? 0 : 1,"MATCH"],[$lim ? 1 : 0,$lim ? "TV SET TO FULL" : "TV SET TO LIMITED"]);
+ my $sep=int($h*0.07+0.5);
+ my $total=$sep;
+ $total+=$mw+$gap+_stext_width($_->[1],$lh,$lsw,$ltr) for(@item);
+ my $x=int($w/2-$total/2+0.5);
+ my $my=$cy+int($h*0.11+0.5)-int($mh/2);
+ for my $it (@item) {
+  my ($shown,$text)=@$it;
+  _range_panel($im,$x,$my,$x+$mw,$my+$mh,$t,$edge,$shown ? _lc($o,60,60,60) : $field,$shown ? _lc($o,16,16,16) : undef,int($mh*0.47+0.5));
+  _stext($im,$text,$x+$mw+$gap,$my+$mh/2,$lh,$lsw,$label,$ltr);
+  $x+=$mw+$gap+_stext_width($text,$lh,$lsw,$ltr)+$sep;
+ }
+ # What the EDID and the AVI infoframe predict for a display on Auto
+ # (PGSignalCheck signal_range_plate_lines): the verdict, then its basis.
+ my $check=$o->{check};
+ if(ref($check) eq "ARRAY" && @$check == 2) {
+  my $ey=$my+$mh+int($h*0.06+0.5);
+  my @row=("EDID CHECK",$check->[0]);
+  my @rw=map { _stext_width($_,$lh,$lsw,$ltr) } @row;
+  my $rx=$w/2-($rw[0]+$lh+$rw[1])/2;
+  _stext($im,$row[0],$rx,$ey,$lh,$lsw,$title,$ltr);
+  _stext($im,$row[1],$rx+$rw[0]+$lh,$ey,$lh,$lsw,$value,$ltr);
+  _stext_center($im,$check->[1],$w/2,$ey+int($h*0.04+0.5),$th,int($th*0.16+0.5) || 1,$title,int($th*0.3+0.5));
+ }
+ return $im;
 }
 
 1;

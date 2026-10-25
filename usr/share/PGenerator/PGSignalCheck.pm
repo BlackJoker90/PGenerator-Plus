@@ -18,7 +18,7 @@ our @EXPORT_OK=qw(
  signal_check signal_board_limits signal_port_info signal_tmds_mhz
  signal_format_label signal_mode_label signal_hdr_label
  signal_wire_from_infoframes signal_wire_parts signal_wire_label signal_wire_adjustments
- signal_vsif_dv
+ signal_vsif_dv signal_avi_fields signal_range_expectation signal_range_plate_lines
 );
 
 our %FORMAT_NAME=(0=>"RGB",1=>"YCbCr 4:4:4",2=>"YCbCr 4:2:2",3=>"YCbCr 4:2:0");
@@ -452,6 +452,131 @@ sub signal_wire_adjustments {
   push(@adj,signal_hdr_label($req)." setting is sent as ".($EOTF_NAME{$w->{eotf}} || "EOTF $w->{eotf}").".");
  }
  return \@adj;
+}
+
+# The range fields of an AVI infoframe (hex as in signal_wire_from_infoframes):
+# {format (conf color_format), q (PB3 bits 3:2), yq (PB5 bits 7:6), vic
+# (PB4)}, undef when it is not an AVI frame. Bit layout as edid-decode's
+# parse-if.cpp reads it.
+sub signal_avi_fields {
+ my ($avi)=@_;
+ my @a=map {hex($_)} grep {/^[0-9a-fA-F]{1,2}$/} split(/:/,$avi || "");
+ return undef if(@a < 9 || $a[0] != 0x82);
+ my %fmt=(0=>0,1=>2,2=>1,3=>3);
+ my $f=$fmt{($a[4] >> 5) & 3};
+ return {format=>$f,q=>($a[6] >> 2) & 3,yq=>($a[8] >> 6) & 3,vic=>$a[7]};
+}
+
+our %RANGE_NAME=(1=>"Limited",2=>"Full");
+our %Q_NAME=(0=>"Default",1=>"Limited",2=>"Full",3=>"Reserved");
+
+# How the display decodes the range while its own range setting (HDMI black
+# level, RGB range) is on Auto, from the AVI infoframe on the cable ($avi)
+# and what the display declares in its EDID ($caps from PGEdidCaps: VCDB QS
+# and QY), compared with the range of the codes on the cable ($codes: 1
+# Limited, 2 Full). Rules as CTA-861 is quoted and implemented in Linux
+# drm_edid.c (drm_default_rgb_quant_range, drm_hdmi_avi_infoframe_quant_range)
+# and edid-decode (cta_vcdb):
+#  RGB: Q=0 (Default) is the default range of the video format, Limited
+#   for a CTA format with a VIC above 1, Full for VIC 1 (640x480) and IT
+#   formats. A display that sets QS follows a non-zero Q. One that does not
+#   is only bound to the default: a Q that differs from it may be ignored.
+#   Without a VIC (0) the display may still take the timing for a CTA
+#   format, so Default is not certain either. RGB ignores YQ.
+#  YCbCr: YQ=0 is Limited. YQ=1 (Full) is certain only when the display
+#   sets QY.
+# Returns {verdict,expect,codes,format,q,yq,vic,qs,qy,basis,reason}: verdict
+# "match" or "mismatch" (expect 1/2 against codes), "uncertain" (expect
+# undef: the plate on screen decides) or "unknown" (no infoframe or no code
+# range); qs/qy are undef without an EDID.
+sub signal_range_expectation {
+ my ($caps,$avi,$codes)=@_;
+ my $f=signal_avi_fields($avi);
+ my $known=($caps && $caps->{known}) ? 1 : 0;
+ my %e=(verdict=>"unknown",expect=>undef,codes=>($codes && $RANGE_NAME{$codes}) ? $codes : undef,
+  format=>undef,q=>undef,yq=>undef,vic=>undef,
+  qs=>$known ? ($caps->{quant_rgb_selectable} ? 1 : 0) : undef,
+  qy=>$known ? ($caps->{quant_ycc_selectable} ? 1 : 0) : undef,
+  basis=>"",reason=>"");
+ if(!$f) {
+  @e{qw(basis reason)}=("no_avi","No AVI infoframe was read: no display is connected or the kernel log no longer has it.");
+  return \%e;
+ }
+ @e{qw(format q yq vic)}=@$f{qw(format q yq vic)};
+ my ($expect,$basis,$why);
+ if($f->{format} == 0) {
+  my $q=$f->{q};
+  my $vic=$f->{vic};
+  my $default=($vic > 1) ? 1 : 2;
+  my $fmt=($vic > 1) ? "VIC $vic, a CTA video format" : (($vic == 1) ? "VIC 1 (640x480), an IT format" : "a timing without a VIC (0), an IT format");
+  my $sent="The Pi signals RGB ".(($q == 0) ? "with the range flag on Default" : $Q_NAME{$q})." (AVI Q=$q) on $fmt";
+  if($q == 3) {
+   ($basis,$why)=("q_reserved","$sent: Q=3 is reserved, so no range is signalled.");
+  } elsif($q == 0 && $vic == 0) {
+   ($basis,$why)=("default_novic","$sent. Its default is Full, but a display that takes the timing for a video format decodes it as Limited.");
+  } elsif($q == 0) {
+   ($expect,$basis,$why)=($default,$vic > 1 ? "default_ce" : "default_it","$sent, whose default range is $RANGE_NAME{$default}.");
+  } elsif($e{qs}) {
+   ($expect,$basis,$why)=($q,"q","$sent. The display declares in its EDID that it follows the range flag (VCDB QS=1).");
+  } elsif($q == $default) {
+   ($expect,$basis,$why)=($q,"q_default","$sent, which is also the default range of that format.");
+  } else {
+   ($basis,$why)=("q_unsupported","$sent. That is not its default ($RANGE_NAME{$default}), and ".($known ? "the display does not declare that it follows the range flag (VCDB QS=0), so it may decode it as $RANGE_NAME{$default}." : "without an EDID it is not known whether the display follows the range flag."));
+  }
+ } else {
+  my $yq=$f->{yq};
+  my $sent="The Pi signals ".signal_format_label($f->{format})." ".(($yq <= 1) ? $RANGE_NAME{$yq+1} : "with a reserved range")." (AVI YQ=$yq)";
+  if($yq == 0) {
+   ($expect,$basis,$why)=(1,"yq_limited","$sent.");
+  } elsif($yq == 1 && $e{qy}) {
+   ($expect,$basis,$why)=(2,"yq","$sent. The display declares in its EDID that it follows the YCbCr range flag (VCDB QY=1).");
+  } elsif($yq == 1) {
+   ($basis,$why)=("yq_unsupported","$sent, but ".($known ? "the display does not declare that it follows the YCbCr range flag (VCDB QY=0)" : "without an EDID it is not known whether the display follows the YCbCr range flag").", so it may decode it as Limited.");
+  } else {
+   ($basis,$why)=("yq_reserved","$sent: YQ=$yq is reserved.");
+  }
+ }
+ $e{basis}=$basis;
+ if(!defined $e{codes}) {
+  $e{reason}="$why The range of the codes on the cable is not known.";
+  return \%e;
+ }
+ my $codes_txt="the Pi sends $RANGE_NAME{$e{codes}} codes";
+ if(!defined $expect) {
+  $e{verdict}="uncertain";
+  $e{reason}="$why Whether the display on Auto matches the $RANGE_NAME{$e{codes}} codes is not certain: the Range Check on screen shows how it decodes.";
+  return \%e;
+ }
+ $e{expect}=$expect;
+ if($expect == $e{codes}) {
+  $e{verdict}="match";
+  $e{reason}="$why On Auto the display decodes $RANGE_NAME{$expect} and $codes_txt: match.";
+ } else {
+  $e{verdict}="mismatch";
+  $e{reason}="$why On Auto the display decodes $RANGE_NAME{$expect}, but $codes_txt: mismatch. Set the display's range to $RANGE_NAME{$e{codes}} by hand or change the Pi's output range.";
+ }
+ return \%e;
+}
+
+# The two lines the Range Check draws for signal_range_expectation, in the
+# glyphs of its stroke font (PGG1Patterns %SFONT): the verdict, then the
+# basis ("AUTO DECODES LIMITED   QS 1   Q LIMITED   VIC 16").
+sub signal_range_plate_lines {
+ my ($e)=@_;
+ return undef if(!$e);
+ my %word=(match=>"MATCH",mismatch=>"MISMATCH",uncertain=>"UNCERTAIN",unknown=>"NO DATA");
+ my $word=$word{$e->{verdict} || "unknown"} || "NO DATA";
+ return [$word,"NO INFOFRAME READ"] if(!defined $e->{format});
+ my $sp="   ";
+ my $auto="AUTO DECODES ".(defined $e->{expect} ? uc($RANGE_NAME{$e->{expect}}) : "FULL OR LIMITED");
+ my @p=($auto);
+ if($e->{format} == 0) {
+  push(@p,defined $e->{qs} ? "QS $e->{qs}" : "NO EDID","Q ".uc($Q_NAME{$e->{q}}),"VIC $e->{vic}");
+ } else {
+  my %yq=(0=>"LIMITED",1=>"FULL");
+  push(@p,defined $e->{qy} ? "QY $e->{qy}" : "NO EDID","YQ ".($yq{$e->{yq}} || "RESERVED"));
+ }
+ return [$word,join($sp,@p)];
 }
 
 1;

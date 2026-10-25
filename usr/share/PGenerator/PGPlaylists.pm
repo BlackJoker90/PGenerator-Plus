@@ -31,6 +31,7 @@ our @CATALOG = (
  { name => "g1_skintones",       label => "Skin Tones",                 group => "G1 plates", sdr => 1 },
  { name => "g1_granger",         label => "Granger Rainbow",            group => "G1 plates", sdr => 1 },
  { name => "g1_warmup",          label => "Warm-Up",                    group => "G1 plates", sdr => 1 },
+ { name => "range_check",        label => "Range Check",                group => "Test images", sdr => 1 },
  { name => "black_clipping",     label => "Black Clipping",             group => "Test images" },
  { name => "white_clipping",     label => "White Clipping",             group => "Test images" },
  { name => "overscan",           label => "Overscan",                   group => "Test images" },
@@ -53,8 +54,8 @@ sub pattern_item {
 sub builtin_playlists {
  return (
   { id => "builtin-picture", builtin => 1, name => "Picture setup",
-    description => "Black level, white level, colour and geometry, in the order a manual setup goes.",
-    items => [ map { pattern_item($_) } qw(black_clipping g1_brightness white_clipping g1_contrast g1_color_bars g1_tint g1_sharpness overscan) ] },
+    description => "Range, black level, white level, colour and geometry, in the order a manual setup goes.",
+    items => [ map { pattern_item($_) } qw(range_check black_clipping g1_brightness white_clipping g1_contrast g1_color_bars g1_tint g1_sharpness overscan) ] },
   { id => "builtin-greyscale", builtin => 1, name => "Greyscale windows",
     description => "10 % windows from 20 % to 100 %, for a quick look at greyscale tracking.",
     items => [ map { window_item($_) } (20,30,40,50,60,70,80,90,100) ] },

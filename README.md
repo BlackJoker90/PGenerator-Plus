@@ -139,7 +139,7 @@ Updates come from **this fork's releases**. The dialog shows the release notes a
 <td valign="top">
 
 ### 🧹 Small things that add up
-mDNS answers AAAA queries with an NSEC record, so clients do not wait for an IPv6 address that never comes. `/api/lg/status` answers in milliseconds instead of ~4 s. Start and restart show an **animated progress screen on the TV** that follows the real boot steps in the colours of the WebUI theme you picked, and the WebUI follows a restart in its own dialog and reloads once the Pi is back. A renderer restart in YCbCr no longer flashes the screen green. **Download Logs** replaces the old log upload.
+mDNS answers AAAA queries with an NSEC record, so clients do not wait for an IPv6 address that never comes. `/api/lg/status` answers in milliseconds instead of ~4 s. Start and restart show an **animated progress screen on the TV** that follows the real boot steps in the colours of the WebUI theme you picked, and the WebUI follows a restart in its own dialog and reloads once the Pi is back. A renderer restart in YCbCr no longer flashes the screen green. **Faster start and reboot**: the WebUI answers about 25 s after the kernel starts, 10 s sooner than in earlier releases, and a reboot from the WebUI is back about 11 s sooner (USB network detection runs in the background, the WiFi driver is reloaded only when it failed, the WebUI starts before the renderer); every step is logged with its uptime in `/var/log/PGenerator/boot-times.log`. **Download Logs** replaces the old log upload.
 
 </td>
 </tr>
@@ -207,7 +207,7 @@ Next to the settings, **On the cable** shows what is actually sent (format, rang
 | Self-test of the HDMI output | – | **built in**: scanout readback, link depth, AVI, HDR and Dolby Vision infoframes per mode |
 | Pattern playlists | – | **stepped with the TV remote** (HDMI-CEC), own playlists |
 | On-screen pattern menu | – | **every pattern on the TV**, picked with the remote |
-| Start and restart | static splash, WebUI just goes offline | **animated progress on the TV** (real boot steps, in the WebUI theme), restart dialog in the WebUI that reconnects by itself |
+| Start and restart | static splash, WebUI just goes offline | **animated progress on the TV** (real boot steps, in the WebUI theme), restart dialog in the WebUI that reconnects by itself; WebUI up about 25 s after the kernel starts |
 | Popups | success and error toasts | warnings and errors only |
 
 > The left column describes upstream behaviour as stated in the fork commits that changed it. Run `git log origin/main..main` in a clone with both remotes for the full list.

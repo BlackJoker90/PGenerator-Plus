@@ -27,6 +27,9 @@ $pid_file="/var/run/PGenerator/PGeneratord.pl.pid";
 $debug="file";
 $log_file="/tmp/pgenerator_debug.log";
 $calman_patch_log="/var/log/PGenerator/calman-patches.log";
+# Boot and shutdown steps with the uptime they were reached at (command.pm
+# boot_time_mark, etc/init.d/rcPGenerator pgen_mark). Survives a reboot.
+$boot_times_file="/var/log/PGenerator/boot-times.log";
 
 $none="None";
 
@@ -351,6 +354,10 @@ $calibration_sessions="";
 # Set by a refused apply (command.pm signal_gate_conf); the next reply to
 # the program that asked carries the refusal (daemon.pm send_key_to_client).
 $signal_refused_pending=0;
+# The pattern socket whose command is being handled (daemon.pm
+# pattern_daemon): a refusal is recorded with it as owner, and only that
+# socket's close ends it. Per thread, "" outside the pattern loop.
+$signal_gate_owner="";
 
 $pattern_plugins="$var_dir/plugins";
 $plugin_archive_file="PGenerator-plugin-.*.tar.gz";
@@ -457,6 +464,10 @@ $resolve_disconnect_request=0;
 # change, instead of waiting for the calibration software's next message.
 share($resolve_last_pattern);
 $resolve_last_pattern="";
+# The refused state held by the daemon (command.pm signal_refused_set): the
+# file next to it can fail to be written, this copy cannot.
+share(%signal_refused_mem);
+%signal_refused_mem=();
 
 $webui_info_cache="";
 $webui_info_cache_time=0;

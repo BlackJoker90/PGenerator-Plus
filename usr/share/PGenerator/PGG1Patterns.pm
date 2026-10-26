@@ -24,7 +24,7 @@ use POSIX qw(floor);
 
 our @EXPORT_OK=qw(g1_pattern_key g1_pattern_render g1_pattern_keys g1_pattern_level g1_pattern_has_10bit);
 
-our $VERSION="8";
+our $VERSION="9";
 
 # Calman token (SPECIALTY:<token> or IMAGE:<token>) -> pattern key.
 my %TOKEN=(
@@ -1141,7 +1141,7 @@ sub _range_check {
  my $field=[$low,$low,$low];
  my $black=[16,16,16];
  my $im=_img($w,$h,$field);
- my ($edge,$title,$label,$value)=map { _lc($o,$_,$_,$_) } (48,72,100,124);
+ my ($edge,$title,$value)=map { _lc($o,$_,$_,$_) } (48,72,124);
  my $t=int($h/540+0.5) || 1;
  my ($px1,$px2)=(int($w*0.25+0.5),$w-int($w*0.25+0.5));
  my ($py1,$py2)=(int($h*0.28+0.5),int($h*0.6+0.5));
@@ -1165,27 +1165,29 @@ sub _range_check {
  my $lh=int($h*0.02+0.5);
  my ($lsw,$ltr)=(int($lh*0.15+0.5) || 1,int($lh*0.28+0.5));
  my $gap=int($h*0.018+0.5);
- my @item=([$lim ? 0 : 1,"MATCH"],[$lim ? 1 : 0,$lim ? "TV SET TO FULL" : "TV SET TO LIMITED"]);
+ # The picture that matches in green, the wrong decode in red: muted and
+ # about as bright as the grey labels, levels on the 16-235 scale like
+ # every colour here.
+ my @item=([$lim ? 0 : 1,"MATCH",_lc($o,52,150,80)],[$lim ? 1 : 0,$lim ? "TV SET TO FULL" : "TV SET TO LIMITED",_lc($o,178,66,62)]);
  my $sep=int($h*0.07+0.5);
  my $total=$sep;
  $total+=$mw+$gap+_stext_width($_->[1],$lh,$lsw,$ltr) for(@item);
  my $x=int($w/2-$total/2+0.5);
  my $my=$cy+int($h*0.11+0.5)-int($mh/2);
  for my $it (@item) {
-  my ($shown,$text)=@$it;
+  my ($shown,$text,$colour)=@$it;
   _range_panel($im,$x,$my,$x+$mw,$my+$mh,$t,$edge,$shown ? _lc($o,60,60,60) : $field,$shown ? _lc($o,16,16,16) : undef,int($mh*0.47+0.5));
-  _stext($im,$text,$x+$mw+$gap,$my+$mh/2,$lh,$lsw,$label,$ltr);
+  _stext($im,$text,$x+$mw+$gap,$my+$mh/2,$lh,$lsw,$colour,$ltr);
   $x+=$mw+$gap+_stext_width($text,$lh,$lsw,$ltr)+$sep;
  }
- # What the EDID and the AVI infoframe predict for a display on Auto, or
- # what the TV reported it is set to (PGSignalCheck
- # signal_range_plate_lines): the verdict, its basis and the label of the
- # verdict row. Without a label the row names the Auto condition: a range
- # set by hand on the display does not reach the Pi over HDMI.
+ # What the EDID and the AVI infoframe predict for a display on Auto
+ # (PGSignalCheck signal_range_plate_lines): the verdict, then its basis.
+ # The row names that condition: a range set by hand on the display does
+ # not reach the Pi, so the verdict says nothing about it (the panel does).
  my $check=$o->{check};
- if(ref($check) eq "ARRAY" && (@$check == 2 || @$check == 3)) {
+ if(ref($check) eq "ARRAY" && @$check == 2) {
   my $ey=$my+$mh+int($h*0.06+0.5);
-  my @row=($check->[2] // "IF TV ON AUTO",$check->[0]);
+  my @row=("IF TV ON AUTO",$check->[0]);
   my @rw=map { _stext_width($_,$lh,$lsw,$ltr) } @row;
   my $rx=$w/2-($rw[0]+$lh+$rw[1])/2;
   _stext($im,$row[0],$rx,$ey,$lh,$lsw,$title,$ltr);

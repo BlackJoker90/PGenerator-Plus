@@ -980,6 +980,11 @@ our @signal_conf_keys=qw(mode_idx signal_mode is_sdr is_hdr eotf colorimetry
  primaries color_format max_bpc rgb_quant_range dv_status is_ll_dovi
  is_std_dovi dv_interface dv_transport dv_metadata dv_map_mode dv_color_space
  dv_profile);
+# HDR metadata the renderer reads while it runs: snapshotted and put back
+# with the signal keys, so a refused apply leaves the output as it was.
+# Optional in a snapshot: one written before they were added still
+# restores the signal keys.
+our @signal_metadata_keys=qw(min_luma max_luma max_cll max_fall);
 
 # Connected HDMI port and its EDID file.
 sub signal_connected_port (@) {
@@ -1137,7 +1142,7 @@ sub _signal_state_read (@) {
 # refused apply goes back to.
 sub signal_applied_snapshot_write (@) {
  my $conf=shift || \%pgenerator_conf;
- my %f=map {("conf_$_"=>defined($conf->{$_}) ? "$conf->{$_}" : "")} @signal_conf_keys;
+ my %f=map {("conf_$_"=>defined($conf->{$_}) ? "$conf->{$_}" : "")} (@signal_conf_keys,@signal_metadata_keys);
  $f{time}=time();
  return 1 if(&_signal_state_write($signal_applied_file,%f));
  # A later refusal then goes back to an older snapshot, or refuses without
@@ -1154,16 +1159,20 @@ sub signal_applied_snapshot_read (@) {
   return undef if(!exists $f->{"conf_$k"});
   $conf{$k}=$f->{"conf_$k"};
  }
+ foreach my $k (@signal_metadata_keys) {
+  $conf{$k}=$f->{"conf_$k"} if(exists $f->{"conf_$k"});
+ }
  return \%conf;
 }
 
-# Put the signal keys back to $snapshot (conf file and %pgenerator_conf).
-# Returns 1 when every key was written.
+# Put the signal keys and the HDR metadata back to $snapshot (conf file and
+# %pgenerator_conf). Returns 1 when every key was written.
 sub signal_restore_conf (@) {
  my $snapshot=shift;
  return 0 if(!$snapshot);
+ my @keys=(@signal_conf_keys,grep { exists $snapshot->{$_} } @signal_metadata_keys);
  my @batch;
- foreach my $k (@signal_conf_keys) {
+ foreach my $k (@keys) {
   my $want=defined($snapshot->{$k}) ? "$snapshot->{$k}" : "";
   my $cur=defined($pgenerator_conf{$k}) ? "$pgenerator_conf{$k}" : "";
   next if($want eq $cur);
@@ -1177,7 +1186,7 @@ sub signal_restore_conf (@) {
  # the file the renderer reads, so the next check sees what is really set.
  my %disk=&signal_conf_from_disk();
  my $ok=1;
- foreach my $k (@signal_conf_keys) {
+ foreach my $k (@keys) {
   my $want=defined($snapshot->{$k}) ? "$snapshot->{$k}" : "";
   my $got=defined($disk{$k}) ? "$disk{$k}" : "";
   next if($want eq $got);
@@ -1241,8 +1250,25 @@ sub hdmi_link_last_event (@) {
 
 # Daemon start: no refusal carries over, the conf found now is what a
 # refused apply goes back to.
+# One line "<uptime> <what>" in $boot_times_file. Uptime, not the clock:
+# until NTP has run the clock is whatever fake-hwclock saved.
+sub boot_time_mark (@) {
+ my $what=shift;
+ my $up="";
+ if(open(my $fh,"<","/proc/uptime")) { $up=(split(/\s+/,<$fh> // ""))[0] // ""; close($fh); }
+ return 0 if($up eq "" || !defined $boot_times_file || $boot_times_file eq "");
+ open(my $out,">>",$boot_times_file) or return 0;
+ print $out "$up $what\n";
+ close($out);
+ return 1;
+}
+
 sub signal_state_reset (@) {
  mkdir($signal_state_dir) if(!-d $signal_state_dir);
+ {
+  lock(%signal_refused_mem);
+  %signal_refused_mem=();
+ }
  unlink($signal_refused_file);
  unlink($hdmi_link_events_file);
  &signal_applied_snapshot_write();
@@ -1250,28 +1276,59 @@ sub signal_state_reset (@) {
 
 # Refused state: set by a refused apply from a calibration program, cleared
 # by the next apply that passes, when that program disconnects, or by a
-# daemon restart (signal_state_reset).
+# daemon restart (signal_state_reset). The daemon holds it in
+# %signal_refused_mem (shared with the WebUI and Resolve threads) and writes
+# it to $signal_refused_file for the WebUI and the logs: a write that fails
+# must not let the next patch through. owner is the pattern socket of the
+# program that asked ($signal_gate_owner, daemon.pm close_connection).
 sub signal_refused_set (@) {
  my %f=@_;
  $f{time}=time() if(!$f{time});
- return &_signal_state_write($signal_refused_file,%f);
+ {
+  lock(%signal_refused_mem);
+  %signal_refused_mem=map { ($_ => defined($f{$_}) ? "$f{$_}" : "") } keys(%f);
+ }
+ return 1 if(&_signal_state_write($signal_refused_file,%f));
+ &log("Signal: could not write $signal_refused_file: $!; the refusal stays in effect") if(defined &log);
+ return 0;
 }
 
 sub signal_refused_read (@) {
+ {
+  lock(%signal_refused_mem);
+  return {%signal_refused_mem} if(%signal_refused_mem);
+ }
  return undef if(!-e $signal_refused_file);
  return &_signal_state_read($signal_refused_file);
 }
 
+# The socket the refusal belongs to, "" when it was not set from one.
+sub signal_refused_owner (@) {
+ my $f=&signal_refused_read();
+ return ($f && defined $f->{owner}) ? $f->{owner} : "";
+}
+
 sub signal_refused_clear (@) {
  my $why=shift || "";
- return 0 if(!-e $signal_refused_file);
+ my $had=0;
+ {
+  lock(%signal_refused_mem);
+  $had=1 if(%signal_refused_mem);
+  %signal_refused_mem=();
+ }
+ $had=1 if(-e $signal_refused_file);
  unlink($signal_refused_file);
+ return 0 if(!$had);
  &log("Signal: refused state cleared".($why ne "" ? " ($why)" : "")) if(defined &log);
  return 1;
 }
 
 # Reason text while patches are refused, "" otherwise.
 sub signal_patches_refused (@) {
+ {
+  lock(%signal_refused_mem);
+  return ((defined $signal_refused_mem{reason} && $signal_refused_mem{reason} ne "") ? $signal_refused_mem{reason} : "The requested signal settings were refused.") if(%signal_refused_mem);
+ }
  return "" if(!-e $signal_refused_file);
  # A state file that cannot be read still means refused (fail closed).
  my $f=&signal_refused_read();
@@ -1318,7 +1375,7 @@ sub signal_gate_conf (@) {
  $signal_refused_pending=1;
  &signal_refused_set(source=>$source,reason=>$r->{reason},code=>$r->{code},
                      requested=>$requested,kept=>$kept,alternatives=>$alt,
-                     restored=>$restored ? 1 : 0);
+                     restored=>$restored ? 1 : 0,owner=>defined($signal_gate_owner) ? $signal_gate_owner : "");
  &log("Signal: $source asked for $requested: refused: $r->{reason}".($restored ? " Output kept: $kept." : " Conf could not be restored.")) if(defined &log);
  my $text="$source asked for $requested. $r->{reason}";
  $text.="\n$alt" if($alt ne "");

@@ -1221,6 +1221,7 @@ sub webui_http (@) {
     ) || do { &log("WebUI: failed to bind port $http_port: $!"); return; };
  }
  &log("WebUI: HTTP server started on port $http_port");
+ &boot_time_mark("webui: listening on $http_port");
 
  # NOTE: no global $SIG{CHLD} reaper here, deliberately. This process
  # runs system()/backticks/piped opens all over (modetest, helpers)
@@ -1925,7 +1926,9 @@ sub webui_handle_request (@) {
     close($client);
     undef $client;
     my $cmd_b64=encode_base64("REBOOT","");
-    system("(sleep 2 && PG_CMD=\"$cmd_b64\" sudo -E /usr/bin/PGenerator_cmd.pl) &");
+    # The reply is out (closed above); the short wait only lets the
+    # browser read it before the renderer and the network go down.
+    system("(sleep 0.5 && PG_CMD=\"$cmd_b64\" sudo -E /usr/bin/PGenerator_cmd.pl) &");
    }
    elsif($path eq "/api/power") {
     # Power-off request. Reply before issuing HALT so the client sees a
@@ -14160,31 +14163,7 @@ sub webui_range_expectation (@) {
  require PGSignalCheck;
  my ($caps)=eval { &signal_display_caps() };
  my ($connected,$avi)=&webui_last_infoframes();
- my $e=PGSignalCheck::signal_range_expectation($caps,$connected ? $avi : "",$codes);
- return PGSignalCheck::signal_range_apply_tv($e,$connected ? &webui_tv_black_level() : undef);
-}
-
-# The TV's own range setting where it can be read: the LG webOS picture
-# setting blackLevel (lg.pm picture_get), only with an LG TV paired. The
-# helper gets 10 s so a slow TV cannot hold the pattern request for the
-# minute picture_get allows, and a reading is kept for 30 s so the redraw
-# after a signal change does not ask again. Not during a measurement
-# series: lg_helper_run serialises TV conversations, and AutoCal holds
-# one. Returns "auto", "low", "high" or undef.
-my ($_webui_tv_level_at,$_webui_tv_level)=(0,undef);
-sub webui_tv_black_level (@) {
- return $_webui_tv_level if(time()-$_webui_tv_level_at < 30);
- return undef if(defined(&webui_meter_series_alive) && &webui_meter_series_alive());
- return undef if(`pgrep -f '[m]eter_lg_(3d_)?autocal\.pl' 2>/dev/null`=~/\d/);
- return undef if(!defined(&webui_lg_picture_settings) || !defined(&lg_encode_json) || !defined(&lg_decode_json));
- my $r=eval { &lg_decode_json(&webui_lg_picture_settings(&lg_encode_json({ keys => ["blackLevel"], ignore_calibration_picture_mode => 1, helper_timeout => 10 }))) };
- my $level;
- if(ref($r) eq "HASH" && ($r->{"status"} || "") eq "ok" && ref($r->{"picture_settings"}) eq "HASH") {
-  require PGSignalCheck;
-  $level=PGSignalCheck::signal_tv_black_level($r->{"picture_settings"}{"blackLevel"});
- }
- ($_webui_tv_level_at,$_webui_tv_level)=(time(),$level);
- return $level;
+ return PGSignalCheck::signal_range_expectation($caps,$connected ? $avi : "",$codes);
 }
 
 sub webui_range_expectation_json (@) {
@@ -14198,7 +14177,6 @@ sub webui_range_expectation_json (@) {
   .",\"codes\":".$str->(defined $e->{codes} ? $range{$e->{codes}} : undef)
   .",\"format\":".$num->($e->{format}).",\"q\":".$num->($e->{q}).",\"yq\":".$num->($e->{yq})
   .",\"vic\":".$num->($e->{vic}).",\"qs\":".$num->($e->{qs}).",\"qy\":".$num->($e->{qy})
-  .",\"tv\":".$str->($e->{tv})
   .",\"basis\":".$str->($e->{basis}).",\"reason\":".$str->($e->{reason})."}";
 }
 

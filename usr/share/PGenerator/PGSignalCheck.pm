@@ -19,7 +19,6 @@ our @EXPORT_OK=qw(
  signal_format_label signal_mode_label signal_hdr_label
  signal_wire_from_infoframes signal_wire_parts signal_wire_label signal_wire_adjustments
  signal_vsif_dv signal_avi_fields signal_range_expectation signal_range_plate_lines
- signal_tv_black_level signal_range_apply_tv
 );
 
 our %FORMAT_NAME=(0=>"RGB",1=>"YCbCr 4:4:4",2=>"YCbCr 4:2:2",3=>"YCbCr 4:2:0");
@@ -559,90 +558,27 @@ sub signal_range_expectation {
  return \%e;
 }
 
-# The display's own range setting where the display reports it: the LG
-# webOS picture setting blackLevel, read over the TV's network API. Older
-# firmware returns an object with one value per analogue colour system,
-# digital inputs under "unknown"; webOS 25 returns the value as a string
-# (bscpylgtv docs/available_settings_*.md, AVS Forum bscpylgtv thread
-# #41). The values are auto, low and high. No LG document maps them to the
-# menu; low = Limited and high = Full is how the reference clients and
-# their users read them. Returns "auto", "low", "high" or undef.
-our %TV_LEVEL_RANGE=(low=>1,high=>2);
-sub signal_tv_black_level {
- my $v=shift;
- $v=$v->{unknown} if(ref($v) eq "HASH");
- return undef if(!defined $v || ref($v));
- $v=lc($v);
- $v=~s/^\s+|\s+$//g;
- return ($v=~/^(?:auto|low|high)$/) ? $v : undef;
-}
-
-# The verdict of signal_range_expectation with the range the display
-# reports it is set to ($level from signal_tv_black_level). On Auto the
-# EDID prediction stands. Set by hand, the TV decodes that range on RGB.
-# Whether LG applies the setting to YCbCr is not documented, so on YCbCr a
-# setting that differs from what Auto would decode leaves the verdict
-# uncertain: the panel on screen shows it. Adds tv (the level) to $e.
-sub signal_range_apply_tv {
- my ($e,$level)=@_;
- return $e if(ref($e) ne "HASH" || !defined $level);
- $e->{tv}=$level;
- return $e if(!defined $e->{format});
- if($level eq "auto") {
-  $e->{reason}.=" The LG TV reports its Black Level on Auto.";
-  return $e;
- }
- my $tv=$TV_LEVEL_RANGE{$level};
- return $e if(!$tv);
- my $set="The LG TV reports its Black Level set by hand to ".ucfirst($level)." ($RANGE_NAME{$tv}).";
- if(!defined $e->{codes}) {
-  $e->{reason}.=" $set";
-  return $e;
- }
- my $codes_txt="the Pi sends $RANGE_NAME{$e->{codes}} codes";
- if($e->{format} != 0 && (!defined $e->{expect} || $e->{expect} != $tv)) {
-  @$e{qw(verdict expect basis)}=("uncertain",undef,"tv_set_ycc");
-  $e->{reason}="$set On RGB it decodes $RANGE_NAME{$tv}; whether LG applies the setting to YCbCr is not documented, so the Range Check on screen shows how it decodes the $RANGE_NAME{$e->{codes}} codes.";
-  return $e;
- }
- @$e{qw(expect basis)}=($tv,"tv_set");
- if($tv == $e->{codes}) {
-  $e->{verdict}="match";
-  $e->{reason}="$set It decodes $RANGE_NAME{$tv} and $codes_txt: match.";
- } else {
-  $e->{verdict}="mismatch";
-  $e->{reason}="$set It decodes $RANGE_NAME{$tv}, but $codes_txt: mismatch. Set the TV's Black Level to ".($e->{codes} == 1 ? "Low" : "High")." or Auto, or change the Pi's output range.";
- }
- return $e;
-}
-
-# The three parts the Range Check draws for signal_range_expectation, in
-# the glyphs of its stroke font (PGG1Patterns %SFONT): the verdict, its
-# basis ("DECODES LIMITED   QS 1   Q LIMITED   VIC 16") and the label of
-# the verdict row. Without a reading from the TV the label is IF TV ON
-# AUTO: a range set by hand on the display does not reach the Pi over
-# HDMI, so the verdict is a prediction for Auto. With one (tv, see
-# signal_range_apply_tv) it names the setting the TV reported.
+# The two lines the Range Check draws for signal_range_expectation, in the
+# glyphs of its stroke font (PGG1Patterns %SFONT): the verdict, then the
+# basis ("DECODES LIMITED   QS 1   Q LIMITED   VIC 16"). The plate labels
+# the row IF TV ON AUTO: a range set by hand on the display never reaches
+# the Pi, so the verdict is a prediction for Auto, not a reading.
 sub signal_range_plate_lines {
  my ($e)=@_;
  return undef if(!$e);
  my %word=(match=>"MATCH",mismatch=>"MISMATCH",uncertain=>"UNCERTAIN",unknown=>"NO DATA");
  my $word=$word{$e->{verdict} || "unknown"} || "NO DATA";
- my $tv=$e->{tv} || "";
- my %label=(auto=>"TV ON AUTO",low=>"TV SET TO LIMITED",high=>"TV SET TO FULL");
- my $label=$label{$tv} || "IF TV ON AUTO";
- return [$word,"NO INFOFRAME READ",$label] if(!defined $e->{format});
+ return [$word,"NO INFOFRAME READ"] if(!defined $e->{format});
  my $sp="   ";
  my $auto="DECODES ".(defined $e->{expect} ? uc($RANGE_NAME{$e->{expect}}) : "FULL OR LIMITED");
  my @p=($auto);
- my $by_hand=(($e->{basis} || "")=~/^tv_set/);
  if($e->{format} == 0) {
-  push(@p,$by_hand ? "SET ON THE TV" : (defined $e->{qs} ? "QS $e->{qs}" : "NO EDID"),"Q ".uc($Q_NAME{$e->{q}}),"VIC $e->{vic}");
+  push(@p,defined $e->{qs} ? "QS $e->{qs}" : "NO EDID","Q ".uc($Q_NAME{$e->{q}}),"VIC $e->{vic}");
  } else {
   my %yq=(0=>"LIMITED",1=>"FULL");
-  push(@p,$by_hand ? "SET ON THE TV" : (defined $e->{qy} ? "QY $e->{qy}" : "NO EDID"),"YQ ".($yq{$e->{yq}} || "RESERVED"));
+  push(@p,defined $e->{qy} ? "QY $e->{qy}" : "NO EDID","YQ ".($yq{$e->{yq}} || "RESERVED"));
  }
- return [$word,join($sp,@p),$label];
+ return [$word,join($sp,@p)];
 }
 
 1;

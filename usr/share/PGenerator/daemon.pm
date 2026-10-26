@@ -28,20 +28,26 @@ sub fork_pattern_daemon (@) {
  if(fork() == 0 ){
   $SIG{PIPE}='IGNORE';
   open(STDERR,">>/tmp/pg_stderr.log");
+  &boot_time_mark("daemon: start");
   # A refusal ends with the daemon; what a refused apply goes back to until
   # the first one passes is the conf found now.
   &signal_state_reset();
+  # The WebUI first: it answers while the renderer starts (it already runs
+  # beside every later renderer restart), so a slow HDMI handshake no
+  # longer delays it. The pattern ports open after the boot plate.
+  &lg_startup_scan_prepare();
+  threads->create(\&webui_http)->detach();
+  threads->create(\&webui_mdns)->detach();
   &pattern_generator_start();
+  &boot_time_mark("daemon: renderer ".(&pattern_generator_is_running() ? "running" : "not running"));
   &show_boot_pattern();
+  &boot_time_mark("daemon: boot plate done");
   threads->create(\&device_info)->detach();
   threads->create(\&discovery_devicecontrol)->detach();
   threads->create(\&discovery_lightspace)->detach();
   threads->create(\&discovery_rpc)->detach();
   threads->create(\&resolve_connection_thread)->detach();
-  &lg_startup_scan_prepare();
   threads->create(\&lg_startup_scan_worker)->detach();
-  threads->create(\&webui_http)->detach();
-  threads->create(\&webui_mdns)->detach();
   # HDMI link interruptions during measurements (refused settings' sibling).
   threads->create(\&webui_hdmi_link_watch)->detach() if($is_kms);
   # TV remote listener for the on-screen menu (setting on by default).
@@ -1278,6 +1284,7 @@ sub pattern_daemon {
     # variables initialization
     #
     $scaling_done=0;
+    $signal_gate_owner="$connection";
     #
     # Reference Unified Pattern Generator Control Interface Init Request
     # INIT:1.2
@@ -1780,7 +1787,7 @@ sub pattern_daemon {
 	       # A refused apply put the conf back to the kept output; Calman
 	       # choosing those working settings again must still reach the
 	       # apply, which ends the refused state (signal_gate_conf).
-	       $calman_settings_dirty=1 if(-e $signal_refused_file);
+	       $calman_settings_dirty=1 if(&signal_patches_refused() ne "");
 	       return;
 	      }
 	      &sudo("SET_PGENERATOR_CONF",$conf_key,$conf_val);
@@ -3334,8 +3341,11 @@ sub close_connection {
  my $had_session=&calibration_session_close($connection,$reason);
  if($calman{$connection} || $had_session) {
   &log("Calman: socket disconnected, preserving pattern state") if($calman{$connection});
-  # A refusal belongs to the session of the program that asked.
-  &signal_refused_clear(($session_software || "calibration software")." disconnected");
+  # A refusal belongs to the socket of the program that asked: a probe or
+  # a second program closing leaves it in place.
+  my $owner=&signal_refused_owner();
+  &signal_refused_clear(($session_software || "calibration software")." disconnected")
+   if($owner eq "$connection" || ($owner eq "" && $had_session));
  }
  &release_source_rgb_quant_range("hcfr") if($is_hcfr);
  $calman{$connection}=0;

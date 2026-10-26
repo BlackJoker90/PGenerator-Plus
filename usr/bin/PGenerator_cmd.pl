@@ -855,10 +855,13 @@ sub apply_bootloader () {
 #               Reboot function               #
 ###############################################
 sub reboot(@) {
+ &boot_time_mark("shutdown: reboot requested");
  &persist_meter_settings_legacy();
  &process_pid("$pattern_generator.pl","kill");
  &stop_renderer_for_shutdown();
+ &boot_time_mark("shutdown: renderer stopped");
  &reset_hdmi_output();
+ &boot_time_mark("shutdown: HDMI output reset");
  # Animated restart screen on the console framebuffer (plain RGB now) until
  # sendsigs ends it; the next boot shows its own progress.
  system("/usr/sbin/pgen_bootscreen reboot --daemon >/dev/null 2>&1") if(-x "/usr/sbin/pgen_bootscreen");
@@ -915,27 +918,51 @@ sub reset_hdmi_output(@) {
  # YCbCr output format left set, the sink keeps decoding YCbCr while the
  # shutdown and the firmware restart briefly send all-zero pixels, which
  # a YCbCr decoder shows as a green screen. Put the link back to 8 bpc
- # RGB SDR so those zeros arrive as black.
- my $connector_id="";
- open(MT,"timeout 3 $modetest -c 2>/dev/null|");
- while(<MT>) {
-  if(/^(\d+)\s+\d+\s+connected\s+HDMI/) {
-   $connector_id=$1;
-   last;
-  }
- }
- close(MT);
+ # RGB SDR so those zeros arrive as black. The renderer does the same on
+ # TERM (ResetConnectorOnExit): only what is still set otherwise is
+ # written, read from the same listing that finds the connector. A
+ # property whose value cannot be read is written.
+ my ($connector_id,$props)=&hdmi_connector_props();
  return if($connector_id eq "");
+ my $colour=exists($props->{"Colorimetry"}) ? "Colorimetry" : (exists($props->{"Colorspace"}) ? "Colorspace" : "");
+ $colour=&kms_connector_has_property("Colorimetry") ? "Colorimetry" : "Colorspace" if($colour eq "");
+ my @writes;
+ foreach my $w (["output format",0],["max bpc",8],["HDR_OUTPUT_METADATA",0],[$colour,0]) {
+  my $v=$props->{$w->[0]};
+  push(@writes,$w) if(!defined($v) || $v ne "$w->[1]");
+ }
+ return if(!@writes);
  local $is_kms=1;
  &wait_for_drm_master_unowned(2);
- &modetest_connector_write($connector_id,"output format",0);
- &modetest_connector_write($connector_id,"max bpc",8);
- &modetest_connector_write($connector_id,"HDR_OUTPUT_METADATA",0);
- if(&kms_connector_has_property("Colorimetry")) {
-  &modetest_connector_write($connector_id,"Colorimetry",0);
- } else {
-  &modetest_connector_write($connector_id,"Colorspace",0);
+ &modetest_connector_write($connector_id,@$_) foreach(@writes);
+}
+
+# The connected HDMI connector's id and its property values from one
+# "modetest -c": enum and range as the number, a blob as 0 when empty and
+# "set" otherwise. ("",{}) when there is none.
+sub hdmi_connector_props(@) {
+ my ($connector_id,%props,$name);
+ $connector_id="";
+ open(MT,"timeout 3 $modetest -c 2>/dev/null|") or return ("",{});
+ while(<MT>) {
+  if(/^(\d+)\s+\d+\s+(\S+)\s+(\S+)/) {
+   my ($id,$status,$conn)=($1,$2,$3);
+   last if($connector_id ne "");
+   $connector_id=$id if($status eq "connected" && $conn=~/^HDMI/);
+   next;
+  }
+  next if($connector_id eq "");
+  if(/^\t\d+ (.+):$/) { $name=$1; next; }
+  next if(!defined $name);
+  if(/^\t\tvalue:\s*(\S*)\s*$/) {
+   $props{$name}=$1 eq "" ? 0 : $1;
+   next;
+  }
+  # A blob's value is the hex dump on the lines after "value:".
+  $props{$name}="set" if(/^\t\t\t[0-9a-f]+\s*$/ && exists($props{$name}));
  }
+ close(MT);
+ return ($connector_id,\%props);
 }
 
 ###############################################

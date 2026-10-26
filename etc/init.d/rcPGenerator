@@ -12,6 +12,11 @@ AP_NET="10.10.10"
 USB_NET="10.10.12"
 DIRECT_NET="10.10.13"
 MAC_ADDRESS_USB="3E:3D:8C:17:B2:DF"
+BOOT_TIMES="/var/log/PGenerator/boot-times.log"
+DHCP_STARTING="/tmp/rcPGenerator.dhcp-starting"
+DHCP_STARTED="/tmp/rcPGenerator.dhcp-started"
+DHCP_INIT="/etc/init.d/dhcp"
+DHCP_PID_FILE="/var/run/dhcpd.pid"
 
 . $DEFAULT_FILE
 
@@ -20,6 +25,104 @@ SUBNET=$(grep AP_NET /etc/default/rcPGenerator |awk -F . '{print $2}')
 #
 # Function
 #
+# One line "<uptime> rc: <step>" in $BOOT_TIMES (the daemon adds its own
+# steps, usr/share/PGenerator/command.pm boot_time_mark). Uptime, not the
+# clock: until NTP has run the clock is whatever fake-hwclock saved.
+pgen_mark () {
+ echo "$(cut -d' ' -f1 /proc/uptime) rc: $*" >> "$BOOT_TIMES" 2>/dev/null
+}
+
+# dhcpd binds usb0 when it starts, so after the RNDIS rebuild it must have
+# started after it. Not started yet by this script ($DHCP_STARTING): it
+# will bind the new usb0, nothing to do. Started: wait until that start has
+# returned and dhcpd has written its pid file, since the init script's stop
+# kills only the pid in it (a restart in between left two dhcpd running),
+# then restart it.
+usb_dhcp_follow_rebuild () {
+ [ -e "$DHCP_STARTING" ] || { pgen_mark "usb: dhcpd not started yet, binds the new usb0"; return; }
+ i=0
+ while [ ! -e "$DHCP_STARTED" ] && [ $i -lt 240 ]; do
+  sleep 0.5
+  i=$((i+1))
+ done
+ i=0
+ while ! { [ -s "$DHCP_PID_FILE" ] && kill -0 "$(cat "$DHCP_PID_FILE")" 2>/dev/null; } && [ $i -lt 20 ]; do
+  sleep 0.25
+  i=$((i+1))
+ done
+ "$DHCP_INIT" restart
+ pgen_mark "usb: dhcp restarted for RNDIS"
+}
+
+# USB gadget (Pi Zero, Pi 4): keep ECM when the host has talked to it,
+# else rebuild it as RNDIS. Runs in the background of the boot.
+usb_gadget_ecm_or_rndis () {
+ /bin/sleep 5
+ n_packets=$(ifconfig usb0|grep "RX packets:0 ")
+ if [ -n "$n_packets" ]; then
+  echo "No connection established: clean and retry with rndis" > /dev/kmsg
+  # START Clean
+  cd /sys/kernel/config/usb_gadget/
+  cd PGenerator
+  echo "" > UDC
+  rm configs/c.1/rndis.usb0
+  rm configs/c.1/ecm.usb0
+  rm configs/c.1/acm.usb0
+  rm configs/c.1/ncm.usb0
+  rm configs/c.1/mass_storage.usb0
+  rmdir configs/c.1/strings/0x408/
+  rmdir configs/c.1/
+  rmdir functions/rndis.usb0/
+  rmdir functions/ecm.usb0
+  rmdir functions/acm.usb0
+  rmdir functions/ncm.usb0
+  rmdir functions/mass_storage.usb0
+  rmdir strings/0x408/
+  cd /sys/kernel/config/usb_gadget/
+  rmdir PGenerator
+  # End Clean
+
+  # START Windows
+  cd /sys/kernel/config/usb_gadget/
+  mkdir -p PGenerator
+  cd PGenerator
+  echo 0x1d6b > idVendor
+  echo 0x0104> idProduct
+  echo "0x3066" > bcdDevice
+  mkdir -p strings/0x408
+  echo "111111111111111" > strings/0x408/serialnumber
+  echo "RB8" > strings/0x408/manufacturer
+  echo "PGenerator RNDIS" > strings/0x408/product
+  mkdir -p configs/c.1/strings/0x408
+  echo "0x80" > configs/c.1/bmAttributes
+  echo "Config 1: RNDIS network" > configs/c.1/strings/0x408/configuration
+  echo "1" > os_desc/use
+  echo "0xcd" > os_desc/b_vendor_code
+  echo "MSFT100" > os_desc/qw_sign
+  mkdir -p functions/rndis.usb0
+  echo "RNDIS" > functions/rndis.usb0/os_desc/interface.rndis/compatible_id
+  echo "5162001" > functions/rndis.usb0/os_desc/interface.rndis/sub_compatible_id
+  ln -s functions/rndis.usb0 configs/c.1
+  mkdir functions/mass_storage.usb0
+  echo 1 > functions/mass_storage.usb0/stall
+  echo 0 > functions/mass_storage.usb0/lun.0/cdrom
+  echo 0 > functions/mass_storage.usb0/lun.0/ro
+  echo 0 > functions/mass_storage.usb0/lun.0/nofua
+  echo $BOOT_PARTITION > functions/mass_storage.usb0/lun.0/file
+  ln -s functions/mass_storage.usb0 configs/c.1
+  ln -s configs/c.1 os_desc
+  ls /sys/class/udc > UDC
+  ifconfig usb0 hw ether $MAC_ADDRESS_USB
+  ifconfig usb0 $USB_NET".1" netmask 255.255.255.0 up
+  # END Windows
+ else
+  pgen_mark "usb: ECM host connected"
+  return
+ fi
+ pgen_mark "usb: rebuilt as RNDIS"
+ usb_dhcp_follow_rebuild
+}
+
 rc_PGenerator_start () { 
  PROJECT="RPI3"
  MODEL=$(cat /proc/device-tree/model)
@@ -32,7 +135,13 @@ rc_PGenerator_start () {
   BT_MACADDRESS=$(echo B8:27:EB:$(printf "%02x" $(( 0x${SERIAL:0:2} ^0xAA))):$(printf "%02x" $(( 0x${SERIAL:2:2} ^0xAA))):$(printf "%02x" $(( 0x${SERIAL:4:2} ^0xAA))))
  fi
  # End Patch for RPI 3 Model B Plus to fix bluetooth mac address 
+ rm -f "$DHCP_STARTING" "$DHCP_STARTED"
  if [ "$1" == "start" ]; then
+  # The last boots only; the daemon (user pgenerator) appends to it too.
+  [ -f "$BOOT_TIMES" ] && tail -n 400 "$BOOT_TIMES" > "$BOOT_TIMES.tmp" && mv "$BOOT_TIMES.tmp" "$BOOT_TIMES"
+  echo "--- boot $(cat /proc/sys/kernel/random/boot_id 2>/dev/null)" >> "$BOOT_TIMES"
+  chown pgenerator:pgenerator "$BOOT_TIMES" 2>/dev/null
+  pgen_mark "start"
 
   # Suppress kernel console messages so splash stays clean.
   # cmdline.txt has "quiet loglevel=1" for early boot; this catches
@@ -92,6 +201,7 @@ rc_PGenerator_start () {
   # mount swap and disk
   swapon -a
   mount -a
+  pgen_mark "disks mounted"
   
   # start for bluetooth
   rmmod btusb
@@ -132,65 +242,12 @@ rc_PGenerator_start () {
    ifconfig usb0 $USB_NET".1" netmask 255.255.255.0 up
    # END Linux
  
-   /bin/sleep 5
-   n_packets=$(ifconfig usb0|grep "RX packets:0 ")
-   if [ -n "$n_packets" ]; then
-    echo "No connection established: clean and retry with rndis" > /dev/kmsg
-    # START Clean
-    cd /sys/kernel/config/usb_gadget/
-    cd PGenerator
-    echo "" > UDC
-    rm configs/c.1/rndis.usb0
-    rm configs/c.1/ecm.usb0
-    rm configs/c.1/acm.usb0
-    rm configs/c.1/ncm.usb0
-    rm configs/c.1/mass_storage.usb0
-    rmdir configs/c.1/strings/0x408/
-    rmdir configs/c.1/
-    rmdir functions/rndis.usb0/
-    rmdir functions/ecm.usb0
-    rmdir functions/acm.usb0
-    rmdir functions/ncm.usb0
-    rmdir functions/mass_storage.usb0
-    rmdir strings/0x408/
-    cd /sys/kernel/config/usb_gadget/
-    rmdir PGenerator
-    # End Clean
-
-    # START Windows
-    cd /sys/kernel/config/usb_gadget/
-    mkdir -p PGenerator
-    cd PGenerator
-    echo 0x1d6b > idVendor
-    echo 0x0104> idProduct
-    echo "0x3066" > bcdDevice
-    mkdir -p strings/0x408
-    echo "111111111111111" > strings/0x408/serialnumber
-    echo "RB8" > strings/0x408/manufacturer
-    echo "PGenerator RNDIS" > strings/0x408/product
-    mkdir -p configs/c.1/strings/0x408
-    echo "0x80" > configs/c.1/bmAttributes
-    echo "Config 1: RNDIS network" > configs/c.1/strings/0x408/configuration
-    echo "1" > os_desc/use
-    echo "0xcd" > os_desc/b_vendor_code
-    echo "MSFT100" > os_desc/qw_sign
-    mkdir -p functions/rndis.usb0
-    echo "RNDIS" > functions/rndis.usb0/os_desc/interface.rndis/compatible_id
-    echo "5162001" > functions/rndis.usb0/os_desc/interface.rndis/sub_compatible_id
-    ln -s functions/rndis.usb0 configs/c.1
-    mkdir functions/mass_storage.usb0
-    echo 1 > functions/mass_storage.usb0/stall
-    echo 0 > functions/mass_storage.usb0/lun.0/cdrom
-    echo 0 > functions/mass_storage.usb0/lun.0/ro
-    echo 0 > functions/mass_storage.usb0/lun.0/nofua
-    echo $BOOT_PARTITION > functions/mass_storage.usb0/lun.0/file
-    ln -s functions/mass_storage.usb0 configs/c.1
-    ln -s configs/c.1 os_desc
-    ls /sys/class/udc > UDC
-    ifconfig usb0 hw ether $MAC_ADDRESS_USB
-    ifconfig usb0 $USB_NET".1" netmask 255.255.255.0 up
-    # END Windows
-   fi
+   # A host that speaks ECM (macOS, Linux) sends packets within 5 s;
+   # without any, the gadget is rebuilt as RNDIS (Windows). Decided in the
+   # background: WiFi, dhcpd and PGenerator (HDMI, WebUI) do not wait.
+   ( usb_gadget_ecm_or_rndis ) </dev/null >>/tmp/rcPGenerator-usb.log 2>&1 &
+   # Not inside the gadget directory the rebuild removes.
+   cd /
   fi
 
   # START RPI2 wifi
@@ -226,9 +283,12 @@ rc_PGenerator_start () {
 
    # start for wifi
    # Reload WiFi modules so cfg80211 loads regulatory.db for 5GHz support.
-   # cfg80211 loads the db once at module init; if it was loaded before
-   # regulatory.db was installed, reloading picks up the new file.
-   if [ -f /lib/firmware/regulatory.db ]; then
+   # cfg80211 loads the db once at module init (about 8 s into the boot,
+   # from the root filesystem) and logs only when that fails
+   # (net/wireless/reg.c regdb_fw_cb). Reload only then, e.g. when the
+   # file was installed after the module had loaded.
+   if [ -f /lib/firmware/regulatory.db ] && dmesg | grep -qE "cfg80211: (failed to load regulatory\.db|loaded regulatory\.db is malformed)"; then
+    pgen_mark "wifi: regulatory.db not loaded, reloading cfg80211"
     rmmod brcmfmac 2>/dev/null; rmmod cfg80211 2>/dev/null
     modprobe cfg80211; modprobe brcmfmac
     sleep 2
@@ -249,6 +309,7 @@ rc_PGenerator_start () {
     perl -p -i -e "s/interface=.*/interface=wlan0/" /etc/hostapd/hostapd.conf
    fi
    # end for wifi
+   pgen_mark "wifi done"
   fi
 
   # Re-apply persisted WiFi/AP/BT disabled state (issue #22).
@@ -310,7 +371,10 @@ rc_PGenerator_start () {
  echo -n > /var/lib/dhcp/dhcpd.leases
 
  # dhcp
- /etc/init.d/dhcp restart
+ touch "$DHCP_STARTING"
+ "$DHCP_INIT" restart
+ touch "$DHCP_STARTED"
+ pgen_mark "dhcp started"
 
  # Remove broken default route via eth0 link-local.  dhcpcd assigns IPv4LL
  # (169.254.x.x) when no DHCP server answers, and its default route
@@ -322,10 +386,13 @@ rc_PGenerator_start () {
  fi
 
  # PGenerator 
+ pgen_mark "PGenerator start"
  /etc/init.d/PGenerator restart
+ pgen_mark "PGenerator start returned"
 
  # At the end a sync
  /bin/sync
+ pgen_mark "done"
 }
 
 #

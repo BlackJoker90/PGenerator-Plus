@@ -4,8 +4,10 @@ PID_NUMBER=`cat $PID_FILE 2>/dev/null`
 PROGRAM_NAME="dhcpd"
 INIT_NAME="dhcp"
 DHCP_CONF_FILE="/etc/dhcp/dhcpd.conf"
-PROGRAM_DAEMON="/sbin/dhcpd -cf $DHCP_CONF_FILE"
+DHCPD_BIN="/sbin/dhcpd"
+PROGRAM_DAEMON="$DHCPD_BIN -cf $DHCP_CONF_FILE"
 DEFAULT_FILE="/etc/default/dhcp"
+LOCK_FILE="/var/run/dhcp-init.lock"
 
 [ -f "$DEFAULT_FILE" ] && . "$DEFAULT_FILE"
 : ${DAEMON_ARGUMENT:="bnep ap0 usb0"}
@@ -42,6 +44,32 @@ build_interface_args() {
  echo "$iface_list"
 }
 
+# One start, stop or restart at a time: the boot, the Bluetooth udev
+# scripts (PGenerator_bluez.sh, pgenerator-bnep-hook.sh in the background)
+# and the USB gadget rebuild all restart dhcpd, sometimes within seconds.
+# The restart's own stop and start run under its lock.
+dhcp_lock() {
+ [ -n "$DHCP_INIT_LOCKED" ] && return 0
+ DHCP_INIT_LOCKED=1
+ export DHCP_INIT_LOCKED
+ command -v flock >/dev/null 2>&1 || return 0
+ exec 9>"$LOCK_FILE"
+ flock -w 30 9
+}
+
+# Every dhcpd of this configuration. dhcpd writes its pid file a moment
+# after it has started, so one started just before (Bluetooth coming up
+# during the boot) is not in it yet; restarting then left two running.
+# DirectLan's dhcpd (usr/lib/dhcpcd-hooks, -pf) is not ours.
+dhcp_stop_all() {
+ [ -n "$PID_NUMBER" ] && [ "$(cat /proc/$PID_NUMBER/comm 2>/dev/null)" = "dhcpd" ] && /bin/kill -9 $PID_NUMBER 2>/dev/null
+ pkill -9 -f "^$DHCPD_BIN -cf $DHCP_CONF_FILE( [^- ][^ ]*)*\$" 2>/dev/null
+}
+
+case "$1" in
+    start|stop|restart) dhcp_lock ;;
+esac
+
 case "$1" in
     start)
         echo -n "Starting $PROGRAM_NAME..."
@@ -50,13 +78,15 @@ case "$1" in
             echo "skipped"
             exit 0
         fi
-        $PROGRAM_DAEMON $IFACE_ARGUMENTS &>/dev/null
+        # Without the lock's descriptor: dhcpd keeps running, and holding
+        # it would block every later start, stop and restart.
+        $PROGRAM_DAEMON $IFACE_ARGUMENTS 9>&- &>/dev/null
         echo "done"
     ;;
 
     stop)
         echo -n "Stopping $PROGRAM_NAME..."
-        /bin/kill -9 $PID_NUMBER 2>/dev/null
+        dhcp_stop_all
         /bin/rm $PID_FILE &>/dev/null
         echo "done"
     ;;

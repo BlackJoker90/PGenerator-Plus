@@ -1529,19 +1529,20 @@ background:linear-gradient(135deg,var(--sw-bg) 0 50%,var(--sw-card) 50% 100%)}
 .selftest-verdict{grid-template-columns:auto minmax(0,1fr)}
 .selftest-actions{grid-column:1/-1;justify-content:stretch}
 .selftest-actions .btn{flex:1 1 0;min-height:44px;justify-content:center}
-/* Phones: three lines per mode on shared columns, so group chips, mode names
-   and depth chips each line up: group | mode | depth, then link | result,
-   then strip | score. */
-.selftest-modes{grid-template-columns:auto minmax(0,1fr) auto;column-gap:10px}
+/* Phones and tablets: three lines per mode on shared columns. Group chips,
+   mode names and depth chips sit side by side with the same gap and line up
+   down the list; the last column takes the rest: group | mode | depth, then
+   link | state, then strip | score. */
+.selftest-modes{grid-template-columns:auto auto auto minmax(0,1fr);column-gap:12px}
 .selftest-modes .selftest-mode-head{row-gap:6px}
-.selftest-modes .selftest-group{grid-column:1;grid-row:1}
+.selftest-modes .selftest-group{grid-column:1;grid-row:1;white-space:nowrap}
 .selftest-modes .selftest-mode-title{display:contents}
-.selftest-modes .selftest-mode-name{grid-column:2;grid-row:1;min-width:0;white-space:normal}
-.selftest-modes .selftest-bits{grid-column:3;grid-row:1;justify-self:start}
-.selftest-modes .selftest-state{grid-column:3;grid-row:2;justify-self:end}
-.selftest-modes .selftest-mode-link{grid-column:1/3;grid-row:2}
-.selftest-modes .selftest-score{grid-column:3;grid-row:3;justify-self:end}
+.selftest-modes .selftest-mode-name{grid-column:2;grid-row:1;white-space:normal}
+.selftest-modes .selftest-bits{grid-column:3;grid-row:1}
+.selftest-modes .selftest-mode-link{grid-column:1/3;grid-row:2;contain:inline-size}
+.selftest-modes .selftest-state{grid-column:3/5;grid-row:2;justify-self:end}
 .selftest-modes .selftest-strip{grid-column:1/3;grid-row:3;justify-content:flex-start}
+.selftest-modes .selftest-score{grid-column:3/5;grid-row:3;justify-self:end}
 .selftest-table{display:block;overflow-x:auto}
 }
 @media(prefers-reduced-motion:reduce){.selftest-verdict[data-state="running"] [data-icon="running"],.selftest-mode[data-status="running"] .selftest-dot{animation:none}.selftest-progress-fill{transition:none}}

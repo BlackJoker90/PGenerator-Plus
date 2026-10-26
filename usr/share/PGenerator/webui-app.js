@@ -3729,6 +3729,8 @@ function selftestModeRow(mode,result,running){
  const status=r.status||'pending';
  const windows=(r.checks||[]).filter(c=>c.swatch);
  const groupKey=mode.group==='SDR'?'sdr':mode.group==='HDR10'?'hdr':'dv';
+ // Narrow cards show "DV" so the state still fits on the first line.
+ const groupLabel=groupKey==='dv'?'<span class="selftest-group-long">'+selftestEsc(mode.group)+'</span><span class="selftest-group-short" aria-hidden="true">DV</span>':selftestEsc(mode.group);
  const open=!!selftestOpen[mode.id]&&(r.checks||[]).length>0;
  // Framebuffer channel order as the renderer stores it.
  const fmt=(r.link&&r.link.format)||'';
@@ -3744,11 +3746,11 @@ function selftestModeRow(mode,result,running){
   '</div>':'';
  return '<li class="selftest-mode" data-status="'+selftestEsc(status)+'" data-group="'+groupKey+'">'+
   '<button type="button" class="selftest-mode-head"'+((r.checks||[]).length?' aria-expanded="'+open+'" aria-controls="selftestDetail_'+mode.id+'"':' disabled')+' data-mode="'+mode.id+'">'+
-   '<span class="selftest-mode-id"><span class="selftest-group">'+selftestEsc(mode.group)+'</span><span class="selftest-mode-title"><span class="selftest-mode-name">'+selftestEsc(mode.label)+'</span><span class="selftest-bits" data-bits="'+mode.depth+'">'+mode.depth+'-bit</span></span></span>'+
+   '<span class="selftest-mode-id"><span class="selftest-group">'+groupLabel+'</span><span class="selftest-mode-title"><span class="selftest-mode-name">'+selftestEsc(mode.label)+'</span><span class="selftest-bits" data-bits="'+mode.depth+'">'+mode.depth+'-bit</span></span></span>'+
    '<span class="selftest-mode-link">'+selftestEsc(r.note||selftestLinkText(r.link))+'</span>'+
    '<span class="selftest-strip" aria-hidden="true">'+strip+'</span>'+
    '<span class="selftest-score">'+score+'</span>'+
-   '<span class="selftest-state"><span class="selftest-dot" aria-hidden="true"></span>'+(SELFTEST_STATUS_TEXT[status]||status)+'</span>'+
+   '<span class="selftest-state"><span class="selftest-dot" aria-hidden="true"></span>'+(SELFTEST_STATUS_TEXT[status]||status).replace(/-/g,'\u2011')+'</span>'+
   '</button>'+detail+'</li>';
 }
 function selftestRender(st){

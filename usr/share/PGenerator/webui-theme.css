@@ -1483,6 +1483,8 @@ background:linear-gradient(135deg,var(--sw-bg) 0 50%,var(--sw-card) 50% 100%)}
 .selftest-group{--grp:var(--text2);justify-self:start;flex:0 0 auto;padding:4px 10px;border-radius:999px;font-size:.7rem;line-height:1.2;font-weight:700;color:var(--grp);background:color-mix(in srgb,var(--grp) 14%,transparent)}
 .selftest-mode[data-group="hdr"] .selftest-group{--grp:var(--status-warning)}
 .selftest-mode[data-group="dv"] .selftest-group{--grp:var(--status-dv)}
+.selftest-group-short{display:none}
+@container (max-width:380px){.selftest-group-long{position:absolute;width:1px;height:1px;margin:-1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}.selftest-group-short{display:inline}}
 .selftest-mode-name{font-size:.86rem;font-weight:600;color:var(--text-primary);white-space:nowrap}
 /* Link depth chip: one hue per depth, kept apart from the group chips (grey,
    HDR orange, DV violet) and the result colours; the text mixes towards the
@@ -1532,7 +1534,7 @@ background:linear-gradient(135deg,var(--sw-bg) 0 50%,var(--sw-card) 50% 100%)}
    shared columns so each lines up down the list; group, mode and depth sit
    side by side with the same gap. Below, once there is a result: the link
    line, then strip | score. Empty parts take no line. */
-.selftest-modes{grid-template-columns:auto auto auto minmax(0,1fr);column-gap:12px}
+.selftest-modes{grid-template-columns:auto auto auto minmax(min-content,1fr);column-gap:10px}
 .selftest-modes .selftest-group{grid-column:1;grid-row:1;white-space:nowrap}
 .selftest-modes .selftest-mode-title{display:contents}
 .selftest-modes .selftest-mode-name{grid-column:2;grid-row:1;white-space:normal}

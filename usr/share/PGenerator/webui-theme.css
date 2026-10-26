@@ -383,6 +383,7 @@ body.layout-tablet .dashboard > .card > h2:has(> .pg-switch){gap:8px}
 body.layout-tablet .dashboard > .card > h2:has(> .pg-switch)::after{margin-left:0}
 .card-section+.card-section,.meter-session-section{margin-top:14px;padding-top:14px;border-top:1px solid var(--border)}
 .net-card>.net-merged{margin-top:14px;padding-top:14px;border-top:1px solid var(--border)}
+.devinfo-card>.card-section{margin-top:14px;padding-top:14px;border-top:1px solid var(--border)}
 .net-card>.net-merged>.lg-card-title-actions{margin:0 0 10px}
 .dashboard>.card.net-merged-source{display:none!important}
 .card-section-head{display:flex;align-items:center;justify-content:space-between;gap:12px;min-height:28px;margin-bottom:8px}

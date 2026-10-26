@@ -3930,7 +3930,7 @@ function pgRebootProgress(bootId){
  document.body.classList.add('pg-restarting');
  const d={step:0,result:'running',t0:Date.now(),offlineAt:0,value:0,timer:0,poll:0,actionsFor:''};
  const opener=document.activeElement;
- const close=()=>{ clearInterval(d.timer); clearTimeout(d.poll); document.removeEventListener('keydown',onKey,true); root.remove(); document.body.classList.remove('pg-restarting'); if(opener&&opener.isConnected) opener.focus(); };
+ const close=()=>{ clearInterval(d.timer); clearTimeout(d.poll); document.removeEventListener('keydown',onKey,true); root.remove(); document.body.classList.remove('pg-restarting'); if(opener&&opener.isConnected) opener.focus({preventScroll:true}); };
  const onKey=ev=>{
   if(!root.isConnected) return;
   if(ev.key==='Escape'&&(d.result==='timeout'||d.result==='unconfirmed')){ ev.preventDefault(); close(); return; }
@@ -4155,7 +4155,9 @@ function pgConfirmReboot(o){
    if(done) return; done=true;
    document.removeEventListener('keydown',onKey,true);
    root.classList.add('is-leaving');
-   const finish=()=>{root.remove();uiSyncBodyScrollLock();if(opener&&opener.focus&&opener.isConnected) opener.focus();};
+   // Without preventScroll a phone jumped to the top: a tap on a select
+   // leaves focus on the workspace title the tab bar focused.
+   const finish=()=>{root.remove();uiSyncBodyScrollLock();if(opener&&opener.focus&&opener.isConnected) opener.focus({preventScroll:true});};
    const reduce=window.matchMedia&&window.matchMedia('(prefers-reduced-motion: reduce)').matches;
    if(reduce) finish(); else setTimeout(finish,180);
    resolve(val);
@@ -5105,6 +5107,7 @@ function pgApplyLayout(options){
  uiSyncBodyScrollLock();
  meterSyncGreyscaleDesktopLayout();
  pgPlaceConnectivityForLayout();
+ pgPlaceUpdateForLayout();
  pgSyncCardCollapseForLayout();
  pgUpdateLayoutControls();
  if(pgLayoutEffective==='desktop'){
@@ -5167,6 +5170,17 @@ function pgPlaceConnectivityForLayout(){
   }
  });
  pgScheduleTabletNavSync();
+}
+// Tablet/phone shows Software Update in System, as a section at the end of
+// Device Info; Desktop keeps it in Settings, before Backup.
+function pgPlaceUpdateForLayout(){
+ const update=document.getElementById('updateCard');
+ const info=document.querySelector('.dashboard > .card[data-widget="info"]');
+ const backup=document.getElementById('backupCard');
+ if(!update||!info||!backup) return;
+ if(document.body.classList.contains('layout-desktop')){
+  if(update.nextElementSibling!==backup) backup.before(update);
+ }else if(update.parentNode!==info) info.appendChild(update);
 }
 function meterSyncGreyscaleDesktopLayout(){
  const live=document.getElementById('meterLiveReading');
@@ -5784,11 +5798,12 @@ function pgRenderSpdInfoframe(r){
  lines.forEach((line,i)=>{ if(i) dd.appendChild(document.createElement('br')); dd.appendChild(document.createTextNode(line)); });
 }
 
-// Device Info opens the page. Topic order: Signal (output, self-test, infoframes, patterns) · Measure (calibration,
-// session, 3D LUT, Display Profiler) · CEC · Device (network, LG TV control, Resolve, system, UI, update).
-// The key carries a version so the new grouping replaces older saved drags once.
-const PG_DEFAULT_WIDGET_ORDER=['patterns','meter','cec','wifi','lg','resolve','settings'];
-const PG_WIDGET_ORDER_KEY='pg_widget_order_v5';
+// Device Info opens the page. Topic order: Signal (output, self-test, infoframes, patterns, playlists) · Measure
+// (calibration, session, 3D LUT, Display Profiler) · CEC · Device (network, LG TV control, Resolve, system, UI, update).
+// The key carries a version so the new grouping replaces older saved drags once
+// (v6: Playlists below Diagnostic Patterns, as on Desktop; v5 put them above).
+const PG_DEFAULT_WIDGET_ORDER=['patterns','playlists','meter','cec','wifi','lg','resolve','settings'];
+const PG_WIDGET_ORDER_KEY='pg_widget_order_v6';
 // Widget reorder: POINTER drag on the .drag-handle grip only (no HTML5 DnD).
 // Drop target = card under the cursor; insert before/after by midpoint.
 // Avoid setPointerCapture + moving the capture node (that combo was a no-op).
@@ -6860,7 +6875,7 @@ function pgPrompt(opts){
    done=true;
    document.removeEventListener('keydown',onKey,true);
    root.remove();
-   try{ if(opener&&opener!==document.body&&opener.isConnected&&typeof opener.focus==='function') opener.focus(); }catch(e){}
+   try{ if(opener&&opener!==document.body&&opener.isConnected&&typeof opener.focus==='function') opener.focus({preventScroll:true}); }catch(e){}
    resolve(v);
   };
   function onKey(ev){
@@ -22957,6 +22972,9 @@ function meterCloseLutTools(){
  // iOS opens its own picker when a select gets focus during a touch gesture,
  // so touch-opened menus leave the select unfocused (touchOpenAt).
  let touchOpenAt=0,touchMenu=false;
+ // Where the select was when the menu was last placed, and whether a finger
+ // is on the screen (a scroll then is the user's own).
+ let anchorX=0,anchorY=0,touching=false;
  function eligible(el){
   return !!el&&el.tagName==='SELECT'&&!el.multiple&&!(el.size>1)&&!el.disabled&&!el.hasAttribute('data-native-select');
  }
@@ -23045,6 +23063,7 @@ function meterCloseLutTools(){
   if(!menu||!current) return;
   const z=zoomOf(current)||1;
   const r=current.getBoundingClientRect();
+  anchorX=r.left; anchorY=r.top;
   const vw=window.innerWidth/z,vh=window.innerHeight/z;
   const top=r.top/z,bottom=r.bottom/z,left=r.left/z,width=r.width/z;
   const gap=6,margin=8,cap=360;
@@ -23196,11 +23215,17 @@ function meterCloseLutTools(){
  }
  document.addEventListener('touchstart',e=>{
   const t=e.target,sel=tapSelect(t);
+  touching=true;
   touchStart=sel&&e.touches.length===1?{el:sel,target:t,x:e.touches[0].clientX,y:e.touches[0].clientY}:null;
   if(menu&&!menu.contains(t)&&sel!==current) close();
  },{capture:true,passive:true});
+ document.addEventListener('touchcancel',e=>{
+  touching=e.touches.length>0;
+  touchStart=null;
+ },{capture:true,passive:true});
  document.addEventListener('touchend',e=>{
   const start=touchStart;
+  touching=e.touches.length>0;
   touchStart=null;
   const p=e.changedTouches&&e.changedTouches[0];
   if(!start||!p||e.target!==start.target) return;
@@ -23239,7 +23264,19 @@ function meterCloseLutTools(){
    if(t.options.length) open(t);
   }
  },true);
- window.addEventListener('scroll',e=>{ if(menu&&!menu.contains(e.target)) close(); },true);
+ // On an iPhone the menu closed on the 3 s stats poll with no gesture: iOS
+ // WebKit can move the scroll position when a poll rewrites text (see
+ // pgWhenScrollIdle). Only a scroll that moves the select counts. A finger
+ // on the screen or a mouse-opened menu closes as before; a touch-opened
+ // menu follows its select and closes once the select has left the screen.
+ window.addEventListener('scroll',e=>{
+  if(!menu||menu.contains(e.target)) return;
+  if(!current.isConnected||!current.getClientRects().length){ close(true); return; }
+  const r=current.getBoundingClientRect();
+  if(Math.abs(r.left-anchorX)<1&&Math.abs(r.top-anchorY)<1) return;
+  if(!touchMenu||touching||r.bottom<0||r.top>window.innerHeight){ close(); return; }
+  position();
+ },true);
  // Chart code dispatches synthetic resize events after redraws; only a real
  // viewport change matters, and then the menu follows its select.
  let viewW=window.innerWidth,viewH=window.innerHeight;

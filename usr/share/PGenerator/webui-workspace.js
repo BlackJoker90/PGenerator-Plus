@@ -6842,7 +6842,7 @@ function meterShowChoiceModal(options){
    resolved=true;
    try{ document.removeEventListener('keydown',onKey,true); }catch(e){}
    try{ root.remove(); }catch(e){}
-   try{ if(opener&&opener!==document.body&&opener.isConnected&&typeof opener.focus==='function') opener.focus(); }catch(e){}
+   try{ if(opener&&opener!==document.body&&opener.isConnected&&typeof opener.focus==='function') opener.focus({preventScroll:true}); }catch(e){}
    resolve(value);
   };
   acceptBtn.onclick=()=>{

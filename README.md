@@ -253,7 +253,7 @@ Next to the settings, **On the cable** shows what is actually sent (format, rang
    - Use a microSD card or USB stick of at least 8 GB.
 3. Boot the Pi and connect to it, using one of the methods below.
 4. Open **`http://pgenerator.local`** (or the Pi's IP address).
-5. Go to **Settings → Software Update → Check for Updates** to move to the newest OTA release.
+5. Go to **Settings → Software Update → Check for Updates** (on a phone or tablet: **System → Software Update**) to move to the newest OTA release.
 
 <details>
 <summary><b>Connection methods (Bluetooth PAN, Wi-Fi AP, Ethernet)</b></summary>
@@ -286,7 +286,7 @@ From then on the Pi follows this fork's releases. The update source is `usr/shar
 
 ### ⬆️ Updating
 
-- **Web UI:** **Settings → Software Update → Check for Updates → Install Update.** The dialog shows the release notes and download progress, then restarts the service. The release dropdown also lets you reinstall the current release or roll back to an earlier one.
+- **Web UI:** **Settings → Software Update → Check for Updates → Install Update.** On a phone or tablet the section is under **System**. The dialog shows the release notes and download progress, then restarts the service. The release dropdown also lets you reinstall the current release or roll back to an earlier one.
 - **SSH** (`root` / `PGenerator!!$`):
 
   ```bash
@@ -367,9 +367,9 @@ Served on **port 80** at `http://pgenerator.local`. It has a **Desktop** layout 
 | **Meter Profiler** | Meter correction (CCSS) editor and preview |
 | **3D LUT · Display Profiler** | LUT handling, MHC2 / KDE HDR profile building |
 | **Connectivity** | Wi-Fi client, access point and Bluetooth in one Network card, LG TV control (pairing, AutoCal: greyscale, 3D LUT, HDR tone map, Shadow Fix) and the Resolve client |
-| **System** | Device info: CPU, memory and temperature with meters, plus board, hostname, resolution, uptime, RAM and the network interfaces; GPU memory (asks before the required reboot) and CPU **Scaling Type** (Performance recommended, applies at once) are set in their tiles |
+| **System** | Device info: CPU, memory and temperature with meters, plus board, hostname, resolution, uptime, RAM and the network interfaces; GPU memory (asks before the required reboot) and CPU **Scaling Type** (Performance recommended, applies at once) are set in their tiles. On a phone or tablet, Software Update and Download Logs sit here too, below the device info |
 | **Live Information** (right-hand drawer) | Active signal, the infoframe decoder (AVI and DRM), the measured HDMI link depth and clock, and HDMI-CEC status |
-| **Settings** | Layout, zoom, **13 themes**, Show/Hide for the Measure workspaces, software update (with notes, progress, rollback), Download Logs, and settings backup and restore |
+| **Settings** | Layout, zoom, **13 themes**, Show/Hide for the Measure workspaces, software update (with notes, progress, rollback) and Download Logs (on a phone or tablet both are under System), and settings backup and restore |
 
 **Don't need the meter tools?** Settings → UI Settings → **Measure Workspaces → Hide** removes Calibration, Meter Profiler, 3D LUT and Display Profiler from the navigation, along with the meter status in the header. Saved measurements, profiles and LUTs are kept, and **Show** brings everything back. The choice is stored per browser.
 

@@ -2564,9 +2564,6 @@ function meterColorCheckerSeriesIsSdrOnly(){return false;}
 function meterMbChartActive(){
  return /^(?:ciemb|cieopp)_/.test(String((typeof meterChromaticityChartMode==='function')?meterChromaticityChartMode():''));
 }
-function meterColorCheckerSeriesIsMbOnly(id){
- return [800008,800064].includes(Math.round(Number(id)));
-}
 function meterHueCircleSeriesActive(type,points){
  const t=type!=null?String(type):String(meterActiveSeriesType||'');
  const p=points!=null?Math.round(Number(points)):Math.round(Number(meterActiveSeriesPoints));
@@ -3159,13 +3156,6 @@ function meterLgAutoCalTransportReady(){
   return getVal('colorimetry')==='9'&&getVal('primaries')==='2'&&getVal('eotf')==='2';
  }
  return getVal('colorimetry')==='2'&&getVal('eotf')==='0';
-}
-
-function meterLgAutoCalTransportAvailable(){
- const modeIdx=getVal('mode_idx');
- const validFmts=getValidFormats(modeIdx,10);
- const validBpc=getValidBpc(modeIdx,1);
- return validFmts.indexOf(1)>=0 && validBpc.indexOf(10)>=0;
 }
 
 function meterSetLgAutoCalTransportValues(){
@@ -4392,19 +4382,6 @@ function meterAutoCalProcessQueuedPanelLight(){
  return true;
 }
 
-async function meterAutoCalAdjustBrightness(delta){
- const numericDelta=Number(delta)||0;
- if(!numericDelta) return;
- if(meterAutoCalLuminanceSetupActive){
-  meterAutoCalPanelLightQueuedDelta+=numericDelta;
-  meterAutoCalUpdatePanelLightUi();
-  meterAutoCalProcessQueuedPanelLight();
-  return;
- }
- if(meterAutoCalPanelLightBlocksMeterRead()) return;
- await meterAutoCalApplyBrightnessDelta(numericDelta,false);
-}
-
 function meterAutoCalResultRows(status){
  const source=status;
  const readings=(source&&Array.isArray(source.readings)?source.readings:(Array.isArray(meterReadings)?meterReadings:[]))
@@ -5134,269 +5111,6 @@ function meterAutoCalBuildBackendSteps(whiteStep,seriesSteps){
   return true;
  });
  return whiteStep?[whiteStep,...body]:body;
-}
-
-function meterAutoCalClipCodes(){
- const limited=String(getVal('rgb_quant_range')||'1')==='1';
- return limited
-  ? {range:'1',black:[16,17,18],white:[233,234,235]}
-  : {range:'0',black:[0,1,2],white:[253,254,255]};
-}
-
-function meterAutoCalIreForCode(code,range){
- const numeric=Number(code);
- if(String(range)==='1') return Math.max(0,Math.min(100,((numeric-16)/219)*100));
- return Math.max(0,Math.min(100,(numeric/255)*100));
-}
-
-function meterAutoCalReadingY(reading){
- const y=Number(reading&&(reading.luminance!=null?reading.luminance:reading.Y));
- return Number.isFinite(y)?y:0;
-}
-
-function meterAutoCalLevelThreshold(a,b,kind){
- const hi=Math.max(Math.abs(Number(a)||0),Math.abs(Number(b)||0));
- return kind==='black'?Math.max(0.0005,hi*0.08):Math.max(0.05,hi*0.0015);
-}
-
-function meterAutoCalLevelSeparated(a,b,kind){
- return (Number(b)-Number(a))>meterAutoCalLevelThreshold(a,b,kind);
-}
-
-function meterAutoCalReadTransient(message){
- return /communication|connection|init|start|fifo|timeout|unavailable|session|stale/i.test(String(message||''));
-}
-
-async function meterAutoCalReadCodePatch(code,label,range,dtype){
- const numeric=Number(code);
- const ire=meterAutoCalIreForCode(numeric,range);
- const payload=meterAutoCalMeasurementSignalContext({
-  display_type:dtype,
-  refresh_rate:getMeterRefreshRate()||undefined,
-  delay_ms:Math.max(meterDelayMs(),1200),
-  // The autocal inner-loop single reads also need the operator's CCSS
-  // override so a custom profile survives every patch probe.
-  ccss_override:(typeof getCcssOverride==='function')?getCcssOverride():undefined,
-  patch_r:numeric,
-  patch_g:numeric,
-  patch_b:numeric,
-  ire:ire,
-  stimulus:ire,
-  name:label,
-  patch_size:getMeterPatchSize(),
-  target_gamut:(document.getElementById('meterTargetGamut')||{}).value||'auto',
-  target_gamma:meterAutoCalTargetGammaValue(),
-  signal_range:range,
-  transport_signal_range:range
- });
- payload.require_device_ready=meterSelectedMeasurementRequiresReady();
- const referenceBlack=(numeric<=0 || (String(range)==='1'&&numeric<=16));
- let lastMessage='';
- for(let attempt=0;attempt<3;attempt++){
-  if(meterAutoCalStopRequested) throw new Error('LG Auto Cal stopped');
-  let shouldRetry=false;
-  try{
-   const result=await meterStartSingleReadWithTimeout(payload,referenceBlack?45000:180000,()=>meterAutoCalStopRequested);
-   if(result&&result.status==='ok'&&Array.isArray(result.readings)&&result.readings[0]) return result;
-   if(result&&result.status==='cancelled') return result;
-   lastMessage=(result&&result.message)||'Unable to read '+label;
-   shouldRetry=meterAutoCalReadTransient(lastMessage);
-  }catch(e){
-   lastMessage=(e&&e.message)?e.message:'Unable to read '+label;
-   shouldRetry=meterAutoCalReadTransient(lastMessage);
-  }
-  try{ await fetchJSON('/api/meter/session/stop',{method:'POST',_quiet:true,_timeoutMs:5000}); }catch(e){}
-  if(referenceBlack&&/timeout|timed out/i.test(lastMessage)) break;
-  if(!shouldRetry) break;
-  if(attempt<2){
-   meterAutoCalSetOverlay(true,{phase:'preflight',current_name:'Retrying meter read',message:label+' - '+lastMessage});
-   await new Promise(resolve=>setTimeout(resolve,800+(attempt*500)));
-  }
- }
- if(referenceBlack){
-  return {status:'ok',readings:[{luminance:0,Y:0,ire:ire,name:label,r_code:numeric,g_code:numeric,b_code:numeric,synthetic_black:true}]};
- }
- return {status:'error',message:lastMessage||('Unable to read '+label)};
-}
-
-async function meterAutoCalMeasureClipSet(kind,codes,dtype,range){
- const readings={};
- for(const code of codes){
-  if(meterAutoCalStopRequested) throw new Error('LG Auto Cal stopped');
-  meterAutoCalSetOverlay(true,{phase:'preflight',current_name:kind==='black'?'Tuning Black Brightness':'Tuning White Contrast',message:'Reading code '+code});
-  const result=await meterAutoCalReadCodePatch(code,(kind==='black'?'Black ':'White ')+code,range,dtype);
-  if(!result||result.status!=='ok'||!Array.isArray(result.readings)||!result.readings[0]) throw new Error((result&&result.message)||'Unable to read '+code);
-  readings[String(code)]=result.readings[0];
- }
- return readings;
-}
-
-function meterAutoCalBlackClipOk(readings,codes){
- return meterAutoCalBlackClipState(readings,codes).ok;
-}
-
-function meterAutoCalBlackClipState(readings,codes){
- const y0=meterAutoCalReadingY(readings[String(codes[0])]);
- const y1=meterAutoCalReadingY(readings[String(codes[1])]);
- const y2=meterAutoCalReadingY(readings[String(codes[2])]);
- const floorLimit=Math.max(0.001,Math.max(y1,y2)*0.25);
- const floorOk=y0<=floorLimit;
- const blackTo17Separated=meterAutoCalLevelSeparated(y0,y1,'black');
- const blackTo18Separated=meterAutoCalLevelSeparated(y0,y2,'black');
- const nearBlackSeparated=meterAutoCalLevelSeparated(y1,y2,'black');
- const firstVisible=blackTo18Separated||nearBlackSeparated;
- return {ok:floorOk&&firstVisible,floorOk:floorOk,floorRaised:!floorOk,separated:firstVisible,blackTo17Separated:blackTo17Separated,blackTo18Separated:blackTo18Separated,nearBlackSeparated:nearBlackSeparated,y0:y0,y1:y1,y2:y2};
-}
-
-function meterAutoCalBlackFloorOk(readings,codes){
- return meterAutoCalBlackClipState(readings,codes).floorOk;
-}
-
-function meterAutoCalWhiteClipOk(readings,codes){
- return meterAutoCalWhiteClipState(readings,codes).ok;
-}
-
-function meterAutoCalWhiteClipState(readings,codes){
- const values=codes.map(code=>meterAutoCalReadingY(readings[String(code)]));
- const lowerIndex=Math.max(0,values.length-3);
- const midIndex=Math.max(0,values.length-2);
- const topIndex=Math.max(0,values.length-1);
- const lowerSeparated=values.length>=3?meterAutoCalLevelSeparated(values[lowerIndex],values[midIndex],'white'):true;
- const topSeparated=meterAutoCalLevelSeparated(values[midIndex],values[topIndex],'white');
- const targetReached=lowerSeparated&&topSeparated;
- return {ok:targetReached,clipped:!targetReached,tooHigh:!targetReached,lowerSeparated:lowerSeparated,topSeparated:topSeparated,y0:values[0],y1:values[values.length-1],values:values};
-}
-
-async function meterAutoCalLoadClipControls(){
- const r=await fetchJSON('/api/lg/picture-settings',{
-  method:'POST',
-  headers:{'Content-Type':'application/json'},
-  body:JSON.stringify({keys:['pictureMode','brightness','contrast'],picture_mode:meterLgPictureModeValue()}),
-  _quiet:true,
-  _timeoutMs:10000
- });
- const picture=(r&&r.status==='ok'&&r.picture_settings)?r.picture_settings:{};
- return {
-  pictureMode:picture.pictureMode||meterLgPictureModeValue(),
-  brightness:Number.isFinite(Number(picture.brightness))?Number(picture.brightness):null,
-  contrast:Number.isFinite(Number(picture.contrast))?Number(picture.contrast):null
- };
-}
-
-async function meterAutoCalWriteClipControl(key,value,pictureMode){
- if(key!=='brightness'&&key!=='contrast') throw new Error('Unsupported clipping control: '+key);
- if(!Number.isFinite(Number(value))) throw new Error('Invalid '+key+' value.');
- const settings={};
- settings[key]=Math.max(0,Math.min(100,Math.round(Number(value))));
- const r=await fetchJSON('/api/lg/picture-settings/set',{
-  method:'POST',
-  headers:{'Content-Type':'application/json'},
-  body:JSON.stringify({settings:settings,picture_mode:pictureMode||'',readback_keys:[key]}),
-  _quiet:true,
-  _timeoutMs:20000
- });
- if(!r||r.status!=='ok') throw new Error((r&&(r.repair_hint||r.message))||'Unable to adjust '+key);
- const pic=r.picture_settings||{};
- const readback=Number(pic[key]);
- return Number.isFinite(readback)?readback:settings[key];
-}
-
-async function meterAutoCalRunLevelPreflight(){
- const codes=meterAutoCalClipCodes();
- const dtype=meterAutoCalPendingConfig&&meterAutoCalPendingConfig.dtype?meterAutoCalPendingConfig.dtype:getEffectiveDisplayType();
- const controls=await meterAutoCalLoadClipControls();
- let brightness=controls.brightness;
- let contrast=controls.contrast;
- let blackReadings=null;
- let whiteReadings=null;
- let lastGoodBrightness=null;
- let lastGoodBlackReadings=null;
- let lastFloorSafeBrightness=null;
- let lastFloorSafeBlackReadings=null;
- for(let attempt=0;attempt<12;attempt++){
-  blackReadings=await meterAutoCalMeasureClipSet('black',codes.black,dtype,codes.range);
-  const blackState=meterAutoCalBlackClipState(blackReadings,codes.black);
-  if(blackState.floorOk) {
-   lastFloorSafeBrightness=brightness;
-   lastFloorSafeBlackReadings=blackReadings;
-  }
-  if(blackState.ok) {
-   lastGoodBrightness=brightness;
-   lastGoodBlackReadings=blackReadings;
-   break;
-  }
-  if(!Number.isFinite(Number(brightness))) throw new Error('Black clipping failed and LG brightness is not writable.');
-  if(blackState.floorRaised&&lastFloorSafeBrightness!=null){
-   brightness=await meterAutoCalWriteClipControl('brightness',lastFloorSafeBrightness,controls.pictureMode);
-   blackReadings=lastFloorSafeBlackReadings||blackReadings;
-   meterAutoCalSetOverlay(true,{phase:'preflight',current_name:'Tuning Black Brightness',message:'Preserving black floor at brightness '+brightness});
-   break;
-  }
-  const delta=blackState.floorRaised?-1:1;
-  brightness=await meterAutoCalWriteClipControl('brightness',Number(brightness)+delta,controls.pictureMode);
-  meterAutoCalSetOverlay(true,{phase:'preflight',current_name:'Tuning Black Brightness',message:'Brightness '+brightness});
- }
- const finalBlackState=meterAutoCalBlackClipState(blackReadings,codes.black);
- if(!finalBlackState.floorOk) throw new Error('Black floor is still raised after brightness adjustment.');
- const optimizeBlackSeparation=finalBlackState.ok;
- if(Number.isFinite(Number(brightness))&&optimizeBlackSeparation){
-  for(let attempt=0;attempt<6;attempt++){
-   if(Number(brightness)<=0) break;
-   const testBrightness=await meterAutoCalWriteClipControl('brightness',Number(brightness)-1,controls.pictureMode);
-   meterAutoCalSetOverlay(true,{phase:'preflight',current_name:'Tuning Black Brightness',message:'Brightness '+testBrightness});
-   const testReadings=await meterAutoCalMeasureClipSet('black',codes.black,dtype,codes.range);
-   if(meterAutoCalBlackClipOk(testReadings,codes.black)){
-    brightness=testBrightness;
-    blackReadings=testReadings;
-    lastGoodBrightness=brightness;
-    lastGoodBlackReadings=blackReadings;
-    continue;
-   }
-   if(lastGoodBrightness!=null) {
-    brightness=await meterAutoCalWriteClipControl('brightness',lastGoodBrightness,controls.pictureMode);
-    blackReadings=lastGoodBlackReadings||blackReadings;
-   }
-   break;
-  }
- }
- let lastGoodContrast=null;
- let lastGoodWhiteReadings=null;
- for(let attempt=0;attempt<36;attempt++){
-  whiteReadings=await meterAutoCalMeasureClipSet('white',codes.white,dtype,codes.range);
-  const whiteState=meterAutoCalWhiteClipState(whiteReadings,codes.white);
-  if(whiteState.ok) {
-   lastGoodContrast=contrast;
-   lastGoodWhiteReadings=whiteReadings;
-   break;
-  }
-  if(!Number.isFinite(Number(contrast))) throw new Error('White contrast tuning failed and LG contrast is not writable.');
-  if(Number(contrast)<=0) break;
-  contrast=await meterAutoCalWriteClipControl('contrast',Number(contrast)-1,controls.pictureMode);
-  meterAutoCalSetOverlay(true,{phase:'preflight',current_name:'Tuning White Contrast',message:'Contrast '+contrast});
- }
- if(!meterAutoCalWhiteClipOk(whiteReadings,codes.white)) throw new Error('White contrast tuning still failed after contrast adjustment.');
- if(Number.isFinite(Number(contrast))){
-  for(let attempt=0;attempt<36;attempt++){
-   if(Number(contrast)>=100) break;
-   const testContrast=await meterAutoCalWriteClipControl('contrast',Number(contrast)+1,controls.pictureMode);
-   meterAutoCalSetOverlay(true,{phase:'preflight',current_name:'Tuning White Contrast',message:'Contrast '+testContrast});
-   const testReadings=await meterAutoCalMeasureClipSet('white',codes.white,dtype,codes.range);
-   if(meterAutoCalWhiteClipOk(testReadings,codes.white)){
-    contrast=testContrast;
-    whiteReadings=testReadings;
-    lastGoodContrast=contrast;
-    lastGoodWhiteReadings=whiteReadings;
-    continue;
-   }
-   if(lastGoodContrast!=null){
-    contrast=await meterAutoCalWriteClipControl('contrast',lastGoodContrast,controls.pictureMode);
-    whiteReadings=lastGoodWhiteReadings||whiteReadings;
-    meterAutoCalSetOverlay(true,{phase:'preflight',current_name:'Tuning White Contrast',message:'Backed off contrast to '+contrast});
-   }
-   break;
-  }
- }
- return {brightness:brightness,contrast:contrast,range:codes.range,black_codes:codes.black,white_codes:codes.white,black_readings:blackReadings,white_readings:whiteReadings};
 }
 
 async function meterAutoCalResetDdc(){
@@ -6467,16 +6181,6 @@ function meterFullAutoCalReportSetAnyData(stage){
  return !!(set&&series.some(item=>meterSeriesSnapshotHasReadings(set[item.key])));
 }
 
-function meterFullAutoCalReportStatusText(stage){
- const data=meterFullAutoCalLoadReportData();
- const set=data&&data[stage];
- if(!set) return '';
- return meterFullAutoCalReportSeries().map(item=>{
-  const count=(set[item.key]&&Array.isArray(set[item.key].readings))?set[item.key].readings.filter(rd=>meterReadingHasLuminance(rd)).length:0;
-  return item.label+': '+count;
- }).join(' | ');
-}
-
 function meterFullAutoCalPromptDefaults(){
  // This is the very first "Review the workflow" prompt shown before Full
  // AutoCal starts -- DV DOES reach it, and needs its own copy: DV's transport
@@ -6568,16 +6272,6 @@ function meterFullAutoCalDefaultConfig(){
 	  darkDetailEnabled:false
  };
 	}
-
-function meterConfigFlag(config,key,fallback){
- if(config&&Object.prototype.hasOwnProperty.call(config,key)) return config[key]!==false;
- return !!fallback;
-}
-
-function meterFullAutoCalRunConfigFlag(key,fallback){
- if(meterFullAutoCalRunning&&(!meterFullAutoCalConfig||!Object.prototype.hasOwnProperty.call(meterFullAutoCalConfig,key))) return false;
- return meterConfigFlag(meterFullAutoCalConfig,key,fallback);
-}
 
 function meterFullAutoCalPostCommitPolishEnabled(){
  return false;
@@ -7148,10 +6842,6 @@ async function meterFullAutoCalCompleteAfterHdrToneMap(status,options,source){
   meterFullAutoCalAbort((e&&e.message)||'HDR tone-map upload failed',true);
   return false;
  }
-}
-
-function meterFullAutoCalTouchupChoiceValue(){
- return false;
 }
 
 	function meterFullAutoCalSyncMeticulousChoices(source){
@@ -8192,10 +7882,6 @@ async function meterFullAutoCalGeneratePostReport(){
   if(skipBtn) skipBtn.disabled=false;
   meterUpdateReadButtons();
  }
-}
-
-async function meterFullAutoCalSkipPostReport(){
- await meterAutoCalCloseCompleteAction();
 }
 
 async function meterStartFullAutoCal(){
@@ -13500,28 +13186,6 @@ function meterGreyscaleInteractionXForChart(canvasId,step,steps,idx){
  return meterGreyCategoryChartX(steps,idx);
 }
 
-function meterSeriesMeasuredSegments(steps,readingMap,pointBuilder){
- const segments=[];
- let current=[];
- (steps||[]).forEach((step,idx)=>{
-  const reading=readingMap?readingMap[step.ire]:null;
-  if(!reading){
-   if(current.length) segments.push(current);
-   current=[];
-   return;
-  }
-  const point=pointBuilder(reading,step,idx);
-  if(!point){
-   if(current.length) segments.push(current);
-   current=[];
-   return;
-  }
-  current.push(point);
- });
- if(current.length) segments.push(current);
- return segments;
-}
-
 function meterTargetShapedCurveFraction(a,b,signal,targetValueForSignal,t){
  if(!a||!b||typeof targetValueForSignal!=='function') return t;
  const aSignal=Number(a.signal);
@@ -13711,11 +13375,6 @@ function meterMeasuredEotfLuminanceSegments(steps,readingMap,axisMax,targetValue
 function meterMeasuredEotfLuminanceDotPoints(steps,readingMap,axisMax,scaleLuminance,mode){
  const segs=meterDirectMeasuredEotfLuminanceSegments(steps,readingMap,axisMax,scaleLuminance,mode);
  return [].concat(...segs);
-}
-
-function meterGammaPlotAnchorStep(steps,idx){
- if(!Array.isArray(steps)||idx<0||idx>=steps.length) return null;
- return idx>0 ? steps[idx-1] : steps[idx];
 }
 
 // Redraws only the EOTF chart (used by log-scale toggle so the ΔE chart is
@@ -14999,41 +14658,6 @@ function drawDashedLine(ctx,chart,points,color,width){
  ctx.setLineDash([]);
 }
 
-// Annotate the 0% IRE data point on an EOTF/Gamma chart with the actual
-// measured black level (Lb). The chart's Y axis spans 0 to peak, so a lifted
-// black (e.g. 0.05 cd/m^2 on a 1000 nit panel) is plotted at y ~ 0.00005 --
-// visually indistinguishable from true black and labelled "0.0" by the
-// axis. Without this annotation, the only signal of a real black lift is
-// the existing "Min cd/m^2: Lb" footer text, which is easy to miss while
-// the chart is in motion. Draws a small yellow callout next to the 0% dot.
-function meterDrawLiftedBlackLabel(ctx,chart,axisMax,yTop,Lb,measureSteps,scaleFn){
- return; // operator opted to hide the 0% black callout (no-op stub)
- if(!(Lb>0) || !ctx || !chart) return;
- const zeroStep=(measureSteps||[]).find(s=>Math.abs(Number((s&&s.ire!=null)?s.ire:0))<0.5);
- if(!zeroStep) return;
- const zeroX=meterGreyEotfLuminanceChartX(zeroStep,measureSteps,measureSteps.indexOf(zeroStep),axisMax);
- const scaled=scaleFn(Lb);
- if(!(Number.isFinite(zeroX)) || !(Number.isFinite(scaled))) return;
- const px=chart.toX(zeroX);
- const py=chart.toY(Math.max(0,Math.min(1,scaled)));
- // The 0% point sits on the X axis. Place the label 14px above and offset
- // right so it doesn't collide with the Y axis tick or the point itself.
- const labelX=Math.min(ctx.w-chart.pad.r-44, px+10);
- const labelY=Math.max(chart.pad.t+12, py-8);
- ctx.save();
- ctx.font='bold 10px sans-serif';
- ctx.textAlign='left';
- ctx.textBaseline='alphabetic';
- // Filled pill for legibility against grid lines and the measured curve.
- const text='0% = '+Lb.toFixed(Lb<1?3:1)+' cd/m\u00B2';
- const w=ctx.measureText(text).width+8;
- ctx.fillStyle='rgba(255,235,59,0.92)';
- ctx.fillRect(labelX-4,labelY-9,w,14);
- ctx.fillStyle='#1a1a22';
- ctx.fillText(text,labelX,labelY+2);
- ctx.restore();
-}
-
 function meterGreyscaleRgbBalanceReference(gs){
  let effectiveWhiteRGB=meterEffectiveGreyscaleWhiteReference(gs);
  // For manual single reads before 100% is measured, still plot RGB balance
@@ -15201,10 +14825,6 @@ function drawEOTFChart(gs,allSteps,readingMap){
   if(seg.length>1) drawLine(ctx,chart,seg,'#ffeb3b',1.25);
  });
  drawDots(ctx,chart,meterMeasuredEotfLuminanceDotPoints(measureSteps,readingMap,axisMax,eotfPlotMeasured,'eotf'),'#ffeb3b',2.2);
- // Annotate the 0% IRE point with the actual measured Lb (cd/m^2) so a
- // lifted black is visible even though the Y axis spans 0 to peak and
- // the plotted 0% point sits on the X axis.
- meterDrawLiftedBlackLabel(ctx,chart,axisMax,yTop,Lb,measureSteps,eotfPlotMeasured);
  // Optional per-channel R/G/B EOTF overlay (mirrors the Gamma chart's
  // per-channel option). Each channel's measured linear value is normalized to
  // the white reference's same channel, rescaled to the chart reference, then
@@ -15315,10 +14935,6 @@ function drawGammaChart(gs,allSteps,readingMap){
  // Marker on every actual read so a lone reading is visible before a
  // neighbour exists to draw a line to.
  drawDots(ctx,chart,meterMeasuredEotfLuminanceDotPoints(measureSteps,readingMap,axisMax,scaleMeasuredLuminance,'luminance'),'#ffeb3b',2.2);
- // Annotate the 0% IRE point with the actual measured Lb (cd/m^2) so a
- // lifted black is visible even though the Y axis spans 0 to peak and
- // the plotted 0% point sits on the X axis.
- meterDrawLiftedBlackLabel(ctx,chart,axisMax,yTop,Lb,measureSteps,scaleMeasuredLuminance);
  ctx.fillStyle=pgThemeColor('--chart-annotation','#aaa');ctx.font='11px sans-serif';
  ctx.textAlign='left';
  ctx.fillText('Min cd/m\u00B2: '+Lb.toFixed(2),chart.pad.l,ctx.h-2);
@@ -16490,10 +16106,6 @@ function cie2dBindHandlers(canvas){
  canvas.addEventListener('wheel',onWheel,{passive:false});
  canvas.addEventListener('dblclick',onDbl);
  canvas._cie2dHandlers={onDown,onMove,onUp,onWheel,onDbl};
-}
-function cie2dUnbindHandlers(canvas){
- // Handlers stay bound once; mode checks gate behaviour. No-op cleanup.
- if(!canvas) return;
 }
 
 // CIE ΔY% luminance-error ring. Only drawn when Include luminance error is on.
@@ -19591,24 +19203,6 @@ function meterUpdateCustomCcssPanel(value){
  }
  if(summary) summary.textContent=summaryText;
  if(button) button.textContent=(current.startsWith('ccss_')?'Open CCSS Viewer':'Open CCSS Editor');
-}
-
-function meterSelectCustomCcssValue(filename){
- const sel=document.getElementById('meterDisplayType');
- if(!sel||!filename) return;
- const nextValue='custom_'+filename;
- sel.dataset.pendingValue=nextValue;
- sel.value=nextValue;
- if(sel.value===nextValue){
-  delete sel.dataset.pendingValue;
-  sel.dataset.lastStableValue=nextValue;
-  meterApplyDisplayTypeSelection(nextValue,{patchSizeDefault:true});
-  return;
- }
- delete sel.dataset.pendingValue;
- sel.value='custom';
- sel.dataset.lastStableValue='custom';
- meterApplyDisplayTypeSelection('custom');
 }
 
 // Snapshot the custom-CCSS library size BEFORE the editor opens so close-time

@@ -20,16 +20,22 @@
 ###############################################
 #            Write File Function              #
 ###############################################
+# Returns 1 when the content reached $file, 0 when opening, writing,
+# closing or the rename failed: a caller that reports what it wrote
+# (PGenerator.conf) must not report a lost write as done.
 sub write_file(@) {
  my $file_tmp = shift;
  my $file = shift;
  my $content = shift;
  my $do_sync = shift;
- open(FILE,">$file_tmp");
- print FILE $content;
- close(FILE);
- rename("$file_tmp","$file") if($file_tmp ne $file);
+ my $ok = 0;
+ if(open(FILE,">$file_tmp")) {
+  $ok = (print FILE $content) ? 1 : 0;
+  $ok = 0 if(!close(FILE));
+ }
+ $ok = (rename("$file_tmp","$file") ? 1 : 0) if($ok && $file_tmp ne $file);
  &sync() if($do_sync);
+ return $ok;
 }
 
 ###############################################
@@ -61,13 +67,88 @@ sub upload_file(@) {
 ###############################################
 #       Get File Destination Function         #
 ###############################################
+# A target named by a pattern port client: IMAGES, PLUGINS, VIDEO, or one
+# existing folder directly in $var_dir. Anything else ("../x", "a/b", a
+# missing folder) returns "" and the caller refuses the request.
 sub get_destination(@) {
  my $where = shift;
- my $dest = "$var_dir/$where";
- $dest=$pattern_images  if($where eq "IMAGES");
- $dest=$pattern_plugins if($where eq "PLUGINS");
- $dest=$pattern_video   if($where eq "VIDEO");
- return $dest;
+ return "" if(!defined $where);
+ return $pattern_images  if($where eq "IMAGES");
+ return $pattern_plugins if($where eq "PLUGINS");
+ return $pattern_video   if($where eq "VIDEO");
+ return "" if($where !~/^[A-Za-z0-9][A-Za-z0-9._-]*$/);
+ return "" if(-l "$var_dir/$where" || !-d "$var_dir/$where");
+ return "$var_dir/$where";
+}
+
+###############################################
+#           Client Path Functions             #
+###############################################
+# A file name sent by a client: one plain name, never a path. Returns the
+# name, or "" for an empty name, ".", "..", a slash, a backslash or NUL.
+sub safe_file_name(@) {
+ my $name = shift;
+ return "" if(!defined $name || $name eq "" || $name eq "." || $name eq "..");
+ return "" if($name =~/[\/\\\x00]/);
+ return $name;
+}
+
+# $path (relative, already URL-decoded) inside $base: no ".." segment and,
+# with every symlink followed, still inside the real $base. Returns the
+# real path of an existing entry, or "".
+sub path_inside(@) {
+ my ($base,$path) = @_;
+ return "" if(!defined $base || !defined $path || $path =~/\x00/);
+ return "" if(grep { $_ eq ".." } split(/\/+/,$path));
+ require Cwd;
+ my $real_base = Cwd::abs_path($base);
+ return "" if(!defined $real_base || !-e "$base/$path");
+ my $real = Cwd::abs_path("$base/$path");
+ return "" if(!defined $real);
+ return $real if($real eq $real_base || index($real,"$real_base/") == 0);
+ return "";
+}
+
+# A ZIP upload: unpacked into a private folder first, then only plain
+# files and folders are moved into $dest. An entry can neither leave $dest
+# ("../", absolute names) nor plant a symlink there. Returns 1 when every
+# entry arrived.
+sub upload_extract_zip(@) {
+ my ($zip,$dest) = @_;
+ require File::Path;
+ my $stage = "$upload_tmp_dir/UPLOAD_ZIP.".time().".$$";
+ return 0 if(!mkdir($stage,0700));
+ # unzip exits 1 for warnings (e.g. a skipped "../" component).
+ my $rc = system($unzip,"-qq","-o","-d",$stage,$zip);
+ my $ok = ($rc != -1 && ($? >> 8) <= 1) ? 1 : 0;
+ $ok = 0 if($ok && !&upload_move_tree($stage,$dest));
+ File::Path::remove_tree($stage);
+ return $ok;
+}
+
+sub upload_move_tree(@) {
+ my ($from,$to) = @_;
+ require File::Copy;
+ my $dh;
+ return 0 if(!opendir($dh,$from));
+ my @names = grep { $_ ne "." && $_ ne ".." } readdir($dh);
+ closedir($dh);
+ my $ok = 1;
+ foreach my $name (@names) {
+  my ($src,$dst) = ("$from/$name","$to/$name");
+  if(-l $src) {
+   $ok = 0;
+  } elsif(-d $src) {
+   if(-l $dst || (-e $dst && !-d $dst)) { $ok = 0; next; }
+   if(!-d $dst && !mkdir($dst)) { $ok = 0; next; }
+   $ok = 0 if(!&upload_move_tree($src,$dst));
+  } elsif(-f $src) {
+   # Never write through a symlink already in the target.
+   unlink($dst) if(-l $dst);
+   $ok = 0 if(!File::Copy::move($src,$dst));
+  }
+ }
+ return $ok;
 }
 
 ###############################################

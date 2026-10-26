@@ -229,7 +229,6 @@ sub signal_check {
  $d=$d || {known=>0};
  my $format=int($req->{color_format} || 0);
  my $bpc=int($req->{max_bpc} || 8);
- $bpc=8 if($bpc != 8 && $bpc != 10 && $bpc != 12);
  my $mode=lc($req->{signal_mode} || "sdr");
  my $dv=($mode eq "dv") ? 1 : 0;
  my $lldv=($dv && lc($req->{dv_transport} || "") eq "lldv") ? 1 : 0;
@@ -243,6 +242,10 @@ sub signal_check {
   return \%r;
  };
 
+ # A value the renderer would read differently is refused, not checked as
+ # something else (bit depth 9 as 8 bits, colour format -1 as RGB).
+ return $refuse->("value","Bit depth $bpc is not available. Choose 8, 10 or 12 bits.") if($bpc != 8 && $bpc != 10 && $bpc != 12);
+ return $refuse->("value","Colour format $format is not available. Choose RGB, YCbCr 4:4:4 or YCbCr 4:2:2.") if($format < 0 || $format > 3);
  return $refuse->("format","YCbCr 4:2:0 is not available: PGenerator+ has no 4:2:0 output. Choose RGB, YCbCr 4:4:4 or YCbCr 4:2:2.") if($format == 3);
 
  # 4:2:2 travels in a 12-bit container; the renderer draws it from 10-bit

@@ -802,72 +802,6 @@ function meterIccPatchControlChanged(source){
  meterIccSyncUi();
 }
 
-function meterIccPatchFractions(quality,profileType,profileModel){
- quality=quality==='quick'?'small':quality==='standard'?'medium':quality==='high'?'large':quality;
- const clut=profileModel==='clut';
- const rampCount=quality==='small'?(clut?17:9):(quality==='large'?33:17);
- const cubeCount=clut?(quality==='small'?3:quality==='large'?7:5):(quality==='large'?5:3);
- const patches=[];
- const seen=new Set();
- const add=(r,g,b,name)=>{
-  const key=[r,g,b].map(value=>Math.round(value*100000)).join(':');
-  if(seen.has(key)) return;
-  seen.add(key);
-  patches.push({r,g,b,name});
- };
- add(1,1,1,'ICC White');
- add(0,0,0,'ICC Black');
- add(1,0,0,'ICC Red 100');
- add(0,1,0,'ICC Green 100');
- add(0,0,1,'ICC Blue 100');
- const rampValues=[];
- for(let index=0;index<rampCount;index++) rampValues.push(index/(rampCount-1));
- // A standard 17-point encoded ramp does not take its first non-black sample
- // until about 6.25%. That is too sparse to solve the shaper curves which
- // Windows loads from an SDR MHC2 profile. Add exact low-end 8-bit codes while
- // retaining the evenly spaced ramp across the rest of the range.
- if(profileType==='windows-sdr'||profileType==='sdr'){
-  [3,5,8,10,13,19,26].forEach(code=>rampValues.push(code/255));
- }
- rampValues.sort((a,b)=>a-b);
- for(const value of rampValues){
-  add(value,value,value,'ICC Grey '+Math.round(value*100));
-  add(value,0,0,'ICC Red '+Math.round(value*100));
-  add(0,value,0,'ICC Green '+Math.round(value*100));
-  add(0,0,value,'ICC Blue '+Math.round(value*100));
- }
- for(let ri=0;ri<cubeCount;ri++) for(let gi=0;gi<cubeCount;gi++) for(let bi=0;bi<cubeCount;bi++){
-  const r=ri/(cubeCount-1),g=gi/(cubeCount-1),b=bi/(cubeCount-1);
-  add(r,g,b,'ICC Cube '+Math.round(r*100)+'/'+Math.round(g*100)+'/'+Math.round(b*100));
- }
- return patches;
-}
-
-function meterIccSteps(quality,profileType,profileModel){
- const hdr=profileType==='kde-hdr'||profileType==='windows-hdr';
- const inputMax=hdr?1023:255;
- const code=value=>Math.round(Math.max(0,Math.min(1,value))*inputMax);
- const steps=meterIccPatchFractions(quality,profileType,profileModel).map((patch,index)=>({
-  ire:index,
-  r:code(patch.r),
-  g:code(patch.g),
-  b:code(patch.b),
-  input_max:inputMax,
-  name:patch.name
- }));
- if(profileType==='windows-hdr'){
-  steps.push({
-   ire:100,
-   r:inputMax,
-   g:inputMax,
-   b:inputMax,
-   input_max:inputMax,
-   name:'ICC HDR Metadata White'
-  });
- }
- return steps;
-}
-
 function meterIccPatchesToSteps(patches,profileType,includeMetadataWhite){
  const hdr=profileType==='kde-hdr'||profileType==='windows-hdr';
  const inputMax=hdr?1023:255;
@@ -2451,7 +2385,7 @@ function meterIccShowFineTuneReport(parent,result,passes){
 }
 
 async function meterIccInstallProfile(file,button){
- if(!meterIccCompanionConnected){ showToast('Start Patch Companion on the target computer first','error'); return; }
+ if(!meterIccCompanionConnected){ toast('Start Patch Companion on the target computer first','err'); return; }
  const original=button?button.textContent:'Install & Apply';
  if(button){ button.disabled=true; button.textContent='Installing...'; }
  try{
@@ -2462,14 +2396,14 @@ async function meterIccInstallProfile(file,button){
    await new Promise(resolve=>setTimeout(resolve,750));
    const state=await fetchJSON('/api/icc/companion/profile-install-status?job='+encodeURIComponent(queued.job),{_quiet:true,_timeoutMs:5000});
    if(state&&state.status==='ok'){
-    showToast(state.message||('Installed and applied '+file),'success');
+    toast(state.message||('Installed and applied '+file));
     await meterIccCompanionCycleFullscreen();
     return;
    }
    if(state&&state.status==='error') throw new Error(state.message||'Profile installation failed');
   }
   throw new Error('Patch Companion did not finish the profile installation');
- }catch(error){ showToast(error&&error.message?error.message:'Profile installation failed','error'); }
+ }catch(error){ toast(error&&error.message?error.message:'Profile installation failed','err'); }
  finally{ if(button){ button.disabled=false; button.textContent=original; } }
 }
 

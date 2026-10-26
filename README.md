@@ -347,6 +347,7 @@ PGenerator+ is a free, open-source display calibration suite for the Raspberry P
 
 - **Protocol:** XML calibration protocol (port `20002`). PGenerator+ connects *outbound* to the calibration PC, which helps across subnets.
 - **Connect:** in the Web UI's **Resolve Protocol** card, enter the PC's IP and port and click **Connect**.
+- **Bit depth:** the XML's `bits` is the precision of the patch codes, not an output setting. The output keeps the depth set in the WebUI: 8-bit codes on a 10-bit output take the same 8 → 10-bit step as the G1 patches, 10-bit codes on an 8-bit output are scaled to 8 bits by the renderer.
 - **Windows redirect helper:** `tools/PGenerator-Resolve-Redirect.bat` forwards Calman's local port 20002 to the Pi.
 
 **5. DeviceControl**

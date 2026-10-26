@@ -2083,12 +2083,12 @@ __PG_LOGO_DARK__
   <section class="card-section" id="backupCard" aria-labelledby="setTitle_backup">
    <div class="card-section-head"><h3 class="card-section-title" id="setTitle_backup"><svg class="card-section-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="4.5" rx="1" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><path d="M5 8.5V18a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8.5M10 12.5h4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>Backup</h3></div>
     <div class="btn-grid btn-grid-lg">
-     <button class="btn btn-sm btn-secondary ico-export" id="exportSystemSettingsBtn" onclick="exportSystemSettings()" title="Download PGenerator+ settings, profiles, calibration history and custom diagnostic media">Export System Settings</button>
-     <button class="btn btn-sm btn-secondary ico-import" id="importSystemSettingsBtn" onclick="selectSystemSettingsImport()" title="Restore PGenerator+ settings, profiles, calibration history and custom diagnostic media">Import System Settings</button>
+     <button class="btn btn-sm btn-secondary ico-export" id="exportSystemSettingsBtn" onclick="exportSystemSettings()" title="Download PGenerator+ settings, playlists, profiles, calibration history and custom diagnostic media">Export System Settings</button>
+     <button class="btn btn-sm btn-secondary ico-import" id="importSystemSettingsBtn" onclick="selectSystemSettingsImport()" title="Restore PGenerator+ settings, playlists, profiles, calibration history and custom diagnostic media">Import System Settings</button>
      <input type="file" id="systemSettingsImportFile" accept=".pgbackup,application/gzip" style="display:none" onchange="importSystemSettingsFile(this.files&&this.files[0])">
     </div>
     <div id="systemBackupStatus" style="margin-top:6px;font-size:.7rem;color:var(--text2)"></div>
-    <div class="update-hint">System exports include PGenerator+ configuration, custom series, custom meter and ICC profiles, calibration history, LUTs, Dolby Vision configurations, reports, and user-added diagnostic images and videos. Built-in media, caches, logs, hardware identity, and Companion pairing data are excluded.</div>
+    <div class="update-hint">System exports include PGenerator+ configuration, playlists, signal presets, TV menu settings, the TV start screen theme, custom series, custom meter and ICC profiles, calibration history, LUTs, Dolby Vision configurations, reports, and user-added diagnostic images and videos. Built-in media, caches, logs, hardware identity, and Companion pairing data are excluded.</div>
   </section>
  </section>
 

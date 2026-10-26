@@ -47,7 +47,13 @@ BACKUP_SPECS = (
     ("dir", "/var/lib/PGenerator/lg/profile-captures", "calibration profile captures"),
     ("dir", "/var/lib/PGenerator/lg/ddc", "LG DDC configuration"),
     ("dir", "/var/lib/PGenerator/reports/full-autocal", "Full AutoCal reports"),
+    ("file", "/var/lib/PGenerator/playlists/user.json", "pattern playlists"),
+    ("file", "/var/lib/PGenerator/presets/presets.json", "signal presets"),
+    ("file", "/var/lib/PGenerator/tvmenu/settings.json", "TV menu settings"),
+    ("file", "/var/lib/PGenerator/ui/bootscreen.theme", "TV start screen theme"),
 )
+
+DATA_DIR = "/var/lib/PGenerator"
 
 
 class BackupError(Exception):
@@ -336,6 +342,18 @@ def apply_pgenerator_ownership(path):
             pass
 
 
+def missing_data_parents(destination):
+    """Folders between DATA_DIR and destination that do not exist yet, the
+    deepest first. The import runs as root; folders it creates must belong
+    to the daemon's user, which writes its files there."""
+    missing = []
+    parent = os.path.dirname(destination)
+    while parent.startswith(DATA_DIR + "/") and not os.path.isdir(parent):
+        missing.append(parent)
+        parent = os.path.dirname(parent)
+    return missing
+
+
 def create_rollback_snapshot(software_version):
     directory = "/var/lib/PGenerator/system-backups"
     if not os.path.isdir(directory):
@@ -364,6 +382,7 @@ def restore_archive(archive_path, software_version):
         restored_files = 0
         for kind, destination, label in BACKUP_SPECS:
             source = os.path.join(staging_dir, *archive_name(destination).split("/"))
+            new_parents = missing_data_parents(destination)
             if kind == "file":
                 if not os.path.isfile(source):
                     continue
@@ -374,8 +393,9 @@ def restore_archive(archive_path, software_version):
                     continue
                 restored_files += sum(len(files) for unused_root, unused_dirs, files in os.walk(source))
                 merge_tree(source, destination)
-            if destination.startswith("/var/lib/PGenerator/"):
-                apply_pgenerator_ownership(destination)
+            if destination.startswith(DATA_DIR + "/"):
+                # A new folder holds only what was just restored.
+                apply_pgenerator_ownership(new_parents[-1] if new_parents else destination)
             restored_components.append(label)
         return {
             "status": "ok",

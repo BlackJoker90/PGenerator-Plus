@@ -17,7 +17,6 @@ try:
     import numpy as np
 
     from pgen_colour_math import (
-        BRADFORD,
         D65_WHITE,
         ICC_D50_WHITE,
         PQ_C1,
@@ -27,8 +26,6 @@ try:
         PQ_M2,
         bradford_adaptation as shared_bradford_adaptation,
         matrix3_inverse,
-        matrix3_multiply as mat_mul,
-        matrix3_vector_multiply as mat_vec,
     )
 except ImportError as import_error:
     print("Companion LUT builder cannot start: {}".format(import_error),

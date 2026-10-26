@@ -2582,7 +2582,6 @@ function pgApplyStats(stats){
   deviceUptime.title=uptimeText;
  }
 }
-function setSwitch(id,on){const e=document.getElementById(id);if(e)e.checked=!!on;}
 function switchBusy(id,busy){const e=document.getElementById(id);if(e)e.disabled=!!busy;}
 // Device Info: the SoC temperature as a vital. The bar spans 0-85 degC (the
 // hard limit); the tones follow the 80 degC throttle point.
@@ -2683,7 +2682,7 @@ function rangeCheckEdidHtml(rc){
  if(!rc||!rc.verdict) return '';
  const label={match:'Match',mismatch:'Mismatch',uncertain:'Uncertain'}[rc.verdict]||'No data';
  const color={match:'var(--status-success)',mismatch:'var(--status-error)',uncertain:'var(--status-warning)'}[rc.verdict]||'var(--text2)';
- return '<div style="margin-top:6px"><b>EDID check, display range on Auto: <span style="color:'+color+'">'+label+'</span></b> &mdash; '+selftestEsc(rc.reason||'')+' A range set by hand on the display is not visible to the Pi: the panel on screen shows how it decodes.</div>';
+ return '<div style="margin-top:6px"><b>EDID check, display range on Auto: <span style="color:'+color+'">'+label+'</span></b> &mdash; '+pgHtmlEsc(rc.reason||'')+' A range set by hand on the display is not visible to the Pi: the panel on screen shows how it decodes.</div>';
 }
 function diagSetInfoHtml(html){
  const el=document.getElementById('diagInfo');
@@ -2763,19 +2762,6 @@ async function diagDeleteSelectedAsset(kind){
  } finally {
   diagUpdateDeleteButtonState(kind);
  }
-}
-async function diagPlaySelectedAsset(kind){
- const sel=document.getElementById(diagAssetSelectId(kind));
- if(!sel) return;
- const value=sel.value||sel.dataset.lastSelected||'';
- if(!value||value===DIAG_UPLOAD_SENTINEL){
-  toast('Choose a custom diagnostic '+kind+' first',true);
-  return;
- }
- sel.value=value;
- sel.dataset.lastSelected=value;
- diagBlurElement(sel);
- await diagShowUploadedAsset(kind,value,true);
 }
 async function diagLoadAssetCatalog(kind,preserveValue){
  const path=kind==='video'?'/api/diagnostic/videos':'/api/diagnostic/images';
@@ -3148,31 +3134,6 @@ async function stopPattern(){
 }
 document.getElementById('diagCustomVideoInput').addEventListener('change',evt=>diagHandleAssetUpload('video',evt));
 document.getElementById('diagCustomImageInput').addEventListener('change',evt=>diagHandleAssetUpload('image',evt));
-function toggleSection(el){el.parentElement.classList.toggle('collapsed');}
-function getPatternTargetMax(){
- const sm=getVal('signal_mode');
- if(sm==='dv')return 255;
- const bits=parseInt(getVal('max_bpc')||'8',10);
- if(bits>=12)return 4095;
- if(bits>=10)return 1023;
- return 255;
-}
-function isPqStimulusMode(){
- const sm=getVal('signal_mode');
- return sm==='hdr10'||sm==='dv';
-}
-function getPatternPeakCode(){
- const maxCode=getPatternTargetMax();
- if(isPqStimulusMode()){
-  const peak=clampNum(document.getElementById('max_luma').value||1000,0,10000);
-  return Math.round(pqEncodeNormalized(peak)*maxCode);
- }
- return maxCode;
-}
-function stimulusPercentToCode(percent){
- const pct=clampNum(percent,0,100);
- return Math.round(getPatternPeakCode()*pct/100);
-}
 function buildCalPatterns(){
  // Greyscale, Color Checker and Saturation Sweep grids were removed from the
  // Test Patterns card — those series are now driven exclusively by the Meter
@@ -3180,11 +3141,6 @@ function buildCalPatterns(){
 }
 buildCalPatterns();
 
-function dvTransportDefault(configKey,capsKey,fallback){
- if(caps&&caps[capsKey]!=null) return String(caps[capsKey]);
- if(config&&config[configKey]!=null) return String(config[configKey]);
- return fallback;
-}
 function dvTransportMode(value){
  // Same rule as pg_dv_transport_mode() in variables.pm.
  return String(value||'').toLowerCase()==='lldv' ? 'lldv' : 'standard';
@@ -3416,7 +3372,7 @@ let playlistPollTimer=null;
 let playlistBusy=false;
 let playlistDraft=null;
 const PLAYLIST_THUMB={black_clipping:'black',white_clipping:'white',overscan:'overscan'};
-function playlistEsc(v){ return selftestEsc(v); }
+function playlistEsc(v){ return pgHtmlEsc(v); }
 function playlistThumb(item,cls){
  cls=cls||'';
  if(!item) return '<span class="pat-thumb '+cls+'" aria-hidden="true"></span>';
@@ -3704,7 +3660,8 @@ const SELFTEST_STATUS_TEXT={pending:'Waiting',running:'Testing',pass:'Bit-exact'
 let selftestState=null;
 let selftestPollTimer=null;
 let selftestOpen={};
-function selftestEsc(v){
+// Text for innerHTML: data from the network or a device is text, never markup.
+function pgHtmlEsc(v){
  return String(v==null?'':v).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 }
 // Swatch fill for a test window: the code's level on its own scale.
@@ -3730,24 +3687,24 @@ function selftestModeRow(mode,result,running){
  const windows=(r.checks||[]).filter(c=>c.swatch);
  const groupKey=mode.group==='SDR'?'sdr':mode.group==='HDR10'?'hdr':'dv';
  // Narrow cards show "DV" so the state still fits on the first line.
- const groupLabel=groupKey==='dv'?'<span class="selftest-group-long">'+selftestEsc(mode.group)+'</span><span class="selftest-group-short" aria-hidden="true">DV</span>':selftestEsc(mode.group);
+ const groupLabel=groupKey==='dv'?'<span class="selftest-group-long">'+pgHtmlEsc(mode.group)+'</span><span class="selftest-group-short" aria-hidden="true">DV</span>':pgHtmlEsc(mode.group);
  const open=!!selftestOpen[mode.id]&&(r.checks||[]).length>0;
  // Framebuffer channel order as the renderer stores it.
  const fmt=(r.link&&r.link.format)||'';
  const chans=' <span class="selftest-chans">'+(/4:4:4/.test(fmt)?'Cb Cr Y':/4:2:2/.test(fmt)?'Y Cb Cr':'R G B')+'</span>';
- const strip=windows.length?windows.map(c=>'<span class="selftest-swatch'+(c.ok?'':' is-off')+'" style="background:'+selftestSwatchColor(c.swatch)+'" title="'+selftestEsc(c.label+': '+(c.ok?'exact':'expected '+c.expect+', read '+c.got))+'"></span>').join('')
+ const strip=windows.length?windows.map(c=>'<span class="selftest-swatch'+(c.ok?'':' is-off')+'" style="background:'+selftestSwatchColor(c.swatch)+'" title="'+pgHtmlEsc(c.label+': '+(c.ok?'exact':'expected '+c.expect+', read '+c.got))+'"></span>').join('')
   :'';
  const score=r.total?r.passed+'/'+r.total:'';
- const rows=(r.checks||[]).map(c=>'<tr class="'+(c.ok?'':'is-off')+'"><th scope="row">'+(c.swatch?'<span class="selftest-swatch" style="background:'+selftestSwatchColor(c.swatch)+'"></span>':'')+selftestEsc(c.label)+'</th><td>'+selftestEsc(c.expect)+'</td><td>'+selftestEsc(c.got)+'</td><td class="selftest-cell-state">'+(c.ok?(c.swatch?'Exact':'Match'):(c.info?'Not verified':'Mismatch'))+'</td></tr>').join('');
+ const rows=(r.checks||[]).map(c=>'<tr class="'+(c.ok?'':'is-off')+'"><th scope="row">'+(c.swatch?'<span class="selftest-swatch" style="background:'+selftestSwatchColor(c.swatch)+'"></span>':'')+pgHtmlEsc(c.label)+'</th><td>'+pgHtmlEsc(c.expect)+'</td><td>'+pgHtmlEsc(c.got)+'</td><td class="selftest-cell-state">'+(c.ok?(c.swatch?'Exact':'Match'):(c.info?'Not verified':'Mismatch'))+'</td></tr>').join('');
  const detail=(r.checks||[]).length?
   '<div class="selftest-detail" id="selftestDetail_'+mode.id+'"'+(open?'':' hidden')+'>'+
-   (r.link&&r.link.avi?'<p class="selftest-detail-meta">AVI infoframe <code>'+selftestEsc(r.link.avi)+'</code>'+(r.link.prop>=0?' · range property '+selftestEsc(r.link.prop):'')+'</p>':'')+
+   (r.link&&r.link.avi?'<p class="selftest-detail-meta">AVI infoframe <code>'+pgHtmlEsc(r.link.avi)+'</code>'+(r.link.prop>=0?' · range property '+pgHtmlEsc(r.link.prop):'')+'</p>':'')+
    '<table class="selftest-table"><thead><tr><th scope="col">Check</th><th scope="col">Expected'+chans+'</th><th scope="col">Read back'+chans+'</th><th scope="col"><span class="sr-only">Result</span></th></tr></thead><tbody>'+rows+'</tbody></table>'+
   '</div>':'';
- return '<li class="selftest-mode" data-status="'+selftestEsc(status)+'" data-group="'+groupKey+'">'+
+ return '<li class="selftest-mode" data-status="'+pgHtmlEsc(status)+'" data-group="'+groupKey+'">'+
   '<button type="button" class="selftest-mode-head"'+((r.checks||[]).length?' aria-expanded="'+open+'" aria-controls="selftestDetail_'+mode.id+'"':' disabled')+' data-mode="'+mode.id+'">'+
-   '<span class="selftest-mode-id"><span class="selftest-group">'+groupLabel+'</span><span class="selftest-mode-title"><span class="selftest-mode-name">'+selftestEsc(mode.label)+'</span><span class="selftest-bits" data-bits="'+mode.depth+'">'+mode.depth+'-bit</span></span></span>'+
-   '<span class="selftest-mode-link">'+selftestEsc(r.note||selftestLinkText(r.link))+'</span>'+
+   '<span class="selftest-mode-id"><span class="selftest-group">'+groupLabel+'</span><span class="selftest-mode-title"><span class="selftest-mode-name">'+pgHtmlEsc(mode.label)+'</span><span class="selftest-bits" data-bits="'+mode.depth+'">'+mode.depth+'-bit</span></span></span>'+
+   '<span class="selftest-mode-link">'+pgHtmlEsc(r.note||selftestLinkText(r.link))+'</span>'+
    '<span class="selftest-strip" aria-hidden="true">'+strip+'</span>'+
    '<span class="selftest-score">'+score+'</span>'+
    '<span class="selftest-state"><span class="selftest-dot" aria-hidden="true"></span>'+(SELFTEST_STATUS_TEXT[status]||status).replace(/-/g,'\u2011')+'</span>'+
@@ -4219,12 +4176,18 @@ async function scanWifi(){
  const list=document.getElementById('wifiList');
  if(!nets||!nets.length){list.innerHTML='<div style="color:var(--text2)">No networks found</div>';return;}
  list.innerHTML='';
- const seen={};
- nets.filter(n=>{if(seen[n.ssid])return false;seen[n.ssid]=1;return true;})
+ const seen=new Set();
+ nets.filter(n=>{if(seen.has(n.ssid))return false;seen.add(n.ssid);return true;})
  .sort((a,b)=>b.signal-a.signal)
  .forEach(n=>{
+  // A network name comes from the air: set as text, never parsed as markup.
   const d=document.createElement('div');d.className='wifi-item';
-  d.innerHTML='<div><div class="name">'+n.ssid+'</div><div class="meta">'+n.security+'</div></div><div class="meta">'+n.signal+' dBm</div>';
+  const info=document.createElement('div');
+  const name=document.createElement('div');name.className='name';name.textContent=String(n.ssid);
+  const sec=document.createElement('div');sec.className='meta';sec.textContent=String(n.security);
+  const sig=document.createElement('div');sig.className='meta';sig.textContent=n.signal+' dBm';
+  info.appendChild(name);info.appendChild(sec);
+  d.appendChild(info);d.appendChild(sig);
   d.onclick=()=>{
    list.querySelectorAll('.wifi-item.is-selected').forEach(item=>item.classList.remove('is-selected'));
    d.classList.add('is-selected');
@@ -4394,19 +4357,20 @@ async function cecScan(){
    const pwr=pwrNames[d.power]||(d.power!==undefined?''+d.power:'?');
    const pwrColor=d.power===0?'#4caf50':d.power===1?'var(--orange)':'var(--text2)';
    html+='<tr style="border-bottom:1px solid var(--border)">';
-   html+='<td style="padding:2px 6px">'+name+'</td>';
-   html+='<td style="padding:2px 6px">'+type+'</td>';
-   html+='<td style="padding:2px 6px">'+(d.phys||'')+'</td>';
-   html+='<td style="padding:2px 6px">'+vendor+'</td>';
-   html+='<td style="padding:2px 6px;color:'+pwrColor+'">'+pwr+'</td>';
+   // Names and addresses come from the devices on the HDMI bus.
+   html+='<td style="padding:2px 6px">'+pgHtmlEsc(name)+'</td>';
+   html+='<td style="padding:2px 6px">'+pgHtmlEsc(type)+'</td>';
+   html+='<td style="padding:2px 6px">'+pgHtmlEsc(d.phys||'')+'</td>';
+   html+='<td style="padding:2px 6px">'+pgHtmlEsc(vendor)+'</td>';
+   html+='<td style="padding:2px 6px;color:'+pwrColor+'">'+pgHtmlEsc(pwr)+'</td>';
    html+='</tr>';
   });
   html+='</table>';
-  html+='<div style="margin-top:4px;color:var(--text2)">PGenerator+: '+r.data.self.phys+' (logical '+r.data.self.log+')</div>';
+  html+='<div style="margin-top:4px;color:var(--text2)">PGenerator+: '+pgHtmlEsc(r.data.self.phys)+' (logical '+pgHtmlEsc(r.data.self.log)+')</div>';
   el.innerHTML=html;
   loadCecStatus();
  }else{
-  el.innerHTML='Scan failed: '+(r&&r.message?r.message:'unknown error');
+  el.textContent='Scan failed: '+(r&&r.message?r.message:'unknown error');
   loadCecStatus();
  }
 }
@@ -6531,7 +6495,7 @@ async function systemBackupWaitForReboot(){
 async function exportSystemSettings(){
  const btn=document.getElementById('exportSystemSettingsBtn');
  if(btn){btn.disabled=true;btn.textContent='Creating Backup...';}
- systemBackupSetStatus('Collecting settings, profiles, calibration history and custom diagnostic media...',false);
+ systemBackupSetStatus('Collecting settings, playlists, profiles, calibration history and custom diagnostic media...',false);
  try{
   const response=await fetch('/api/system-backup/export',{method:'POST'});
   if(!response.ok){
@@ -8391,19 +8355,11 @@ function meterContainerGamut(){
  return GAMUT_PRESETS[meterContainerGamutKey()]||GAMUT_PRESETS.bt709;
 }
 
-function meterActiveGamut(){
- return GAMUT_PRESETS[meterActiveGamutKey()]||GAMUT_PRESETS.bt709;
-}
-
 function meterDvMapModeValue(){
  const active=(typeof meterActiveSeriesDvMapMode!=='undefined')?String(meterActiveSeriesDvMapMode||''):'';
  if(active) return active;
  const el=document.getElementById('dv_map_mode');
  return String((el&&el.value) || (config&&config.dv_map_mode) || '2');
-}
-
-function meterDvInterfaceValue(){
- return '0';
 }
 
 // Analysis targets and chart overlays must follow the currently selected
@@ -8574,14 +8530,6 @@ function meterPatchUsesVideoRange(){
  return meterIsLimitedRange();
 }
 
-function meterRangeMin(){
- return meterIsLimitedRange()?16:0;
-}
-
-function meterRangeSpan(){
- return meterIsLimitedRange()?219:255;
-}
-
 // SDR26 super-white ladder (99/105/109 anchors) exists only on YCbCr
 // Limited transports. RGB Limited clamps above legal white, so it uses
 // the Full-shape 24-anchor model with Limited codes; its peak is 100%.
@@ -8650,10 +8598,6 @@ function meterGreyTargetGammaSelection(){
   return calActive ? meterDvAutoTargetGamma() : (selected||meterDvAutoTargetGamma());
  }
  return selected;
-}
-
-function meterDvRelativeUsesGammaChartMath(){
- return false;
 }
 
 function meterHdrAutoCalUsesPowerGammaChartMath(){
@@ -8941,35 +8885,6 @@ function meterDecodeSignalChannel(code){
  return Math.pow(norm,2.4);
 }
 
-function meterEncodeSignalChannel(linear){
- const min=meterRangeMin();
- const span=meterRangeSpan();
- const clamped=Math.max(0,Math.min(1,linear||0));
- let encoded=clamped;
- if(meterChartIsDv()){
-  const sel=(typeof meterGreyTargetGammaSelection==='function')?meterGreyTargetGammaSelection():(((document.getElementById('meterTargetGamma')||{}).value||'')||((typeof meterDvAutoTargetGamma==='function')?meterDvAutoTargetGamma():''));
-  encoded=sel==='st2084' ? meterChartPqEncodeNormalized(clamped*10000) : Math.pow(clamped,1/meterDvTunnelGamma());
- }
- else if(meterChartIsPq()){
-  const peak=meterChartHdrPeak();
-  const peakCode=meterChartPqEncodeNormalized(peak)||1;
-  encoded=meterChartPqEncodeNormalized(clamped*peak)/peakCode;
- }
- else if(meterChartIsHlg()) encoded=hlgOetf(clamped);
- else encoded=Math.pow(clamped,1/2.4);
- return Math.round(min+encoded*span);
-}
-
-function meterDvAbsoluteTargetLuminanceForPercent(percent, peak){
- const clamped=clampNum(percent,0,100)/100;
- const targetPeak=(peak>0)?peak:meterChartMasterPeak();
- const sel=(typeof meterGreyTargetGammaSelection==='function')?meterGreyTargetGammaSelection():(((document.getElementById('meterTargetGamma')||{}).value||'')||((typeof meterDvAutoTargetGamma==='function')?meterDvAutoTargetGamma():''));
- if(sel==='st2084') return Math.min(targetPeak,meterChartPqDecodeNormalized(clamped));
- if(sel==='srgb') return Math.min(targetPeak,srgbEotf(clamped)*targetPeak);
- if(sel==='bt1886') return Math.min(targetPeak,gammaEotf(clamped,2.4)*targetPeak);
- return Math.min(targetPeak,gammaEotf(clamped,parseFloat(sel)||2.2)*targetPeak);
-}
-
 function meterDvAbsoluteTargetRollOffFraction(peak){
  const targetPeak=(peak>0)?peak:meterChartMasterPeak();
  return meterChartPqEncodeNormalized(targetPeak);
@@ -9006,10 +8921,6 @@ function meterDvRelativeChartTargetLuminance(ire, peak, code){
 
 function meterCodeFromSignalPercent(percent){
  return meterCodeFromSignalPercentWithOptions(percent,null);
-}
-
-function meterLgSdrExtendedCodeFromPercent(percent){
- return meterPreviewSignalCode(percent,{lgExtendedSdr:true});
 }
 
 function meterLgSdrLegalHeadroomCodeFromPercent(percent){
@@ -9223,10 +9134,6 @@ function meterLgAutoCalCodeForSlot(slot){
  return meterPreviewSignalCode(slot,{lgAutocal26:true});
 }
 
-function meterLgSdrLegalDdcCodeFromPercent(percent){
- return meterPreviewSignalCode(percent,{lgLegalSdrDdc:true});
-}
-
 function meterLgSdrLegalStimulusFromCode(code){
  const numeric=Number(code);
  if(!Number.isFinite(numeric)) return 0;
@@ -9240,13 +9147,6 @@ function meterCodeFromSignalPercentWithOptions(percent,opts){
 
 function meterActualSignalPercent(percent){
  return meterGreySignalFractionFromCode(meterCodeFromSignalPercent(percent))*100;
-}
-
-function meterActualCodePercent(percent){
- const clamped=clampNum(percent,0,100)/100;
- const range=meterGreyCodeRange();
- const code=Math.round(range.min+clamped*range.span);
- return meterGreySignalFractionFromCode(code)*100;
 }
 
 function meterColorLevelPercent(){
@@ -9470,10 +9370,6 @@ function meterSeriesUsesLgTargetWhite(type,points){
  // ColorChecker and Sat Sweep use the White patch from that same series for
  // target Y; stored AutoCal target white can make normal series reads look bad.
  return t==='greyscale'&&meterUseLgAutoCal26(points!=null?points:meterActiveSeriesPoints);
-}
-
-function meterColorSeriesUsesLgTargetWhite(type){
- return meterSeriesUsesLgTargetWhite(type,meterActiveSeriesPoints);
 }
 
 function meterColorSeriesTargetWhiteForRun(type,points){
@@ -10129,18 +10025,6 @@ function meterDecodeColorCheckerSignal(signal){
  return meterTargetSignalToLinear(clamped);
 }
 
-function meterEncodeColorCheckerFullSatChannel(active){
- const min=meterChromaPatchRangeMin();
- const span=meterChromaPatchRangeSpan();
- if(!active) return min;
- if(meterChartIsPq()&&(!meterChartIsDv()||meterDvMapModeValue()==='1')) return Math.round(min+meterChartPqEncodeNormalized(100)*span);
- return min+span;
-}
-
-function meterFullSatChannelIsActive(linear){
- return Number(linear||0) > 1e-6;
-}
-
 function meterEncodeSaturationLinear(linear,colorName){
  const min=meterChromaPatchRangeMin();
  const span=meterChromaPatchRangeSpan();
@@ -10205,22 +10089,6 @@ function meterSaturationStimulusLinearLevel(colorName){
 function meterDvRelativeSaturationFraction(sat){
  const s=Math.max(0,Math.min(1,sat||0));
  return s-(0.8*s*s*(1-s));
-}
-
-function meterGamutColorIsSecondary(colorName){
- switch(String(colorName||'').toLowerCase()){
-  case 'cyan':
-  case 'magenta':
-  case 'yellow':
-   return true;
-  default:
-   return false;
- }
-}
-
-function meterDvAbsoluteSaturationFraction(colorName,sat){
- const s=Math.max(0,Math.min(1,sat||0));
- return s + 0.8*s*(1-s);
 }
 
 function meterRemapRelativeDvChromaticityToSolveGamut(x,y,gamut){
@@ -10411,37 +10279,6 @@ function meterColorCheckerFullSatTargetXYZ(colorName){
   return {X:xyz.X*100,Y:xyz.Y*100,Z:xyz.Z*100};
  }
  return meterSaturationTargetXYZ(colorName,100);
-}
-
-function meterInferSdrSatReferenceNits(){
- if(meterChartIsHdr()) return null;
- const rows=(Array.isArray(meterReadings)?meterReadings:[])
-  .filter(r=>r&&r.series_color&&r.sat_pct!=null&&((r.luminance!=null&&r.luminance>0)||(r.Y!=null&&r.Y>0)));
- if(rows.length<6) return null;
- const estimates=[];
- rows.forEach(r=>{
-  const measuredY=(r.luminance!=null)?Number(r.luminance):Number(r.Y);
-  if(!(measuredY>0)) return;
-  const rgb=meterBuildSaturationTargetLinearRgb(String(r.series_color),Number(r.sat_pct));
-  const xyz=linRgbToXyz(rgb[0],rgb[1],rgb[2],meterTargetSolveGamut().rgbToXyz);
-  if(!(xyz&&xyz.Y>1e-9)) return;
-  const est=measuredY/xyz.Y;
-  if(est>30&&est<400) estimates.push(est);
- });
- if(estimates.length<6) return null;
-   estimates.sort((a,b)=>a-b);
-   const mid=Math.floor(estimates.length/2);
-   return estimates.length%2 ? estimates[mid] : (estimates[mid-1]+estimates[mid])/2;
-  }
-
-function meterSaturationTargetXYZ(colorName,satPercent){
- const rgb=meterBuildSaturationTargetLinearRgb(colorName,satPercent);
- const xyz=linRgbToXyz(rgb[0],rgb[1],rgb[2],meterTargetSolveGamut().rgbToXyz);
-  // Use the same per-mode luminance reference as target_Yn-based color
-  // patches so saturation sweeps and color series stay aligned.
-  let scale=meterWrgbChromaticReferenceNits();
-  if(!(scale>0)) scale=meterColorSeriesReferenceNits();
- return {X:xyz.X*scale,Y:xyz.Y*scale,Z:xyz.Z*scale};
 }
 
 function meterParseSaturationReading(reading){
@@ -11923,18 +11760,6 @@ function meterReadingIsGreyscale(reading){
  return r!=null&&g!=null&&b!=null&&Number(r)===Number(g)&&Number(g)===Number(b);
 }
 
-function meterReadingIsZeroBlack(reading){
- if(!reading) return false;
- const name=String(reading.name||'').trim().toLowerCase();
- if(name==='0%'||name==='black') return true;
- const plot=(typeof meterReadingPlotIre==='function')?meterReadingPlotIre(reading):null;
- const candidates=[plot,reading.plot_ire,reading.nominal_ire,reading.target_ire,reading.ire,reading.stimulus];
- return candidates.some(value=>{
-  const ire=Number(value);
-  return Number.isFinite(ire)&&Math.abs(ire)<0.05;
- });
-}
-
 function meterNormalizeOledBlackReading(reading){
  // Pass-through normalizer for the 0% IRE greyscale reading. The previous
  // behavior force-zeroed the reading whenever the measured luminance was
@@ -12088,12 +11913,6 @@ function meterContrastTextColor(css){
  if(m.length<3) return '#222';
  const lum=0.299*parseInt(m[0],10)+0.587*parseInt(m[1],10)+0.114*parseInt(m[2],10);
  return lum<145?'#eee':'#222';
-}
-
-// Display color for a stimulus RGB triplet using a browser-safe preview of the
-// actual emitted signal patch inside the current signal container.
-function stimulusColor(r,g,b){
- return meterSignalPreviewColor(r,g,b);
 }
 
 // CIE 1931 spectral locus xy coordinates (5nm intervals, 380-700nm)
@@ -12540,17 +12359,6 @@ function meterStrokeCieLocus2d(ctx,points,toX,toY){
  ctx.lineTo(toX(points[0][0]),toY(points[0][1]));
  ctx.closePath();ctx.stroke();
 }
-function cie3dStrokeSmoothLocus(ctx,points){
- if(!points||points.length<2) return;
- ctx.beginPath();ctx.moveTo(points[0].sx,points[0].sy);
- for(let i=1;i<points.length-1;i++){
-  const p=points[i],n=points[i+1];
-  ctx.quadraticCurveTo(p.sx,p.sy,(p.sx+n.sx)/2,(p.sy+n.sy)/2);
- }
- const last=points[points.length-1];
- ctx.lineTo(last.sx,last.sy);ctx.lineTo(points[0].sx,points[0].sy);
- ctx.closePath();ctx.stroke();
-}
 function meterCieChartAxis(){
  const mode=meterChromaticityChartMode();
  const ten=/_10$/.test(mode),degree=ten?'10\u00B0':'2\u00B0';
@@ -12936,16 +12744,6 @@ function meterGammaPreviousSeriesReading(reading,xSteps,readingMap){
  return (prevStep&&readingMap[prevStep.ire])?readingMap[prevStep.ire]:null;
 }
 
-function meterDvRelativeWhiteGamma(whiteY,peak){
- const targetPeak=(peak>0)?peak:100;
- if(!(whiteY>0) || !(targetPeak>0)) return null;
- const targetAtWhite=effectiveGamma(meterDvRelativeChartTargetLuminance(99.9,targetPeak),targetPeak,99.9);
- const normalizedY=whiteY/targetPeak;
- if(!(targetAtWhite>0) || !(normalizedY>0)) return null;
- const gamma=targetAtWhite/normalizedY;
- return isFinite(gamma)?gamma:null;
-}
-
 // Pure power / sRGB targets with a raised black: scale from 0..peak then hard-
 // floor at Lb. That produces the classic clip kink on EOTF/luminance charts
 // (shadow codes whose power-law target sits below Lb map to the black shelf).
@@ -13040,27 +12838,7 @@ function meterGreyTargetSignal(ire,code){
  return nominal;
 }
 
-function meterGreyInputFraction(ire,code){
- const nominal=Math.max(0,Math.min(1,(ire||0)/100));
- if(meterChartIsDv()&&meterDvMapModeValue()==='2') return nominal;
- if(code!=null && meterChartIsHdr()) return meterGreySignalFractionFromCode(code);
- return nominal;
-}
-
 const METER_HDR_DIFFUSE_WHITE_DEFAULT=92.2457;
-
-function meterDisplayTypeIsProjector(value){
- const current=String(value||((document.getElementById('meterDisplayType')||{}).value)||'').toLowerCase();
- if(current==='projector'||current.startsWith('projector_')) return true;
- if(current.startsWith('ccss_')||current.startsWith('custom_')){
-  const source=current.startsWith('custom_')?'custom':'system';
-  const name=current.replace(/^(?:ccss|custom)_/,'');
-  const entry=(meterCcssLibrary||[]).find(item=>String(item&&item.source||'').toLowerCase()===source&&String(item&&item.name||'').toLowerCase()===name);
-  const meta=[entry&&entry.display,entry&&entry.technology,entry&&entry.name,name].filter(Boolean).join(' ');
-  return /projector/i.test(meta);
- }
- return false;
-}
 
 function meterUpdateHdrDiffuseWhiteVisibility(value){
  const wrap=document.getElementById('meterHdrDiffuseConfig');
@@ -13314,10 +13092,6 @@ function meterGreyTargetChartValue(ire,Lw,Lb,code){
  return meterGreyTargetLuminance(ire,Lw,Lb,code);
 }
 
-function meterGreyTargetWhiteValue(Lw,Lb){
- return meterGreyTargetChartValue(100,Lw,Lb,meterPatchRangeMin()+meterPatchRangeSpan());
-}
-
 const METER_SDR_EOTF_REFERENCE_NITS=200;
 function meterEotfSdrChartActive(){
  return !(typeof meterChartIsHdr==='function'&&meterChartIsHdr());
@@ -13509,11 +13283,6 @@ function meterLuminanceUnscaleValue(norm,yTop){
  const n=Math.max(0,Math.min(1,norm||0));
  if(meterLuminanceLogScaleEnabled()) return meterLogUnscaleValue(n,top);
  return n*top;
-}
-
-function meterLuminanceLogFloor(yTop){
- const top=Math.max(1e-6,yTop||1);
- return Math.max(1e-6,top/METER_LUMINANCE_LOG_FLOOR_DIVISOR);
 }
 
 function meterEotfLuminanceLogPointAllowed(mode,value,plot,signal){
@@ -13796,25 +13565,6 @@ function meterTargetGammaLabel(){
  const opt=sel.options[sel.selectedIndex];
  if(usesPqTarget) return meterChartBt2390Enabled()?'PQ + BT.2390':'PQ';
  return opt&&opt.textContent?opt.textContent.trim():'Gamma';
-}
-
-function meterGreyTargetChartPoints(steps,Lw,Lb,scale){
- const pts=[];
- const seen={};
- const addPoint=(ire,code)=>{
-  const key=''+ire+':'+(code==null?'':code);
-  if(seen[key]) return;
-  seen[key]=1;
-  pts.push([meterGreyInputFraction(ire,code),meterGreyTargetChartValue(ire,Lw,Lb,code)/scale]);
- };
- addPoint(0,0);
- (steps||[]).forEach(s=>{
-  const slotIre=Number(meterGreyscaleTargetSlotIre(s));
-  addPoint(Number.isFinite(slotIre)?slotIre:(s.ire||0),s.r_code!=null?s.r_code:s.r);
- });
- addPoint(100,meterPatchRangeMin()+meterPatchRangeSpan());
- pts.sort((a,b)=>a[0]-b[0]);
- return pts;
 }
 
 function meterGreyDenseTargetCurvePoints(targetPeak,Lb,yTop,mode,maxPct,steps){
@@ -14234,10 +13984,6 @@ function hlgSignalToDisplayLinear(stim,minY,maxY){
  return Math.max(0,Math.min(1,hlgEotf(stim,minY,peak)/peak));
 }
 
-function meterChartHdrStimulusLuminance(v){
- return Math.pow(Math.max(0,Math.min(1,v)),2.2)*meterChartHdrPeak();
-}
-
 function meterChartHdrCodeLuminance(v,clipPeak){
  const peak=(clipPeak>0)?clipPeak:meterChartHdrPeak();
  const diffuseScale=(typeof meterHdrDiffuseScale==='function')?meterHdrDiffuseScale():1;
@@ -14251,12 +13997,6 @@ function meterChartHdrCodeLuminance(v,clipPeak){
   return bt2390Tonemap(Math.min(raw,master),master,peak);
  }
  return Math.min(raw,peak);
-}
-
-function meterChartDvClipPeak(){
- const contentPeak=meterChartHdrPeak();
- const whitePeak=(meterWhiteReading&&meterWhiteReading.luminance>0)?meterWhiteReading.luminance:0;
- return whitePeak>0?Math.min(contentPeak,whitePeak):contentPeak;
 }
 
 function meterChartTrackingLuminance(v,clipPeak,Lw,Lb){
@@ -14288,35 +14028,6 @@ function meterChartTargetLuminance(v,Lw,Lb){
  const peak=(Lw>0)?Lw:meterChartHdrPeak();
  if(meterChartIsHdr()) return meterChartTrackingLuminance(v,peak,Lw,Lb);
  return meterChartTrackingLuminance(v,Lw,Lw,Lb);
-}
-
-// CIE L* from Y with white reference Yn
-function cieLstar(Y,Yn){
- if(Yn<=0) return 0;
- const r=Y/Yn;
- return r>0.008856?116*Math.cbrt(r)-16:903.3*r;
-}
-
-// CIELUV chromaticity-only ΔE: 1300 * Δu'v' (HCFR old formula)
-function deltaEuv(X,Y,Z,Xr,Yr,Zr){
- const d=X+15*Y+3*Z, dr=Xr+15*Yr+3*Zr;
- if(d<=0||dr<=0) return 0;
- const u=4*X/d, v=9*Y/d;
- const ur=4*Xr/dr, vr=9*Yr/dr;
- return 1300*Math.sqrt((u-ur)*(u-ur)+(v-vr)*(v-vr));
-}
-
-// Full CIELUV ΔE*uv (HCFR 3.5.4.4 new formula)
-// Yw1/Yw2 = white Y for L* scaling of measured/reference
-// (Xn,Yn,Zn) = adaptation white for u'n,v'n
-function deltaELuv(X1,Y1,Z1,Yw1, X2,Y2,Z2,Yw2, Xn,Yn,Zn){
- const L1=cieLstar(Y1,Yw1), L2=cieLstar(Y2,Yw2);
- const d1=X1+15*Y1+3*Z1, d2=X2+15*Y2+3*Z2, dn=Xn+15*Yn+3*Zn;
- if(d1<=0||dn<=0) return Math.abs(L1-L2);
- const un=4*Xn/dn, vn=9*Yn/dn;
- const u1s=13*L1*(4*X1/d1-un), v1s=13*L1*(9*Y1/d1-vn);
- const u2s=d2>0?13*L2*(4*X2/d2-un):0, v2s=d2>0?13*L2*(9*Y2/d2-vn):0;
- return Math.sqrt((L1-L2)*(L1-L2)+(u1s-u2s)*(u1s-u2s)+(v1s-v2s)*(v1s-v2s));
 }
 
 // XYZ to Lab (optional white point, defaults to D65 Y=1)
@@ -14939,12 +14650,6 @@ function meterSelectedMeasurementRequiresReady(){
  return meterIsSpectrophotometer(meterSelectedMeasurementMeter());
 }
 
-function meterAutoMeasurementOptionLabel(preferredMeter){
- const meter=preferredMeter||meterFindByPort(meterResolvedMeasurementPort)||meterFindByPort(meterMeasurementPort)||(Array.isArray(meterInventory)?meterInventory[0]:null);
- const label=meter?meterOptionLabel(meter):(meterLastKnownName||'Meter');
- return label&&label!=='Meter'?('Auto: '+label):'Auto';
-}
-
 function meterPopulateRoleSelects(meters,detectedPort){
  const savedMeasurementPort=meterStoredMeasurementPort();
  meterInventory=Array.isArray(meters)
@@ -15235,10 +14940,6 @@ function meterCcssCreateDisplayTypeValue(){
  let value=String((sel&&sel.value)||'');
  if(value==='custom_editor') value=String((sel&&sel.dataset.lastStableValue)||'lcd');
  return value;
-}
-
-function meterCcssCreateCanStart(){
- return meterCcssCreateStartBlockReason()==='';
 }
 
 function meterCcssCreateStartBlockReason(){
@@ -19550,13 +19251,6 @@ function meterClearInteractiveSelection(keepLiveReading){
  meterUpdateReadButtons();
 }
 
-function meterIsPatchStepSelected(step){
- if(!meterCurrentPatchStep||!step) return false;
- const cur=meterCanonicalSeriesStep(meterCurrentPatchStep)||meterCurrentPatchStep;
- const sel=meterCanonicalSeriesStep(step)||step;
- return meterStepNameKey(cur)===meterStepNameKey(sel);
-}
-
 function meterPatchDisplayLockedForRead(){
  return !!(
   meterSeriesRunning
@@ -21337,14 +21031,6 @@ function meterGreyProfileSlots(points){
  return meterGreyDefaultSlots(normalized);
 }
 
-function meterGreyAnalysisIreFromCode(code){
- const value=Number(code);
- if(!Number.isFinite(value)) return 0;
- if(value<=0) return 0;
- if(value>=255) return 100;
- return value*100/255;
-}
-
 function meterGreyscaleStepLabel(step){
  if(!step) return '';
  if(step.name!=null && String(step.name)!=='') return String(step.name);
@@ -21389,12 +21075,6 @@ function meterGreyNormalizeEntry(slot,raw){
 function meterLgGreyDefaultEntry(slot){
  const key=meterFormatPercentValue(slot);
  const stimulus=(Object.prototype.hasOwnProperty.call(METER_LG_GREY_STIMULUS_22,key))?METER_LG_GREY_STIMULUS_22[key]:slot;
- return meterGreyNormalizeEntry(slot,stimulus);
-}
-
-function meterLgAutoCalDefaultEntry(slot){
- const code=meterLgAutoCalCodeForSlot(slot);
- const stimulus=meterLgAutoCalStimulusFromCode(code);
  return meterGreyNormalizeEntry(slot,stimulus);
 }
 

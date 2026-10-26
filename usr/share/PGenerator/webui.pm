@@ -1689,7 +1689,8 @@ sub webui_handle_request (@) {
      }
      elsif($method eq "POST") {
       # Apply config changes
-      my ($result,$need_restart,$restart_id,$apply_hint)=&webui_apply_config($body);
+      my $request_local=($request_peer_ip=~/^(?:127\.|::1$|::ffff:127\.)/) ? 1 : 0;
+      my ($result,$need_restart,$restart_id,$apply_hint)=&webui_apply_config($body,{local=>$request_local});
       my $len=length($result);
       print $client "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: $len\r\n$cors\r\n$result";
       if($need_restart) {
@@ -3312,42 +3313,8 @@ sub webui_meter_series_processes (@) {
  return @procs;
 }
 
-sub webui_proc_pgrp (@) {
- my ($pid)=@_;
- $pid=int($pid || 0);
- return 0 if($pid<=0);
- my $stat="";
- if(open(my $fh,"<","/proc/$pid/stat")) {
-  local $/;
-  $stat=<$fh>;
-  close($fh);
- }
- return 0 if($stat eq "");
- return int($1) if($stat=~/^\d+\s+\(.*\)\s+\S+\s+\d+\s+(\d+)/);
- return 0;
-}
-
 sub webui_meter_series_alive (@) {
  return scalar(&webui_meter_series_pids()) ? 1 : 0;
-}
-
-sub webui_meter_series_kill (@) {
- my ($signal)=@_;
- $signal="-TERM" if(!defined($signal) || $signal eq "");
- my @pids=&webui_meter_series_pids();
- return 0 unless(@pids);
- my %targets;
- my $self_pgrp=getpgrp(0);
- foreach my $pid (@pids) {
-  $pid=int($pid);
-  next if($pid<=0);
-  $targets{$pid}=1;
-  my $pgrp=&webui_proc_pgrp($pid);
-  $targets{"-$pgrp"}=1 if($pgrp>1 && $pgrp!=$self_pgrp);
- }
- my $target_list=join(" ",sort { $a <=> $b } keys %targets);
- system("sudo kill $signal $target_list 2>/dev/null") if($target_list ne "");
- return scalar(@pids);
 }
 
 sub webui_meter_series_signal_stop (@) {
@@ -10107,18 +10074,13 @@ sub webui_config_json (@) {
   $json_conf{"color_format"}=&pg_dv_transport_color_format($json_dv_transport);
   $json_conf{"max_bpc"}=&pg_dv_transport_max_bpc($json_conf{"max_bpc"});
  }
- my $json="{";
- my $first=1;
- foreach my $k (sort keys %json_conf) {
-  $json.="," if(!$first);
-  my $v=$json_conf{$k};
-  $v=&webui_preferred_rgb_quant_range() if($k eq "rgb_quant_range" && $external_rgb_quant_range_active);
-  $v=~s/"/\\"/g;
-  $json.="\"$k\":\"$v\"";
-  $first=0;
- }
- $json.="}";
- return $json;
+ $json_conf{"rgb_quant_range"}=&webui_preferred_rgb_quant_range() if($external_rgb_quant_range_active);
+ # Every value goes out as a JSON string, escaped by JSON::PP: a backslash
+ # or a control character in one conf value must not break the whole reply.
+ # The conf holds bytes and goes out as the same bytes: no utf8 layer.
+ my %out=map { ($_ => (defined($json_conf{$_}) ? "$json_conf{$_}" : "")) } keys %json_conf;
+ require JSON::PP;
+ return JSON::PP->new->canonical(1)->encode(\%out);
 }
 
 # POST /api/config must be one complete JSON object; anything else
@@ -10158,8 +10120,53 @@ sub webui_signal_owner (@) {
  return "";
 }
 
+# A decoded JSON scalar as the text of its conf line: a string as sent, a
+# number in plain decimal notation (1e1 is "10", 1e-05 is "0.00001").
+sub _webui_conf_value_text (@) {
+ my $v=shift;
+ require B;
+ return "$v" if(B::svref_2object(\$v)->FLAGS & B::SVp_POK());
+ return sprintf("%.0f",$v) if($v == int($v) && abs($v) < 1e15);
+ my $t=sprintf("%.15f",$v);
+ $t=~s/0+$//;
+ $t=~s/\.$//;
+ return $t;
+}
+
+# Values a signal key may take: the WebUI's choices (webui-body.html), the
+# DRM colorimetry enum 0-12 (drm_override.c), the DV transport values and
+# plain numbers for the HDR metadata. "" deletes the key and passes.
+our %webui_signal_value_ok=(
+ signal_mode=>qr/^(?:sdr|hdr10|hlg|dv)$/i,
+ max_bpc=>qr/^(?:8|10|12)$/,
+ color_format=>qr/^[0-3]$/,
+ rgb_quant_range=>qr/^[0-2]$/,
+ colorimetry=>qr/^(?:[0-9]|1[0-2])$/,
+ eotf=>qr/^[0-3]$/,
+ primaries=>qr/^[0-3]$/,
+ is_sdr=>qr/^[01]$/,
+ is_hdr=>qr/^[01]$/,
+ dv_status=>qr/^[01]$/,
+ is_ll_dovi=>qr/^[01]$/,
+ is_std_dovi=>qr/^[01]$/,
+ dv_transport=>qr/^(?:standard|lldv)$/i,
+ dv_map_mode=>qr/^[0-2]$/,
+ dv_metadata=>qr/^[0-4]$/,
+ dv_interface=>qr/^\d{1,2}$/,
+ dv_color_space=>qr/^\d{1,2}$/,
+ dv_profile=>qr/^\d{1,2}$/,
+ mode_idx=>qr/^(?:-1|\d{1,4})$/,
+ min_luma=>qr/^\d{1,6}(?:\.\d{1,6})?$/,
+ max_luma=>qr/^\d{1,6}(?:\.\d{1,6})?$/,
+ max_cll=>qr/^\d{1,6}(?:\.\d{1,6})?$/,
+ max_fall=>qr/^\d{1,6}(?:\.\d{1,6})?$/,
+);
+
+# $opts->{local}: the request came from this device (the self-test posts
+# over 127.0.0.1). Internal calls pass no $opts and count as local.
 sub webui_apply_config (@) {
  my $body=shift;
+ my $opts=shift || {local=>1};
  my $need_restart=0;
  my %changed_restart_keys=();
  &webui_reload_pgenerator_conf();
@@ -10167,13 +10174,37 @@ sub webui_apply_config (@) {
  # (renderer_reconfigure_in_place) is only allowed when DV is off on both
  # sides of the change.
  my $dv_before=&renderer_dv_conf_active();
- # Parse simple JSON: {"key":"val","key2":"val2"}
+ # The body is one JSON object (webui_config_body_valid). Settings are its
+ # root keys with a plain value: a nested object or array is not a setting
+ # and is ignored, and a line break would write conf lines of its own.
+ # Decoded without utf8, like webui_config_body_valid: values keep their
+ # bytes, as the conf stores them.
+ my $decoded=eval { require JSON::PP; JSON::PP->new->decode($body) };
+ $decoded={} if(ref($decoded) ne "HASH");
  my %changes;
-  while($body=~/"(\w+)"\s*:\s*(?:"([^"]*)"|(-?\d+(?:\.\d+)?))/g) {
-   $changes{$1}=defined $2 ? $2 : $3;
+ foreach my $k (keys %$decoded) {
+  my $v=$decoded->{$k};
+  next if($k !~/^\w+$/ || !defined($v) || ref($v));
+  $v=&_webui_conf_value_text($v);
+  if($v=~/[\x00-\x1f\x7f]|[^\x00-\xff]/) {
+   my $result='{"status":"error","message":"'.&_webui_json_escape("Invalid value for $k.").'"}';
+   return wantarray ? ($result,0) : $result;
   }
-  # A marker from the self-test (read from $body below), not a setting.
-  delete $changes{"selftest"};
+  $changes{$k}=$v;
+ }
+ # The self-test (pgen_selftest.pl) marks its own switches "selftest":1. It
+ # counts only with exactly that value, from this device, while the
+ # self-test runs: it lets its restore pass a signal lock and keeps the
+ # user's pre-DV values.
+ my $selftest=(defined($changes{"selftest"}) && $changes{"selftest"} eq "1" && $opts->{local} &&
+               &webui_selftest_running()) ? 1 : 0;
+ delete $changes{"selftest"};
+ foreach my $k (sort keys %changes) {
+  next if(!$webui_signal_value_ok{$k} || $changes{$k} eq "" || $changes{$k}=~$webui_signal_value_ok{$k});
+  &log("WebUI: settings refused, invalid $k=$changes{$k}");
+  my $result='{"status":"error","message":"'.&_webui_json_escape("Invalid value for $k: $changes{$k}").'"}';
+  return wantarray ? ($result,0) : $result;
+ }
   # As posted, before the derivations below: what was quietly changed is
   # reported back (adjusted).
   my %posted=%changes;
@@ -10182,7 +10213,7 @@ sub webui_apply_config (@) {
  # one is refused before anything is derived or written. Judged on what was
  # posted, so another setting still saves. The self-test stops on its own
  # when such a session starts; its restore passes.
- if($body!~/"selftest"\s*:\s*"?1/) {
+ if(!$selftest) {
   my $owner_change=0;
   foreach my $k (@signal_conf_keys,qw(min_luma max_luma max_cll max_fall)) {
    next if(!exists $posted{$k});
@@ -10218,10 +10249,9 @@ sub webui_apply_config (@) {
  # "not chosen" too; a value the user changed is kept.
  if(defined $changes{"signal_mode"}) {
   my $to_dv=(lc($changes{"signal_mode"}) eq "dv");
-  # The self-test (pgen_selftest.pl) marks its mode switches; they must not
-  # replace the user's own pre-DV values.
-  my $selftest_switch=($body=~/"selftest"\s*:\s*"?1/) ? 1 : 0;
-  if(!$dv_before && $to_dv && !$selftest_switch) {
+  # The self-test's mode switches must not replace the user's own pre-DV
+  # values.
+  if(!$dv_before && $to_dv && !$selftest) {
    $changes{"pre_dv_rgb_quant_range"}=$pgenerator_conf{"rgb_quant_range"} || "2";
    $changes{"pre_dv_max_bpc"}=$pgenerator_conf{"max_bpc"} || "8";
    $changes{"pre_dv_color_format"}=$pgenerator_conf{"color_format"} || "0";
@@ -10433,6 +10463,8 @@ sub webui_apply_config (@) {
     dv_status is_ll_dovi is_std_dovi dv_interface dv_profile dv_metadata dv_color_space dv_map_mode dv_transport);
 
   my @conf_writes=();
+  my @conf_deletes=();
+  my %conf_written=();
   foreach my $k (sort keys %changes) {
    next if($k eq "ip_pattern" || $k eq "port_pattern"); # read-only
    my $cur=defined($pgenerator_conf{$k}) ? "$pgenerator_conf{$k}" : "";
@@ -10443,13 +10475,12 @@ sub webui_apply_config (@) {
    # above, so an unchanged key is already on disk; the rest go out in one
    # SET_PGENERATOR_CONF_MULTI below. dv_metadata/dv_map_mode stay
    # unconditional: the helper rewrites each as the other's pair.
-   $webui_rgb_quant_range_preferred=$changes{$k} if($k eq "rgb_quant_range");
    next if(!$value_changed && $k ne "dv_metadata" && $k ne "dv_map_mode");
    # sudo() joins base64 args with spaces, so an empty value (delete the
    # key) would vanish and shift every later pair: write those singly.
-   if("$changes{$k}" eq "") { &sudo("SET_PGENERATOR_CONF",$k,""); }
+   if("$changes{$k}" eq "") { push(@conf_deletes,$k); }
    else { push(@conf_writes,$k,$changes{$k}); }
-   $pgenerator_conf{$k}=$changes{$k};
+   $conf_written{$k}=$changes{$k};
    # Only a restart-key whose value actually CHANGED bounces the renderer.
    # The derivation above backfills keys unconditionally (signal_mode on
    # every POST; max_bpc=10 whenever the live color format is YCbCr 422),
@@ -10460,7 +10491,23 @@ sub webui_apply_config (@) {
     $changed_restart_keys{$k}=1;
    }
   }
-  &sudo("SET_PGENERATOR_CONF_MULTI",@conf_writes) if(@conf_writes);
+  # The helper answers OK only once PGenerator.conf reads back as written.
+  # Memory, the applied snapshot and the end of a refusal follow the file,
+  # so a lost write changes none of them and restarts nothing.
+  my $written=1;
+  $written=0 if(@conf_writes && (&sudo("SET_PGENERATOR_CONF_MULTI",@conf_writes) // "")!~/^OK/);
+  foreach my $k (@conf_deletes) {
+   last if(!$written);
+   $written=0 if((&sudo("SET_PGENERATOR_CONF",$k,"") // "")!~/^OK/);
+  }
+  if(!$written) {
+   &log("WebUI: settings not saved, writing PGenerator.conf failed");
+   &webui_reload_pgenerator_conf();
+   my $result='{"status":"error","message":"The settings could not be saved: writing PGenerator.conf failed. The output was not changed."}';
+   return wantarray ? ($result,0) : $result;
+  }
+  $pgenerator_conf{$_}=$conf_written{$_} foreach(keys %conf_written);
+  $webui_rgb_quant_range_preferred=$changes{"rgb_quant_range"} if(exists $changes{"rgb_quant_range"});
  # Settings that work: what a later refused apply goes back to, and the end
  # of a refusal a calibration program was left in.
  if($signal_changed) {
@@ -11582,24 +11629,37 @@ sub webui_wifi_scan_json (@) {
   my $ssid=$f[4];
   # Skip hidden networks (SSIDs with \x00 or empty/whitespace-only)
   next if($ssid=~/\\x00/ || $ssid=~/^\s*$/);
-  $ssid=~s/"/\\"/g;
   # Sanitize: remove any remaining non-printable characters
   $ssid=~s/[^\x20-\x7e]//g;
   next if($ssid eq "");
-  my $signal=$f[2];
+  # The name comes from the air: escaped for JSON here, shown as text by
+  # the page (scanWifi).
+  $ssid=&_webui_json_escape($ssid);
+  my $signal=($f[2]=~/^-?\d+$/) ? $f[2] : 0;
   my $security=$f[3]=~/WPA/ ? "WPA" : ($f[3]=~/WEP/ ? "WEP" : "Open");
   push @networks, "{\"ssid\":\"$ssid\",\"signal\":$signal,\"security\":\"$security\"}";
  }
  return "[".join(",",@networks)."]";
 }
 
+# A string field of a JSON request body, "" when missing or not a string.
+sub _webui_body_string (@) {
+ my ($body,$key)=@_;
+ my $req=eval { require JSON::PP; JSON::PP->new->decode($body || "{}") };
+ return "" if(ref($req) ne "HASH" || !defined($req->{$key}) || ref($req->{$key}));
+ return "$req->{$key}";
+}
+
 sub webui_wifi_connect (@) {
  my $body=shift;
- my ($ssid,$psk);
- ($ssid)=$body=~/"ssid"\s*:\s*"([^"]*)"/;
- ($psk)=$body=~/"psk"\s*:\s*"([^"]*)"/;
- if(!$ssid) {
+ my $ssid=&_webui_body_string($body,"ssid");
+ my $psk=&_webui_body_string($body,"psk");
+ if($ssid eq "") {
   return '{"status":"error","message":"Missing SSID"}';
+ }
+ # Each ends up on one line of the WiFi configuration.
+ if("$ssid$psk"=~/[\x00-\x1f\x7f]/) {
+  return '{"status":"error","message":"The network name or password contains a control character."}';
  }
  my $raw=&sudo("WIFI_APPLYCONF","wlan0",$ssid,$psk||"");
  chomp($raw);
@@ -11624,19 +11684,21 @@ sub webui_wifi_ap_json (@) {
   }
   close($fh);
  }
- my $ssid=$ap{ssid}||"";
- my $pass=$ap{wpa_passphrase}||"";
- $ssid=~s/"/\\"/g;
- $pass=~s/"/\\"/g;
+ my $ssid=&_webui_json_escape($ap{ssid}||"");
+ my $pass=&_webui_json_escape($ap{wpa_passphrase}||"");
  return "{\"status\":\"ok\",\"ssid\":\"$ssid\",\"password\":\"$pass\"}";
 }
 
 sub webui_wifi_ap_apply (@) {
  my $body=shift;
- my ($ssid)=$body=~/"ssid"\s*:\s*"([^"]*)"/;
- my ($pass)=$body=~/"password"\s*:\s*"([^"]*)"/;
- if(!$ssid || length($ssid)<1) {
+ my $ssid=&_webui_body_string($body,"ssid");
+ my $pass=&_webui_body_string($body,"password");
+ if($ssid eq "") {
   return '{"status":"error","message":"SSID required"}';
+ }
+ # Each ends up on one line of hostapd.conf.
+ if("$ssid$pass"=~/[\x00-\x1f\x7f]/) {
+  return '{"status":"error","message":"The network name or password contains a control character."}';
  }
  if(length($pass)<8) {
   return '{"status":"error","message":"Password must be at least 8 characters"}';

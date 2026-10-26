@@ -188,17 +188,6 @@ sub lg_clear_pin_session_files (@) {
  return (!-d $dir) ? 1 : 0;
 }
 
-sub lg_save_pin_session_meta (@) {
- my ($clients,$meta)=@_;
- $clients=&lg_load_clients() if(ref($clients) ne "HASH");
- if(ref($meta) eq "HASH") {
-  $clients->{"pin_pairing"}=$meta;
- } else {
-  delete($clients->{"pin_pairing"});
- }
- return &lg_save_clients($clients);
-}
-
 sub lg_reconcile_pin_pairing (@) {
  my $clients=shift;
  $clients=&lg_load_clients() if(ref($clients) ne "HASH");
@@ -477,25 +466,6 @@ sub lg_boot_id (@) {
  chomp($id);
  $id=~s/[^A-Za-z0-9-]//g;
  return $id;
-}
-
-sub lg_cec_vendor_is_lg (@) {
- my $vendor=lc(shift||"");
- $vendor=~s/^0x//;
- $vendor=~s/[^0-9a-f]//g;
- return ($vendor eq "00e091") ? 1 : 0;
-}
-
-sub lg_clean_cec_name (@) {
- my $name=shift;
- $name="" if(!defined($name));
- $name=~s/[\x00-\x1f\x7f]+//g;
- $name=~s/^\s+|\s+$//g;
- return $name;
-}
-
-sub lg_cec_lg_device (@) {
- return {};
 }
 
 sub lg_input_from_cec (@) {
@@ -811,57 +781,6 @@ sub lg_webos_port_open (@) {
   }
  }
  return 0;
-}
-
-sub lg_ssdp_devices (@) {
- my @devices=();
- my %seen=();
- my $sock=IO::Socket::INET->new(
-  Proto => "udp",
-  PeerAddr => "239.255.255.250",
-  PeerPort => 1900,
-  Timeout => 0.4,
- );
- return \@devices if(!$sock);
- my @st=(
-  "urn:lge-com:service:webos-second-screen:1",
-  "urn:lge-com:device:webos:1",
-  "ssdp:all",
- );
- foreach my $st (@st) {
-  my $msg="M-SEARCH * HTTP/1.1\r\nHOST: 239.255.255.250:1900\r\nMAN: \"ssdp:discover\"\r\nMX: 1\r\nST: $st\r\n\r\n";
-  eval { $sock->send($msg); 1; };
- }
- my $select=IO::Select->new($sock);
- my $deadline=time()+2;
- while(time() < $deadline) {
-  my $remaining=$deadline-time();
-  $remaining=0.1 if($remaining < 0.1);
-  my @ready=$select->can_read($remaining);
-  last if(!@ready);
-  my $buf="";
-  my $peer=$sock->recv($buf,4096);
-  next if(!defined($buf) || $buf eq "");
-  my $lc=lc($buf);
-  next if($lc !~ /(lge|webos|lg electronics|second-screen)/);
-  my $ip="";
-  if($buf =~ /^LOCATION:\s*https?:\/\/(\d+\.\d+\.\d+\.\d+)(?::\d+)?\//im) {
-   $ip=$1;
-  } elsif(defined($peer)) {
-   my ($port,$addr)=sockaddr_in($peer);
-   $ip=join(".",unpack("C4",$addr)) if(defined($addr));
-  }
-  next if(!&lg_valid_ipv4($ip) || $seen{$ip}++);
-  my $name="LG WebOS TV";
-  if($buf =~ /^SERVER:\s*(.+)$/im) {
-   my $server=$1;
-   $server=~s/\r//g;
-   if($server =~ /(webos[^\s;]*)/i) { $name="LG WebOS TV"; }
-  }
-  push(@devices,{ ip => $ip, source => "ssdp", name => $name, model_name => "" });
- }
- close($sock);
- return \@devices;
 }
 
 sub lg_default_lan_subnets (@) {

@@ -185,96 +185,7 @@ sub resolve_connect (@) {
    last;
   }
   last if($n != $len);
-  &log("Resolve RECV: $xml");
-  #
-  # Parse XML
-  #
-  my $hash;
-  eval {
-   $hash=XMLin($xml,ForceArray=>0,KeyAttr=>[]);
-  };
-  if($@) {
-   &log("Resolve: XML parse error: $@");
-   next;
-  }
-  #
-  # Extract pattern data (Standard Resolve: <color/> <background/> <geometry/>)
-  #
-  my ($r_p,$g_p,$b_p,$r_bg,$g_bg,$b_bg,$bits)=(0,0,0,0,0,0,8);
-  my ($geom_x,$geom_y,$geom_cx,$geom_cy)=(0,0,1,1);
-  if(ref($hash->{color}) eq 'HASH') {
-   $r_p=int($hash->{color}{red}||0);
-   $g_p=int($hash->{color}{green}||0);
-   $b_p=int($hash->{color}{blue}||0);
-   $bits=int($hash->{color}{bits}||8);
-  }
-  if(ref($hash->{background}) eq 'HASH') {
-   $r_bg=int($hash->{background}{red}||0);
-   $g_bg=int($hash->{background}{green}||0);
-   $b_bg=int($hash->{background}{blue}||0);
-  }
-  if(ref($hash->{geometry}) eq 'HASH') {
-   $geom_x=&resolve_float($hash->{geometry}{x});
-   $geom_y=&resolve_float($hash->{geometry}{y});
-   $geom_cx=&resolve_float($hash->{geometry}{cx}||"1");
-   $geom_cy=&resolve_float($hash->{geometry}{cy}||"1");
-  }
-  #
-  # LightSpace format fallback: <shapes><rectangle>...</rectangle></shapes>
-  #
-  if(!ref($hash->{color}) && ref($hash->{shapes}) eq 'HASH') {
-   my $rects=$hash->{shapes}{rectangle};
-   my @rect_list=ref($rects) eq 'ARRAY' ? @$rects : ($rects);
-   if(@rect_list >= 1) {
-    my $fg=(@rect_list >= 2) ? $rect_list[1] : $rect_list[0];
-    my $col=$fg->{colex}||$fg->{color};
-    if(ref($col) eq 'HASH') {
-     $r_p=int($col->{red}||0);
-     $g_p=int($col->{green}||0);
-     $b_p=int($col->{blue}||0);
-     $bits=int($col->{bits}||8);
-    }
-    if(ref($fg->{geometry}) eq 'HASH') {
-     $geom_x=&resolve_float($fg->{geometry}{x});
-     $geom_y=&resolve_float($fg->{geometry}{y});
-     $geom_cx=&resolve_float($fg->{geometry}{cx}||"1");
-     $geom_cy=&resolve_float($fg->{geometry}{cy}||"1");
-    }
-    if(@rect_list >= 2) {
-     my $bgcol=$rect_list[0]->{color}||$rect_list[0]->{colex};
-     if(ref($bgcol) eq 'HASH') {
-      $r_bg=int($bgcol->{red}||0);
-      $g_bg=int($bgcol->{green}||0);
-      $b_bg=int($bgcol->{blue}||0);
-     }
-    }
-   }
-  }
-  #
-  # Sync bit depth from XML to PGenerator config if changed
-  #
-  if($bits > 0 && $bits != $bits_default) {
-   &resolve_save_setting("max_bpc","$bits");
-   &pattern_generator_stop();
-   &pattern_generator_start();
-  }
-  #
-  # Create pattern from color/background/geometry. Dedupe on the RAW sent
-  # values PLUS the operator override knobs, so a knob change redraws even
-  # when the software re-sends the same pattern. The raw pattern is also
-  # stored so the WebUI can redraw it immediately when a knob changes
-  # (resolve_redraw_last) without waiting for the next message.
-  #
-  my $pattern_key="$r_p,$g_p,$b_p;$r_bg,$g_bg,$b_bg;$geom_x;$geom_y;$geom_cx;$geom_cy;$bits;"
-   .($pgenerator_conf{"resolve_force_center"}||"")."/".($pgenerator_conf{"resolve_patch_size"}||"");
-  next if($pattern_key eq $last_pattern_key);
-  $last_pattern_key=$pattern_key;
-  {
-   lock($resolve_last_pattern);
-   $resolve_last_pattern="$r_p,$g_p,$b_p;$r_bg,$g_bg,$b_bg;$geom_x,$geom_y,$geom_cx,$geom_cy;$bits";
-  }
-  &apply_source_rgb_quant_range("resolve",2);
-  &resolve_draw_pattern($r_p,$g_p,$b_p,$r_bg,$g_bg,$b_bg,$geom_x,$geom_y,$geom_cx,$geom_cy);
+  &resolve_handle_message($xml,\$last_pattern_key);
  }
  if($was_disconnect) {
   &log("Resolve: disconnect requested, closing socket");
@@ -284,6 +195,106 @@ sub resolve_connect (@) {
   lock($resolve_disconnect_request);
   $resolve_disconnect_request=0;
  }
+}
+
+###############################################
+#        Resolve Handle One Message           #
+###############################################
+# One XML message: parse it and draw its patch. $last_pattern_key_ref holds
+# the last drawn pattern so a re-sent one is not drawn again.
+sub resolve_handle_message (@) {
+ my ($xml,$last_pattern_key_ref)=@_;
+ &log("Resolve RECV: $xml");
+ #
+ # Parse XML
+ #
+ my $hash;
+ eval {
+  $hash=XMLin($xml,ForceArray=>0,KeyAttr=>[]);
+ };
+ if($@) {
+  &log("Resolve: XML parse error: $@");
+  return;
+ }
+ #
+ # Extract pattern data (Standard Resolve: <color/> <background/> <geometry/>)
+ #
+ my ($r_p,$g_p,$b_p,$r_bg,$g_bg,$b_bg,$bits)=(0,0,0,0,0,0,8);
+ my ($geom_x,$geom_y,$geom_cx,$geom_cy)=(0,0,1,1);
+ if(ref($hash->{color}) eq 'HASH') {
+  $r_p=int($hash->{color}{red}||0);
+  $g_p=int($hash->{color}{green}||0);
+  $b_p=int($hash->{color}{blue}||0);
+  $bits=int($hash->{color}{bits}||8);
+ }
+ if(ref($hash->{background}) eq 'HASH') {
+  $r_bg=int($hash->{background}{red}||0);
+  $g_bg=int($hash->{background}{green}||0);
+  $b_bg=int($hash->{background}{blue}||0);
+ }
+ if(ref($hash->{geometry}) eq 'HASH') {
+  $geom_x=&resolve_float($hash->{geometry}{x});
+  $geom_y=&resolve_float($hash->{geometry}{y});
+  $geom_cx=&resolve_float($hash->{geometry}{cx}||"1");
+  $geom_cy=&resolve_float($hash->{geometry}{cy}||"1");
+ }
+ #
+ # LightSpace format fallback: <shapes><rectangle>...</rectangle></shapes>
+ #
+ if(!ref($hash->{color}) && ref($hash->{shapes}) eq 'HASH') {
+  my $rects=$hash->{shapes}{rectangle};
+  my @rect_list=ref($rects) eq 'ARRAY' ? @$rects : ($rects);
+  if(@rect_list >= 1) {
+   my $fg=(@rect_list >= 2) ? $rect_list[1] : $rect_list[0];
+   my $col=$fg->{colex}||$fg->{color};
+   if(ref($col) eq 'HASH') {
+    $r_p=int($col->{red}||0);
+    $g_p=int($col->{green}||0);
+    $b_p=int($col->{blue}||0);
+    $bits=int($col->{bits}||8);
+   }
+   if(ref($fg->{geometry}) eq 'HASH') {
+    $geom_x=&resolve_float($fg->{geometry}{x});
+    $geom_y=&resolve_float($fg->{geometry}{y});
+    $geom_cx=&resolve_float($fg->{geometry}{cx}||"1");
+    $geom_cy=&resolve_float($fg->{geometry}{cy}||"1");
+   }
+   if(@rect_list >= 2) {
+    my $bgcol=$rect_list[0]->{color}||$rect_list[0]->{colex};
+    if(ref($bgcol) eq 'HASH') {
+     $r_bg=int($bgcol->{red}||0);
+     $g_bg=int($bgcol->{green}||0);
+     $b_bg=int($bgcol->{blue}||0);
+    }
+   }
+  }
+ }
+ #
+ # bits is the precision of the codes in this message, not an output
+ # setting: Resolve only sends patches (webui_signal_owner), the signal
+ # stays what the WebUI set. resolve_draw_pattern maps the codes onto it.
+ #
+ if($bits != 8 && $bits != 10 && $bits != 12) {
+  &log("Resolve: patch with bits=\"$bits\" not drawn: only 8, 10 or 12-bit codes are defined");
+  return;
+ }
+ #
+ # Create pattern from color/background/geometry. Dedupe on the RAW sent
+ # values PLUS the operator override knobs, so a knob change redraws even
+ # when the software re-sends the same pattern. The raw pattern is also
+ # stored so the WebUI can redraw it immediately when a knob changes
+ # (resolve_redraw_last) without waiting for the next message.
+ #
+ my $pattern_key="$r_p,$g_p,$b_p;$r_bg,$g_bg,$b_bg;$geom_x;$geom_y;$geom_cx;$geom_cy;$bits;"
+  .($pgenerator_conf{"resolve_force_center"}||"")."/".($pgenerator_conf{"resolve_patch_size"}||"");
+ return if($pattern_key eq $$last_pattern_key_ref);
+ $$last_pattern_key_ref=$pattern_key;
+ {
+  lock($resolve_last_pattern);
+  $resolve_last_pattern="$r_p,$g_p,$b_p;$r_bg,$g_bg,$b_bg;$geom_x,$geom_y,$geom_cx,$geom_cy;$bits";
+ }
+ &apply_source_rgb_quant_range("resolve",2);
+ &resolve_draw_pattern($r_p,$g_p,$b_p,$r_bg,$g_bg,$b_bg,$geom_x,$geom_y,$geom_cx,$geom_cy,$bits);
 }
 
 ###############################################
@@ -365,17 +376,6 @@ sub resolve_read_exact_interruptible (@) {
 }
 
 ###############################################
-#          Resolve Save Setting               #
-###############################################
-sub resolve_save_setting (@) {
- my ($conf_key,$conf_val)=@_;
- &sudo("SET_PGENERATOR_CONF",$conf_key,$conf_val);
- $pgenerator_conf{$conf_key}="$conf_val";
- # Note: bits_default is NOT synced to max_bpc — EGL surface is always 8bpc
- &log("Resolve: saved $conf_key=$conf_val");
-}
-
-###############################################
 #          Resolve Float Helper               #
 ###############################################
 sub resolve_float (@) {
@@ -390,7 +390,8 @@ sub resolve_float (@) {
 ###############################################
 # Applies the operator override knobs to a RAW received pattern and draws it.
 sub resolve_draw_pattern (@) {
- my ($r_p,$g_p,$b_p,$r_bg,$g_bg,$b_bg,$geom_x,$geom_y,$geom_cx,$geom_cy)=@_;
+ my ($r_p,$g_p,$b_p,$r_bg,$g_bg,$b_bg,$geom_x,$geom_y,$geom_cx,$geom_cy,$bits)=@_;
+ $bits=8 if(!defined $bits || $bits !~/^(?:8|10|12)$/);
  #
  # Patch-size override (WebUI Resolve card "Patch Size Override"): N% of
  # screen AREA, same convention as the meter Patch Size dropdown (linear
@@ -424,10 +425,24 @@ sub resolve_draw_pattern (@) {
   &log("Resolve: patch $rgb_str not drawn, settings are refused: $why");
   return;
  }
+ # The codes are $bits-bit; the output depth is the WebUI's (this thread's
+ # $bits_default follows the shared conf). Codes as fine as the output or
+ # coarser are drawn with their own depth (8-bit codes on a 10-bit output
+ # take the renderer's 8 -> 10-bit step, as G1 and HCFR patches do). Finer
+ # codes are drawn at the output depth and scaled by the renderer
+ # (SOURCE_MAX): BITS above the output would switch the output depth.
+ # Standard Dolby Vision takes 12-bit codes, as for port 85 clients.
+ &sync_pattern_bits_default();
+ my ($draw,$source_max)=("RECTANGLE${bits}bit",0);
+ if(&legacy_external_dv_source_max() == 4095) {
+  ($draw,$rgb_str,$bg_str,$source_max)=&legacy_external_prepare_dv_pattern($draw,$rgb_str,$bg_str,$bits);
+ } elsif($bits > $bits_default) {
+  ($draw,$source_max)=("RECTANGLE",(1 << $bits) - 1);
+ }
  &clean_pattern_files();
  # Full field pattern (geometry covers entire screen)
  if($geom_cx >= 0.99 && $geom_cy >= 0.99) {
-  &create_pattern_file("RECTANGLE","$w_s,$h_s",100,"$rgb_str","$bg_str","","","",1,"resolve");
+  &create_pattern_file($draw,"$w_s,$h_s",100,"$rgb_str","$bg_str","","","",1,"resolve","",$source_max);
  } else {
   # Windowed pattern -- compute pixel dimensions from geometry fractions
   my $win_w=int($geom_cx*$w_s+0.5);
@@ -443,7 +458,7 @@ sub resolve_draw_pattern (@) {
   # The protocol carries no client identity, so this applies to every
   # Resolve-protocol sender. Size still follows the sent geometry.
   $pos_str=$position_default if(($pgenerator_conf{"resolve_force_center"}||"") eq "1");
-  &create_pattern_file("RECTANGLE","$win_w,$win_h",100,"$rgb_str","$bg_str","$pos_str","","",1,"resolve");
+  &create_pattern_file($draw,"$win_w,$win_h",100,"$rgb_str","$bg_str","$pos_str","","",1,"resolve","",$source_max);
  }
 }
 
@@ -467,7 +482,7 @@ sub resolve_redraw_last (@) {
  my ($gx,$gy,$gcx,$gcy)=split(",",$geom||"");
  return 0 if(!defined($b_p) || !defined($gcy));
  &log("Resolve: redrawing last pattern with updated override settings");
- &resolve_draw_pattern($r_p,$g_p,$b_p,$r_bg,$g_bg,$b_bg,$gx,$gy,$gcx,$gcy);
+ &resolve_draw_pattern($r_p,$g_p,$b_p,$r_bg,$g_bg,$b_bg,$gx,$gy,$gcx,$gcy,$bits);
  return 1;
 }
 

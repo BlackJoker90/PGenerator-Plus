@@ -233,18 +233,4 @@ sub run_end {
  return;
 }
 
-sub latest_dir {
- my $best = ""; my $best_m = -1;
- opendir(my $dh, $BASE_DIR) or return "";
- for my $d (readdir($dh)) {
-  next if($d !~ /\A\d{8}-\d{6}-/);
-  my $p = "$BASE_DIR/$d";
-  next if(!-d $p);
-  my $m = (stat($p))[9] || 0;
-  if($m > $best_m) { $best_m = $m; $best = $p; }
- }
- closedir($dh);
- return $best;
-}
-
 1;

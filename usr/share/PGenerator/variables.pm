@@ -52,23 +52,6 @@ $load_avg_file="/proc/loadavg";
 $dir_wpa="/var/run/wpa_supplicant";
 $hostname_file="/etc/hostname";
 
-sub pg_device_model(@) {
- my $model=$device_model || "";
- if($model eq "" && -f $proc_device_model) {
-  if(open(my $fh,"<",$proc_device_model)) {
-   local $/;
-   $model=<$fh>;
-   close($fh);
-   $model=~s/\0|\r|\n//g;
-  }
- }
- return $model;
-}
-
-sub pg_is_pi4_family(@) {
- return (&pg_device_model() =~/Raspberry Pi 4|Raspberry Pi 400|Raspberry Pi Compute Module 4/) ? 1 : 0;
-}
-
 # Dolby Vision transports:
 #  standard - sink-led DV: metadata embedded in an RGB 8-bit tunnel; the
 #             display parses the tunnel itself. Requires full sink-led DV
@@ -118,14 +101,6 @@ sub pg_dv_transport_max_bpc(@) {
  }
  return "10" if(int($pgenerator_conf{"max_bpc"} || 0) == 10);
  return "8";
-}
-
-sub pg_dv_standard_interface(@) {
- return &pg_dv_transport_interface("standard");
-}
-
-sub pg_dv_standard_ll_flag(@) {
- return &pg_dv_transport_ll_flag("standard");
 }
 
 
@@ -251,6 +226,9 @@ $pattern_calman3="CalmanCustomPattern3";
 $pattern_calman4="CalmanCustomPattern4";
 
 $upload_tmp_dir="/tmp";
+# A pattern port command still missing its terminator may not grow past
+# this (upload chunks included): the connection is closed instead.
+$pattern_cmd_max_bytes=16*1024*1024;
 
 $close_command="QUIT";
 $rgb_triplet_command="RGB";

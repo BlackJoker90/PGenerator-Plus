@@ -348,8 +348,6 @@ def repair(d, tags, curve, ymax, plateau_pct, balanced, cal=None, luma_w=None):
             # corridor, regardless of how wide the shaper-domain node spacing
             # becomes near white.
             def axis_node(ch, rel):
-                table_pos = 0.0
-                lo, hi = 0.0, 1.0
                 enc = min(1.0, max(0.0, rel*ENC))
                 # forward through the input table, then to node coordinate
                 v = enc*(ine-1)

@@ -2084,7 +2084,6 @@ def apply_mhc2_active_neutral_luminance(luts, rows, black, primaries,
         for index in range(entries):
             curve_input = index / float(entries - 1)
             source_nits = pq_to_nits(curve_input) / gain
-            source_code = nits_to_pq(source_nits)
             outputs = []
             for other in range(3):
                 other_input = nits_to_pq(source_nits * neutral_gains[other])
@@ -4273,7 +4272,6 @@ def hdr_profile_calibration_from_a2b(profile, rows, fallback, entries=4096,
                                  dtype=np.float64)
 
     evaluate = mft2_a2b_evaluator(profile, "batch")
-    d50 = ICC_D50_WHITE
     d65 = (0.3127 / 0.329, 1.0, (1.0 - 0.3127 - 0.329) / 0.329)
     chad_payload = dict(read_icc_tags(profile)).get(b"chad")
     if not chad_payload or len(chad_payload) < 44 or chad_payload[:4] != b"sf32":

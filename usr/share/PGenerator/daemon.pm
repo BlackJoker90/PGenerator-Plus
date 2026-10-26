@@ -1231,7 +1231,10 @@ sub pattern_daemon {
  #                          #
  ############################
  while ($select->count()) {
-  my @ready = $select->can_read(5);
+  # Commands read but not handled yet (one read carried several) go first,
+  # without waiting for their socket to become readable again.
+  my @ready = grep { $pending_cmd{$_} && @{$pending_cmd{$_}} } $select->handles();
+  @ready = $select->can_read(5) if(!@ready);
   if(!@ready) {
    &renderer_start_when_hdmi_connected();
    next;
@@ -1266,18 +1269,41 @@ sub pattern_daemon {
     #    Receive from client   #
     #                          #
     ############################
-    my $rv=$connection->recv($key,1024);
-    if(!defined $rv) {
-     my $recv_error="$!";
-     # ETIMEDOUT ("Connection timed out") is keepalive finding a dead peer,
-     # not SO_RCVTIMEO (EAGAIN): that socket is closed on every port.
-     my $recv_timeout=(!$!{ETIMEDOUT} && ($!{EAGAIN} || $!{EWOULDBLOCK} || $recv_error=~/temporarily unavailable|would block/i)) ? 1 : 0;
-     if($recv_timeout && ($pattern_socket_kind{$connection} || "") eq "classic") {
-      next;
+    my $key_framed=0;
+    if($pending_cmd{$connection} && @{$pending_cmd{$connection}}) {
+     $key=shift(@{$pending_cmd{$connection}});
+     $key_framed=1;
+    } else {
+     my $rv=$connection->recv($key,1024);
+     if(!defined $rv) {
+      my $recv_error="$!";
+      # ETIMEDOUT ("Connection timed out") is keepalive finding a dead peer,
+      # not SO_RCVTIMEO (EAGAIN): that socket is closed on every port.
+      my $recv_timeout=(!$!{ETIMEDOUT} && ($!{EAGAIN} || $!{EWOULDBLOCK} || $recv_error=~/temporarily unavailable|would block/i)) ? 1 : 0;
+      if($recv_timeout && ($pattern_socket_kind{$connection} || "") eq "classic") {
+       next;
+      }
+      my $close_reason=$recv_timeout ? "recv timeout" : "recv error: $recv_error";
+      &close_connection($connection,$close_reason);
+      last;
      }
-     my $close_reason=$recv_timeout ? "recv timeout" : "recv error: $recv_error";
-     &close_connection($connection,$close_reason);
-     last;
+     # Port 85 and 2100 commands end with a terminator ($end_cmd_string,
+     # $end_cmd_string_calman). One read can carry several commands, or the
+     # start of the next: cut the buffered bytes into whole commands, handle
+     # the first now and queue the rest. Bytes after the last terminator
+     # wait for the next read. Both terminators end in CR or ETX, so a read
+     # without either completes nothing (an upload chunk, an HTTP request).
+     if(!$rpc_client{$connection} && $key ne "" && $key=~/[\r\x03]/) {
+      my $buffered=($cmd{$connection} // "").$key;
+      my @frames=();
+      push(@frames,$1) while($buffered=~s/^(.*?(?:$end_cmd_string|$end_cmd_string_calman))//s);
+      if(@frames) {
+       $cmd{$connection}=$buffered;
+       $key=shift(@frames);
+       push(@{$pending_cmd{$connection}},@frames);
+       $key_framed=1;
+      }
+     }
     }
     #&stats("bytes",length($key));
     #
@@ -1306,26 +1332,29 @@ sub pattern_daemon {
     # GET /frames/index.html HTTP/1.1
     #
     if($key =~/GET \/(.*)\/index.html /) {
-     my (@dir_parts,$html_image_list_disabled,$dir_el)=(split("/",uri_unescape($1)),0,"");
+     my $list_rel=uri_unescape($1);
+     my $list_dir=&path_inside($var_dir,$list_rel);
+     my (@dir_parts,$html_image_list_disabled,$dir_el)=(split("/",$list_rel),0,"");
      for(@dir_parts) {
        $dir_el.="$_/";
        $html_image_list_disabled=1 if(-f "$var_dir/$dir_el/HTMLIMAGELIST.disabled");
      }
-     if($html_image_list_disabled) {
+     # Only folders inside $var_dir are listed.
+     if($html_image_list_disabled || $list_dir eq "" || !-d $list_dir) {
       &send_key_to_client($connection,"HTTP/1.0 404 Not Found\r\n");
       &close_connection($connection);
       last;
      }
-     $prefix=$1;
+     $prefix=&pattern_html_escape($1);
      $content_type="text/html";
-     opendir(DIR,"$var_dir/".uri_unescape($1)."/");
+     opendir(DIR,$list_dir);
      @list_images=readdir(DIR);
      closedir(DIR);
      $img_content="<body style='background-color:#adadad;'>\n";
      $img_content.="<center>\n";
      for(@list_images) {
       if(/(\.jpg|\.png)/) {
-       $file_path="/$prefix/$_-".time();
+       $file_path="/$prefix/".&pattern_html_escape($_)."-".time();
        $img_content.="<a target=new href=\"$file_path\">";
        $img_content.="<img style='border:1px solid black' src=\"$file_path\" width=$img_width height=$img_height>";
        $img_content.="</a>";
@@ -1344,14 +1373,29 @@ sub pattern_daemon {
     # GET /frames/1-TEST,,,,3000000.png HTTP/1.1
     #
     if($key =~/GET \/(.*)\/(.*)\.(jpg|png)-.* /) {
+     my $img_extension=$3;
+     # Only an existing image inside $var_dir is served.
+     my $img_file=&path_inside($var_dir,uri_unescape("$1/$2.$3"));
+     if($img_file eq "" || !-f $img_file) {
+      &send_key_to_client($connection,"HTTP/1.0 404 Not Found\r\n");
+      &close_connection($connection);
+      last;
+     }
+     my $img_size="";
+     $img_size=$img_width."x".$img_height if($key=~/\&preview=1/);
+     $img_size=$1                         if($key=~/\&resize=(\d+x\d+)/);
+     # convert runs from an argument list, never through a shell: the path
+     # comes from the client.
+     my $img_fh;
+     my $img_opened=($img_size ne "") ? open($img_fh,"-|",$convert,"-resize",$img_size,$img_file,"$img_extension:-")
+                                      : open($img_fh,"<",$img_file);
      $img_content="";
-     $img_file=uri_unescape("$var_dir/$1/$2.$3");
-     $img_extension=$3;
-     $img_file="$convert -resize $img_width"."x$img_height '$img_file' $img_extension:-|" if($key=~/\&preview=1/);
-     $img_file="$convert -resize $1 '$img_file' $img_extension:-|"                        if($key=~/\&resize=(\d+x\d+)/);
-     open(IMG,$img_file);
-     $img_content.=$_ while(<IMG>);
-     close(IMG);
+     if($img_opened) {
+      binmode($img_fh);
+      local $/;
+      $img_content=<$img_fh> // "";
+      close($img_fh);
+     }
      $content_type="image/$img_extension";
      if($key=~/\&inline=1/) {
       $img_content='<img src="data:'.$content_type.';base64,'.encode_base64($img_content,"").'" />';
@@ -1373,16 +1417,16 @@ sub pattern_daemon {
     #
     # END CMD STRING
     #
+    # $key is one whole command here (cut on receive), or bytes of one
+    # still missing its terminator: those wait in $cmd for the next read.
     if($rpc_client{$connection}) {
      $cmd{$connection}="";
-    } elsif($key =~/$end_cmd_string|$end_cmd_string_calman/) {
+    } elsif(!$key_framed) {
      $cmd{$connection}.=$key;
-     $key=$cmd{$connection};
-     $cmd{$connection}="";
-    } else {
-     $cmd{$connection}.=$key;
-     if($cmd{$connection} =~/$end_cmd_string|$end_cmd_string_calman/) { $key=$cmd{$connection}; $cmd{$connection}=""; }
-     else                                                             { last;                                         }
+     if(length($cmd{$connection}) > $pattern_cmd_max_bytes) {
+      &close_connection($connection,"command longer than $pattern_cmd_max_bytes bytes");
+     }
+     last;
     }
     #$key=~s/\n|\r//g;
     $key=~s/$end_cmd_string|$end_cmd_string_calman//;
@@ -1406,6 +1450,16 @@ sub pattern_daemon {
       &send_key_to_client($connection,&error());
       last;
      }
+     # A file name, never a path, into a known target folder.
+     my $dir_file=&get_destination($f_where);
+     my $safe_name=&safe_file_name($f_name);
+     if($dir_file eq "" || $safe_name eq "") {
+      &log("Upload refused: target \"$f_where\", name \"$f_name\"");
+      unlink($f_tmp_name) if($uploading_file && $f_tmp_name ne "");
+      $uploading_file=0;
+      &send_key_to_client($connection,&error());
+      last;
+     }
      $f_content=~s/.*;base64,//g;
      if(!$uploading_file) {
       $f_tmp_name="$upload_tmp_dir/UPLOAD_FILE.".time().".".$$;
@@ -1415,19 +1469,23 @@ sub pattern_daemon {
      $f_perc=int((100*$f_start)/$f_size)."%";
      if($f_status eq "END_UPLOAD") {
       $uploading_file=0;
-      my $dir_file=&get_destination($f_where);
-      if($f_where eq "PLUGINS") { $response_to_send=&sudo("SET_PLUGIN",$f_tmp_name,$f_name,$f_where,"install.sh") if($f_where eq "PLUGINS"); }
-      else                      {                     
-       # Check uploadef file type
-       open(CMD,"$file_command $f_tmp_name|");
-       my $file_type=<CMD>;
-       close(CMD);
+      if($f_where eq "PLUGINS") { $response_to_send=&sudo("SET_PLUGIN",$f_tmp_name,$safe_name,$f_where,"install.sh"); }
+      else                      {
+       require File::Copy;
+       # Check uploaded file type
+       my $file_type="";
+       if(open(my $type_fh,"-|",$file_command,$f_tmp_name)) {
+        $file_type=<$type_fh> // "";
+        close($type_fh);
+       }
        # Add support to extract Zip archive data
        if($file_type =~/Zip archive data/) {
-        system("$unzip -o -d $dir_file $f_tmp_name 1>/dev/null");
+        $response_to_send=$error_response if(!&upload_extract_zip($f_tmp_name,$dir_file));
         unlink($f_tmp_name);
-       } else {
-        rename($f_tmp_name,"$dir_file/$f_name");
+       } elsif(!File::Copy::move($f_tmp_name,"$dir_file/$safe_name")) {
+        &log("Upload: cannot store $dir_file/$safe_name: $!");
+        unlink($f_tmp_name);
+        $response_to_send=$error_response;
        }
       }
       $f_perc="100%";
@@ -3031,6 +3089,10 @@ sub pattern_daemon {
     if($key=~/$get_file_list_command:(.*)/) {
      my $f_where=$1;
      my $dir_file=&get_destination($f_where);
+     if($dir_file eq "") {
+      &send_key_to_client($connection,&error());
+      last;
+     }
      $response="$ok_response:".&get_file_list($dir_file);
      &send_key_to_client($connection,$response);
      last;
@@ -3042,8 +3104,13 @@ sub pattern_daemon {
      my $response_to_send=$ok_response;
      ($f_where,$f_name)=split(":",$1);
      my $dir_file=&get_destination($f_where);
-     $response_to_send=&sudo("SET_PLUGIN","$dir_file/$f_name",$plugin_archive_file,$f_where,"uninstall.sh") if($f_where eq "PLUGINS");
-     unlink("$dir_file/$f_name");
+     my $safe_name=&safe_file_name($f_name);
+     if($dir_file eq "" || $safe_name eq "") {
+      &send_key_to_client($connection,&error());
+      last;
+     }
+     $response_to_send=&sudo("SET_PLUGIN","$dir_file/$safe_name",$plugin_archive_file,$f_where,"uninstall.sh") if($f_where eq "PLUGINS");
+     unlink("$dir_file/$safe_name");
      &send_key_to_client($connection,$response_to_send);
      last;
     }
@@ -3256,6 +3323,18 @@ sub create_socket_daemon (@) {
  return $server;
 }
 
+# Text from a client or a file name inside the port 85 image list page.
+sub pattern_html_escape (@) {
+ my $s=shift;
+ $s="" if(!defined $s);
+ $s=~s/&/&amp;/g;
+ $s=~s/</&lt;/g;
+ $s=~s/>/&gt;/g;
+ $s=~s/"/&quot;/g;
+ $s=~s/'/&#39;/g;
+ return $s;
+}
+
 ###############################################
 #          Send Key To Client function        #
 ###############################################
@@ -3350,6 +3429,7 @@ sub close_connection {
  &release_source_rgb_quant_range("hcfr") if($is_hcfr);
  $calman{$connection}=0;
  $cmd{$connection}="";
+ delete $pending_cmd{$connection};
  delete $client_ip{$connection};
  delete $hcfr_client_quant_range{$connection};
  delete $rpc_client{$connection};

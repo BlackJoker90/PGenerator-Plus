@@ -1266,6 +1266,8 @@ sub pgenerator_conf_set_pair (@) {
  my $paired_var = "";
  my $paired_value = "";
  return $content if($var_to_set =~/^(ip_pattern|^port_pattern)$/ || $var_to_set !~/^\w+$/);
+ # One line per key: a line break in a value would add keys of its own.
+ return $content if(defined $value && $value =~/[\x00-\x1f\x7f]/);
  if($var_to_set eq "dv_metadata") {
   $paired_var = "dv_map_mode";
   $paired_value = "0" if($value eq "2");
@@ -1292,9 +1294,19 @@ sub pgenerator_conf_set_pair (@) {
  return $out;
 }
 
+sub pgenerator_conf_value_ok (@) {
+ my $value = shift;
+ return (defined $value && $value !~/[\x00-\x1f\x7f]/) ? 1 : 0;
+}
+
+# The conf text, or undef when the file exists but cannot be read: writing
+# from an empty text then would drop every other key.
 sub read_pgenerator_conf_text (@) {
  my $content = "";
- open(CONF,"$pattern_conf");
+ if(!open(CONF,"<",$pattern_conf)) {
+  return undef if(-e $pattern_conf);
+  return "";
+ }
  while(<CONF>) { $content.=$_; }
  close(CONF);
  chomp($content);
@@ -1306,6 +1318,9 @@ sub read_pgenerator_conf_text (@) {
 # lock two of them read the same file and the later write drops the
 # other's key. The per-process temp file keeps one writer from renaming
 # another's half-written file into place.
+# Returns 1 once the new text is on disk and reads back the same; the
+# callers answer OK only then, so the daemon never takes a lost write for
+# the applied settings.
 sub pgenerator_conf_update (@) {
  my $change = shift;
  my $lock;
@@ -1314,27 +1329,41 @@ sub pgenerator_conf_update (@) {
  } else {
   undef $lock;
  }
- my $content = $change->(&read_pgenerator_conf_text());
- &write_file("$pattern_conf.tmp.$$","$pattern_conf","$content\n");
+ my $ok = 0;
+ my $before = &read_pgenerator_conf_text();
+ if(defined $before) {
+  my $content = $change->($before);
+  if(&write_file("$pattern_conf.tmp.$$","$pattern_conf","$content\n")) {
+   my $after = &read_pgenerator_conf_text();
+   $ok = (defined $after && $after eq $content) ? 1 : 0;
+  } else {
+   unlink("$pattern_conf.tmp.$$");
+  }
+ }
  close($lock) if($lock);
+ return $ok;
 }
 
 sub set_pgenerator_conf (@) {
  return print $error_response if($ARGV[1] =~/^(ip_pattern|^port_pattern)$/);
- &pgenerator_conf_update(sub { return &pgenerator_conf_set_pair($_[0],$ARGV[1],$ARGV[2]); });
+ return print $error_response if($ARGV[1] !~/^\w+$/ || !&pgenerator_conf_value_ok($ARGV[2] // ""));
+ return print $error_response if(!&pgenerator_conf_update(sub { return &pgenerator_conf_set_pair($_[0],$ARGV[1],$ARGV[2] // ""); }));
  print $ok_response;
 }
 
 # SET_PGENERATOR_CONF_MULTI key1 value1 key2 value2 ...: one read and one
 # atomic write for a whole WebUI apply instead of a sudo spawn per key.
 sub set_pgenerator_conf_multi (@) {
- &pgenerator_conf_update(sub {
+ for(my $i=1; $i+1 <= $#ARGV; $i+=2) {
+  return print $error_response if($ARGV[$i] !~/^\w+$/ || !&pgenerator_conf_value_ok($ARGV[$i+1]));
+ }
+ return print $error_response if(!&pgenerator_conf_update(sub {
   my $content = shift;
   for(my $i=1; $i+1 <= $#ARGV; $i+=2) {
    $content = &pgenerator_conf_set_pair($content,$ARGV[$i],$ARGV[$i+1]);
   }
   return $content;
- });
+ }));
  print $ok_response;
 }
 

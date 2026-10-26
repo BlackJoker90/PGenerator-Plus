@@ -3734,7 +3734,7 @@ function selftestModeRow(mode,result,running){
  const fmt=(r.link&&r.link.format)||'';
  const chans=' <span class="selftest-chans">'+(/4:4:4/.test(fmt)?'Cb Cr Y':/4:2:2/.test(fmt)?'Y Cb Cr':'R G B')+'</span>';
  const strip=windows.length?windows.map(c=>'<span class="selftest-swatch'+(c.ok?'':' is-off')+'" style="background:'+selftestSwatchColor(c.swatch)+'" title="'+selftestEsc(c.label+': '+(c.ok?'exact':'expected '+c.expect+', read '+c.got))+'"></span>').join('')
-  :'<span class="selftest-strip-empty">'+(status==='pending'?(running?'Queued':'Not run'):'')+'</span>';
+  :'';
  const score=r.total?r.passed+'/'+r.total:'';
  const rows=(r.checks||[]).map(c=>'<tr class="'+(c.ok?'':'is-off')+'"><th scope="row">'+(c.swatch?'<span class="selftest-swatch" style="background:'+selftestSwatchColor(c.swatch)+'"></span>':'')+selftestEsc(c.label)+'</th><td>'+selftestEsc(c.expect)+'</td><td>'+selftestEsc(c.got)+'</td><td class="selftest-cell-state">'+(c.ok?(c.swatch?'Exact':'Match'):(c.info?'Not verified':'Mismatch'))+'</td></tr>').join('');
  const detail=(r.checks||[]).length?

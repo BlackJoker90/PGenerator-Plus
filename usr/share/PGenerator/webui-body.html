@@ -1800,7 +1800,7 @@ __PG_LOGO_DARK__
   <div id="meterProfileWorkspaceHost"></div>
  </div>
 
- <!-- Device Info -->
+ <!-- Device Info, with Software Update as its last section -->
  <div class="card span2 devinfo-card" data-widget="info" data-desktop-workspace="system" data-desktop-order="10" draggable="true">
   <h2><span class="drag-handle"><svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true" fill="currentColor"><circle cx="9" cy="6" r="1.6"/><circle cx="15" cy="6" r="1.6"/><circle cx="9" cy="12" r="1.6"/><circle cx="15" cy="12" r="1.6"/><circle cx="9" cy="18" r="1.6"/><circle cx="15" cy="18" r="1.6"/></svg></span>Device Info</h2>
   <!-- Vitals: live load, memory and SoC temperature (loadStats) -->
@@ -1854,6 +1854,31 @@ __PG_LOGO_DARK__
     </select>
    </div>
   </div>
+  <section class="card-section" id="updateCard" aria-labelledby="setTitle_update">
+   <div class="card-section-head"><h3 class="card-section-title" id="setTitle_update"><svg class="card-section-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 18a4.5 4.5 0 0 1-.6-8.96A6 6 0 0 1 17.6 8.3 4 4 0 0 1 17 18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><path d="M12 11v9M8.5 16.5 12 20l3.5-3.5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>Software Update</h3></div>
+   <div id="updateContent" class="facts-host">
+    <div class="info-grid devinfo-facts update-facts">
+     <div class="info-item devinfo-fact"><div class="label">Current</div><div class="value" id="updateCurrent">-</div><span class="fact-chip" id="updateCurrentChip" hidden></span></div>
+     <div class="info-item devinfo-fact"><div class="label">Latest</div><div class="value" id="updateLatest">-</div></div>
+     <div class="info-item devinfo-fact"><div class="label">Published</div><div class="value" id="updatePublished">-</div></div>
+     <div class="info-item devinfo-fact"><div class="label">Package</div><div class="value" id="updateTarget">-</div></div>
+    </div>
+    <div id="updateStatus" class="update-status"></div>
+    <details class="update-notes" id="updateChangelogWrap" hidden><summary id="updateChangelogSummary">What’s new</summary><div id="updateChangelog"></div></details>
+    <div class="btn-grid btn-grid-lg" style="margin-top:10px">
+     <button class="btn btn-sm btn-primary ico-install" id="applyUpdateBtn" style="display:none" onclick="applyUpdate()">Install Update</button>
+     <button class="btn btn-sm btn-secondary ico-refresh" id="checkUpdateBtn" onclick="checkUpdate(true)">Check for Updates</button>
+     <button class="btn btn-sm btn-secondary ico-logs" id="submitLogsBtn" onclick="submitLogs()" title="Download a diagnostic report to attach to a GitHub issue">Download Logs</button>
+    </div>
+    <section class="update-section" id="releaseRow" style="display:none" aria-labelledby="releaseRowTitle">
+     <div class="update-section-title" id="releaseRowTitle">Previous versions</div>
+     <label class="update-field-label" for="releaseSelect">Install a release</label>
+     <div class="release-pick">
+      <select id="releaseSelect" data-pg-repick="1" onchange="onReleaseSelectChange()"></select>
+     </div>
+    </section>
+   </div>
+  </section>
  </div>
 
  <!-- Network: WiFi Client, WiFi Access Point and Bluetooth PAN in one card.
@@ -2007,11 +2032,8 @@ __PG_LOGO_DARK__
 
   __PG_LG_CARD__
 
- <!-- GPU Memory -->
- <!-- Software Update -->
-  <!-- Settings: UI Settings (browser-local, never sent to the device config),
-      Software Update and Backup in one card. On Tablet/phone Software Update
-      moves to the end of Device Info (pgPlaceUpdateForLayout). -->
+  <!-- Settings: UI Settings (browser-local, never sent to the device config)
+      and Backup in one card. Software Update sits in Device Info (System). -->
  <section class="card span2 settings-card" id="settingsCard" data-widget="settings" data-collapse-key="settings" data-desktop-workspace="settings" data-desktop-order="10" draggable="true">
   <h2><span class="drag-handle"><svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true" fill="currentColor"><circle cx="9" cy="6" r="1.6"/><circle cx="15" cy="6" r="1.6"/><circle cx="9" cy="12" r="1.6"/><circle cx="15" cy="12" r="1.6"/><circle cx="9" cy="18" r="1.6"/><circle cx="15" cy="18" r="1.6"/></svg></span>Settings</h2>
   <section class="card-section" id="uiSettingsCard" aria-labelledby="setTitle_ui">
@@ -2056,31 +2078,6 @@ __PG_LOGO_DARK__
       <button type="button" class="layout-switch-btn" data-measure-mode="hidden" aria-pressed="false" onclick="pgSetHideMeasure(true)">Hide</button>
      </div>
     </div>
-   </div>
-  </section>
-  <section class="card-section" id="updateCard" aria-labelledby="setTitle_update">
-   <div class="card-section-head"><h3 class="card-section-title" id="setTitle_update"><svg class="card-section-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 18a4.5 4.5 0 0 1-.6-8.96A6 6 0 0 1 17.6 8.3 4 4 0 0 1 17 18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><path d="M12 11v9M8.5 16.5 12 20l3.5-3.5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>Software Update</h3></div>
-   <div id="updateContent" class="facts-host">
-    <div class="info-grid devinfo-facts update-facts">
-     <div class="info-item devinfo-fact"><div class="label">Current</div><div class="value" id="updateCurrent">-</div><span class="fact-chip" id="updateCurrentChip" hidden></span></div>
-     <div class="info-item devinfo-fact"><div class="label">Latest</div><div class="value" id="updateLatest">-</div></div>
-     <div class="info-item devinfo-fact"><div class="label">Published</div><div class="value" id="updatePublished">-</div></div>
-     <div class="info-item devinfo-fact"><div class="label">Package</div><div class="value" id="updateTarget">-</div></div>
-    </div>
-    <div id="updateStatus" class="update-status"></div>
-    <details class="update-notes" id="updateChangelogWrap" hidden><summary id="updateChangelogSummary">What’s new</summary><div id="updateChangelog"></div></details>
-    <div class="btn-grid btn-grid-lg" style="margin-top:10px">
-     <button class="btn btn-sm btn-primary ico-install" id="applyUpdateBtn" style="display:none" onclick="applyUpdate()">Install Update</button>
-     <button class="btn btn-sm btn-secondary ico-refresh" id="checkUpdateBtn" onclick="checkUpdate(true)">Check for Updates</button>
-     <button class="btn btn-sm btn-secondary ico-logs" id="submitLogsBtn" onclick="submitLogs()" title="Download a diagnostic report to attach to a GitHub issue">Download Logs</button>
-    </div>
-    <section class="update-section" id="releaseRow" style="display:none" aria-labelledby="releaseRowTitle">
-     <div class="update-section-title" id="releaseRowTitle">Previous versions</div>
-     <label class="update-field-label" for="releaseSelect">Install a release</label>
-     <div class="release-pick">
-      <select id="releaseSelect" data-pg-repick="1" onchange="onReleaseSelectChange()"></select>
-     </div>
-    </section>
    </div>
   </section>
   <section class="card-section" id="backupCard" aria-labelledby="setTitle_backup">

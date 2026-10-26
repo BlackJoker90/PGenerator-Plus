@@ -5107,7 +5107,6 @@ function pgApplyLayout(options){
  uiSyncBodyScrollLock();
  meterSyncGreyscaleDesktopLayout();
  pgPlaceConnectivityForLayout();
- pgPlaceUpdateForLayout();
  pgSyncCardCollapseForLayout();
  pgUpdateLayoutControls();
  if(pgLayoutEffective==='desktop'){
@@ -5170,17 +5169,6 @@ function pgPlaceConnectivityForLayout(){
   }
  });
  pgScheduleTabletNavSync();
-}
-// Tablet/phone shows Software Update in System, as a section at the end of
-// Device Info; Desktop keeps it in Settings, before Backup.
-function pgPlaceUpdateForLayout(){
- const update=document.getElementById('updateCard');
- const info=document.querySelector('.dashboard > .card[data-widget="info"]');
- const backup=document.getElementById('backupCard');
- if(!update||!info||!backup) return;
- if(document.body.classList.contains('layout-desktop')){
-  if(update.nextElementSibling!==backup) backup.before(update);
- }else if(update.parentNode!==info) info.appendChild(update);
 }
 function meterSyncGreyscaleDesktopLayout(){
  const live=document.getElementById('meterLiveReading');
@@ -6110,14 +6098,14 @@ function pgWatchUpdateCard(){
  },{rootMargin:'0px 0px 100% 0px'});
  io.observe(card);
  // Once per page load, so the header shows an update without a visit to
- // Settings. Started after the page's own requests.
+ // System. Started after the page's own requests.
  setTimeout(()=>{ if(!_updateChecked) checkUpdate(false,true); },3000);
 }
 if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',pgWatchUpdateCard);
 else pgWatchUpdateCard();
 function showUpdateCard(){
  document.getElementById('updateCard').style.display='';
- if(document.body.classList.contains('layout-desktop')) pgSelectDesktopWorkspace('settings');
+ if(document.body.classList.contains('layout-desktop')) pgSelectDesktopWorkspace('system');
  else pgTabletRevealWorkspaceOf(document.getElementById('updateCard'));
  document.getElementById('updateCard').scrollIntoView({behavior:'smooth'});
  if(!_updateChecked) checkUpdate();

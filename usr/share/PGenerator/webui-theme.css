@@ -1532,18 +1532,20 @@ background:linear-gradient(135deg,var(--sw-bg) 0 50%,var(--sw-card) 50% 100%)}
 .selftest-actions{grid-column:1/-1;justify-content:stretch}
 .selftest-actions .btn{flex:1 1 0;min-height:44px;justify-content:center}
 /* Phones and tablets: group | mode | depth | state on the first line, on
-   shared columns so each lines up down the list; group, mode and depth sit
-   side by side with the same gap. Below, once there is a result: the link
-   line, then strip | score. Empty parts take no line. */
-.selftest-modes{grid-template-columns:auto auto auto minmax(min-content,1fr);column-gap:10px}
+   shared columns so each lines up down the list. The gaps are columns of
+   their own (at least 10px, then an equal share of the free width), so the
+   space between the four is the same whatever the card width. Below, once
+   there is a result: the link line, then strip | score. Empty parts take no
+   line. */
+.selftest-modes,.selftest-mode-head{grid-template-columns:auto minmax(10px,1fr) auto minmax(10px,1fr) auto minmax(10px,1fr) auto;column-gap:0}
 .selftest-modes .selftest-group{grid-column:1;grid-row:1;white-space:nowrap}
 .selftest-modes .selftest-mode-title{display:contents}
-.selftest-modes .selftest-mode-name{grid-column:2;grid-row:1;white-space:normal}
-.selftest-modes .selftest-bits{grid-column:3;grid-row:1}
-.selftest-modes .selftest-state{grid-column:4;grid-row:1;justify-self:end;white-space:normal;text-align:right}
+.selftest-modes .selftest-mode-name{grid-column:3;grid-row:1;white-space:normal}
+.selftest-modes .selftest-bits{grid-column:5;grid-row:1}
+.selftest-modes .selftest-state{grid-column:7;grid-row:1;justify-self:end;white-space:normal;text-align:right}
 .selftest-modes .selftest-mode-link{grid-column:1/-1;grid-row:2;margin-top:6px;contain:inline-size}
-.selftest-modes .selftest-strip{grid-column:1/4;grid-row:3;margin-top:6px;justify-content:flex-start}
-.selftest-modes .selftest-score{grid-column:4;grid-row:3;margin-top:6px;justify-self:end}
+.selftest-modes .selftest-strip{grid-column:1/6;grid-row:3;margin-top:6px;justify-content:flex-start}
+.selftest-modes .selftest-score{grid-column:7;grid-row:3;margin-top:6px;justify-self:end}
 .selftest-modes :is(.selftest-mode-link,.selftest-strip,.selftest-score):empty{display:none}
 .selftest-table{display:block;overflow-x:auto}
 }

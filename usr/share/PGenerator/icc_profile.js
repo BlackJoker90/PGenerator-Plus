@@ -3228,7 +3228,7 @@ function meterIccSetProgress(label,current,total){
  if(count) count.textContent=determinate?(Math.max(0,Number(current)||0)+' / '+Math.max(0,Number(total)||0)):'Working...';
  if(fill){
   fill.classList.toggle('indeterminate',!determinate);
-  fill.style.width=determinate?(Math.max(0,Math.min(100,100*current/total))+'%'):'';
+  fill.style.transform=determinate?('scaleX('+(Math.max(0,Math.min(100,100*current/total))/100)+')'):'';
  }
 }
 

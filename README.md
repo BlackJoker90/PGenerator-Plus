@@ -357,7 +357,7 @@ PGenerator+ is a free, open-source display calibration suite for the Raspberry P
 
 ## 🗺️ Web UI tour
 
-Served on **port 80** at `http://pgenerator.local`. It has a **Desktop** layout with a sidebar of workspaces and a **Tablet** layout with draggable, collapsible cards and a bottom tab bar on phones.
+Served on **port 80** at `http://pgenerator.local`. It has a **Desktop** layout with a sidebar of workspaces and a **Tablet** layout for tablets and phones: a bottom tab bar opens one workspace at a time (Output first), with draggable, collapsible cards. The layout is chosen in Settings → UI Settings.
 
 | Workspace | What's in it |
 |---|---|
@@ -367,7 +367,7 @@ Served on **port 80** at `http://pgenerator.local`. It has a **Desktop** layout 
 | **Meter Profiler** | Meter correction (CCSS) editor and preview |
 | **3D LUT · Display Profiler** | LUT handling, MHC2 / KDE HDR profile building |
 | **Connectivity** | Wi-Fi client, access point and Bluetooth in one Network card, LG TV control (pairing, AutoCal: greyscale, 3D LUT, HDR tone map, Shadow Fix) and the Resolve client |
-| **System** | Device info: CPU, memory and temperature with meters, plus board, hostname, resolution, uptime, RAM and the network interfaces; GPU memory (asks before the required reboot) and CPU **Scaling Type** (Performance ⚡ recommended, applies at once) are set in their tiles |
+| **System** | Device info: CPU, memory and temperature with meters, plus board, hostname, resolution, uptime, RAM and the network interfaces; GPU memory (asks before the required reboot) and CPU **Scaling Type** (Performance recommended, applies at once) are set in their tiles |
 | **Live Information** (right-hand drawer) | Active signal, the infoframe decoder (AVI and DRM), the measured HDMI link depth and clock, and HDMI-CEC status |
 | **Settings** | Layout, zoom, **13 themes**, Show/Hide for the Measure workspaces, software update (with notes, progress, rollback), Download Logs, and settings backup and restore |
 

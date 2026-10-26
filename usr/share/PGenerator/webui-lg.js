@@ -601,6 +601,7 @@ function lgRevealPinEntry(){
    }
   }catch(e){}
  }
+ if(card&&typeof pgTabletRevealWorkspaceOf==='function') pgTabletRevealWorkspaceOf(card);
  if(card&&card.scrollIntoView) card.scrollIntoView({behavior:'smooth',block:'center'});
  if(legacyInput){
   try{legacyInput.focus({preventScroll:true});}catch(e){legacyInput.focus();}

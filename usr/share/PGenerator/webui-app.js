@@ -2201,9 +2201,16 @@ function statToneClass(pct){
  if(pct>=60)return' warn';
  return'';
 }
+// Progress fills are full-width bars scaled from the left: a step moves on the
+// compositor instead of re-laying out the bar. data-pct keeps the value readable.
+function pgSetFill(el,pct){
+ if(!el) return;
+ const p=Math.max(0,Math.min(100,Number(pct)||0));
+ el.dataset.pct=String(p);
+ el.style.transform='scaleX('+(p/100)+')';
+}
 function setMeter(id,pct){
- const el=document.getElementById(id);
- if(el)el.style.width=Math.max(0,Math.min(100,Number(pct)||0))+'%';
+ pgSetFill(document.getElementById(id),pct);
 }
 // Daemon notice (e.g. Calman asked for a format PGenerator+ cannot output):
 // a modal info card that stays until dismissed, once per notice id.
@@ -2590,19 +2597,6 @@ function pgSetDeviceTemperature(t){
  return text;
 }
 // Line icons for the Device Info facts, drawn in the theme accent.
-const PG_DEVICE_FACT_ICONS={
- board:'<rect x="3" y="5" width="18" height="14" rx="2"/><rect x="9.5" y="9.5" width="5" height="5" rx=".6"/><circle cx="6.5" cy="8.5" r=".8"/><circle cx="17.5" cy="8.5" r=".8"/><circle cx="6.5" cy="15.5" r=".8"/><circle cx="17.5" cy="15.5" r=".8"/>',
- host:'<rect x="3.5" y="4" width="17" height="7" rx="1.5"/><rect x="3.5" y="13" width="17" height="7" rx="1.5"/><path d="M7.5 7.5h.01M7.5 16.5h.01"/>',
- display:'<rect x="3" y="4" width="18" height="12" rx="1.5"/><path d="M8.5 20h7M12 16v4"/>',
- clock:'<circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/>',
- ram:'<rect x="3" y="7" width="18" height="9" rx="1.5"/><path d="M7 16v3M11 16v3M15 16v3M7 10.5v2M11 10.5v2M15 10.5v2"/>',
- chip:'<rect x="6" y="6" width="12" height="12" rx="1.5"/><rect x="9.5" y="9.5" width="5" height="5" rx=".5"/><path d="M9 2.5V6M15 2.5V6M9 18v3.5M15 18v3.5M2.5 9H6M2.5 15H6M18 9h3.5M18 15h3.5"/>',
- eth:'<path d="M3.5 5.5h17v10H16v3H8v-3H3.5z"/><path d="M8 9v2.5M12 9v2.5M16 9v2.5"/>',
- usb:'<path d="M12 3.5v13"/><circle cx="12" cy="18.5" r="2"/><path d="M12 14.5l-4.5-2.5V9M12 12l4.5-2.5V7"/><circle cx="7.5" cy="8" r="1.2"/><path d="M15.5 5h2v2h-2z"/>',
- wifi:'<path d="M2.5 9a14 14 0 0 1 19 0M5.5 12.3a9.6 9.6 0 0 1 13 0M8.6 15.5a5.2 5.2 0 0 1 6.8 0"/><circle cx="12" cy="19" r="1.3" fill="currentColor"/>',
- ap:'<circle cx="12" cy="12" r="1.6"/><path d="M8.5 15.5a5 5 0 0 1 0-7M15.5 8.5a5 5 0 0 1 0 7M5.6 18.4a9 9 0 0 1 0-12.8M18.4 5.6a9 9 0 0 1 0 12.8"/>',
- bt:'<path d="M7 7.5l10 9-5 4.5v-18l5 4.5-10 9"/>'
-};
 // Help tips keep their text in data-tip once the tooltip has taken over title
 function pgSetTipSuffix(tip,suffix){
  const attr=tip.hasAttribute('data-tip')?'data-tip':'title';
@@ -2613,11 +2607,6 @@ function addDeviceFact(g,icon,label,value,valueId){
  addInfo(g,label,value,valueId);
  const d=g.lastElementChild;
  d.classList.add('devinfo-fact');
- const svg=document.createElementNS('http://www.w3.org/2000/svg','svg');
- svg.setAttribute('class','devinfo-icon');svg.setAttribute('viewBox','0 0 24 24');svg.setAttribute('aria-hidden','true');
- Object.entries({fill:'none',stroke:'currentColor','stroke-width':'1.8','stroke-linecap':'round','stroke-linejoin':'round'}).forEach(([k,v])=>svg.setAttribute(k,v));
- svg.innerHTML=PG_DEVICE_FACT_ICONS[icon]||'';
- d.insertBefore(svg,d.firstChild);
 }
 // Copy button on a fact tile: copies the tile's value; the copy icon turns
 // into a check for a moment as the confirmation.
@@ -2861,7 +2850,7 @@ function diagPromptVideoRange(){
   label.textContent='Frame range for extracted frames:';
   const sel=document.createElement('select');
   sel.className='inline-select';
-  sel.style.cssText='font-size:.68rem;max-width:unset';
+  sel.style.cssText='font-size:.6875rem;max-width:unset';
   sel.innerHTML='<option value="limited">Limited (16-235, recommended)</option><option value="full">Full (0-255)</option>';
   sel.value=pref;
   const btn=document.createElement('button');
@@ -3970,7 +3959,7 @@ function pgRebootProgress(bootId){
    :(d.step===0?'Shutting down PGenerator+…':'The Pi is restarting — this page reconnects automatically.')));
   const msgEl=card.querySelector('.upd-msg');
   if(msgEl.textContent!==msg) msgEl.textContent=msg;
-  card.querySelector('.upd-bar-fill').style.width=d.value.toFixed(1)+'%';
+  pgSetFill(card.querySelector('.upd-bar-fill'),d.value);
   const bar=card.querySelector('.upd-bar');
   bar.setAttribute('aria-valuenow',String(Math.round(d.value)));
   bar.setAttribute('aria-valuetext',d.result==='done'?'Done':(run?'Step '+(d.step+1)+' of 3, '+PG_RB_STEPS[d.step]:'Stopped at '+PG_RB_STEPS[d.step]));
@@ -4191,8 +4180,8 @@ function pgConfirmReboot(o){
 }
 
 // CPU frequency scaling governor, shown as "Scaling Type". Applies at once.
-const PG_GOVERNOR_LABELS={performance:'Performance \u26a1',ondemand:'On demand \ud83d\udcc8',
- schedutil:'Scheduler-driven \ud83e\udde0',conservative:'Conservative \ud83d\udc22',powersave:'Power save \ud83d\udd0b'};
+const PG_GOVERNOR_LABELS={performance:'Performance',ondemand:'On demand',
+ schedutil:'Scheduler-driven',conservative:'Conservative',powersave:'Power save'};
 let pgGovernorCurrent='';
 async function loadGovernor(){
  const g=await fetchJSON('/api/system/governor',{_quiet:true});
@@ -4947,7 +4936,8 @@ function pgRefreshVisibleWorkspace(options){
   // in-memory snapshot without rebuilding steps or consulting measurement
   // caches, otherwise a resize can replace freshly graded results with an
   // older series context.
-  if(pgDesktopWorkspace==='calibration'&&typeof meterRedrawActiveSeriesCharts==='function'){
+  const workspace=document.body.classList.contains('layout-desktop')?pgDesktopWorkspace:pgTabletWorkspace;
+  if(workspace==='calibration'&&typeof meterRedrawActiveSeriesCharts==='function'){
    try{ meterRedrawActiveSeriesCharts(); }catch(e){}
   }else if(typeof pgRedrawChartsForTheme==='function') pgRedrawChartsForTheme();
  }));
@@ -5120,7 +5110,10 @@ function pgApplyLayout(options){
  pgSyncCardCollapseForLayout();
  pgUpdateLayoutControls();
  if(pgLayoutEffective==='desktop'){
-  if(previous!=='desktop'||(options&&options.resetWorkspace)) pgDesktopWorkspace='output';
+  // Coming from Tablet, Desktop opens the workspace that was open there.
+  if(options&&options.resetWorkspace) pgDesktopWorkspace='output';
+  else if(previous!=='desktop') pgDesktopWorkspace=pgTabletNavPinned||pgTabletWorkspace;
+  pgSyncTabletPanels();
   pgSelectDesktopWorkspace(pgDesktopWorkspace);
  }else{
   pgSetDesktopUtilityDrawer(false);
@@ -5128,6 +5121,10 @@ function pgApplyLayout(options){
   // Desktop workspaces assign inline presentation order. Clear it when
   // returning to Tablet or CSS order masks DOM drag-and-drop reordering.
   document.querySelectorAll('.dashboard > .card[data-desktop-active]').forEach(panel=>panel.removeAttribute('data-desktop-active'));
+  if(options&&options.resetWorkspace) pgTabletWorkspace='output';
+  else if(previous==='desktop') pgTabletWorkspace=pgDesktopWorkspace;
+  pgTabletNavPinned=PG_TABLET_NAV_TOOLS[pgTabletWorkspace]?pgTabletWorkspace:'';
+  pgSelectTabletWorkspace(pgTabletWorkspace);
   pgRefreshVisibleWorkspace();
  }
  pgSyncTabletNav();
@@ -5196,6 +5193,7 @@ function pgApplyHideMeasure(){
   btn.setAttribute('aria-pressed',(btn.getAttribute('data-measure-mode')==='hidden')===pgHideMeasure?'true':'false');
  });
  if(pgHideMeasure&&PG_MEASURE_WORKSPACES.indexOf(pgDesktopWorkspace)>=0) pgSelectDesktopWorkspace('output');
+ if(pgHideMeasure&&PG_MEASURE_WORKSPACES.indexOf(pgTabletWorkspace)>=0){ pgTabletNavPinned=''; pgSelectTabletWorkspace('output'); }
  pgScheduleTabletNavSync();
 }
 function pgSetHideMeasure(hide){
@@ -5213,19 +5211,25 @@ function pgUpdateHeaderOffset(){
  if(!header) return;
  document.documentElement.style.setProperty('--pg-header-height',Math.ceil(header.getBoundingClientRect().height)+'px');
 }
-// Tablet/phone stacks every card in one scroll. The bottom jump bar reuses the
-// desktop workspace metadata (data-desktop-workspace + sidebar icons) to scroll
-// to each group; it never filters cards, so drag-and-drop order still applies.
+// Tablet/phone shows one workspace at a time, picked in the bottom bar. The
+// bar reuses the desktop workspace metadata (data-desktop-workspace + sidebar
+// icons); cards of the other workspaces are hidden by CSS (data-tablet-active),
+// so drag-and-drop order still applies inside the open workspace.
 let pgTabletNavFrame=0;
 let pgTabletNavPinned='';
+let pgTabletWorkspace='output';
 function pgTabletWorkspaceAnchors(){
  const first={};
+ // Measure with the workspace filter lifted: a card hidden only because
+ // another workspace is open still counts as available.
+ document.body.classList.add('pg-tablet-measuring');
  document.querySelectorAll('.dashboard > .card[data-desktop-workspace]').forEach(card=>{
   const workspace=card.getAttribute('data-desktop-workspace');
   if(!Object.prototype.hasOwnProperty.call(PG_DESKTOP_WORKSPACES,workspace)||!card.getClientRects().length) return;
   const top=card.getBoundingClientRect().top;
   if(!first[workspace]||top<first[workspace].top) first[workspace]={workspace:workspace,card:card,top:top};
  });
+ document.body.classList.remove('pg-tablet-measuring');
  return Object.keys(first).map(key=>first[key]).sort((a,b)=>a.top-b.top);
 }
 function pgTabletNavOffset(){
@@ -5245,6 +5249,46 @@ const PG_TABLET_NAV_TOOLS={
  'icc-profile':{host:'calibration',control:'#meterSeriesTabRow [data-series-tab="icc"]'}
 };
 let pgTabletMoreOpen=false;
+function pgTabletHostWorkspace(workspace){
+ const tool=PG_TABLET_NAV_TOOLS[workspace];
+ return tool?tool.host:workspace;
+}
+function pgSyncTabletPanels(){
+ const tablet=document.body.classList.contains('layout-tablet');
+ document.querySelectorAll('.dashboard > .card[data-desktop-workspace]').forEach(panel=>{
+  if(!tablet){ panel.removeAttribute('data-tablet-active'); return; }
+  let workspace=panel.getAttribute('data-desktop-workspace');
+  if(PG_DESKTOP_WORKSPACE_ALIASES[workspace]) workspace=PG_DESKTOP_WORKSPACE_ALIASES[workspace];
+  const active=workspace===pgTabletWorkspace||!!panel.getAttribute('data-desktop-global');
+  panel.setAttribute('data-tablet-active',active?'true':'false');
+ });
+ const title=document.getElementById('desktopWorkspaceTitle');
+ if(title&&tablet) title.textContent=PG_DESKTOP_WORKSPACES[pgTabletWorkspace]||'';
+}
+function pgSelectTabletWorkspace(workspace){
+ if(PG_DESKTOP_WORKSPACE_ALIASES[workspace]) workspace=PG_DESKTOP_WORKSPACE_ALIASES[workspace];
+ workspace=pgTabletHostWorkspace(workspace);
+ if(!Object.prototype.hasOwnProperty.call(PG_DESKTOP_WORKSPACES,workspace)) workspace='output';
+ if(pgHideMeasure&&PG_MEASURE_WORKSPACES.indexOf(workspace)>=0) workspace='output';
+ const changed=pgTabletWorkspace!==workspace;
+ pgTabletWorkspace=workspace;
+ pgSyncTabletPanels();
+ if(changed&&workspace==='calibration'){
+  // As on Desktop: pick up series created in another browser on the way in.
+  try{ meterRefreshCustomSeriesFromServer(); }catch(e){}
+ }
+ if(changed) pgRefreshVisibleWorkspace();
+ return changed;
+}
+// Before scrolling to an element on Tablet, open the workspace it lives in.
+function pgTabletRevealWorkspaceOf(el){
+ if(!el||!document.body.classList.contains('layout-tablet')) return;
+ const workspace=pgPaletteWorkspaceOf(el);
+ if(!workspace||pgTabletHostWorkspace(workspace)===pgTabletWorkspace) return;
+ pgTabletNavPinned='';
+ pgSelectTabletWorkspace(workspace);
+ pgSyncTabletNav();
+}
 function pgTabletNavButton(workspace,className){
  const btn=document.createElement('button');
  btn.type='button';
@@ -5334,7 +5378,7 @@ function pgSetTabletMore(open,options){
  sheet.hidden=!pgTabletMoreOpen;
  btn.setAttribute('aria-expanded',pgTabletMoreOpen?'true':'false');
  if(pgTabletMoreOpen&&options&&options.focus){
-  const target=sheet.querySelector('[aria-current="location"]')||sheet.querySelector('button');
+  const target=sheet.querySelector('[aria-current="page"]')||sheet.querySelector('button');
   if(target) target.focus();
  }else if(!pgTabletMoreOpen&&options&&options.returnFocus) btn.focus();
 }
@@ -5388,16 +5432,14 @@ function pgSyncTabletNav(){
   const moreBtn=document.getElementById('tabletMoreBtn');
   if(refocusMore&&moreBtn) moreBtn.focus();
  }
- let current=anchors.length?anchors[0].workspace:'';
- const threshold=pgTabletNavOffset()+48;
- anchors.forEach(a=>{ if(a.top<=threshold) current=a.workspace; });
- if(pgTabletNavPinned&&list.indexOf(pgTabletNavPinned)>=0) current=pgTabletNavPinned;
+ let current=pgTabletWorkspace;
+ if(pgTabletNavPinned&&list.indexOf(pgTabletNavPinned)>=0&&pgTabletHostWorkspace(pgTabletNavPinned)===pgTabletWorkspace) current=pgTabletNavPinned;
  const compact=nav.classList.contains('is-compact');
  nav.querySelectorAll('[data-workspace-jump]').forEach(btn=>{
   const active=btn.getAttribute('data-workspace-jump')===current;
   if(active){
-   if(btn.getAttribute('aria-current')!=='location'){
-    btn.setAttribute('aria-current','location');
+   if(btn.getAttribute('aria-current')!=='page'){
+    btn.setAttribute('aria-current','page');
     if(!compact&&btn.classList.contains('tablet-nav-btn')){
      const left=btn.offsetLeft-(nav.clientWidth-btn.offsetWidth)/2;
      nav.scrollTo({left:Math.max(0,left),behavior:'auto'});
@@ -5407,7 +5449,7 @@ function pgSyncTabletNav(){
  });
  const more=document.getElementById('tabletMoreBtn');
  if(more){
-  const inMore=!!nav.querySelector('.tablet-more-item[aria-current="location"]');
+  const inMore=!!nav.querySelector('.tablet-more-item[aria-current="page"]');
   const label=inMore?'More workspaces, current: '+PG_DESKTOP_WORKSPACES[current]:'More workspaces';
   more.classList.toggle('has-current',inMore);
   if(more.getAttribute('aria-label')!==label) more.setAttribute('aria-label',label);
@@ -5417,23 +5459,23 @@ function pgScheduleTabletNavSync(){
  if(pgTabletNavFrame||!document.body.classList.contains('layout-tablet')) return;
  pgTabletNavFrame=requestAnimationFrame(()=>{ pgTabletNavFrame=0; pgSyncTabletNav(); });
 }
+// Switching workspace is a view change: it lands at the top at once, with no
+// scroll animation (it is the most frequent action on a phone).
 function pgJumpToTabletWorkspace(workspace){
  const tool=PG_TABLET_NAV_TOOLS[workspace];
- const anchor=pgTabletWorkspaceAnchors().find(a=>a.workspace===(tool?tool.host:workspace));
- if(!anchor) return;
- const reduce=!!(window.matchMedia&&window.matchMedia('(prefers-reduced-motion: reduce)').matches);
- const control=tool?document.querySelector(tool.control):null;
- const top=control&&control.getClientRects().length?control.getBoundingClientRect().top-12:anchor.top;
  pgTabletNavPinned=workspace;
- window.scrollTo({top:Math.max(0,window.scrollY+top-pgTabletNavOffset()),behavior:reduce?'auto':'smooth'});
+ pgSelectTabletWorkspace(workspace);
+ const control=tool?document.querySelector(tool.control):null;
+ const top=control&&control.getClientRects().length?window.scrollY+control.getBoundingClientRect().top-pgTabletNavOffset()-12:0;
+ window.scrollTo({top:Math.max(0,top),behavior:'auto'});
  pgSyncTabletNav();
  if(control){
   try{ control.focus({preventScroll:true}); }catch(e){}
   control.click();
   return;
  }
- if(!anchor.card.hasAttribute('tabindex')) anchor.card.setAttribute('tabindex','-1');
- try{ anchor.card.focus({preventScroll:true}); }catch(e){}
+ const title=document.getElementById('desktopWorkspaceTitle');
+ if(title){ try{ title.focus({preventScroll:true}); }catch(e){} }
 }
 function pgLayoutInit(){
  pgApplyThemeMode(pgReadThemeMode(),{initial:true});
@@ -5471,10 +5513,6 @@ function pgLayoutInit(){
   jumpNav.addEventListener('focusout',event=>{ if(pgTabletMoreOpen&&!(event.relatedTarget&&jumpNav.contains(event.relatedTarget))&&event.relatedTarget) pgSetTabletMore(false); });
   document.addEventListener('pointerdown',event=>{ if(pgTabletMoreOpen&&!jumpNav.contains(event.target)) pgSetTabletMore(false); });
  }
- // The jump bar highlight follows the scroll once it settles; restyling the
- // fixed bar mid-momentum made iOS jump (see pgWhenScrollIdle).
- window.addEventListener('scroll',()=>pgWhenScrollIdle('tabletNav',pgScheduleTabletNavSync),{passive:true});
- ['wheel','touchstart','keydown'].forEach(type=>window.addEventListener(type,()=>{ if(pgTabletNavPinned){ pgTabletNavPinned=''; pgScheduleTabletNavSync(); } },{passive:true}));
  window.addEventListener('resize',()=>{
   const width=Math.round(window.innerWidth||0);
   const height=Math.round(window.innerHeight||0);
@@ -5753,7 +5791,7 @@ function pgRenderSpdInfoframe(r){
 // The key carries a version so the new grouping replaces older saved drags once.
 const PG_DEFAULT_WIDGET_ORDER=['patterns','meter','cec','wifi','lg','resolve','settings'];
 const PG_WIDGET_ORDER_KEY='pg_widget_order_v5';
-// Widget reorder: POINTER drag on ☰ .drag-handle only (no HTML5 DnD).
+// Widget reorder: POINTER drag on the .drag-handle grip only (no HTML5 DnD).
 // Drop target = card under the cursor; insert before/after by midpoint.
 // Avoid setPointerCapture + moving the capture node (that combo was a no-op).
 (function(){
@@ -5997,7 +6035,7 @@ async function checkUpdate(manual,background){
  const checkedAt=new Date().toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'});
  if(!r||r.status==='error'){
   const msg=r&&r.message?r.message:'Couldn\u2019t reach GitHub. The Pi needs internet access to check for updates; check its network connection, then try again.';
-  setUpdateStatus('\u26a0 '+msg,'error');
+  setUpdateStatus(msg,'error');
   pgMarkCurrentTile(null);
   if(manual) toast(r&&r.message?'Couldn\u2019t check for updates: '+msg:msg,true,{action:{label:'Retry',run:()=>checkUpdate(true)}});
   return;
@@ -6026,13 +6064,13 @@ async function checkUpdate(manual,background){
   document.getElementById('applyUpdateBtn').style.display='';
   document.getElementById('updateBtn').style.display='';
   document.getElementById('updateBtn').classList.add('update-pulse');
-  setUpdateStatus(staleNote?'\u26a0 '+staleNote:'',staleNote?'warn':'');
+  setUpdateStatus(staleNote||'',staleNote?'warn':'');
   pgMarkCurrentTile('available','v'+r.latest+' is available (checked '+checkedAt+')');
   if(manual) toast('Update available: v'+r.latest);
  } else if(staleNote){
   document.getElementById('applyUpdateBtn').style.display='none';
   document.getElementById('updateBtn').style.display='none';
-  setUpdateStatus('\u26a0 Couldn\u2019t check for updates. '+staleNote,'warn');
+  setUpdateStatus('Couldn\u2019t check for updates. '+staleNote,'warn');
   pgMarkCurrentTile(null);
   if(manual) toast('Couldn\u2019t check for updates. '+staleNote,true);
  } else {
@@ -6067,6 +6105,7 @@ else pgWatchUpdateCard();
 function showUpdateCard(){
  document.getElementById('updateCard').style.display='';
  if(document.body.classList.contains('layout-desktop')) pgSelectDesktopWorkspace('settings');
+ else pgTabletRevealWorkspaceOf(document.getElementById('updateCard'));
  document.getElementById('updateCard').scrollIntoView({behavior:'smooth'});
  if(!_updateChecked) checkUpdate();
 }
@@ -6324,7 +6363,7 @@ function pgUpdateRender(d){
  c.querySelector('.upd-pct').textContent=pct;
  const bar=c.querySelector('.upd-bar');
  bar.classList.toggle('is-indeterminate',indet);
- c.querySelector('.upd-bar-fill').style.width=d.value+'%';
+ pgSetFill(c.querySelector('.upd-bar-fill'),d.value);
  const stepName=PG_UPD_STEPS[Math.min(d.step,4)];
  if(indet) bar.removeAttribute('aria-valuenow');
  else bar.setAttribute('aria-valuenow',String(d.value));
@@ -15868,7 +15907,7 @@ function meterUpdateUsbPowerWarning(r){
   const fallback='USB link unstable - a device is not enumerating reliably. Try a different cable/port or a powered USB hub.';
   const detail=(r&&r.usb_power_detail)||fallback;
   badge.style.display='inline';
-  badge.textContent='\u26a0 USB Unstable';
+  badge.textContent='USB unstable';
   badge.title=detail;
   if(!_meterUsbPowerWarned){ _meterUsbPowerWarned=true; toast(detail,true); }
  }else{
@@ -18419,7 +18458,8 @@ function meterSetWorkflowProgress(status,options){
   bar.setAttribute('aria-valuemax','100');
   bar.setAttribute('aria-valuenow',String(Math.round(pctValue)));
   if(fill){
-   fill.style.width=pctValue+'%';
+   // A started run always shows a sliver, even at 0-1 %.
+   pgSetFill(fill,pctValue>0?Math.max(1.5,pctValue):0);
    fill.classList.toggle('active',pctValue>0&&pctValue<100);
   }
  }
@@ -18431,7 +18471,7 @@ function meterClearWorkflowProgress(){
  const fill=document.getElementById('meterWorkflowProgressFill');
  if(pctText) pctText.textContent='';
  if(fill){
-  fill.style.width='0%';
+  pgSetFill(fill,0);
   fill.classList.remove('active');
  }
  if(bar) bar.style.display='none';
@@ -21069,7 +21109,7 @@ function meterToneMapSetLiveY(nits){
  if(fill){
   // Bar scales 0–2000 nits for HDR peaks (clamped display only).
   const pct=Number.isFinite(y)&&y>0?Math.max(0,Math.min(100,(y/2000)*100)):0;
-  fill.style.width=pct+'%';
+  pgSetFill(fill,pct);
  }
 }
 
@@ -22910,11 +22950,10 @@ function meterCloseLutTools(){
 
 // Animated dropdown for native selects. The <select> stays the source of
 // truth (value, onchange handlers, form state); only its popup is replaced by
-// a themed menu whose entries stagger in. Listboxes (size>1), multiple selects
+// a themed menu that scales in from its trigger. Listboxes (size>1), multiple selects
 // and selects marked data-native-select keep the browser popup.
 (function(){
- const PG_DD_MAX_STAGGER=14;
- const reduceMotion=window.matchMedia?window.matchMedia('(prefers-reduced-motion: reduce)'):null;
+  const reduceMotion=window.matchMedia?window.matchMedia('(prefers-reduced-motion: reduce)'):null;
  let menu=null,current=null,items=[],activeIndex=-1,typeBuf='',typeTimer=0,touchStart=null;
  let watcher=null,watchTimer=0,watchedIndex=-1;
  // iOS opens its own picker when a select gets focus during a touch gesture,
@@ -22935,7 +22974,6 @@ function meterCloseLutTools(){
   items=[];
   activeIndex=-1;
   ul.textContent='';
-  let n=0;
   const add=(opt,inGroup)=>{
    if(opt.hidden) return;
    const li=document.createElement('li');
@@ -22943,7 +22981,6 @@ function meterCloseLutTools(){
    li.setAttribute('role','option');
    li.setAttribute('aria-selected',opt.selected?'true':'false');
    if(optionDisabled(opt)) li.setAttribute('aria-disabled','true');
-   li.style.setProperty('--i',Math.min(n++,PG_DD_MAX_STAGGER));
    const mark=document.createElement('span');
    mark.className='pg-dd-mark';
    mark.setAttribute('aria-hidden','true');
@@ -22984,7 +23021,6 @@ function meterCloseLutTools(){
     head.className='pg-dd-group';
     head.setAttribute('role','presentation');
     head.textContent=child.label;
-    head.style.setProperty('--i',Math.min(n++,PG_DD_MAX_STAGGER));
     ul.appendChild(head);
     Array.from(child.children).forEach(opt=>{ if(opt.tagName==='OPTION') add(opt,true); });
    }else if(child.tagName==='OPTION') add(child,false);
@@ -23122,7 +23158,7 @@ function meterCloseLutTools(){
   if(immediate===true||m.classList.contains('no-motion')){ m.remove(); return; }
   m.classList.remove('is-open');
   m.classList.add('is-closing');
-  setTimeout(()=>m.remove(),160);
+  setTimeout(()=>m.remove(),100);
  }
  function choose(i){
   const li=items[i];
@@ -23276,6 +23312,7 @@ function pgPaletteReveal(el,focusEl){
  if(!el) return;
  const ws=pgPaletteWorkspaceOf(el);
  if(ws&&document.body.classList.contains('layout-desktop')&&ws!==pgDesktopWorkspace) pgSelectDesktopWorkspace(ws);
+ else pgTabletRevealWorkspaceOf(el);
  requestAnimationFrame(()=>{
   const reduce=!!(window.matchMedia&&window.matchMedia('(prefers-reduced-motion: reduce)').matches);
   const box=el.closest('.field,.info-item,.card-section-head,.card')||el;

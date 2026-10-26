@@ -53,8 +53,8 @@ function meterRenderCustomSeriesManager(){
   return '<tr style="border-bottom:1px solid var(--divider)">'
    +'<td style="padding:6px">'+esc(series.name)+'</td>'
    +'<td style="padding:6px">'+(series.kind==='lattice'?'3D LUT':(series.category==='color'?'Color':'Greyscale'))+'</td>'
-   +'<td style="padding:6px"><span style="font-size:.68rem;padding:2px 6px;border:1px solid var(--border);border-radius:4px">'+series.mode.toUpperCase()+'</span></td>'
-   +'<td style="padding:6px"><span style="font-size:.68rem;padding:2px 6px;border:1px solid var(--border);border-radius:4px" title="'+(isLattice?'Lattice codes are re-derived for the current range at read time':'Signal range these patch codes are authored for')+'">'+rangeLbl+'</span></td>'
+   +'<td style="padding:6px"><span style="font-size:.6875rem;padding:2px 6px;border:1px solid var(--border);border-radius:4px">'+series.mode.toUpperCase()+'</span></td>'
+   +'<td style="padding:6px"><span style="font-size:.6875rem;padding:2px 6px;border:1px solid var(--border);border-radius:4px" title="'+(isLattice?'Lattice codes are re-derived for the current range at read time':'Signal range these patch codes are authored for')+'">'+rangeLbl+'</span></td>'
    +'<td style="padding:6px">'+patchInfo+'</td>'
    +'<td style="padding:6px"><div style="display:flex;gap:4px;flex-wrap:wrap;justify-content:flex-end">'
     +'<button class="btn btn-sm btn-primary" onclick="meterCustomSeriesLoad('+series.id+')" title="Close this window and load the series into the charts">Load</button>'
@@ -914,11 +914,11 @@ async function meterLutSolveStart(series,readings,opts){
   // Keep the series progress chrome showing "Building…" so the operator sees
   // that measure-complete is not the end of Build 3D LUT.
   const btn=document.getElementById('meterReadSeriesBtn');
-  if(btn) btn.innerHTML='&#9881; Building 3D LUT…';
+  if(btn) btn.innerHTML='Building 3D LUT…';
   const label=document.getElementById('meterProgressLabel');
   if(label) label.textContent='Building 3D LUT from measurements…';
   const fill=document.getElementById('meterProgressFill');
-  if(fill){ fill.style.width='100%'; fill.style.opacity='0.85'; }
+  if(fill){ pgSetFill(fill,100); fill.style.opacity='0.85'; }
   const prog=document.getElementById('meterProgress');
   if(prog) prog.style.display='';
  }catch(e){}
@@ -943,7 +943,7 @@ function meterLutSolveProgressShow(msg,detail){
  if(title) title.textContent='Building 3D LUT';
  if(m) m.textContent=String(msg||'Starting solve…');
  if(d) d.textContent=String(detail||'');
- if(fill){ fill.style.width='12%'; fill.classList.add('active'); }
+ if(fill){ pgSetFill(fill,12); fill.classList.add('active'); }
  modal.style.display='flex';
  try{ uiSyncBodyScrollLock(); }catch(e){}
 }
@@ -962,13 +962,13 @@ function meterLutSolveProgressUpdate(status){
  if(Number.isFinite(pct)&&pct>=0){
   if(fill){
    fill.classList.add('active');
-   fill.style.width=Math.max(8,Math.min(100,pct))+'%';
+   pgSetFill(fill,Math.max(8,Math.min(100,pct)));
   }
   bits.push(Math.round(Math.min(100,pct))+'%');
  } else if(fill){
   // Indeterminate shimmer while the worker has no percent yet.
-  const cur=parseFloat(fill.style.width)||12;
-  fill.style.width=Math.min(92,cur+3)+'%';
+  const cur=parseFloat(fill.dataset.pct)||12;
+  pgSetFill(fill,Math.min(92,cur+3));
   fill.classList.add('active');
  }
  if(d) d.textContent=bits.join(' · ')||'Solving model and generating cube…';
@@ -3669,7 +3669,7 @@ function meterRenderGreyTvControls(reading){
   return;
  }
  if(meterAutoCalLuminanceSetupActive){
-  host.innerHTML='<div style="height:100%;display:flex;align-items:center;justify-content:center;text-align:center;font-size:.68rem;color:var(--text2);padding:8px">LG controls paused during luminance setup.</div>';
+  host.innerHTML='<div style="height:100%;display:flex;align-items:center;justify-content:center;text-align:center;font-size:.6875rem;color:var(--text2);padding:8px">LG controls paused during luminance setup.</div>';
   if(meta) meta.textContent='LG paused';
   return;
  }
@@ -3677,7 +3677,7 @@ function meterRenderGreyTvControls(reading){
  const renderStep=seriesReadOnly?(meterCanonicalSeriesStep(reading)||reading):meterCurrentPatchStep;
  const target=meterGreyTvTarget(renderStep,{allow_series_running:seriesReadOnly});
  if(!target){
-  host.innerHTML='<div style="height:100%;display:flex;align-items:center;justify-content:center;text-align:center;font-size:.68rem;color:var(--text2);padding:8px">No greyscale patch selected.</div>';
+  host.innerHTML='<div style="height:100%;display:flex;align-items:center;justify-content:center;text-align:center;font-size:.6875rem;color:var(--text2);padding:8px">No greyscale patch selected.</div>';
   if(meta) meta.textContent='LG TV';
   return;
  }
@@ -3692,12 +3692,12 @@ function meterRenderGreyTvControls(reading){
  }
  const state=meterLgGreyState||{status:'idle',picture:null,message:'',needsRepair:false};
  if((state.status==='loading'||state.status==='idle')&&!state.picture&&!seriesReadOnly){
-  host.innerHTML='<div style="height:100%;display:flex;align-items:center;justify-content:center;text-align:center;font-size:.68rem;color:var(--text2);padding:8px">Loading...</div>';
+  host.innerHTML='<div style="height:100%;display:flex;align-items:center;justify-content:center;text-align:center;font-size:.6875rem;color:var(--text2);padding:8px">Loading...</div>';
   if(meta) meta.textContent='LG '+target.label;
   return;
  }
  if(state.status==='error'&&!state.picture&&!seriesReadOnly){
-  host.innerHTML='<div style="height:100%;display:flex;align-items:center;justify-content:center;text-align:center;font-size:.68rem;color:#f7b0b0;padding:8px">'+(state.message||'Unable to read LG white-balance values.')+'</div>';
+  host.innerHTML='<div style="height:100%;display:flex;align-items:center;justify-content:center;text-align:center;font-size:.6875rem;color:#f7b0b0;padding:8px">'+(state.message||'Unable to read LG white-balance values.')+'</div>';
   if(meta) meta.textContent=state.needsRepair?'LG pairing required':'LG read failed';
   return;
  }
@@ -4843,10 +4843,10 @@ function meterAutoCalSetOverlay(active,status){
   if(text) text.textContent=name+msg+de;
   const total=Number(status.total_steps)||0;
   const current=Math.max(0,Number(status.current_step)||0);
-  if(fill) fill.style.width=(total>0?Math.min(100,Math.max(0,current/total*100)):0)+'%';
+  pgSetFill(fill,total>0?current/total*100:0);
  }else{
   if(text) text.textContent='Preparing...';
-  if(fill) fill.style.width='0%';
+  pgSetFill(fill,0);
  }
  meterUpdateReadButtons();
 }
@@ -5881,7 +5881,7 @@ async function meterAutoCalLuminanceSetupLoop(whiteStep){
  const initialLive=document.getElementById('meterAutoCalLiveY');
  const initialFill=document.getElementById('meterAutoCalLuminanceFill');
  if(initialLive) initialLive.textContent='--';
- if(initialFill) initialFill.style.width='0%';
+ pgSetFill(initialFill,0);
  meterAutoCalSetupReading=null;
  const continueBtn=document.getElementById('meterAutoCalContinueBtn');
  if(continueBtn) continueBtn.disabled=true;
@@ -5963,7 +5963,7 @@ async function meterAutoCalLuminanceSetupLoop(whiteStep){
    if(live) live.textContent=(y!=null&&Number.isFinite(y))?y.toFixed(2):'--';
    if(fill){
     const scale=meterAutoCalLuminanceScaleFor(y);
-    fill.style.width=(y!=null&&Number.isFinite(y)?Math.min(100,Math.max(0,y/scale*100)):0)+'%';
+    pgSetFill(fill,y!=null&&Number.isFinite(y)?y/scale*100:0);
    }
    updateLiveReading(rd);
    meterUpsertSeriesReading(rd,whiteStep);
@@ -6790,7 +6790,7 @@ function meterShowChoiceModal(options){
    group.style.cssText='display:grid;gap:6px';
    if(g.label){
     const gl=document.createElement('div');
-    gl.style.cssText='font-size:.72rem;color:var(--text2);text-transform:uppercase;letter-spacing:.04em';
+    gl.style.cssText='font-size:.72rem;color:var(--text2);';
     gl.textContent=String(g.label);
     group.appendChild(gl);
    }
@@ -11658,7 +11658,7 @@ function meterSeriesIs3dLutBuild(){
  return !!(typeof meterActiveVolumeProfileSeries==='function'&&meterActiveVolumeProfileSeries());
 }
 function meterReadSeriesButtonLabel(){
- return meterSeriesIs3dLutBuild()?'&#9881; Build 3D LUT':'&#9654; Read Series';
+ return meterSeriesIs3dLutBuild()?'Build 3D LUT':'&#9654; Read Series';
 }
 function meterReadSeriesPrimaryAction(){
  if(meterSeriesIs3dLutBuild()) return meterBuild3dLutSeries();
@@ -11707,7 +11707,7 @@ function meterBuild3dLutMeasureUpdate(status){
  const fill=document.getElementById('meterBuild3dLutMeasureFill');
  const name=String(s.current_name||'Reading patch');
  if(counter) counter.textContent=total?(name+' · patch '+Math.min(current,total)+' of '+total):name;
- if(fill) fill.style.width=(total?Math.max(0,Math.min(100,current*100/total)):0)+'%';
+ pgSetFill(fill,total?current*100/total:0);
 }
 function meterBuild3dLutMeasureHide(){
  const modal=document.getElementById('meterBuild3dLutMeasureModal');
@@ -12941,7 +12941,7 @@ function meterBuildPatchThumbs(sortedSteps,completedIres,currentIre){
 	  const isGrey=meterSeriesStepIsGreyscale(step);
 	  const label=isGrey?meterGreyscaleStepLabel(step):(step.name||'');
 	  const thumbWidth=scrollMode?String(distributedGreyThumbWidth(index)||meterSeriesThumbWidth(step)):'';
-	  const fontSize=(isGrey&&customGreyscaleThumbs)?'10px':'8px';
+	  const fontSize='11px';
 	  const border=(isGrey&&customGreyscaleThumbs)?'1px solid var(--border)':'0';
 	  const colorKey=[step.r,step.g,step.b,step.preview_r,step.preview_g,step.preview_b].join(',');
 	  return [meterStepNameKey(step),label,thumbWidth,fontSize,border,colorKey,overPeak[index]?'1':'0'].join('\x1f');
@@ -12956,14 +12956,13 @@ function meterBuildPatchThumbs(sortedSteps,completedIres,currentIre){
     const isGrey=meterSeriesStepIsGreyscale(step);
    const bgColor=meterPreviewColorForStep(step);
    const textColor=meterContrastTextColor(bgColor);
-   const textShadow=textColor==='#eee'?'0 1px 2px rgba(0,0,0,.75)':'0 1px 1px rgba(255,255,255,.18)';
   const label=isGrey?meterGreyscaleStepLabel(step):(step.name||'');
   const thumbWidth=scrollMode?(distributedGreyThumbWidth(index)||meterSeriesThumbWidth(step)):0;
-  const fontSize=(isGrey&&customGreyscaleThumbs)?'10px':'8px';
+  const fontSize='11px';
   const border=(isGrey&&customGreyscaleThumbs)?'1px solid var(--border)':'0';
   const padX=isGrey?'2px':'1px';
   const flexStyle=scrollMode?('flex:0 0 '+thumbWidth+'px;min-width:'+thumbWidth+'px;'):'flex:1 1 0;min-width:0;';
-  thumb.style.cssText=flexStyle+'display:flex;align-items:center;justify-content:center;height:28px;border:'+border+';border-radius:3px;cursor:pointer;box-sizing:border-box;font-size:'+fontSize+';font-weight:700;user-select:none;transition:box-shadow .2s;text-align:center;line-height:1.1;padding:0 '+padX+';text-shadow:'+textShadow;
+  thumb.style.cssText=flexStyle+'display:flex;align-items:center;justify-content:center;height:28px;border:'+border+';border-radius:3px;cursor:pointer;box-sizing:border-box;font-size:'+fontSize+';font-weight:700;user-select:none;transition:box-shadow .2s;text-align:center;line-height:1.1;padding:0 '+padX;
   thumb.style.setProperty('--patch-bg',bgColor);
   thumb.style.setProperty('--patch-fg',textColor);
    thumb.textContent=label;
@@ -13059,13 +13058,15 @@ function meterUpdateThumbStyles(container,completedIres,currentIre){
   thumb.style.opacity='1';
   if(isReading){
    thumb.style.boxShadow='';
-   thumb.style.animation='thumbPulse 1s ease-in-out infinite';
+   // Reduced motion: the read ring holds still instead of breathing.
+   if(window.matchMedia&&matchMedia('(prefers-reduced-motion: reduce)').matches){ thumb.style.animation='none'; thumb.style.boxShadow='inset 0 0 0 3px var(--accent)'; }
+   else thumb.style.animation='thumbPulse 1s ease-in-out infinite';
    thumb.style.zIndex='1';
   } else if(isSelected){
    thumb.style.animation='none';
     // Solid blue ring: visible on ANY patch (incl. the 100% white thumb where
-    // a plain white ring vanished) and matches the pulsing blue read indicator.
-    thumb.style.boxShadow='inset 0 0 0 3px #5b7fff';
+    // a plain white ring vanished) and matches the pulsing read indicator (accent).
+    thumb.style.boxShadow='inset 0 0 0 3px var(--accent)';
    thumb.style.zIndex='1';
   } else if(done){
    thumb.style.animation='none';
@@ -15854,8 +15855,8 @@ function showColorReadingDetail(rd,opts){
  h+='<span style="display:inline-block;width:18px;height:18px;border-radius:3px;background:'+targetColor+';vertical-align:middle;margin-right:6px"></span>';
  h+='<span style="color:var(--text-primary);font-weight:700;font-size:14px">'+(view.name||'')+'</span></div>';
  h+='<div style="display:flex;gap:8px;margin-bottom:10px;justify-content:center">';
- h+='<div style="text-align:center"><div style="width:52px;height:32px;border-radius:4px;border:1px solid var(--border);background:'+targetColor+'"></div><div style="font-size:10px;color:var(--text-muted);margin-top:2px">Target</div></div>';
- h+='<div style="text-align:center"><div style="width:52px;height:32px;border-radius:4px;border:1px solid var(--border);background:'+measuredColor+';'+(hasMeasuredXYZ?'':'opacity:.35')+'"></div><div style="font-size:10px;color:var(--text-muted);margin-top:2px">Measured'+(isUnread?' (none)':'')+'</div></div></div>';
+ h+='<div style="text-align:center"><div style="width:52px;height:32px;border-radius:4px;border:1px solid var(--border);background:'+targetColor+'"></div><div style="font-size:11px;color:var(--text-muted);margin-top:2px">Target</div></div>';
+ h+='<div style="text-align:center"><div style="width:52px;height:32px;border-radius:4px;border:1px solid var(--border);background:'+measuredColor+';'+(hasMeasuredXYZ?'':'opacity:.35')+'"></div><div style="font-size:11px;color:var(--text-muted);margin-top:2px">Measured'+(isUnread?' (none)':'')+'</div></div></div>';
  h+='<table style="width:100%;font-size:12px;border-collapse:collapse">';
  const chartAxis=meterCieChartAxis();
  h+='<tr><td style="padding:3px 0;color:var(--text-muted);white-space:nowrap" title="The exact per-channel codes the renderer emits for this patch, in the transport bit depth">Wire RGB</td><td style="text-align:right;padding:3px 0;color:var(--text-primary);white-space:nowrap">'+((typeof meterLiveWireRgbMarkup==='function')?meterLiveWireRgbMarkup(view):'--')+'</td></tr>';
@@ -15896,7 +15897,7 @@ function colorHighlightThumb(name){
   const isMatch=t.dataset.name===name;
   const done=completedNames.has(t.dataset.name);
   t.dataset.visualState=isMatch?'selected':(done?'done':'idle');
-  t.style.boxShadow=isMatch?'inset 0 0 0 3px #5b7fff':(done?'inset 0 0 0 2px #4caf50':'none');
+  t.style.boxShadow=isMatch?'inset 0 0 0 3px var(--accent)':(done?'inset 0 0 0 2px #4caf50':'none');
   t.style.animation='none';
   t.style.zIndex=isMatch?'1':'';
  }
@@ -18731,14 +18732,14 @@ function meterBuildReportDocument(sectionHtml,documentTitle){
  +'.report-section-meta{font-size:12px;color:#66748c;margin-bottom:14px;} '
  +'.report-summary{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px;margin-bottom:14px;} '
  +'.report-stat{padding:12px 14px;border:1px solid #dde5f0;border-radius:12px;background:linear-gradient(180deg,#fbfcfe 0%,#f4f7fb 100%);} '
- +'.report-stat-label{font-size:11px;font-weight:700;color:#6a7892;text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px;} '
+ +'.report-stat-label{font-size:11px;font-weight:700;color:#6a7892;margin-bottom:4px;} '
  +'.report-stat-value{font-size:20px;font-weight:800;color:#162032;} '
  +'.report-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;align-items:start;} '
  +'.report-chart-card,.report-table-card{margin-top:14px;padding:12px;border:1px solid #e0e7f1;border-radius:12px;background:#fafcff;} '
  +'.report-grid-charts .report-chart-card{margin-top:0;} '
  +'.report-span-full{grid-column:1 / -1;} '
  +'.report-span-half{grid-column:span 1;} '
- +'.report-chart-title,.report-table-title{font-size:12px;font-weight:800;color:#50607d;text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px;} '
+ +'.report-chart-title,.report-table-title{font-size:12px;font-weight:800;color:#50607d;margin-bottom:8px;} '
  +'.report-table-wrap{overflow-x:auto;} '
  +'.report-table{width:100%;border-collapse:collapse;font-size:12px;background:#fff;} '
  +'.report-table th,.report-table td{padding:8px 10px;border-bottom:1px solid #e7edf5;text-align:right;} '

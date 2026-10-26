@@ -17,18 +17,18 @@ body.layout-desktop #meterIccWorkspaceCard .meter-icc-dialog-title{display:none}
 .meter-icc-avg-deviation-field{grid-column:1}
 .meter-icc-calibration-field{grid-column:2}
 .meter-icc-profile-panel>#meterIccFormatAdvanced{grid-column:1/-1}
-.meter-icc-help{display:inline-flex;align-items:center;justify-content:center;width:15px;height:15px;margin-left:5px;border-radius:50%;border:1px solid var(--border);background:rgba(91,127,255,.12);color:var(--text2);font-size:.68rem;font-weight:700;line-height:1;cursor:help;vertical-align:middle;position:relative;flex:0 0 auto;user-select:none}
+.meter-icc-help{display:inline-flex;align-items:center;justify-content:center;width:15px;height:15px;margin-left:5px;border-radius:50%;border:1px solid var(--border);background:rgba(91,127,255,.12);color:var(--text2);font-size:.6875rem;font-weight:700;line-height:1;cursor:help;vertical-align:middle;position:relative;flex:0 0 auto;user-select:none}
 .meter-icc-help:hover,.meter-icc-help:focus{color:var(--text);border-color:var(--accent);outline:none}
 .meter-icc-help[data-tip]:not([data-tip=""]):hover::after,.meter-icc-help[data-tip]:not([data-tip=""]):focus::after{content:attr(data-tip);position:absolute;left:50%;bottom:calc(100% + 8px);transform:translateX(-50%);z-index:10030;width:max-content;max-width:min(360px,80vw);box-sizing:border-box;padding:8px 10px;border:1px solid var(--border);border-radius:6px;background:var(--panel);color:var(--text);font-size:.7rem;font-weight:400;line-height:1.4;white-space:normal;text-transform:none;letter-spacing:0;box-shadow:0 5px 18px rgba(0,0,0,.35);pointer-events:none}
 .meter-icc-review-panel{grid-column:1/-1}
 .meter-icc-finish-grid{display:grid;grid-template-columns:1fr;gap:12px;margin-top:12px}
 .meter-icc-panel{min-width:0;padding:14px;background:var(--surface-inset);border:1px solid var(--border);border-radius:8px}
 .meter-icc-panel h3{font-size:.8rem;color:var(--text);margin:0 0 4px}
-.meter-icc-section-intro{margin:0 0 12px;font-size:.7rem;color:var(--text2);line-height:1.45}
-.meter-icc-step{display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;margin-right:7px;border-radius:50%;background:color-mix(in srgb,var(--accent) 16%,transparent);color:color-mix(in srgb,var(--accent) 72%,var(--text-primary));font-size:.68rem;font-weight:700;vertical-align:middle}
+.meter-icc-section-intro{margin:0 0 12px;font-size:.78rem;color:var(--text2);line-height:1.45}
+.meter-icc-step{display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;margin-right:7px;border-radius:50%;background:color-mix(in srgb,var(--accent) 16%,transparent);color:color-mix(in srgb,var(--accent) 72%,var(--text-primary));font-size:.6875rem;font-weight:700;vertical-align:middle}
 .meter-icc-advanced{margin-top:10px;padding-top:10px;border-top:1px solid var(--border)}
 .meter-icc-actions{display:flex;align-items:center;justify-content:flex-end;gap:8px;flex-wrap:wrap;margin-top:14px}
-.meter-icc-note{font-size:.72rem;color:var(--text2);line-height:1.5}
+.meter-icc-note{font-size:.78rem;color:var(--text2);line-height:1.5}
 .meter-icc-note a{color:var(--text2);text-decoration:underline;cursor:pointer}
 .meter-icc-note a:hover{color:var(--text)}
 .meter-icc-pair-row{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:8px 0;border-bottom:1px solid var(--border);font-size:.72rem}
@@ -39,7 +39,7 @@ body.layout-desktop #meterIccWorkspaceCard .meter-icc-dialog-title{display:none}
 .meter-disabled-action-hint>button:disabled{pointer-events:none;cursor:not-allowed;opacity:.5;filter:grayscale(.35);transform:none}
 .meter-disabled-action-hint[data-tooltip]:not([data-tooltip=""]):hover::after{content:attr(data-tooltip);position:absolute;right:0;bottom:calc(100% + 8px);z-index:10020;width:max-content;max-width:min(360px,80vw);box-sizing:border-box;padding:7px 9px;border:1px solid var(--border);border-radius:6px;background:var(--panel);color:var(--text);font-size:.7rem;font-weight:400;line-height:1.35;white-space:normal;box-shadow:0 5px 18px rgba(0,0,0,.35);pointer-events:none}
 .meter-icc-field{display:flex;flex-direction:column;gap:5px;margin-bottom:10px}
-.meter-icc-field>label{font-size:.7rem;color:var(--text2);text-transform:uppercase;letter-spacing:.04em}
+.meter-icc-field>label{font-size:.7rem;color:var(--text2);}
 .meter-icc-field input,.meter-icc-field select{width:100%;box-sizing:border-box}
 .meter-icc-field input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),.meter-icc-field select{min-height:34px;background:#0d0d15;border:1px solid var(--border);color:var(--text);padding:6px 10px;border-radius:6px;font-size:.82rem;line-height:normal;outline:none;transition:border-color .2s,box-shadow .2s}
 .meter-icc-field select{cursor:pointer;-webkit-appearance:none;appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' fill='%23888'%3E%3Cpath d='M5 7L0 2h10z'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 8px center;padding-right:24px}
@@ -52,7 +52,7 @@ body.layout-desktop #meterIccWorkspaceCard .meter-icc-dialog-title{display:none}
    both edges; only the short numeric delay keeps its own width. */
 #meterIccStartDelay{max-width:120px}
 .meter-icc-progress-track{height:10px;border:1px solid var(--border);border-radius:5px;overflow:hidden;background:var(--surface-inset)}
-.meter-icc-progress-fill{height:100%;width:0;background:var(--accent);transition:width .2s}
+.meter-icc-progress-fill{height:100%;width:100%;transform:scaleX(0);transform-origin:left;background:var(--accent);transition:transform .2s cubic-bezier(.23,1,.32,1)}
 .meter-icc-progress-fill.indeterminate{width:35%;animation:meter-icc-progress-indeterminate 1.2s ease-in-out infinite;transition:none}
 @keyframes meter-icc-progress-indeterminate{0%{transform:translateX(-110%)}50%{transform:translateX(95%)}100%{transform:translateX(285%)}}
 .meter-icc-profile-row{display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--border);font-size:.72rem}

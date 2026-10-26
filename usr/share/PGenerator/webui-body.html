@@ -21,10 +21,6 @@ __PG_LOGO_DARK__
  </div>
  <div class="hdr-right">
  <div class="hdr-actions">
-   <div class="layout-switch" role="group" aria-label="Interface layout">
-    <button type="button" class="layout-switch-btn" data-layout-mode="tablet" aria-pressed="true" onclick="pgSetLayoutPreference('tablet')">Tablet</button>
-    <button type="button" class="layout-switch-btn" data-layout-mode="desktop" aria-pressed="false" onclick="pgSetLayoutPreference('desktop')">Desktop</button>
-   </div>
    <button class="btn btn-sm update-btn" id="updateBtn" style="display:none" aria-label="Update available" onclick="showUpdateCard()"><svg viewBox="0 0 24 24" width="13" height="13" aria-hidden="true"><path d="M12 4v11M7 10.5l5 5 5-5M5 20h14" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg>Update<span class="update-btn-more">&nbsp;Available</span></button>
   </div>
   <div class="status-bar" id="statusBar">
@@ -39,7 +35,7 @@ __PG_LOGO_DARK__
     <span id="iccCompanionTopStatusWrap" class="status-line status-line-sub" style="display:none" title="PGenerator+ Patch Companion connected"><span class="status-dot" id="iccCompanionTopDot" style="background:var(--green)"></span><span class="status-label" id="iccCompanionTopStatusText" style="color:var(--text)">PGenerator+ Patch Companion</span></span>
    </span>
    <button type="button" id="hdmiWarnBadge" class="hdmi-port-badge" onclick="hdmiShowOverlay()"></button>
-   <span id="meterUsbWarnBadge" title="USB link unstable">&#9888; USB Unstable</span>
+   <span id="meterUsbWarnBadge" title="USB link unstable">USB unstable</span>
   </div>
   <!-- Device power sits last in the header (after status) and apart from the layout toggle, so it is the last header Tab stop. -->
   <div class="hdr-power" role="group" aria-label="Device power">
@@ -93,8 +89,8 @@ __PG_LOGO_DARK__
 
  <!-- Display Settings -->
  <div class="card" id="displaySettingsCard" data-widget="display" data-desktop-workspace="output" data-desktop-order="10" draggable="true">
-  <h2><span class="drag-handle">&#9776;</span>Display Settings <button type="button" class="btn btn-sm card-h2-action btn-reset" onclick="resetDefaults()" title="Reset the display settings below to SDR defaults (applied only after Apply &amp; Restart)"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 12a8.5 8.5 0 1 0 2.6-6.1"/><path d="M3.5 4v5h5"/></svg>Reset Defaults</button></h2>
-  <div id="displayNoHdmiBanner" style="display:none;background:var(--surface-inset);border:1px solid var(--border);border-left:3px solid var(--orange);border-radius:6px;padding:10px 12px;margin-bottom:10px;font-size:.82rem;color:var(--text);line-height:1.45"><strong>No HDMI display connected.</strong> Settings can still be changed and saved; the renderer starts when a display is plugged in. The resolution list appears once the display is detected.</div>
+  <h2><span class="drag-handle"><svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true" fill="currentColor"><circle cx="9" cy="6" r="1.6"/><circle cx="15" cy="6" r="1.6"/><circle cx="9" cy="12" r="1.6"/><circle cx="15" cy="12" r="1.6"/><circle cx="9" cy="18" r="1.6"/><circle cx="15" cy="18" r="1.6"/></svg></span>Display Settings <button type="button" class="btn btn-sm card-h2-action btn-reset" onclick="resetDefaults()" title="Reset the display settings below to SDR defaults (applied only after Apply &amp; Restart)"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 12a8.5 8.5 0 1 0 2.6-6.1"/><path d="M3.5 4v5h5"/></svg>Reset Defaults</button></h2>
+  <div id="displayNoHdmiBanner" style="display:none;background:color-mix(in srgb,var(--orange) 8%,var(--surface-inset));border:1px solid color-mix(in srgb,var(--orange) 45%,var(--border));border-radius:6px;padding:10px 12px;margin-bottom:10px;font-size:.82rem;color:var(--text);line-height:1.45"><strong>No HDMI display connected.</strong> Settings can still be changed and saved; the renderer starts when a display is plugged in. The resolution list appears once the display is detected.</div>
   <div id="signalRefusedAlert" class="signal-alert" data-tone="refused" role="alert" hidden><strong>Settings refused</strong> <span id="signalRefusedText"></span></div>
   <div id="signalOwnerAlert" class="signal-alert" data-tone="owner" role="status" hidden><strong id="signalOwnerTitle"></strong> <span id="signalOwnerText"></span></div>
   <div id="signalLinkAlert" class="signal-alert" role="alert" hidden><strong>HDMI link interrupted</strong> <span id="signalLinkText"></span> <button type="button" class="btn btn-sm btn-secondary signal-alert-dismiss" onclick="pgSignalLinkDismiss()">Dismiss</button></div>
@@ -170,7 +166,6 @@ __PG_LOGO_DARK__
   </section>
   <fieldset class="grid setting-tiles signal-fields" id="displaySignalFields">
   <div class="field field-display">
-    <svg class="setting-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="12" rx="1.5"/><path d="M8.5 20h7M12 16v4"/></svg>
     <label for="mode_idx">Resolution</label>
     <div class="mode-select-wrap">
      <select id="mode_idx"></select>
@@ -179,7 +174,6 @@ __PG_LOGO_DARK__
     <button type="button" class="btn btn-sm btn-secondary mode-retry" id="modeRetryBtn" onclick="pgRetryModes()" title="Ask the generator for the display&rsquo;s modes again" hidden>Reload modes</button>
    </div>
   <div class="field field-gamut">
-    <svg class="setting-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2.5v2M12 19.5v2M2.5 12h2M19.5 12h2M5.3 5.3l1.4 1.4M17.3 17.3l1.4 1.4M5.3 18.7l1.4-1.4M17.3 6.7l1.4-1.4"/></svg>
     <label for="signal_mode">Signal Mode</label>
     <select id="signal_mode">
      <option value="sdr">SDR</option>
@@ -189,7 +183,6 @@ __PG_LOGO_DARK__
     </select>
    </div>
   <div class="field field-gamma">
-    <svg class="setting-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3 21 8l-9 5-9-5z"/><path d="m3 12 9 5 9-5M3 16l9 5 9-5"/></svg>
     <label for="max_bpc">Bit Depth</label>
     <select id="max_bpc">
      <option value="8">8-bit</option>
@@ -198,7 +191,6 @@ __PG_LOGO_DARK__
     </select>
    </div>
   <div class="field field-display">
-    <svg class="setting-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="9.5" r="5"/><circle cx="15" cy="9.5" r="5"/><circle cx="12" cy="15" r="5"/></svg>
     <label for="color_format">Color Format</label>
     <select id="color_format" onchange="uiEnforceQuantRangeForColorFormat()">
      <option value="0">RGB</option>
@@ -207,7 +199,6 @@ __PG_LOGO_DARK__
     </select>
    </div>
   <div class="field field-gamut">
-    <svg class="setting-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18" stroke-width="1.6"/><path d="M9.4 18.2C7.6 16.4 6.2 11.6 6.8 7.6 7.2 5.2 8.6 5 10.2 6.3L20 15Z"/><path d="M16.2 14.4 11.8 11 10.4 16.6Z" fill="currentColor" stroke-width="1"/></svg>
     <label for="colorimetry">Colorimetry</label>
     <select id="colorimetry">
      <option value="2">BT.709</option>
@@ -215,7 +206,6 @@ __PG_LOGO_DARK__
     </select>
    </div>
   <div class="field field-gamma">
-    <svg class="setting-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>
     <label for="rgb_quant_range">Range</label>
     <select id="rgb_quant_range" onchange="pgSyncRangeDefaultOption(this)">
      <option value="0">Default</option>
@@ -342,12 +332,12 @@ __PG_LOGO_DARK__
  <!-- Signal Self-Test (Output, below Display Settings): pgen_selftest.pl walks the output through the signal
       modes and reads back the scanned-out codes (webui-app.js selftest*). -->
  <div class="card span2 selftest-card" id="selftestCard" data-widget="selftest" data-desktop-workspace="output" data-desktop-order="35" draggable="true">
-  <h2><span class="drag-handle">&#9776;</span>Signal Self-Test</h2>
+  <h2><span class="drag-handle"><svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true" fill="currentColor"><circle cx="9" cy="6" r="1.6"/><circle cx="15" cy="6" r="1.6"/><circle cx="9" cy="12" r="1.6"/><circle cx="15" cy="12" r="1.6"/><circle cx="9" cy="18" r="1.6"/><circle cx="15" cy="18" r="1.6"/></svg></span>Signal Self-Test</h2>
   <ul class="selftest-facts" aria-label="What the self-test does">
-   <li><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3 9 5-9 5-9-5 9-5Z"/><path d="m3 13 9 5 9-5"/></svg><span><strong>Every signal mode</strong>Known codes drawn and read back from the scanout</span></li>
-   <li><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8V5a1 1 0 0 1 1-1h3M16 4h3a1 1 0 0 1 1 1v3M20 16v3a1 1 0 0 1-1 1h-3M8 20H5a1 1 0 0 1-1-1v-3"/><path d="M8 12h8"/></svg><span><strong>The link too</strong>Link depth, range CSC and AVI infoframe</span></li>
-   <li><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg><span><strong>About 3 minutes</strong>Dim test windows on the display</span></li>
-   <li><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12a8 8 0 1 0 2.4-5.7"/><path d="M4 4v4h4"/></svg><span><strong>Settings come back</strong>Your signal settings are restored afterwards</span></li>
+   <li><span><strong>Every signal mode</strong>Known codes drawn and read back from the scanout</span></li>
+   <li><span><strong>The link too</strong>Link depth, range CSC and AVI infoframe</span></li>
+   <li><span><strong>About 3 minutes</strong>Dim test windows on the display</span></li>
+   <li><span><strong>Settings come back</strong>Your signal settings are restored afterwards</span></li>
   </ul>
   <p class="selftest-note"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.9 2.4 17.6A2 2 0 0 0 4.1 20.6h15.8a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/><path d="M12 9.5v4"/><path d="M12 17h.01"/></svg><span><strong>Not an HDMI analyzer.</strong> Read inside the Pi, before the cable: it proves what the Pi sends, not what the display receives.</span></p>
   <div class="selftest-verdict" id="selftestVerdict" data-state="idle">
@@ -377,10 +367,10 @@ __PG_LOGO_DARK__
 
  <!-- Diagnostic Patterns -->
  <div class="card span2" data-widget="patterns" data-desktop-workspace="patterns" data-desktop-order="10" draggable="true">
-  <h2><span class="drag-handle">&#9776;</span>Diagnostic Patterns</h2>
+  <h2><span class="drag-handle"><svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true" fill="currentColor"><circle cx="9" cy="6" r="1.6"/><circle cx="15" cy="6" r="1.6"/><circle cx="9" cy="12" r="1.6"/><circle cx="15" cy="12" r="1.6"/><circle cx="9" cy="18" r="1.6"/><circle cx="15" cy="18" r="1.6"/></svg></span>Diagnostic Patterns</h2>
   <div class="pat-section">
    <div class="pat-content">
-    <div style="font-size:.65rem;color:var(--text2);margin-bottom:6px;line-height:1.4">Visual setup patterns for display calibration. Use these to verify your display&#39;s basic picture settings before running a full calibration.</div>
+    <div style="font-size:.78rem;color:var(--text2);margin-bottom:6px;line-height:1.4">Visual setup patterns for display calibration. Use these to verify your display&#39;s basic picture settings before running a full calibration.</div>
     <!-- One transport for the whole card: what is on the TV, and one Stop / Show again. -->
     <div class="diag-now" id="diagNow" data-state="idle">
      <span class="diag-now-screen" id="diagNowScreen" aria-hidden="true"></span>
@@ -451,7 +441,7 @@ __PG_LOGO_DARK__
     <div>
      <input type="file" id="diagCustomVideoInput" accept="video/mp4,.mp4,.m4v,.mov,.webm,.mkv,.avi,.hevc,.h265,.h264,.ts,.m2ts" style="display:none">
      <input type="file" id="diagCustomImageInput" accept="image/png,.png,image/jpeg,.jpg,.jpeg,image/bmp,.bmp,.ppm,image/gif,.gif" style="display:none">
-     <div id="diagUploadStatus" style="display:none;font-size:.68rem;color:var(--text2);margin-top:8px"></div>
+     <div id="diagUploadStatus" style="display:none;font-size:.6875rem;color:var(--text2);margin-top:8px"></div>
     </div>
     <div id="diagInfo" style="font-size:.7rem;color:var(--text2);margin-top:8px;padding:8px 10px;background:var(--surface-inset);border-radius:6px;line-height:1.5;display:none"></div>
    </div>
@@ -462,7 +452,7 @@ __PG_LOGO_DARK__
 <!-- Pattern playlists: step a set of setup patterns with the TV remote
       (HDMI-CEC, pgen_cec_remote.py) or from here. webui-app.js playlist*. -->
  <div class="card span2 playlist-card" id="playlistCard" data-widget="playlists" data-desktop-workspace="patterns" data-desktop-order="20" draggable="true">
-  <h2><span class="drag-handle">&#9776;</span>Playlists</h2>
+  <h2><span class="drag-handle"><svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true" fill="currentColor"><circle cx="9" cy="6" r="1.6"/><circle cx="15" cy="6" r="1.6"/><circle cx="9" cy="12" r="1.6"/><circle cx="15" cy="12" r="1.6"/><circle cx="9" cy="18" r="1.6"/><circle cx="15" cy="18" r="1.6"/></svg></span>Playlists</h2>
   <p class="playlist-lede">Step through setup patterns with the TV remote: right or down for the next pattern, left or up to go back, a number key to jump, Exit to end. Arrow keys on this page do the same. OK or Menu on the remote opens a menu of every pattern on the TV.</p>
   <section class="playlist-deck" id="playlistDeck" hidden aria-labelledby="playlistDeckName">
    <div class="playlist-deck-top">
@@ -527,11 +517,11 @@ __PG_LOGO_DARK__
 
 <!-- Calibration -->
  <div class="card span2" data-widget="meter" data-desktop-workspace="calibration" data-desktop-order="10" draggable="true" id="meterCard">
-  <h2 id="meterCardTitle"><span class="meter-card-header-title"><span class="drag-handle">&#9776;</span><span id="meterCardTitleText">Calibration</span></span><button type="button" id="meterConfigToggle" class="meter-config-toggle" data-no-collapse aria-expanded="true" aria-controls="meterSettingsGrid" title="Collapse meter and target settings" onclick="meterToggleConfiguration(event)">&#9662;</button></h2>
+  <h2 id="meterCardTitle"><span class="meter-card-header-title"><span class="drag-handle"><svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true" fill="currentColor"><circle cx="9" cy="6" r="1.6"/><circle cx="15" cy="6" r="1.6"/><circle cx="9" cy="12" r="1.6"/><circle cx="15" cy="12" r="1.6"/><circle cx="9" cy="18" r="1.6"/><circle cx="15" cy="18" r="1.6"/></svg></span><span id="meterCardTitleText">Calibration</span></span><button type="button" id="meterConfigToggle" class="meter-config-toggle" data-no-collapse aria-expanded="true" aria-controls="meterSettingsGrid" title="Collapse meter and target settings" onclick="meterToggleConfiguration(event)">&#9662;</button></h2>
   <div class="meter-card-header-row">
    <div class="meter-card-header-col meter-card-header-col-meter">
     <label class="meter-header-label">Meter <span class="meter-help-tip" title="Used for Read Once, Continuous, and series measurements." aria-label="Measurement meter help">?</span></label>
-    <div class="meter-card-header-meter"><select id="meterMeasurementPort" class="meter-card-header-select" title="Used for Read Once, Continuous, and series measurements."><option value="">Meter</option></select><span class="meter-xyz-gear-wrap meter-profile-gear-wrap"><button type="button" id="meterProfileGear" class="meter-xyz-gear" aria-label="Meter settings" aria-expanded="false" title="Meter settings">&#9881;</button><div class="meter-xyz-gear-popover" id="meterProfileGearPopover" role="dialog" aria-label="Meter settings"><div class="meter-profile-title">Meter Settings</div><div id="meterProfileRelocSlot"></div><div class="meter-profile-section" id="meterProfileLowLight"><div class="meter-profile-section-title">Low Light Handler <span class="meter-help-tip" title="Below the Trigger, take 2, 3, or 5 physical meter samples on the same patch and average them in linear XYZ. The meter process stays open between samples." aria-label="Low light handler help">?</span></div><label class="meter-toggle"><input type="checkbox" id="meterLowLightEnabled" onchange="meterSetLowLightHandler()"> Enabled</label><div class="field"><label for="meterLowLightMode">Mode</label><select id="meterLowLightMode" onchange="meterSetLowLightHandler()"><option value="off" title="One physical meter sample">Off (single read)</option><option value="a" title="Average 2 physical XYZ samples">2 reads (a)</option><option value="aa" title="Average 3 physical XYZ samples">3 reads (aa)</option><option value="aaa" title="Average 5 physical XYZ samples">5 reads (aaa)</option></select></div><div class="field"><label>Trigger</label><div class="meter-inline-value"><input type="number" id="meterLowLightTrigger" onchange="meterSetLowLightHandler()" min="0.1" max="1000" step="0.1" value="5.0" title="Expected target luminance below which repeated sampling is used. Default 5.0."><span class="meter-inline-unit">cd/m&sup2;</span></div></div></div></div></span></div>
+    <div class="meter-card-header-meter"><select id="meterMeasurementPort" class="meter-card-header-select" title="Used for Read Once, Continuous, and series measurements."><option value="">Meter</option></select><span class="meter-xyz-gear-wrap meter-profile-gear-wrap"><button type="button" id="meterProfileGear" class="meter-xyz-gear" aria-label="Meter settings" aria-expanded="false" title="Meter settings"><svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1Z"/></svg></button><div class="meter-xyz-gear-popover" id="meterProfileGearPopover" role="dialog" aria-label="Meter settings"><div class="meter-profile-title">Meter Settings</div><div id="meterProfileRelocSlot"></div><div class="meter-profile-section" id="meterProfileLowLight"><div class="meter-profile-section-title">Low Light Handler <span class="meter-help-tip" title="Below the Trigger, take 2, 3, or 5 physical meter samples on the same patch and average them in linear XYZ. The meter process stays open between samples." aria-label="Low light handler help">?</span></div><label class="meter-toggle"><input type="checkbox" id="meterLowLightEnabled" onchange="meterSetLowLightHandler()"> Enabled</label><div class="field"><label for="meterLowLightMode">Mode</label><select id="meterLowLightMode" onchange="meterSetLowLightHandler()"><option value="off" title="One physical meter sample">Off (single read)</option><option value="a" title="Average 2 physical XYZ samples">2 reads (a)</option><option value="aa" title="Average 3 physical XYZ samples">3 reads (aa)</option><option value="aaa" title="Average 5 physical XYZ samples">5 reads (aaa)</option></select></div><div class="field"><label>Trigger</label><div class="meter-inline-value"><input type="number" id="meterLowLightTrigger" onchange="meterSetLowLightHandler()" min="0.1" max="1000" step="0.1" value="5.0" title="Expected target luminance below which repeated sampling is used. Default 5.0."><span class="meter-inline-unit">cd/m&sup2;</span></div></div></div></div></span></div>
    </div>
    <div class="meter-card-header-col meter-card-header-col-display">
     <label class="meter-header-label">Display Type <span class="meter-help-tip" title="Panel technology used for calibration paths (OLED window size, WRGB compensation and pattern insertion defaults). Correction selection is controlled separately by Meter Profile." aria-label="Display type help">?</span></label>
@@ -542,7 +532,7 @@ __PG_LOGO_DARK__
      <label>Meter Profile (CCSS / CCMX) <span class="meter-help-tip" id="meterCorrectionProfileHelp" title="CCSS profiles are reusable spectral display corrections for compatible colorimeters. CCMX profiles are meter-specific correction matrices. Choose No Correction for the meter's native response." aria-label="Meter correction profile help">?</span></label>
      <div class="meter-ccss-profile-control-row">
       <select id="meterCcssProfile"><option value="custom_editor">Profile Editor...</option><option value="">Auto (technology default)</option><option value="none">No Correction</option></select>
-      <div id="meterCcssCapabilityNote" style="display:none;font-size:.64rem;color:var(--text2)">SpyderX supports matching CCMX profiles, but not CCSS profiles.</div>
+      <div id="meterCcssCapabilityNote" style="display:none;font-size:.6875rem;color:var(--text2)">SpyderX supports matching CCMX profiles, but not CCSS profiles.</div>
      </div>
     </div>
    </div>
@@ -553,7 +543,7 @@ __PG_LOGO_DARK__
       <option value="local">PGenerator+ output</option>
       <option value="companion" disabled title="Run PGenerator+ Patch Companion on the target computer to enable this option">PGenerator+ Patch Companion</option>
      </select>
-     <span id="meterCompanionGearWrap" class="meter-xyz-gear-wrap is-hidden"><button type="button" id="meterCompanionGear" class="meter-xyz-gear" aria-label="PGenerator+ Patch Companion settings" aria-expanded="false" title="PGenerator+ Patch Companion settings">&#9881;</button><div class="meter-xyz-gear-popover" id="meterCompanionGearPopover" role="dialog" aria-label="PGenerator+ Patch Companion settings">
+     <span id="meterCompanionGearWrap" class="meter-xyz-gear-wrap is-hidden"><button type="button" id="meterCompanionGear" class="meter-xyz-gear" aria-label="PGenerator+ Patch Companion settings" aria-expanded="false" title="PGenerator+ Patch Companion settings"><svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1Z"/></svg></button><div class="meter-xyz-gear-popover" id="meterCompanionGearPopover" role="dialog" aria-label="PGenerator+ Patch Companion settings">
       <div class="meter-profile-title">PGenerator+ Patch Companion Settings</div>
       <div class="field">
        <label for="meterCalibrationCompanionWindowMode">Display mode</label>
@@ -585,10 +575,10 @@ __PG_LOGO_DARK__
    </div>
   </div>
   <div id="meterResetRow" class="meter-reset-row" style="display:none">
-   <span class="meter-reset-row-text">&#9888; Meter disconnected. Reset USB to reconnect it; if that doesn&rsquo;t help, unplug the meter and plug it back in.</span>
+   <span class="meter-reset-row-text">Meter disconnected. Reset USB to reconnect it; if that doesn&rsquo;t help, unplug the meter and plug it back in.</span>
    <button class="btn btn-sm btn-secondary btn-push-end" onclick="meterResetUSB()">Reset USB</button>
   </div>
-  <div id="meterNoMeterBanner" style="display:none;background:var(--surface-inset);border:1px solid var(--border);border-left:3px solid var(--orange);border-radius:6px;padding:10px 12px;margin-bottom:10px;align-items:center;gap:12px;flex-wrap:wrap">
+  <div id="meterNoMeterBanner" style="display:none;background:color-mix(in srgb,var(--orange) 8%,var(--surface-inset));border:1px solid color-mix(in srgb,var(--orange) 45%,var(--border));border-radius:6px;padding:10px 12px;margin-bottom:10px;align-items:center;gap:12px;flex-wrap:wrap">
    <span id="meterNoMeterBannerText" style="font-size:.82rem;color:var(--text);line-height:1.45;flex:1 1 320px"></span>
    <button class="btn btn-sm btn-secondary" id="meterSimToggleBtn" onclick="meterToggleSimulatedMeter()">Use Simulated Meter</button>
   </div>
@@ -610,7 +600,7 @@ __PG_LOGO_DARK__
 	        <input type="checkbox" id="meterPatchInsert" checked> Pattern Insertion
 	       </label>
 	       <span class="meter-pattern-insert-wrap is-hidden">
-	        <button type="button" id="meterPatternInsertGear" class="meter-pattern-insert-gear" aria-label="Pattern insertion options" aria-expanded="false" title="Pattern insertion options">&#9881;</button>
+	        <button type="button" id="meterPatternInsertGear" class="meter-pattern-insert-gear" aria-label="Pattern insertion options" aria-expanded="false" title="Pattern insertion options"><svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1Z"/></svg></button>
 	        <div class="meter-pattern-insert-popover" id="meterPatternInsertPopover" role="dialog" aria-label="Pattern insertion options">
 	         <div class="meter-pattern-insert-grid">
 	          <label class="meter-toggle"><input type="checkbox" id="meterPatchInsertTimeEnabled" checked> Time</label>
@@ -630,7 +620,7 @@ __PG_LOGO_DARK__
         <div class="meter-xyz-toggle-row" id="meterCustomD65ToggleWrap">
          <label class="meter-toggle meter-field-label"><input type="checkbox" id="meterCustomD65Enabled"> Custom D65 <span class="meter-help-tip" title="Use a measured or entered whitepoint for D65 target colorspaces only." aria-label="Custom D65 help">?</span></label>
           <span class="meter-xyz-gear-wrap is-hidden">
-           <button type="button" id="meterCustomD65Gear" class="meter-xyz-gear" aria-label="Custom D65 options" aria-expanded="false" title="Custom D65 options">&#9881;</button>
+           <button type="button" id="meterCustomD65Gear" class="meter-xyz-gear" aria-label="Custom D65 options" aria-expanded="false" title="Custom D65 options"><svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1Z"/></svg></button>
           <div class="meter-xyz-gear-popover" id="meterCustomD65GearPopover" role="dialog" aria-label="Custom D65 options">
            <div class="field-whitepoint" id="meterTargetWhitePointField">
             <label class="meter-field-label">Target White x / y <span class="meter-help-tip" title="Custom values update the CIE target, greyscale target white, and color analysis for D65 target colorspaces." aria-label="Target white point help">?</span></label>
@@ -648,7 +638,7 @@ __PG_LOGO_DARK__
           <input type="checkbox" id="meterStabilizationEnabled" disabled> Stabilization Pattern
          </label>
          <span class="meter-pattern-insert-wrap is-hidden">
-          <button type="button" id="meterStabilizationGear" class="meter-pattern-insert-gear" aria-label="Stabilization pattern options" aria-expanded="false" title="Stabilization pattern options">&#9881;</button>
+          <button type="button" id="meterStabilizationGear" class="meter-pattern-insert-gear" aria-label="Stabilization pattern options" aria-expanded="false" title="Stabilization pattern options"><svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1Z"/></svg></button>
           <div class="meter-pattern-insert-popover" id="meterStabilizationPopover" role="dialog" aria-label="Stabilization pattern options">
            <div class="meter-pattern-insert-grid meter-stabilization-grid">
             <div class="meter-stabilization-note">Uses a 100% full-field pattern by default at the selected stimulus whenever no measurement patch is displayed.</div>
@@ -798,12 +788,12 @@ __PG_LOGO_DARK__
      <option value="100">100 Hz</option>
      <option value="120">120 Hz</option>
     </select>
-    <div id="meterRefreshCapabilityNote" style="display:none;font-size:.64rem;color:var(--text2);margin-top:4px">Automatic (SpyderX native); manual refresh override is not supported.</div>
+    <div id="meterRefreshCapabilityNote" style="display:none;font-size:.6875rem;color:var(--text2);margin-top:4px">Automatic (SpyderX native); manual refresh override is not supported.</div>
    </div>
   </div>
 
   <!-- Series Controls -->
-  <div id="meterSeriesHeader" style="font-size:.65rem;color:var(--text2);text-transform:uppercase;margin-bottom:4px;padding-top:8px;border-top:1px solid var(--border)">Series Measurements</div>
+  <div id="meterSeriesHeader" style="font-size:.6875rem;color:var(--text2);margin-bottom:4px;padding-top:8px;border-top:1px solid var(--border)">Series Measurements</div>
   <div class="meter-series-control-layout">
    <div class="meter-series-selector-panel">
     <div class="btn-row btn-seg" id="meterSeriesTabRow" style="margin:0">
@@ -886,16 +876,16 @@ __PG_LOGO_DARK__
     <div id="meterToneMapPanel" style="display:none;margin:0 0 10px 0;padding:12px;border:1px solid var(--border);border-radius:6px;background:var(--surface-inset);max-width:520px">
      <div style="font-size:.78rem;color:var(--text2);line-height:1.45;margin-bottom:10px">HDR tone-map upload uses a short 100% white flash for peak luminance (white is turned off before upload) so the panel does not heat-soak, then writes the tone map to the TV (same path as Full AutoCal).</div>
      <div style="display:flex;align-items:baseline;justify-content:space-between;gap:10px;margin-bottom:8px">
-      <div style="font-size:.7rem;color:var(--text2);text-transform:uppercase;letter-spacing:.06em">100% white luminance</div>
+      <div style="font-size:.7rem;color:var(--text2);">100% white luminance</div>
       <div style="font-size:1.35rem;font-weight:700;color:var(--text)"><span id="meterToneMapLiveY">--</span> <span style="font-size:.78rem;font-weight:500;color:var(--text2)">cd/m&sup2;</span></div>
      </div>
      <div style="height:18px;background:var(--surface-field);border:1px solid var(--border);border-radius:4px;overflow:hidden">
-      <div id="meterToneMapLuminanceFill" style="height:100%;width:0%;background:#fff;transition:width .2s ease"></div>
+      <div id="meterToneMapLuminanceFill" style="height:100%;width:100%;background:#fff;transform:scaleX(0);transform-origin:left;transition:transform .2s cubic-bezier(.23,1,.32,1)"></div>
      </div>
      <div id="meterToneMapStatusText" style="font-size:.72rem;color:var(--text2);margin-top:8px">Select Measure &amp; Upload to measure peak and upload the tone map.</div>
     </div>
     <div id="meterTwoPointControls" style="display:none;align-items:flex-end;gap:8px;flex-wrap:wrap;padding:8px 10px;background:var(--surface-inset);border-radius:6px">
-     <div style="font-size:.68rem;color:var(--text2);text-transform:uppercase;letter-spacing:.06em">2pt Levels</div>
+     <div style="font-size:.6875rem;color:var(--text2);">2pt Levels</div>
      <div style="font-size:.72rem;color:var(--text2);display:grid;grid-template-columns:92px 92px;gap:4px 8px;align-items:end">
       <label for="meterTwoPointLow">Low Patch</label>
       <label for="meterTwoPointLowCode">RGB Code</label>
@@ -935,7 +925,7 @@ __PG_LOGO_DARK__
     Use custom greyscale values
    </label>
    <div id="meterGreyProfileActions" style="display:none;align-items:center;gap:8px;flex-wrap:wrap">
-    <span id="meterGreyProfileModeLabel" style="font-size:.65rem;color:var(--text2)">Current mode</span>
+    <span id="meterGreyProfileModeLabel" style="font-size:.6875rem;color:var(--text2)">Current mode</span>
     <button class="btn btn-sm btn-secondary" onclick="meterOpenGreyProfileEditor(meterActiveSeriesPoints===11?11:21)">Edit Values</button>
     <button class="btn btn-sm btn-secondary" onclick="meterExportGreyProfile()">Export</button>
     <button class="btn btn-sm btn-secondary" onclick="meterOpenGreyProfileImport()">Import</button>
@@ -943,18 +933,18 @@ __PG_LOGO_DARK__
    <input type="file" id="meterGreyProfileImportInput" accept="application/json,.json" style="display:none">
   </div>
   <div id="meterThumbsWrap" class="meter-thumbs-shell" style="display:none;margin-bottom:10px">
-   <button type="button" id="meterThumbsLeftBtn" class="meter-thumbs-nav" onclick="meterThumbsPage(-1)" aria-label="Scroll thumbnails left" title="Scroll thumbnails left">&#10094;</button>
+   <button type="button" id="meterThumbsLeftBtn" class="meter-thumbs-nav" onclick="meterThumbsPage(-1)" aria-label="Scroll thumbnails left" title="Scroll thumbnails left"><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg></button>
    <div id="meterThumbsRow" style="flex:1 1 auto;min-width:0;overflow-x:auto;overflow-y:hidden;padding-bottom:6px;max-width:100%">
     <div id="meterPatchThumbs" style="display:flex;gap:2px;min-width:0"></div>
    </div>
-   <button type="button" id="meterThumbsRightBtn" class="meter-thumbs-nav" onclick="meterThumbsPage(1)" aria-label="Scroll thumbnails right" title="Scroll thumbnails right">&#10095;</button>
+   <button type="button" id="meterThumbsRightBtn" class="meter-thumbs-nav" onclick="meterThumbsPage(1)" aria-label="Scroll thumbnails right" title="Scroll thumbnails right"><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg></button>
   </div>
   <p id="meterOverPeakNote" class="meter-over-peak-note" role="status" hidden></p>
 
   <!-- Live Reading -->
   <div id="meterLiveReadingHome" aria-hidden="true"></div>
   <div id="meterLiveReading" style="display:none;margin-bottom:12px">
-    <div id="meterLiveReadingLabel" style="font-size:.65rem;color:var(--text2);text-transform:uppercase;margin-bottom:4px">Patch Reading</div>
+    <div id="meterLiveReadingLabel" style="font-size:.6875rem;color:var(--text2);margin-bottom:4px">Patch Reading</div>
    <div style="background:var(--surface-inset);padding:10px;border-radius:6px">
     <div class="meter-live-primary-values" style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:8px;font-size:.82rem">
      <span>Luminance: <strong id="meterLum">--</strong> cd/m&sup2; <span class="meter-live-tgt" id="meterLumTgt" title="Target luminance"></span></span>
@@ -990,7 +980,7 @@ __PG_LOGO_DARK__
     <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:10px;flex-wrap:wrap">
     <div style="min-width:0">
       <div style="font-size:.95rem;font-weight:700;color:var(--text-primary)">Custom Greyscale Values</div>
-      <div id="meterGreyModalModeLabel" style="font-size:.68rem;color:var(--text2)">Current mode</div>
+      <div id="meterGreyModalModeLabel" style="font-size:.6875rem;color:var(--text2)">Current mode</div>
      </div>
      <div class="btn-row" style="margin:0">
       <button class="btn btn-sm btn-secondary" id="meterGreyEdit11Btn" onclick="meterSetGreyEditorPoints(11)">11pt</button>
@@ -1031,7 +1021,7 @@ __PG_LOGO_DARK__
     <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:10px;flex-wrap:wrap">
      <div style="min-width:0">
       <div id="meterCustomSeriesModalTitle" style="font-size:.95rem;font-weight:700;color:var(--text-primary)">Custom Series</div>
-      <div id="meterCustomSeriesModalModeLabel" style="font-size:.68rem;color:var(--text2)">Current mode</div>
+      <div id="meterCustomSeriesModalModeLabel" style="font-size:.6875rem;color:var(--text2)">Current mode</div>
      </div>
     </div>
     <div style="display:flex;gap:14px;flex-wrap:wrap;margin-bottom:10px;align-items:flex-end">
@@ -1147,7 +1137,7 @@ __PG_LOGO_DARK__
     <div id="meterCubePreviewPanel" style="display:none;margin-bottom:12px;padding:10px;background:var(--surface-inset);border-radius:6px;font-size:.75rem;color:var(--text2)"></div>
     <div class="meter-lut-tools-content">
     <div id="lutCubeViewWrap" style="display:none;margin-bottom:12px">
-     <div style="font-size:.7rem;color:var(--text2);text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px;display:flex;align-items:center;gap:10px;flex-wrap:wrap">3D LUT Cube &mdash; <span id="lutCubeViewName" style="text-transform:none">Select a solved LUT</span>
+     <div style="font-size:.7rem;color:var(--text2);margin-bottom:6px;display:flex;align-items:center;gap:10px;flex-wrap:wrap">3D LUT Cube &mdash; <span id="lutCubeViewName" style="text-transform:none">Select a solved LUT</span>
       <span class="meter-help-tip" title="The LUT's contents in signal RGB space: hollow box = input lattice node, filled dot = where the LUT sends it. Connector length shows how far the LUT moves that node (an identity LUT shows dots centred in their boxes). Drag = rotate, wheel = zoom, double-click = reset camera." aria-label="LUT cube view help">?</span>
      </div>
      <div style="font-size:.7rem;color:var(--text2);margin-bottom:6px;display:flex;align-items:center;gap:10px;flex-wrap:wrap">
@@ -1164,7 +1154,7 @@ __PG_LOGO_DARK__
      <canvas id="lutCubeView" width="640" height="480" style="width:100%;max-width:640px;background:var(--surface-inset);border-radius:6px;cursor:grab;display:block"></canvas>
     </div>
     <div id="meterSolvedLutSection">
-     <div style="font-size:.7rem;color:var(--text2);text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px">Solved LUTs</div>
+     <div style="font-size:.7rem;color:var(--text2);margin-bottom:6px">Solved LUTs</div>
      <div id="meterSolvedLutList" style="padding:10px;background:var(--surface-inset);border-radius:6px;font-size:.75rem;color:var(--text2)">Loading&hellip;</div>
     </div>
     </div>
@@ -1177,7 +1167,7 @@ __PG_LOGO_DARK__
     <div id="lutSolveProgressTitle" style="font-size:.95rem;font-weight:700;color:var(--text-primary);margin-bottom:8px">Building 3D LUT</div>
     <div id="lutSolveProgressMsg" style="font-size:.8rem;color:var(--text2);line-height:1.5;margin-bottom:12px">Starting solve&hellip;</div>
     <div style="height:10px;border-radius:3px;background:#0d0f18;border:1px solid rgba(255,255,255,.12);overflow:hidden;text-align:left">
-     <div id="lutSolveProgressFill" class="meter-workflow-progress-fill active" style="width:8%;height:100%"></div>
+     <div id="lutSolveProgressFill" class="meter-workflow-progress-fill active" style="transform:scaleX(.08)"></div>
     </div>
     <div id="lutSolveProgressDetail" style="font-size:.7rem;color:var(--text2);margin-top:10px;line-height:1.4">&nbsp;</div>
    </div>
@@ -1211,7 +1201,7 @@ __PG_LOGO_DARK__
    <div style="width:min(620px,100%);max-height:90vh;overflow:auto;background:var(--surface-modal);border:1px solid var(--border);border-radius:10px;padding:16px;box-sizing:border-box">
     <div style="font-size:1rem;font-weight:700;color:var(--text-primary);margin-bottom:8px">3D LUT AutoCal</div>
     <div style="font-size:.78rem;color:var(--text2);line-height:1.45;margin-bottom:14px">Choose how the display is profiled before the 3D LUT is solved and uploaded. Greyscale / 1D should already be calibrated. Regardless of profiling method, the worker always generates and uploads a full 33&sup3; (35,937-node) 12-bit payload for the active picture mode. Patch counts below are the profile measurements only.</div>
-    <label style="display:block;font-size:.72rem;color:var(--text2);margin-bottom:6px;text-transform:uppercase;letter-spacing:.04em">Profiling method</label>
+    <label style="display:block;font-size:.72rem;color:var(--text2);margin-bottom:6px;">Profiling method</label>
     <select id="meterLg3dModalProfileSource" onchange="meterLg3dModalProfileSourceChanged()" style="width:100%;max-width:100%;background:var(--surface-inset);border:1px solid var(--border);border-radius:6px;color:var(--text-primary);padding:8px 10px;box-sizing:border-box;margin-bottom:10px">
      <option value="matrix">Matrix (5-point) — 5 patches, fastest</option>
      <option value="skeleton">Skeleton (multi-level WRGB) — 45 patches</option>
@@ -1232,7 +1222,7 @@ __PG_LOGO_DARK__
     <div id="meterLg3dModalExplain" style="font-size:.8rem;color:var(--text);line-height:1.5;background:var(--surface-inset);border:1px solid var(--border);border-radius:8px;padding:12px;margin-bottom:10px;min-height:7.5em"></div>
     <div id="meterLg3dModalCount" style="font-size:.75rem;color:var(--text2);margin-bottom:12px">&nbsp;</div>
     <div style="margin-bottom:14px;padding:10px 12px;background:var(--surface-inset);border:1px solid var(--border);border-radius:8px">
-     <div style="font-size:.72rem;color:var(--text2);text-transform:uppercase;letter-spacing:.04em;margin-bottom:8px">Export cube size</div>
+     <div style="font-size:.72rem;color:var(--text2);margin-bottom:8px">Export cube size</div>
      <label style="display:flex;align-items:flex-start;gap:8px;font-size:.8rem;color:var(--text);cursor:pointer;line-height:1.4;margin-bottom:8px">
       <input type="radio" name="meterLg3dCubeSize" id="meterLg3dCubeSize17" value="17" checked style="margin-top:3px;accent-color:var(--accent,#5b7fff)">
       <span><strong>17&sup3;</strong> (4,913 nodes) — faster build; fine for most host apps and TV download copies. Recommended default.</span>
@@ -1252,7 +1242,7 @@ __PG_LOGO_DARK__
    <div style="width:min(620px,100%);max-height:90vh;overflow:auto;background:var(--surface-modal);border:1px solid var(--border);border-radius:10px;padding:16px;box-sizing:border-box">
     <div style="font-size:1rem;font-weight:700;color:var(--text-primary);margin-bottom:8px">Select 3D LUT Series</div>
     <div style="font-size:.78rem;color:var(--text2);line-height:1.45;margin-bottom:14px">Choose a profiling series to measure. It uses the same method chooser as the standalone 3D LUT AutoCal; the descriptions below note what each set samples.</div>
-    <label style="display:block;font-size:.72rem;color:var(--text2);margin-bottom:6px;text-transform:uppercase;letter-spacing:.04em">Profiling method</label>
+    <label style="display:block;font-size:.72rem;color:var(--text2);margin-bottom:6px;">Profiling method</label>
     <select id="meterLg3dSelSeriesSource" onchange="meterLg3dSelectSeriesChanged()" style="width:100%;max-width:100%;background:var(--surface-inset);border:1px solid var(--border);border-radius:6px;color:var(--text-primary);padding:8px 10px;box-sizing:border-box;margin-bottom:10px">
      <option value="matrix">Matrix (5-point) — 5 patches, fastest</option>
      <option value="skeleton">Skeleton (multi-level WRGB) — 45 patches</option>
@@ -1327,7 +1317,7 @@ __PG_LOGO_DARK__
     <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:10px;flex-wrap:wrap">
      <div>
       <div id="meterCcssCreateTitle" style="font-size:.95rem;font-weight:700;color:var(--text-primary)">Create Meter Profile</div>
-      <div id="meterCcssCreateIntro" style="font-size:.68rem;color:var(--text2);max-width:68ch;line-height:1.45"></div>
+      <div id="meterCcssCreateIntro" style="font-size:.6875rem;color:var(--text2);max-width:68ch;line-height:1.45"></div>
      </div>
     </div>
     <div style="margin-bottom:12px">
@@ -1464,7 +1454,7 @@ __PG_LOGO_DARK__
     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px;margin-bottom:10px">
     <div style="background:var(--surface-inset);border-radius:6px;padding:10px;min-width:0">
      <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px">
-      <div style="font-size:.65rem;color:var(--text2);text-transform:uppercase">Low RGB Balance</div>
+      <div style="font-size:.6875rem;color:var(--text2);">Low RGB Balance</div>
       <div id="meterTwoPointLowLabel" style="font-size:.72rem;color:var(--text-primary)">Low</div>
      </div>
      <canvas id="meterTwoPointLowCanvas" width="220" height="220" style="width:100%;height:220px;display:block"></canvas>
@@ -1472,7 +1462,7 @@ __PG_LOGO_DARK__
     </div>
     <div style="background:var(--surface-inset);border-radius:6px;padding:10px;min-width:0">
      <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px">
-      <div style="font-size:.65rem;color:var(--text2);text-transform:uppercase">High RGB Balance</div>
+      <div style="font-size:.6875rem;color:var(--text2);">High RGB Balance</div>
       <div id="meterTwoPointHighLabel" style="font-size:.72rem;color:var(--text-primary)">High</div>
      </div>
      <canvas id="meterTwoPointHighCanvas" width="220" height="220" style="width:100%;height:220px;display:block"></canvas>
@@ -1502,13 +1492,13 @@ __PG_LOGO_DARK__
 	     <div id="meterGreyscaleRgbRow" style="display:flex;gap:8px;align-items:stretch">
 	      <div id="meterGreyLiveRail">
 	      <div id="meterGreyRgbLegacyWrap" style="flex:0 0 100px;width:100px;height:220px;background:var(--surface-inset);border-radius:6px;padding:6px;display:flex;flex-direction:column;box-sizing:border-box">
-	       <div style="font-size:.6rem;color:var(--text2);text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px;text-align:center">RGB</div>
+	       <div style="font-size:.6875rem;color:var(--text2);margin-bottom:4px;text-align:center">RGB</div>
 	       <canvas id="meterRGBCanvasGrey" width="200" height="200" style="width:100%;flex:1;min-height:0;display:block"></canvas>
 	      </div>
 	      <div id="meterGreyTvWrap" style="flex:0 0 180px;width:180px;height:220px;background:var(--surface-inset);border-radius:6px;padding:6px;display:flex;flex-direction:column;box-sizing:border-box">
-	       <div id="meterGreyTvTitle" style="font-size:.6rem;color:var(--text2);text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px;text-align:center">RGB</div>
+	       <div id="meterGreyTvTitle" style="font-size:.6875rem;color:var(--text2);margin-bottom:4px;text-align:center">RGB</div>
 	       <div id="meterGreyTvWidget" style="width:100%;flex:1;min-height:0;display:block"></div>
-	       <div id="meterGreyTvMeta" style="font-size:.6rem;color:var(--text2);line-height:1.35;margin-top:4px;text-align:center">LG TV</div>
+	       <div id="meterGreyTvMeta" style="font-size:.6875rem;color:var(--text2);line-height:1.35;margin-top:4px;text-align:center">LG TV</div>
 	      </div>
 	      </div>
 	      <div id="meterRgbChartScroller" class="meter-scroll-sync" style="flex:1;min-width:0;background:var(--surface-inset);border-radius:6px">
@@ -1556,7 +1546,7 @@ __PG_LOGO_DARK__
       </label>
      </div>
      <div style="display:flex;align-items:center;gap:10px;margin-bottom:4px;flex-wrap:wrap">
-      <div style="font-size:.65rem;color:var(--text2);text-transform:uppercase" id="chartDeltaELabel">&Delta;E ITP</div>
+      <div style="font-size:.6875rem;color:var(--text2);" id="chartDeltaELabel">&Delta;E ITP</div>
       <label id="meterSeparateLumErrorWrap" style="font-size:.7rem;color:var(--text2);cursor:pointer;user-select:none;display:none" title="Split each greyscale &Delta;E bar: the bottom segment is colored by the chroma-only &Delta;E and the shimmering top by the added luminance error. Available with Grey ref = Absolute Y w/gamma.">
        <input type="checkbox" id="meterSeparateLumError" onchange="meterOnGreyRefChange()" style="vertical-align:middle"> Separate Luminance Error
       </label>
@@ -1568,7 +1558,7 @@ __PG_LOGO_DARK__
 	    </div>
 	    <div id="meterGammaBlock" style="margin-bottom:10px">
      <div style="display:flex;align-items:center;gap:10px;margin-bottom:4px;flex-wrap:wrap">
-      <div style="font-size:.65rem;color:var(--text2);text-transform:uppercase" id="chartGammaValueLabel">Gamma</div>
+      <div style="font-size:.6875rem;color:var(--text2);" id="chartGammaValueLabel">Gamma</div>
       <label style="font-size:.7rem;color:var(--text2);cursor:pointer;user-select:none;margin-left:auto">
        <input type="checkbox" id="meterPerChannelGamma" onchange="if(meterReadings&&meterReadings.length)drawAllCharts(meterReadings);meterSaveColorPrefs()" style="vertical-align:middle"> Per-channel Y
       </label>
@@ -1581,7 +1571,7 @@ __PG_LOGO_DARK__
     <div id="meterEotfLuminanceGrid" style="display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:10px;margin-bottom:10px">
      <div id="meterEotfBlock">
       <div style="display:flex;align-items:center;gap:10px;margin-bottom:4px;flex-wrap:wrap">
-       <div style="font-size:.65rem;color:var(--text2);text-transform:uppercase" id="chartEotfLabel">EOTF</div>
+       <div style="font-size:.6875rem;color:var(--text2);" id="chartEotfLabel">EOTF</div>
        <label style="font-size:.7rem;color:var(--text2);cursor:pointer;user-select:none;margin-left:auto" title="Absolute error view: plots inverse-EOTF so a perfectly tracking display is a straight diagonal and errors deviate from it. Unchecked shows the normal bowed EOTF luminance curve.">
        <input type="checkbox" id="meterEotfAbsolute" onchange="meterRedrawEotfChart();meterSaveColorPrefs()" style="vertical-align:middle" checked> Absolute
        </label>
@@ -1598,7 +1588,7 @@ __PG_LOGO_DARK__
      </div>
     <div id="meterLuminanceBlock" style="min-width:0">
         <div style="display:flex;align-items:center;gap:10px;margin-bottom:4px;flex-wrap:wrap">
-         <div style="font-size:.65rem;color:var(--text2);text-transform:uppercase">Luminance</div>
+         <div style="font-size:.6875rem;color:var(--text2);">Luminance</div>
          <label style="font-size:.7rem;color:var(--text2);cursor:pointer;user-select:none;margin-left:auto" title="Use logarithmic vertical scaling for the luminance chart. This changes only the chart axis, not the target calculations.">
           <input type="checkbox" id="meterLuminanceLogScale" onchange="meterRedrawLuminanceChart();meterSaveColorPrefs()" style="vertical-align:middle"> Log scale
          </label>
@@ -1613,7 +1603,7 @@ __PG_LOGO_DARK__
    <div id="chartsColorWrap" style="display:none">
     <div style="margin-bottom:10px">
      <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;flex-wrap:wrap">
-      <div id="chartCIELabel" style="font-size:.65rem;color:var(--text2);text-transform:uppercase">CIE 1931 Chromaticity</div>
+      <div id="chartCIELabel" style="font-size:.6875rem;color:var(--text2);">CIE 1931 Chromaticity</div>
       <label id="meterCie3dViewLabel" style="font-size:.7rem;color:var(--text2);cursor:pointer;user-select:none;display:inline-flex;align-items:center;gap:4px">
        <input type="checkbox" id="meterCie3dView" onchange="meterOnCie3dViewChange()" style="vertical-align:middle"> 3D View
        <span class="meter-help-tip" title="3D view of the chromaticity chart. Drag = rotate · Mouse wheel = zoom · Double-click = reset camera. Left-click a point to select it." aria-label="3D View camera controls help">?</span>
@@ -1641,7 +1631,7 @@ __PG_LOGO_DARK__
       </span>
      </div>
      <div id="meterCubeViewWrap" style="display:none;margin-bottom:10px">
-      <div style="font-size:.65rem;color:var(--text2);text-transform:uppercase;margin-bottom:4px;display:flex;align-items:center;gap:10px;flex-wrap:wrap">RGB Cube (signal space)
+      <div style="font-size:.6875rem;color:var(--text2);margin-bottom:4px;display:flex;align-items:center;gap:10px;flex-wrap:wrap">RGB Cube (signal space)
        <span class="meter-help-tip" title="Lattice nodes at their signal RGB positions. Hollow = not measured yet, filled = measured. Drag = rotate, wheel = zoom." aria-label="RGB cube view help">?</span>
       </div>
       <div id="chartCubeViewBox" style="position:relative;display:inline-block;max-width:100%">
@@ -1656,11 +1646,11 @@ __PG_LOGO_DARK__
        <button type="button" id="chartCIEExpandBtn" class="chart-expand-btn" title="Expand to full width" aria-label="Expand CIE chart to full width" onclick="meterToggleChartExpand('cie')"></button>
       </div>
       <div id="meterRGBColorWrap" style="flex:0 0 180px;width:180px;height:450px;background:var(--surface-inset);border-radius:6px;padding:10px;display:flex;flex-direction:column;box-sizing:border-box">
-       <div style="font-size:.68rem;color:var(--text2);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px;text-align:center">RGB</div>
+       <div style="font-size:.6875rem;color:var(--text2);margin-bottom:8px;text-align:center">RGB</div>
        <canvas id="meterRGBCanvasColor" width="200" height="400" style="width:100%;flex:1;min-height:0;display:block"></canvas>
       </div>
       <div id="meterXYYColorWrap" style="flex:0 0 180px;width:180px;height:450px;background:var(--surface-inset);border-radius:6px;padding:10px;display:flex;flex-direction:column;box-sizing:border-box">
-       <div id="meterXYYColorLabel" style="font-size:.68rem;color:var(--text2);text-transform:none;letter-spacing:.06em;margin-bottom:8px;text-align:center">xyY</div>
+       <div id="meterXYYColorLabel" style="font-size:.6875rem;color:var(--text2);text-transform:none;letter-spacing:.06em;margin-bottom:8px;text-align:center">xyY</div>
        <canvas id="meterXYYCanvasColor" width="200" height="400" style="width:100%;flex:1;min-height:0;display:block"></canvas>
       </div>
       <div id="colorReadingDetail" style="flex:0 0 205px;width:205px;height:450px;background:var(--surface-inset);border-radius:6px;padding:12px;font-size:12px;color:var(--text-muted);box-sizing:border-box;overflow:auto">
@@ -1670,7 +1660,7 @@ __PG_LOGO_DARK__
     </div>
     <div id="meterColorDeltaESection" style="margin-bottom:10px">
      <div style="display:flex;align-items:center;gap:10px;margin-bottom:4px;flex-wrap:wrap">
-      <div style="font-size:.65rem;color:var(--text2);text-transform:uppercase" id="chartColorDELabel">&Delta;E 2000 (Color Accuracy)</div>
+      <div style="font-size:.6875rem;color:var(--text2);" id="chartColorDELabel">&Delta;E 2000 (Color Accuracy)</div>
       <label style="font-size:.7rem;color:var(--text2);cursor:pointer;user-select:none;display:inline-flex;align-items:center;gap:4px;margin-left:auto">
        <input type="checkbox" id="meterColorIncludeLumError" onchange="meterOnColorIncludeLumChange()" style="vertical-align:middle"> Include luminance error
        <span class="meter-help-tip" title="Off = chroma-only ΔE and 3D (target Y matched to measured). On = full ΔE including luminance; 2D/3D CIE show cyan/orange ΔY% rings (cyan = brighter, orange = dimmer) and 3D adds vertical ΔY stems. Small filled dots are always measured xy, not luminance rings." aria-label="Include luminance error help">?</span>
@@ -1696,7 +1686,7 @@ __PG_LOGO_DARK__
      </div>
     </div>
     <div id="colorSeriesAveragesWrap" style="margin-bottom:10px;display:none">
-     <div style="font-size:.65rem;color:var(--text2);text-transform:uppercase;margin-bottom:4px">Series Averages</div>
+     <div style="font-size:.6875rem;color:var(--text2);margin-bottom:4px">Series Averages</div>
      <div style="overflow-x:auto;border-radius:6px;background:var(--surface-inset)">
       <table id="colorSeriesAveragesTable" style="width:100%;border-collapse:collapse;font-size:11px;color:var(--text-primary);white-space:nowrap">
        <thead><tr style="border-bottom:1px solid var(--border);color:var(--text-muted);text-align:right">
@@ -1713,7 +1703,7 @@ __PG_LOGO_DARK__
      </div>
     </div>
     <div id="colorReadingsTableWrap" style="margin-bottom:10px;display:none">
-     <div style="font-size:.65rem;color:var(--text2);text-transform:uppercase;margin-bottom:4px">Color Readings</div>
+     <div style="font-size:.6875rem;color:var(--text2);margin-bottom:4px">Color Readings</div>
      <div style="overflow-x:auto;border-radius:6px;background:var(--surface-inset)">
       <table id="colorReadingsTable" style="width:100%;border-collapse:collapse;font-size:11px;color:var(--text-primary);white-space:nowrap">
        <thead><tr style="border-bottom:1px solid var(--border);color:var(--text-muted);text-align:right">
@@ -1765,9 +1755,9 @@ __PG_LOGO_DARK__
      <button class="btn btn-sm btn-secondary" onclick="meterCloseReportDialog()">Close</button>
     </div>
     <div style="font-size:.72rem;color:var(--text2);margin-bottom:8px">Choose which measured series to include and export as HTML or PDF.</div>
-    <div style="font-size:.7rem;color:var(--text2);text-transform:uppercase;margin:10px 0 6px">Include Series Data</div>
+    <div style="font-size:.7rem;color:var(--text2);margin:10px 0 6px">Include Series Data</div>
     <div id="meterReportSeriesList" style="display:grid;gap:6px;margin-bottom:12px"></div>
-    <div style="font-size:.7rem;color:var(--text2);text-transform:uppercase;margin:10px 0 6px">Output Format</div>
+    <div style="font-size:.7rem;color:var(--text2);margin:10px 0 6px">Output Format</div>
     <div style="display:flex;gap:14px;flex-wrap:wrap;margin-bottom:14px">
      <label style="display:flex;align-items:center;gap:6px;cursor:pointer"><input type="radio" name="meterReportFormat" value="html" checked> HTML</label>
      <label style="display:flex;align-items:center;gap:6px;cursor:pointer"><input type="radio" name="meterReportFormat" value="pdf"> PDF</label>
@@ -1812,7 +1802,7 @@ __PG_LOGO_DARK__
 
  <!-- Device Info -->
  <div class="card span2 devinfo-card" data-widget="info" data-desktop-workspace="system" data-desktop-order="10" draggable="true">
-  <h2><span class="drag-handle">&#9776;</span>Device Info</h2>
+  <h2><span class="drag-handle"><svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true" fill="currentColor"><circle cx="9" cy="6" r="1.6"/><circle cx="15" cy="6" r="1.6"/><circle cx="9" cy="12" r="1.6"/><circle cx="15" cy="12" r="1.6"/><circle cx="9" cy="18" r="1.6"/><circle cx="15" cy="18" r="1.6"/></svg></span>Device Info</h2>
   <!-- Vitals: live load, memory and SoC temperature (loadStats) -->
   <div class="devinfo-vitals">
    <div class="devinfo-vital">
@@ -1836,7 +1826,7 @@ __PG_LOGO_DARK__
   </div>
   <!-- Live selects: loadInfo() keeps these nodes when it rebuilds the facts -->
   <div class="info-grid devinfo-facts" id="infoGrid">
-   <div class="info-item devinfo-fact devinfo-control" id="gpuMemField"><svg class="devinfo-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="6" width="12" height="12" rx="1.5"/><rect x="9.5" y="9.5" width="5" height="5" rx=".5"/><path d="M9 2.5V6M15 2.5V6M9 18v3.5M15 18v3.5M2.5 9H6M2.5 15H6M18 9h3.5M18 15h3.5"/></svg>
+   <div class="info-item devinfo-fact devinfo-control" id="gpuMemField">
     <label class="label" for="gpu_mem">GPU Memory <span class="meter-help-tip" id="gpuMemTip" tabindex="0" title="The VideoCore firmware's share of the RAM. The renderer draws through the kernel driver, whose display and 3D buffers come from the separate CMA pool. 64 MB is right for PGenerator+; more only takes RAM from Linux. Changes require a reboot." aria-label="GPU memory help">?</span></label>
     <select id="gpu_mem" onchange="applyMemory()">
      <option value="64" data-pg-badge="Recommended">64 MB</option>
@@ -1845,7 +1835,7 @@ __PG_LOGO_DARK__
      <option value="256">256 MB</option>
     </select>
    </div>
-   <div class="info-item devinfo-fact devinfo-control" id="cmaMemField" style="display:none"><svg class="devinfo-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="6" width="12" height="12" rx="1.5"/><rect x="9.5" y="9.5" width="5" height="5" rx=".5"/><path d="M9 2.5V6M15 2.5V6M9 18v3.5M15 18v3.5M2.5 9H6M2.5 15H6M18 9h3.5M18 15h3.5"/></svg>
+   <div class="info-item devinfo-fact devinfo-control" id="cmaMemField" style="display:none">
     <label class="label" for="cma_mb">Graphics Memory <span class="meter-help-tip" id="cmaMemTip" tabindex="0" title="The kernel CMA pool. Changes require a reboot. The Pi 5 renderer allocates its scanout buffers from this pool; a 4K 10-bit buffer needs about 32 MB, so use 256 MB or more for 4K 10-bit patterns." aria-label="Graphics memory help">?</span></label>
     <select id="cma_mb" onchange="applyMemory()">
      <option value="default">64 MB (Raspberry Pi OS default)</option>
@@ -1857,10 +1847,10 @@ __PG_LOGO_DARK__
      <option value="512">512 MB</option>
     </select>
    </div>
-   <div class="info-item devinfo-fact devinfo-control" id="governorField"><svg class="devinfo-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4.2 17a8.5 8.5 0 1 1 15.6 0"/><path d="m12 13 4-4.5"/><circle cx="12" cy="13.5" r="1.4"/><path d="M7 17.5h10"/></svg>
+   <div class="info-item devinfo-fact devinfo-control" id="governorField">
     <label class="label" for="cpu_governor">Scaling Type <span class="meter-help-tip" tabindex="0" title="CPU frequency scaling governor. Performance keeps the CPU at full clock so pattern changes take the same time every time. Applies immediately, no reboot." aria-label="Scaling type help">?</span></label>
     <select id="cpu_governor" onchange="applyGovernor()">
-     <option value="performance" data-pg-badge="Recommended">Performance ⚡</option>
+     <option value="performance" data-pg-badge="Recommended">Performance</option>
     </select>
    </div>
   </div>
@@ -1869,7 +1859,7 @@ __PG_LOGO_DARK__
  <!-- Network: WiFi Client, WiFi Access Point and Bluetooth PAN in one card.
       data-widget stays "wifi" so saved card orders keep its place. -->
  <div class="card net-card" data-widget="wifi" data-desktop-workspace="connectivity" data-desktop-order="10" draggable="true">
-  <h2><span class="drag-handle">&#9776;</span>Network</h2>
+  <h2><span class="drag-handle"><svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true" fill="currentColor"><circle cx="9" cy="6" r="1.6"/><circle cx="15" cy="6" r="1.6"/><circle cx="9" cy="12" r="1.6"/><circle cx="15" cy="12" r="1.6"/><circle cx="9" cy="18" r="1.6"/><circle cx="15" cy="18" r="1.6"/></svg></span>Network</h2>
   <section class="card-section" aria-labelledby="netTitle_wifi">
    <div class="card-section-head"><h3 class="card-section-title" id="netTitle_wifi"><svg class="card-section-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M2.5 9a14 14 0 0 1 19 0M5.5 12.3a9.6 9.6 0 0 1 13 0M8.6 15.5a5.2 5.2 0 0 1 6.8 0" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><circle cx="12" cy="19" r="1.3" fill="currentColor"/></svg>WiFi Client</h3><label class="pg-switch" title="Enable or disable the WiFi radio (also stops the Access Point)"><input type="checkbox" id="wifiRadioToggle" aria-label="WiFi radio" onchange="onWifiRadioToggle(this)"><span class="pg-switch-track"><span class="pg-switch-thumb"></span></span></label></div>
     <div class="info-grid" id="wifiStatus" style="margin-bottom:8px"></div>
@@ -1928,7 +1918,7 @@ __PG_LOGO_DARK__
 
  <!-- HDMI-CEC TV Control -->
  <div class="card" data-widget="cec" data-desktop-workspace="integrations" data-desktop-order="10" draggable="true">
-  <h2><span class="drag-handle">&#9776;</span>HDMI-CEC</h2>
+  <h2><span class="drag-handle"><svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true" fill="currentColor"><circle cx="9" cy="6" r="1.6"/><circle cx="15" cy="6" r="1.6"/><circle cx="9" cy="12" r="1.6"/><circle cx="15" cy="12" r="1.6"/><circle cx="9" cy="18" r="1.6"/><circle cx="15" cy="18" r="1.6"/></svg></span>HDMI-CEC</h2>
   <div style="display:flex;align-items:center;gap:12px;margin-bottom:8px">
    <span id="cecStatus" style="font-size:.85rem;color:var(--text2)">Checking...</span>
   </div>
@@ -1951,10 +1941,10 @@ __PG_LOGO_DARK__
 
  <!-- Resolve Protocol -->
  <div class="card" data-widget="resolve" data-desktop-workspace="connectivity" data-desktop-order="40" draggable="true">
-  <h2><span class="drag-handle">&#9776;</span>Calibration Software</h2>
+  <h2><span class="drag-handle"><svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true" fill="currentColor"><circle cx="9" cy="6" r="1.6"/><circle cx="15" cy="6" r="1.6"/><circle cx="9" cy="12" r="1.6"/><circle cx="15" cy="12" r="1.6"/><circle cx="9" cy="18" r="1.6"/><circle cx="15" cy="18" r="1.6"/></svg></span>Calibration Software</h2>
   <section class="card-section" aria-labelledby="calTitle_resolve">
   <div class="card-section-head"><h3 class="card-section-title" id="calTitle_resolve"><svg class="card-section-icon rgb-icon" viewBox="0 0 24 24" aria-hidden="true"><circle class="rgb-r" cx="12" cy="8.2" r="5.2"/><circle class="rgb-g" cx="8.2" cy="14.8" r="5.2"/><circle class="rgb-b" cx="15.8" cy="14.8" r="5.2"/></svg>Resolve Protocol</h3><span class="conn-badge" id="resolveStatusBadge" data-state="off" role="status">Disconnected</span></div>
-  <div style="font-size:.7rem;color:var(--text2);margin-bottom:8px;line-height:1.4">Connect via HCFR / DisplayCAL Resolve protocol. Enter the IP of the PC running calibration software.</div>
+  <div style="font-size:.78rem;color:var(--text2);margin-bottom:8px;line-height:1.4">Connect via HCFR / DisplayCAL Resolve protocol. Enter the IP of the PC running calibration software.</div>
   <div class="grid">
    <div class="field">
     <label for="resolveIp">Calibration PC IP</label>
@@ -1992,23 +1982,23 @@ __PG_LOGO_DARK__
 
  <!-- HDMI Infoframes -->
  <div class="card" data-widget="infoframes" data-desktop-workspace="diagnostics" data-desktop-order="10" draggable="true">
-  <h2><span class="drag-handle">&#9776;</span>HDMI Infoframes</h2>
+  <h2><span class="drag-handle"><svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true" fill="currentColor"><circle cx="9" cy="6" r="1.6"/><circle cx="15" cy="6" r="1.6"/><circle cx="9" cy="12" r="1.6"/><circle cx="15" cy="12" r="1.6"/><circle cx="9" cy="18" r="1.6"/><circle cx="15" cy="18" r="1.6"/></svg></span>HDMI Infoframes</h2>
   <div class="btn-row" style="margin-bottom:8px">
    <button class="btn btn-sm btn-secondary" onclick="loadInfoframes()">Refresh</button>
   </div>
   <div>
    <div style="margin-bottom:10px">
-    <div style="font-size:.7rem;color:var(--text2);text-transform:uppercase;margin-bottom:4px">AVI InfoFrame</div>
+    <div style="font-size:.7rem;color:var(--text2);margin-bottom:4px">AVI InfoFrame</div>
     <div id="aviIF" class="if-hex">-</div>
     <div id="aviDecoded" class="if-decoded"></div>
    </div>
    <div>
-    <div style="font-size:.7rem;color:var(--text2);text-transform:uppercase;margin-bottom:4px">DRM InfoFrame</div>
+    <div style="font-size:.7rem;color:var(--text2);margin-bottom:4px">DRM InfoFrame</div>
     <div id="drmIF" class="if-hex">-</div>
     <div id="drmDecoded" class="if-decoded"></div>
    </div>
    <div style="margin-top:10px">
-    <div style="font-size:.7rem;color:var(--text2);text-transform:uppercase;margin-bottom:4px">SPD InfoFrame (source name)</div>
+    <div style="font-size:.7rem;color:var(--text2);margin-bottom:4px">SPD InfoFrame (source name)</div>
     <div id="spdIF" class="if-hex">-</div>
     <div id="spdDecoded" class="if-decoded"></div>
  </div>
@@ -2022,7 +2012,7 @@ __PG_LOGO_DARK__
   <!-- Settings: UI Settings (browser-local, never sent to the device config),
       GPU Memory and Software Update in one card. -->
  <section class="card span2 settings-card" id="settingsCard" data-widget="settings" data-collapse-key="settings" data-desktop-workspace="settings" data-desktop-order="10" draggable="true">
-  <h2><span class="drag-handle">&#9776;</span>Settings</h2>
+  <h2><span class="drag-handle"><svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true" fill="currentColor"><circle cx="9" cy="6" r="1.6"/><circle cx="15" cy="6" r="1.6"/><circle cx="9" cy="12" r="1.6"/><circle cx="15" cy="12" r="1.6"/><circle cx="9" cy="18" r="1.6"/><circle cx="15" cy="18" r="1.6"/></svg></span>Settings</h2>
   <section class="card-section" id="uiSettingsCard" aria-labelledby="setTitle_ui">
    <div class="card-section-head"><h3 class="card-section-title" id="setTitle_ui"><svg class="card-section-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h7M15 6h5M4 12h3M11 12h9M4 18h9M17 18h3" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><circle cx="13" cy="6" r="2" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><circle cx="9" cy="12" r="2" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><circle cx="15" cy="18" r="2" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>UI Settings</h3></div>
    <div class="ui-settings-sections">
@@ -2071,10 +2061,10 @@ __PG_LOGO_DARK__
    <div class="card-section-head"><h3 class="card-section-title" id="setTitle_update"><svg class="card-section-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 18a4.5 4.5 0 0 1-.6-8.96A6 6 0 0 1 17.6 8.3 4 4 0 0 1 17 18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><path d="M12 11v9M8.5 16.5 12 20l3.5-3.5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>Software Update</h3></div>
    <div id="updateContent" class="facts-host">
     <div class="info-grid devinfo-facts update-facts">
-     <div class="info-item devinfo-fact"><svg class="devinfo-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.5 19.5 7v10L12 20.5 4.5 17V7z"/><path d="m8.8 12 2.3 2.3 4.2-4.6"/></svg><div class="label">Current</div><div class="value" id="updateCurrent">-</div><span class="fact-chip" id="updateCurrentChip" hidden></span></div>
-     <div class="info-item devinfo-fact"><svg class="devinfo-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M7 18a4.5 4.5 0 0 1-.6-8.96A6 6 0 0 1 17.6 8.3 4 4 0 0 1 17 18"/><path d="M12 11v8M9 16l3 3 3-3"/></svg><div class="label">Latest</div><div class="value" id="updateLatest">-</div></div>
-     <div class="info-item devinfo-fact"><svg class="devinfo-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="5" width="17" height="15" rx="2"/><path d="M3.5 10h17M8 3v4M16 3v4M8 14h2M14 14h2"/></svg><div class="label">Published</div><div class="value" id="updatePublished">-</div></div>
-     <div class="info-item devinfo-fact"><svg class="devinfo-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><rect x="9.5" y="9.5" width="5" height="5" rx=".6"/><circle cx="6.5" cy="8.5" r=".8"/><circle cx="17.5" cy="8.5" r=".8"/><circle cx="6.5" cy="15.5" r=".8"/><circle cx="17.5" cy="15.5" r=".8"/></svg><div class="label">Package</div><div class="value" id="updateTarget">-</div></div>
+     <div class="info-item devinfo-fact"><div class="label">Current</div><div class="value" id="updateCurrent">-</div><span class="fact-chip" id="updateCurrentChip" hidden></span></div>
+     <div class="info-item devinfo-fact"><div class="label">Latest</div><div class="value" id="updateLatest">-</div></div>
+     <div class="info-item devinfo-fact"><div class="label">Published</div><div class="value" id="updatePublished">-</div></div>
+     <div class="info-item devinfo-fact"><div class="label">Package</div><div class="value" id="updateTarget">-</div></div>
     </div>
     <div id="updateStatus" class="update-status"></div>
     <details class="update-notes" id="updateChangelogWrap" hidden><summary id="updateChangelogSummary">What’s new</summary><div id="updateChangelog"></div></details>
@@ -2230,11 +2220,11 @@ __PG_LOGO_DARK__
 
     <div style="flex:1 1 240px;min-width:220px">
      <div style="display:flex;align-items:baseline;justify-content:space-between;gap:10px;margin-bottom:8px">
-      <div style="font-size:.7rem;color:var(--text2);text-transform:uppercase;letter-spacing:.06em">100% white luminance</div>
+      <div style="font-size:.7rem;color:var(--text2);">100% white luminance</div>
       <div style="font-size:1.4rem;font-weight:700;color:var(--text)"><span id="meterAutoCalLiveY">--</span> <span style="font-size:.78rem;font-weight:500;color:var(--text2)">cd/m&sup2;</span></div>
      </div>
      <div style="height:18px;background:var(--surface-field);border:1px solid var(--border);border-radius:4px;overflow:hidden">
-      <div id="meterAutoCalLuminanceFill" style="height:100%;width:0%;background:#fff;transition:width .2s ease"></div>
+      <div id="meterAutoCalLuminanceFill" style="height:100%;width:100%;background:#fff;transform:scaleX(0);transform-origin:left;transition:transform .2s cubic-bezier(.23,1,.32,1)"></div>
      </div>
      <div id="meterAutoCalBrightnessText" style="font-size:.72rem;color:var(--text2);margin-top:8px">Panel light: --</div>
     </div>

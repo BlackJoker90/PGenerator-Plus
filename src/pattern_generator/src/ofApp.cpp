@@ -728,9 +728,9 @@ void ofApp::log(std::string str) {
  ##########################################################
 */
 void ofApp::setBackground(int redbg, int greenbg, int bluebg) {
- redbg=normalizeSourceValue(scaleSourceToBitDepth(redbg),cur_op().source_range);
- greenbg=normalizeSourceValue(scaleSourceToBitDepth(greenbg),cur_op().source_range);
- bluebg=normalizeSourceValue(scaleSourceToBitDepth(bluebg),cur_op().source_range);
+ redbg=sourceToOutputCode(redbg);
+ greenbg=sourceToOutputCode(greenbg);
+ bluebg=sourceToOutputCode(bluebg);
  int lldv422=usesLowLatencyDoVi422Transport();
  if (ofxRPI4Window::isHDR && !ofxRPI4Window::isDoVi && !ofxRPI4Window::is_std_DoVi) { 
   if (ofxRPI4Window::bit_depth == 10) {  
@@ -791,9 +791,9 @@ void ofApp::setBackground(int redbg, int greenbg, int bluebg) {
  ##########################################################
 */
 void ofApp::setColor(int red, int green, int blue) {
- red=normalizeSourceValue(scaleSourceToBitDepth(red),cur_op().source_range);
- green=normalizeSourceValue(scaleSourceToBitDepth(green),cur_op().source_range);
- blue=normalizeSourceValue(scaleSourceToBitDepth(blue),cur_op().source_range);
+ red=sourceToOutputCode(red);
+ green=sourceToOutputCode(green);
+ blue=sourceToOutputCode(blue);
  if(ofxRPI4Window::is_std_DoVi && ofxRPI4Window::colorspace_on) {
   dv_source_max=cur_op().source_max;
   if(dv_source_max != 255 && dv_source_max != 1023 && dv_source_max != 4095)
@@ -816,12 +816,45 @@ void ofApp::setColor(int red, int green, int blue) {
 }
 
 /*
- * SOURCE_MAX codes deeper than the framebuffer (e.g. the 12-bit codes of a
- * standard-DV pattern still loaded when the signal switches to SDR/HDR10)
- * are scaled down instead of being clipped: clipping turned patch and
- * background into the same white and showed a full field. Shallower codes
- * are left alone, as before (patterns without SOURCE_MAX default to 255).
- * Dolby Vision keeps its source codes for the tunnel shader.
+ * A full-range code 0..full as the studio-range (Limited) code of an output
+ * whose codes run 0..target_max, rounded once: BT.2100 Table 9,
+ * D = Round[(219 x E' + 16) x 2^(n-8)] with E' = value / full.
+ */
+static int limitedCodeFromFull(int value, int full, int target_max) {
+ int shift=(target_max == 1023) ? 2 : 0;
+ return (16 << shift) + (int)(((long long)value * (219 << shift) + full / 2) / full);
+}
+
+/*
+ * A pattern's source code as the code it is drawn with. Full-range codes
+ * deeper than an RGB Limited output without the CSC (passthrough) are
+ * quantized once, straight into the Limited codes: scaling them to the
+ * output depth first and compressing after it rounded twice and moved
+ * about one code in five by one. Everything else is scaled to the output
+ * depth (scaleSourceToBitDepth), then brought to its range
+ * (normalizeSourceValue).
+ */
+int ofApp::sourceToOutputCode(int value) {
+ int source_max=cur_op().source_max;
+ int target_max=(ofxRPI4Window::bit_depth == 10) ? 1023 : 255;
+ if(value >= 0 && source_max > target_max && cur_op().source_range != 1 &&
+    ofxRPI4Window::avi_info.output_format == 0 && ofxRPI4Window::avi_info.rgb_quant_range == 1 &&
+    !ofxRPI4Window::isDoVi && !ofxRPI4Window::is_std_DoVi && ofxRPI4Window::rgbLimitedPassthrough()) {
+  if(value > source_max)
+   value=source_max;
+  return limitedCodeFromFull(value,source_max,target_max);
+ }
+ return normalizeSourceValue(scaleSourceToBitDepth(value),cur_op().source_range);
+}
+
+/*
+ * SOURCE_MAX codes deeper than the framebuffer (finer Resolve codes, the
+ * 12-bit codes of a standard-DV pattern still loaded when the signal
+ * switches to SDR/HDR10) are scaled down instead of being clipped: clipping
+ * turned patch and background into the same white and showed a full field.
+ * Shallower codes are left alone, as before (patterns without SOURCE_MAX
+ * default to 255). Dolby Vision keeps its source codes for the tunnel
+ * shader.
  */
 int ofApp::scaleSourceToBitDepth(int value) {
  if(ofxRPI4Window::is_std_DoVi)
@@ -840,10 +873,16 @@ int ofApp::scaleSourceToBitDepth(int value) {
     ofxRPI4Window::avi_info.rgb_quant_range == 1 && value >= 0) {
   /* SOURCE_MAX defaults to 255; BITS=10 codes without it are 0..1023. */
   int full=(source_max == 255 && cur_op().bits == 10) ? 1023 : (source_max > 0 ? source_max : 255);
-  int black=16 * (full + 1) / 256;
-  int span=219 * (full + 1) / 256;
   if(value > full)
    value=full;
+  /* Deeper than the output (finer Resolve codes, 12-bit codes on a 10-bit
+     output): one rounding, straight into the output's studio codes.
+     Compressing in the source depth and scaling down after it rounded
+     twice: 10-bit white 1023 went out as 234 instead of 235 on 8 bit. */
+  if(full > target_max)
+   return limitedCodeFromFull(value,full,target_max);
+  int black=16 * (full + 1) / 256;
+  int span=219 * (full + 1) / 256;
   value=black + (int)(((long long)value * span + full / 2) / full);
  }
  /* 8-bit pattern drawn in the 10-bit framebuffer (effectivePatternBits):
@@ -863,6 +902,17 @@ int ofApp::scaleSourceToBitDepth(int value) {
  }
  if(value < 0 || source_max <= target_max)
   return value;
+ /* Studio-range codes (SOURCE_RANGE=LIMITED; on YCbCr also an unset
+    range) keep their place in the range: a deeper code is the shallower
+    one times 2^(m-n) (BT.2100 Table 9), so divide by that and round.
+    10-bit white 940 is 8-bit 235, where the full-range factor 255/1023
+    gave 234. */
+ if(cur_op().source_range == 1 ||
+    (ofxRPI4Window::avi_info.output_format != 0 && cur_op().source_range != 2)) {
+  int shift=((source_max == 4095) ? 12 : 10) - ((target_max == 1023) ? 10 : 8);
+  int code=(value + (1 << (shift - 1))) >> shift;
+  return (code > target_max) ? target_max : code;
+ }
  return (value * target_max + source_max / 2) / source_max;
 }
 

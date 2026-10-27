@@ -57,6 +57,9 @@ Run what applies and say what was and was not checked:
   find a lost conf write, a unit test does not prove a code on the cable):
   invalid input, concurrent access, and the safeguard itself failing
   (restore fails, packet unreadable, body complete but not valid JSON).
+  Ask it of every function the change touches and of every place sharing
+  the pattern: each return value (open, print, close, rename, sudo), each
+  step of a multi-step write.
   Test behaviour, not code text: send the request and read the response
   and the state (`t/config_post_behaviour.t`); the renderer's pattern
   parser is `pattern_parse.h`, built under ASan/UBSan by
@@ -64,10 +67,23 @@ Run what applies and say what was and was not checked:
 - A fix is closed when its repro fails against the old code and passes
   against the new: run the test against `git archive HEAD` unpacked into
   `$TMPDIR`, never by stashing in the shared checkout.
+- Earlier claims are hypotheses: a ticked box in `TASKS.md`, a "checked"
+  in a commit message or report, from any session. Build on one only once
+  a test in `t/` proves it; turn a check you rely on into such a test.
+- Removing code: prove with a test that no caller is left, indirect ones
+  included (HTML `on…=""` handlers, string-built names, `&{"main::$name"}`,
+  sudo actions, port-85 templates). `t/webui_called_functions.t` covers the
+  page JS.
+- Independent review before a code change is reported done: a fresh agent
+  (same model) gets the diff, the code it touches and this file, and none
+  of the reasoning behind the change. It reports each finding as confirmed
+  (repro) or plausible (code path); verify each one, fix or answer it, and
+  report what the review found.
 
 Report each change at its level, and name the levels still missing:
-implemented / tested locally / repro fails on the old code / confirmed on
-the Pi. The release refuses to run without `t/` or `prove`.
+implemented / tested locally / repro fails on the old code / independently
+reviewed / confirmed on the Pi. The release refuses to run without `t/` or
+`prove`.
 
 ## Rules that bite
 

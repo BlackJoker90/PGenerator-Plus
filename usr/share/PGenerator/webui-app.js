@@ -8380,7 +8380,9 @@ function meterStimulusSolveGamut(){
  // the wire. Relative DV retains its established target-gamut tunnel path.
  if(meterChartIsDv() && meterDvMapModeValue()==='1') return meterContainerGamut();
  if(meterChartIsDv()) return meterAnalysisGamut();
- return meterChartIsPq() ? meterContainerGamut() : meterAnalysisGamut();
+ // HLG rides the BT.2020 container like HDR10 (webui.pm solve_key): a P3
+ // target is solved into BT.2020 RGB, not sent as P3 RGB.
+ return (meterChartIsPq()||meterChartIsHlg()) ? meterContainerGamut() : meterAnalysisGamut();
 }
 
 function meterTargetSolveGamut(){
@@ -9604,10 +9606,12 @@ function meterColorSeriesReferenceNits(){
   if(meterChartIsDv()) return Math.max(1,Math.min(Math.max(1,meterChartMasterPeak()),measured));
   // Both the ColorChecker ("colors") and the saturation SWEEP now bake RELATIVE
   // target_Yn referenced to measured white: ColorChecker = reflectance/Yn; the
-  // sat sweep bakes target_Yn = (level_linear/mx)*(10000/measured_white) so
-  // target_Yn*measured = the patch's reachable (sub-peak, 50%-level) absolute
-  // luminance, and the sweep's white patch (target_Yn=1) lands on the measured
-  // peak instead of 10000. So both reference measured white. SDR/HLG always were.
+  // sat sweep bakes target_Yn = (level_linear/mx)*(10000/measured_white) for
+  // a PQ level (HDR10, DV absolute) so target_Yn*measured = the patch's
+  // reachable (sub-peak, 50%-level) absolute luminance, and the sweep's white
+  // patch (target_Yn=1) lands on the measured peak instead of 10000. So both
+  // reference measured white. SDR, HLG and DV relative levels already are
+  // relative and are baked as they are.
   // Return the measured value directly (no Math.max(1, ...) clamp) so a dim
   // measured white (e.g. 0.59 nits from a real read) anchors the target
   // curve honestly. The previous clamp forced 0.59 -> 1, which silently
@@ -10025,12 +10029,46 @@ function meterDecodeColorCheckerSignal(signal){
  return meterTargetSignalToLinear(clamped);
 }
 
+// HLG saturation and gamut endpoint codes are authored with the Target Gamma
+// curve the series request carries, as the server builds them (webui.pm
+// $target_linear_to_signal: sRGB, else the power of bt1886 = 2.4 or the
+// number; anything else 2.4): a reread after a series sends the series'
+// codes. Their targets are the BT.2100 display of those codes
+// (meterApplyHlgCodeTargets), not this authoring curve.
+function meterHlgAuthoringGammaSelection(){
+ // A series' own Target Gamma wins, so a reread after the dropdown changed
+ // still sends the series' codes.
+ const series=(typeof meterActiveSeriesTargetGamma!=='undefined'&&meterActiveSeriesTargetGamma)?meterActiveSeriesTargetGamma:'';
+ const sel=series||((typeof meterAutoCalTargetGammaValue==='function')?meterAutoCalTargetGammaValue():'bt1886');
+ return String(sel||'bt1886').toLowerCase();
+}
+function meterHlgAuthoringExponent(sel){
+ if(sel==='bt1886'||sel==='srgb') return 2.4;
+ const g=parseFloat(sel);
+ return g>0?g:2.4;
+}
+function meterHlgAuthoringEncode(linear){
+ const v=Math.max(0,Math.min(1,Number(linear)||0));
+ if(v<=0) return 0;
+ const sel=meterHlgAuthoringGammaSelection();
+ if(sel==='srgb') return v<=0.0031308?12.92*v:1.055*Math.pow(v,1/2.4)-0.055;
+ return Math.pow(v,1/meterHlgAuthoringExponent(sel));
+}
+function meterHlgAuthoringDecode(signal){
+ const v=Math.max(0,Math.min(1,Number(signal)||0));
+ if(v<=0) return 0;
+ const sel=meterHlgAuthoringGammaSelection();
+ if(sel==='srgb') return v<=0.04045?v/12.92:Math.pow((v+0.055)/1.055,2.4);
+ return Math.pow(v,meterHlgAuthoringExponent(sel));
+}
+
 function meterEncodeSaturationLinear(linear,colorName){
  const min=meterChromaPatchRangeMin();
  const span=meterChromaPatchRangeSpan();
  const clamped=Math.max(0,Math.min(1,linear||0));
  if(meterChartIsPq()&&(!meterChartIsDv()||meterDvMapModeValue()==='1')) return Math.round(min+meterChartPqEncodeNormalized(clamped*10000)*span);
  if(meterChartIsDv()) return Math.round(min+Math.pow(clamped,1/2.2)*span);
+ if(meterChartIsHlg()) return Math.round(min+meterHlgAuthoringEncode(clamped)*span);
  return Math.round(min+meterTargetLinearToSignal(clamped)*span);
 }
 
@@ -10074,7 +10112,14 @@ function meterGamutStimulusLinearLevel(){
  if(meterChartIsDv()) return meterDvMapModeValue()==='1'
   ? meterChartPqDecodeNormalized(0.5)/10000
   : 0.5;
+ if(meterChartIsHlg()) return meterHlgAuthoringDecode(meterColorLevelPercent()/100);
  return meterTargetSignalToLinear(meterColorLevelPercent()/100);
+}
+
+// Saturation levels that are absolute luminance (nits/10000): PQ in HDR10
+// and in Dolby Vision absolute. Every other mode's level is relative to white.
+function meterSaturationLevelIsAbsolutePq(){
+ return (meterChartIsPq()&&!meterChartIsDv())||(meterChartIsDv()&&meterDvMapModeValue()==='1');
 }
 
 function meterSaturationStimulusLinearLevel(colorName){
@@ -10083,6 +10128,7 @@ function meterSaturationStimulusLinearLevel(colorName){
  if(meterChartIsDv()) return meterDvMapModeValue()==='1'
   ? meterChartPqDecodeNormalized(actualPercent)/10000
   : 0.5;
+ if(meterChartIsHlg()) return meterHlgAuthoringDecode(actualPercent);
  return meterTargetSignalToLinear(actualPercent);
 }
 
@@ -10213,11 +10259,50 @@ function meterBuildSaturationTargetStepMeta(colorName,satPercent){
  const xyz=linRgbToXyz(rgb[0],rgb[1],rgb[2],meterTargetSolveGamut().rgbToXyz);
  const sum=xyz.X+xyz.Y+xyz.Z;
  const wp=meterTargetWhitePoint();
+ // target_Yn is relative to white (white = 1), which the reading's target
+ // multiplies by the series' white again. An absolute PQ level (nits/10000)
+ // becomes nits/white, as the server builds it.
+ let yn=Math.max(0,xyz.Y||0);
+ if(meterSaturationLevelIsAbsolutePq()){
+  const white=meterColorSeriesReferenceNits();
+  yn=(white>0)?yn*10000/white:yn;
+ }
  return {
   target_x:sum>0?xyz.X/sum:wp.x,
   target_y:sum>0?xyz.Y/sum:wp.y,
-  target_Yn:Math.max(0,xyz.Y||0)
+  target_Yn:yn
  };
+}
+
+// HLG colour and saturation targets are what a BT.2100 display shows for the
+// codes sent (BT.2100-2 HLG EOTF, L_W = the series peak, L_B = 0, BT.2020
+// container), relative to white, as the server sets them
+// (webui_meter_series_start). Neutral patches keep the target white's
+// chromaticity.
+// MacLeod-Boynton charts keep their targets: their mb_target_* describe the
+// same nominal colour as target_x/y (open: their codes are analysis-gamut
+// RGB, TASKS.md).
+function meterApplyHlgCodeTargets(steps){
+ if(!Array.isArray(steps)||!meterChartIsHlg()) return steps;
+ const min=meterChromaPatchRangeMin(),span=meterChromaPatchRangeSpan();
+ if(!(span>0)) return steps;
+ const peakValue=Number(meterChartHdrPeak());
+ const peak=peakValue>0?peakValue:1000;
+ const m=GAMUT_PRESETS.bt2020.rgbToXyz;
+ return steps.map(step=>{
+  if(!step||step.target_Yn==null||step.mb_target_l!=null) return step;
+  const codes=[step.r,step.g,step.b].map(Number);
+  if(!codes.every(Number.isFinite)) return step;
+  const display=hlgRgbSignalToDisplay(codes.map(v=>(v-min)/span),0,peak).map(v=>v/peak);
+  const xyz=linRgbToXyz(display[0],display[1],display[2],m);
+  const out={...step,target_Yn:Math.max(0,xyz.Y||0)};
+  const sum=xyz.X+xyz.Y+xyz.Z;
+  if(sum>0&&!(codes[0]===codes[1]&&codes[1]===codes[2])){
+   out.target_x=xyz.X/sum;
+   out.target_y=xyz.Y/sum;
+  }
+  return out;
+ });
 }
 
 function meterBuildHcfrSaturationStep(colorName,satPercent){
@@ -10279,6 +10364,19 @@ function meterColorCheckerFullSatTargetXYZ(colorName){
   return {X:xyz.X*100,Y:xyz.Y*100,Z:xyz.Z*100};
  }
  return meterSaturationTargetXYZ(colorName,100);
+}
+
+function meterSaturationTargetXYZ(colorName,satPercent){
+ const rgb=meterBuildSaturationTargetLinearRgb(colorName,satPercent);
+ const xyz=linRgbToXyz(rgb[0],rgb[1],rgb[2],meterTargetSolveGamut().rgbToXyz);
+  // Use the same per-mode luminance reference as target_Yn-based color
+  // patches so saturation sweeps and color series stay aligned.
+  let scale=meterWrgbChromaticReferenceNits();
+  if(!(scale>0)) scale=meterColorSeriesReferenceNits();
+  // PQ levels (HDR10, DV absolute) are already absolute: nits/10000 from
+  // meterSaturationStimulusLinearLevel, as the server's target_Yn path.
+  if(meterSaturationLevelIsAbsolutePq()) scale=10000;
+ return {X:xyz.X*scale,Y:xyz.Y*scale,Z:xyz.Z*scale};
 }
 
 function meterParseSaturationReading(reading){
@@ -10361,7 +10459,27 @@ function meterDecodeColorTargetChannel(code,opts){
  return meterTargetSignalToLinear(norm)*meterColorSeriesReferenceNits();
 }
 
+// HLG: the code triplet's BT.2100 display light (the OOTF acts on Y_S, not on
+// each channel alone) in the BT.2020 container the codes are authored in,
+// relative to the series peak and scaled to the series white like target_Yn.
+// Other modes return null and keep the per-channel decode.
+function meterHlgCodeTargetXYZ(r,g,b){
+ if(!meterChartIsHlg()) return null;
+ const rng=meterColorTargetCodeRange();
+ if(!(rng&&rng.span>0)) return null;
+ const codes=[r,g,b].map(Number);
+ if(!codes.every(Number.isFinite)) return null;
+ const peakValue=Number(meterChartHdrPeak());
+ const peak=peakValue>0?peakValue:1000;
+ const white=Number(meterColorSeriesReferenceNits());
+ const scale=(white>0?white:peak)/peak;
+ const display=hlgRgbSignalToDisplay(codes.map(v=>(v-rng.min)/rng.span),0,peak).map(v=>v*scale);
+ return linRgbToXyz(display[0],display[1],display[2],GAMUT_PRESETS.bt2020.rgbToXyz);
+}
+
 function targetColorXYZAbs(r,g,b){
+ const hlg=meterHlgCodeTargetXYZ(r,g,b);
+ if(hlg) return hlg;
  // Analysis targets must follow the selected target gamut, not the transport
  // container. This keeps the CIE triangle and the target chromaticities in
  // sync with the Target Colorspace dropdown even in HDR/DV workflows.
@@ -10379,7 +10497,7 @@ function targetChromaticityXY(r,g,b){
  // ratios (see meterDecodeColorTargetChannel). Luminance targets stay on the
  // clamped path via targetColorXYZAbs.
  const gamut=meterAnalysisGamut();
- const xyz=linRgbToXyz(
+ const xyz=meterHlgCodeTargetXYZ(r,g,b)||linRgbToXyz(
   meterDecodeColorTargetChannel(r,{unclamped:true}),
   meterDecodeColorTargetChannel(g,{unclamped:true}),
   meterDecodeColorTargetChannel(b,{unclamped:true}),
@@ -13944,11 +14062,14 @@ function meterReadingIsSdr26LegalPeak(rd){
  return false;
 }
 
+// Reference HLG, Recommendation ITU-R BT.2100-2 (Table 5); formulas as in
+// the colour-science reference implementation of BT.2100-2.
+// System gamma: 1.2 + 0.42 log10(L_W/1000). Outside 400..2000 cd/m2 the
+// extended form below is kept as it was (its source is not confirmed here).
 function hlgOotf(maxY){
  const peak=maxY>0?maxY:1000;
  if(peak<400 || peak>2000) return 1.2*Math.pow(1.111,Math.log(peak/1000)/Math.log(2));
- if(peak>1000) return 1.2+0.42*Math.log10(peak/1000);
- return 1.2;
+ return 1.2+0.42*Math.log10(peak/1000);
 }
 
 function hlgOetf(linearLight){
@@ -13957,31 +14078,72 @@ function hlgOetf(linearLight){
  return 0.17883277*Math.log(x-0.28466892)+0.55991073;
 }
 
-function hlgEotf(stim,minY,maxY){
-	 const peak=maxY>0?maxY:1000;
-	 const black=Math.max(0,minY||0);
-	 const gamma=hlgOotf(peak);
-	 const clamped=Math.max(0,Math.min(1,stim||0));
- const a=peak-black;
- const b=Math.sqrt(3*Math.pow(Math.max(black/peak,0),1/gamma));
-	 return a*Math.pow(clamped,gamma)+b;
+// Inverse OETF: non-linear signal E' -> normalised scene light E (0..1).
+function hlgInverseOetf(signal){
+ const e=Math.max(0,Math.min(1,signal||0));
+ if(e<=0.5) return e*e/3;
+ return (Math.exp((e-0.55991073)/0.17883277)+0.28466892)/12;
 }
 
+// Black level lift beta = sqrt(3 (L_B/L_W)^(1/gamma)); the EOTF applies it
+// to the signal, E = OETF^-1(max(0,(1-beta) E' + beta)).
+function hlgBlackLift(minY,maxY,gamma){
+ const peak=maxY>0?maxY:1000;
+ return Math.sqrt(3*Math.pow(Math.max(0,(minY||0)/peak),1/gamma));
+}
+
+// EOTF of an achromatic signal: F_D = L_W * E^gamma (OOTF with Y_S = E),
+// in cd/m2.
+function hlgEotf(stim,minY,maxY){
+ const peak=maxY>0?maxY:1000;
+ const gamma=hlgOotf(peak);
+ const beta=hlgBlackLift(minY,peak,gamma);
+ const clamped=Math.max(0,Math.min(1,stim||0));
+ const e=hlgInverseOetf(Math.max(0,(1-beta)*clamped+beta));
+ return peak*Math.pow(e,gamma);
+}
+
+// Inverse of hlgEotf: display luminance (cd/m2) -> signal 0..1.
 function hlgInverseEotfSignal(luminance,minY,maxY){
-	 const peak=maxY>0?maxY:1000;
-	 const black=Math.max(0,minY||0);
-	 const gamma=hlgOotf(peak);
-	 const a=peak-black;
-	 if(!(a>0)) return 0;
-	 const b=Math.sqrt(3*Math.pow(Math.max(black/peak,0),1/gamma));
-	 const normalized=(Math.max(0,luminance||0)-b)/a;
-	 return Math.max(0,Math.min(1,Math.pow(Math.max(0,normalized),1/gamma)));
+ const peak=maxY>0?maxY:1000;
+ const gamma=hlgOotf(peak);
+ const beta=hlgBlackLift(minY,peak,gamma);
+ const e=Math.pow(Math.max(0,Math.min(1,(Math.max(0,luminance||0))/peak)),1/gamma);
+ const ep=hlgOetf(e);
+ if(!(beta<1)) return 0;
+ return Math.max(0,Math.min(1,(ep-beta)/(1-beta)));
 }
 
 function hlgSignalToDisplayLinear(stim,minY,maxY){
  const peak=maxY>0?maxY:1000;
  if(!(peak>0)) return 0;
  return Math.max(0,Math.min(1,hlgEotf(stim,minY,peak)/peak));
+}
+
+// EOTF of an R'G'B' signal (0..1 each): the OOTF scales every channel by
+// Y_S^(gamma-1), Y_S = 0.2627 R_S + 0.6780 G_S + 0.0593 B_S (BT.2020 RGB).
+// Returns display R,G,B in cd/m2.
+function hlgRgbSignalToDisplay(rgb,minY,maxY){
+ const peak=maxY>0?maxY:1000;
+ const gamma=hlgOotf(peak);
+ const beta=hlgBlackLift(minY,peak,gamma);
+ const e=(rgb||[0,0,0]).map(v=>hlgInverseOetf(Math.max(0,(1-beta)*Math.max(0,Math.min(1,v||0))+beta)));
+ const ys=0.2627*e[0]+0.6780*e[1]+0.0593*e[2];
+ if(!(ys>0)) return [0,0,0];
+ const k=peak*Math.pow(ys,gamma-1);
+ return e.map(v=>k*v);
+}
+
+// Inverse of hlgRgbSignalToDisplay: display R,G,B (cd/m2) -> R'G'B' 0..1.
+function hlgRgbDisplayToSignal(rgb,minY,maxY){
+ const peak=maxY>0?maxY:1000;
+ const gamma=hlgOotf(peak);
+ const beta=hlgBlackLift(minY,peak,gamma);
+ const d=(rgb||[0,0,0]).map(v=>Math.max(0,v||0)/peak);
+ const yd=0.2627*d[0]+0.6780*d[1]+0.0593*d[2];
+ if(!(yd>0)||!(beta<1)) return [0,0,0];
+ const k=Math.pow(yd,(1-gamma)/gamma);
+ return d.map(v=>Math.max(0,Math.min(1,(hlgOetf(Math.min(1,v*k))-beta)/(1-beta))));
 }
 
 function meterChartHdrCodeLuminance(v,clipPeak){
@@ -16666,8 +16828,11 @@ function meterLiveXyzRgbCodes(xyz,step){
  if(meterChartIsPq() && (!meterChartIsDv() || meterDvUsesPqTargetCurve())){
   signal=linear.map(channel=>meterLivePqEquivalentSignal(channel,step));
  }else if(meterChartIsHlg()){
+  // BT.2100 OOTF acts on the triplet (Y_S of BT.2020 RGB), not on each
+  // channel alone: decode in the BT.2020 container the codes are sent in.
   const peak=Math.max(1,meterColorSeriesReferenceNits());
-  signal=linear.map(channel=>hlgInverseEotfSignal(Math.max(0,channel),meterChartMasterMin(),peak));
+  const container=xyzToLinRgb(xyz.X,xyz.Y,xyz.Z,GAMUT_PRESETS.bt2020.xyzToRgb);
+  signal=hlgRgbDisplayToSignal(container.map(channel=>Math.max(0,channel)),meterChartMasterMin(),peak);
  }else{
   const reference=Math.max(0.0001,meterColorSeriesReferenceNits());
   // DV outside the PQ target curve encodes linear -> signal with 2.2, the

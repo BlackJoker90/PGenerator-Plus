@@ -184,6 +184,7 @@ Next to the settings, **On the cable** shows what is actually sent (format, rang
 | 10-bit pattern codes | quantised through 8 bit on the way to the GPU | **sent at full 10-bit precision** |
 | RGB Limited output | kernel compression CSC after the framebuffer | **bit-exact** (patched vc4, verified by scanout readback) |
 | HDR10 / HLG at 12-bit | renderer crashed | bit-exact 10-bit |
+| HLG meter targets | power curve: 50 % HLG targeted 435 cd/m² on a 1000 cd/m² display | **ITU-R BT.2100 HLG** (50 % → 51 cd/m², 75 % → 203 cd/m²); colour and saturation targets are the BT.2100 display of the codes sent |
 | Signal-mode switch | ~10 s | **~3.5–4.5 s** |
 | Low Latency Dolby Vision | TV did not switch into DV | 12-bit, TV switches into DV |
 | Calman UPGCI | settings replies Calman could not parse | ACK + parseable settings, `GET_SETTINGS` |

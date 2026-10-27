@@ -1270,6 +1270,7 @@ sub pattern_daemon {
     #                          #
     ############################
     my $key_framed=0;
+    my $http_request=0;
     if($pending_cmd{$connection} && @{$pending_cmd{$connection}}) {
      $key=shift(@{$pending_cmd{$connection}});
      $key_framed=1;
@@ -1291,17 +1292,44 @@ sub pattern_daemon {
      # $end_cmd_string_calman). One read can carry several commands, or the
      # start of the next: cut the buffered bytes into whole commands, handle
      # the first now and queue the rest. Bytes after the last terminator
-     # wait for the next read. Both terminators end in CR or ETX, so a read
-     # without either completes nothing (an upload chunk, an HTTP request).
-     if(!$rpc_client{$connection} && $key ne "" && $key=~/[\r\x03]/) {
+     # wait for the next read. Only a read that holds a terminator, or
+     # finishes one begun by the last byte buffered, completes a command:
+     # the buffer is cut only then, so an upload whose base64 is wrapped in
+     # CRLF lines is not copied on every read.
+     # A line break a client sends after the terminator ("\x02\r\n")
+     # belongs to the command before it, as when one read held one command.
+     my $last_byte=length($cmd{$connection} // "") ? substr($cmd{$connection},-1) : "";
+     if(!$rpc_client{$connection} && $key ne "" && ($last_byte.$key)=~/$end_cmd_string|$end_cmd_string_calman/) {
       my $buffered=($cmd{$connection} // "").$key;
       my @frames=();
-      push(@frames,$1) while($buffered=~s/^(.*?(?:$end_cmd_string|$end_cmd_string_calman))//s);
+      push(@frames,$1) while($buffered=~s/^[\r\n]*(.*?(?:$end_cmd_string|$end_cmd_string_calman))//s);
       if(@frames) {
        $cmd{$connection}=$buffered;
        $key=shift(@frames);
        push(@{$pending_cmd{$connection}},@frames);
        $key_framed=1;
+      }
+     }
+     # An HTTP request (image list, image) ends with an empty line, not with
+     # a terminator: gather it across reads like a command and route it
+     # whole, or as far as it got once the client ends its side (EOF).
+     # Only a buffer starting with "GET /" is touched: upload chunks keep
+     # appending below without being copied on every read.
+     if(!$key_framed && !$rpc_client{$connection}) {
+      my $had=length($cmd{$connection} // "");
+      my $head=($had >= 5) ? substr($cmd{$connection},0,5) : substr(($cmd{$connection} // "").$key,0,5);
+      if($head eq "GET /") {
+       $cmd{$connection}.=$key;
+       # The empty line can straddle two reads: look from just before the
+       # new bytes, not through the whole buffer again.
+       my $from=($had > 3) ? $had-3 : 0;
+       if($key ne "" && substr($cmd{$connection},$from)!~/\n\r?\n/) {
+        &close_connection($connection,"HTTP request longer than $pattern_cmd_max_bytes bytes") if(length($cmd{$connection}) > $pattern_cmd_max_bytes);
+        last;
+       }
+       $key=$cmd{$connection};
+       $cmd{$connection}="";
+       $http_request=1;
       }
      }
     }
@@ -1406,6 +1434,12 @@ sub pattern_daemon {
      &close_connection($connection);
      last;
     }
+    # A whole HTTP request the port has no route for gets an answer too.
+    if($http_request) {
+     &send_key_to_client($connection,"HTTP/1.0 404 Not Found\r\n");
+     &close_connection($connection);
+     last;
+    }
     #
     # CONNECTION INTERRUPT
     #
@@ -1446,29 +1480,72 @@ sub pattern_daemon {
      my $response_to_send=$ok_response;
      ($packet=$key)=~s/^$upload_file_command://;
      ($f_where,$f_name,$f_type,$f_status,$f_start,$f_size,$f_content)=split(":",$packet,7);
-     if(!$f_size) {
-      &send_key_to_client($connection,&error());
-      last;
-     }
      # A file name, never a path, into a known target folder.
      my $dir_file=&get_destination($f_where);
      my $safe_name=&safe_file_name($f_name);
+     # The size divides the progress below: a size that is not a whole
+     # number above 0 ("abc", "0.0") would stop the daemon.
+     if($f_size !~ /^\d+$/ || $f_size == 0) {
+      # A refused chunk of the running upload ends it like a lost one.
+      my $running=$upload_state{$connection};
+      &upload_fail($connection,$f_where,$safe_name,$f_status,$f_start) if($running && $running->{where} eq $f_where && $running->{name} eq $safe_name);
+      &send_key_to_client($connection,&error());
+      last;
+     }
      if($dir_file eq "" || $safe_name eq "") {
       &log("Upload refused: target \"$f_where\", name \"$f_name\"");
-      unlink($f_tmp_name) if($uploading_file && $f_tmp_name ne "");
-      $uploading_file=0;
+      &upload_abort($connection);
       &send_key_to_client($connection,&error());
       last;
      }
      $f_content=~s/.*;base64,//g;
-     if(!$uploading_file) {
-      $f_tmp_name="$upload_tmp_dir/UPLOAD_FILE.".time().".".$$;
-      $uploading_file=1;
+     # Each connection uploads into its own temp file, kept for the target
+     # and name it was started for: two uploads at once, or another target
+     # or name after an unfinished one, never add to each other's bytes.
+     # The same target and name continue the file: START only feeds the
+     # progress, and what it counts is not known from any client here.
+     my $upload=$upload_state{$connection};
+     if($upload && ($upload->{where} ne $f_where || $upload->{name} ne $safe_name)) {
+      &upload_abort($connection);
+      $upload=undef;
      }
-     &upload_file($f_name,$f_tmp_name,$f_content);
+     # The chunks a client sent after one was refused belong to that upload:
+     # refused as well, up to its END_UPLOAD. Only a chunk with the start
+     # value the upload's first chunk had is the client sending the file
+     # again from its beginning, and begins a new upload; what the start
+     # value counts is not known, so no other value is taken for a restart.
+     if($upload && $upload->{failed}) {
+      if(($f_start // "") ne $upload->{first}) {
+       delete $upload_state{$connection} if($f_status eq "END_UPLOAD");
+       &send_key_to_client($connection,&error());
+       last;
+      }
+      delete $upload_state{$connection};
+      $upload=undef;
+     }
+     if(!$upload) {
+      my $tmp_file=&upload_tmp_create();
+      if($tmp_file eq "") {
+       &log("Upload: cannot create a temp file in $upload_tmp_dir: $!");
+       &upload_fail($connection,$f_where,$safe_name,$f_status,$f_start);
+       &send_key_to_client($connection,&error());
+       last;
+      }
+      $upload=$upload_state{$connection}={tmp=>$tmp_file,where=>$f_where,name=>$safe_name,first=>($f_start // "")};
+     }
+     $f_tmp_name=$upload->{tmp};
+     # A temp file that is gone lost the chunks before this one, and a chunk
+     # that is not written leaves a hole: either ends the upload with an
+     # error instead of storing what happened to land.
+     if(!-f $f_tmp_name || !&upload_file($f_name,$f_tmp_name,$f_content)) {
+      &log("Upload: chunk of \"$safe_name\" not written to $f_tmp_name");
+      &upload_fail($connection,$f_where,$safe_name,$f_status,$f_start);
+      &send_key_to_client($connection,&error());
+      last;
+     }
      $f_perc=int((100*$f_start)/$f_size)."%";
      if($f_status eq "END_UPLOAD") {
-      $uploading_file=0;
+      delete $upload_state{$connection};
       if($f_where eq "PLUGINS") { $response_to_send=&sudo("SET_PLUGIN",$f_tmp_name,$safe_name,$f_where,"install.sh"); }
       else                      {
        require File::Copy;
@@ -3435,10 +3512,29 @@ sub close_connection {
  delete $rpc_client{$connection};
  delete $calman_g1_startup{$connection};
  &calman_clear_gci_connection($connection);
+ &upload_abort($connection);
  #$connection->send("");
  $select->remove($connection);
  eval { $connection->close(); };
- $uploading_file=0;
+}
+
+# Drop the upload a connection left unfinished, and its temp file.
+sub upload_abort (@) {
+ my $connection = shift;
+ my $upload = delete $upload_state{$connection};
+ unlink($upload->{tmp}) if($upload && $upload->{tmp} ne "" && -f $upload->{tmp});
+}
+
+# Drop a refused upload but remember it, and the start value of its first
+# chunk, until its END_UPLOAD: the chunks still on their way are refused
+# too instead of starting a new file. Without a running upload the refused
+# chunk is the first one.
+sub upload_fail (@) {
+ my ($connection,$where,$name,$status,$start) = @_;
+ my $running = $upload_state{$connection};
+ my $first = ($running && defined $running->{first}) ? $running->{first} : ($start // "");
+ &upload_abort($connection);
+ $upload_state{$connection}={failed=>1,tmp=>"",where=>$where,name=>$name,first=>$first} if($status ne "END_UPLOAD");
 }
 
 ###############################################

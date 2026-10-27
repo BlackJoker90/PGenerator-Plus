@@ -120,19 +120,20 @@ sub set_pgenerator_conf_runtime(@) {
  $pgenerator_conf{$key}="$value";
 }
 
-# Several keys in one root-helper call (each sudo spawn costs ~0.35s). Empty
-# values are written singly: sudo() joins base64 args with spaces, so an
-# empty one would vanish and shift every later pair.
+# Several keys in one root-helper call (each sudo spawn costs ~0.35s) and
+# one write. An empty value deletes its key; deletes go first, as when
+# they were written singly before the batch (the helper pairs dv_metadata
+# with dv_map_mode, so the order counts).
 sub set_pgenerator_conf_runtime_multi(@) {
  my @pairs=@_;
- my @batch=();
+ my (@deletes,@batch);
  for(my $i=0; $i+1 <= $#pairs; $i+=2) {
   my ($key,$value)=($pairs[$i],$pairs[$i+1]);
-  if("$value" eq "") { &sudo("SET_PGENERATOR_CONF",$key,""); }
+  if("$value" eq "") { push(@deletes,$key,""); }
   else { push(@batch,$key,$value); }
   $pgenerator_conf{$key}="$value";
  }
- &sudo("SET_PGENERATOR_CONF_MULTI",@batch) if(@batch);
+ &sudo("SET_PGENERATOR_CONF_MULTI",@deletes,@batch) if(@deletes || @batch);
 }
 
 # Classic CMD protocol (DeviceControl / custom clients) uses 1.6 wire units for
@@ -1171,17 +1172,18 @@ sub signal_restore_conf (@) {
  my $snapshot=shift;
  return 0 if(!$snapshot);
  my @keys=(@signal_conf_keys,grep { exists $snapshot->{$_} } @signal_metadata_keys);
- my @batch;
+ my (@deletes,@batch);
  foreach my $k (@keys) {
   my $want=defined($snapshot->{$k}) ? "$snapshot->{$k}" : "";
   my $cur=defined($pgenerator_conf{$k}) ? "$pgenerator_conf{$k}" : "";
   next if($want eq $cur);
-  # sudo() joins its arguments with spaces: an empty value goes singly.
-  if($want eq "") { &sudo("SET_PGENERATOR_CONF",$k,""); }
+  # One write for the whole restore. An empty value deletes its key,
+  # before the other keys are set (the order singly written deletes had).
+  if($want eq "") { push(@deletes,$k,""); }
   else { push(@batch,$k,$want); }
   $pgenerator_conf{$k}=$want;
  }
- &sudo("SET_PGENERATOR_CONF_MULTI",@batch) if(@batch);
+ &sudo("SET_PGENERATOR_CONF_MULTI",@deletes,@batch) if(@deletes || @batch);
  # Read back: a failed write must not pass as restored, and memory follows
  # the file the renderer reads, so the next check sees what is really set.
  my %disk=&signal_conf_from_disk();
@@ -1848,7 +1850,9 @@ sub pgenerator_cmd (@) {
     &sudo("SET_PGENERATOR_CONF","dv_map_mode",$map_mode);
     $pgenerator_conf{"dv_map_mode"}=$map_mode;
    }
-  } elsif($conf_key eq "dv_map_mode") {
+  } elsif($conf_key eq "dv_map_mode" && $conf_value ne "") {
+   # An empty value deletes the map mode and leaves dv_metadata as it is
+   # (dv_metadata_for_map_mode("") would switch DV metadata on).
    my $metadata=&dv_metadata_for_map_mode($conf_value);
    if(($pgenerator_conf{"dv_metadata"} || "") ne $metadata) {
     &sudo("SET_PGENERATOR_CONF","dv_metadata",$metadata);
@@ -2378,10 +2382,14 @@ sub stats(@) {
 ###############################################
 #                Sudo function                #
 ###############################################
+# The helper splits $PG_CMD on spaces and decodes each word. An empty
+# argument encodes to nothing and would vanish, shifting every later one
+# into its place: it goes as "=", which decodes to "".
 sub sudo(@) {
  my @arg_base64 = ();
- for(@_) { 
-  push(@arg_base64,encode_base64($_,""));
+ for(@_) {
+  my $arg = defined($_) ? $_ : "";
+  push(@arg_base64,($arg eq "") ? "=" : encode_base64($arg,""));
  }
  return `$pg_cmd_env="@arg_base64" timeout 15 $sudo_cmd`;
 }

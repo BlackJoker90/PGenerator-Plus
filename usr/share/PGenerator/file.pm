@@ -54,14 +54,34 @@ sub read_from_file(@) {
 ###############################################
 #             Upload File Function            #
 ###############################################
+# Appends one base64 chunk to $tmp_name (created if missing). Returns 1
+# when it was written, 0 when the file could not be opened, written or
+# closed: the caller must not store an upload with a hole in it.
 sub upload_file(@) {
  my $name = shift;
  my $tmp_name = shift;
  my $data=shift;
- open(TMP,">$tmp_name") if(!-f "$tmp_name");
- open(TMP,">>$tmp_name");
- print TMP decode_base64($data);
- close(TMP);
+ open(my $fh,">>",$tmp_name) or return 0;
+ binmode($fh);
+ my $ok = (print $fh decode_base64($data)) ? 1 : 0;
+ $ok = 0 if(!close($fh));
+ return $ok;
+}
+
+# A new, empty temp file for one upload; "" when none can be made. Two
+# uploads at once each get their own: the name carries a counter, and
+# O_EXCL never opens a file that is already there.
+my $upload_tmp_seq = 0;
+sub upload_tmp_create(@) {
+ require Fcntl;
+ for(1..20) {
+  my $name = "$upload_tmp_dir/UPLOAD_FILE.".time().".$$.".(++$upload_tmp_seq);
+  if(sysopen(my $fh,$name,Fcntl::O_WRONLY()|Fcntl::O_CREAT()|Fcntl::O_EXCL(),0666)) {
+   close($fh);
+   return $name;
+  }
+ }
+ return "";
 }
 
 ###############################################

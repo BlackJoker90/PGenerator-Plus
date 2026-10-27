@@ -1098,6 +1098,8 @@ function meterCustomSeriesCodeGamut(series){
 }
 
 function meterCustomSeriesCodeXYZ(step,series,unclamped){
+ const hlg=(typeof meterHlgCodeTargetXYZ==='function')?meterHlgCodeTargetXYZ(step.r,step.g,step.b):null;
+ if(hlg) return hlg;
  const gamut=meterCustomSeriesCodeGamut(series);
  return linRgbToXyz(
   meterDecodeColorTargetChannel(step.r,unclamped?{unclamped:true}:undefined),
@@ -2086,7 +2088,11 @@ function meterBuildStepsJS(type,points,options){
 	 const steps=[];
 	 const customSeries=(Number(points)>=900)?meterCustomSeriesById(points):null;
 	 if(customSeries){
-	  if(customSeries.builtin_verification) steps.push(...meterBuildBuiltinColorCheckerSteps(customSeries));
+	  // Built-in verification charts are the page's own HLG patches too: their
+	  // targets are the BT.2100 display of their codes like the colour series'.
+	  if(customSeries.builtin_verification) steps.push(...((typeof meterApplyHlgCodeTargets==='function')
+	   ?meterApplyHlgCodeTargets(meterBuildBuiltinColorCheckerSteps(customSeries))
+	   :meterBuildBuiltinColorCheckerSteps(customSeries)));
 	  else steps.push(...meterBuildCustomSeriesSteps(customSeries,options));
 	  return meterApplyColorSeriesTargetWhiteReference(steps,type,points);
 	 }
@@ -2179,7 +2185,9 @@ function meterBuildStepsJS(type,points,options){
    });
   });
  }
-	 return meterApplyColorSeriesTargetWhiteReference(steps,type,points);
+	 const targeted=(type==='colors'||type==='saturations')&&typeof meterApplyHlgCodeTargets==='function'
+	  ?meterApplyHlgCodeTargets(steps):steps;
+	 return meterApplyColorSeriesTargetWhiteReference(targeted,type,points);
 }
 
 // This expansion exists only to provide an instant local preview. The ordered

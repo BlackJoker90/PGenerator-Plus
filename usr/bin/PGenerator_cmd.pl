@@ -1277,7 +1277,8 @@ sub pgenerator_conf_set_pair (@) {
   $paired_var = "dv_metadata";
   $paired_value = "3" if($value eq "1");
   $paired_value = "4" if($value eq "2");
-  $paired_value = "2" if($paired_value eq "");
+  # Deleting the map mode leaves dv_metadata as it is.
+  $paired_value = "2" if($paired_value eq "" && ($value // "") ne "");
  }
  # dv_metadata=0 (Dolby Vision off) has no map mode: keep the stored
  # dv_map_mode for the next DV session instead of deleting it.
@@ -1320,22 +1321,33 @@ sub read_pgenerator_conf_text (@) {
 # another's half-written file into place.
 # Returns 1 once the new text is on disk and reads back the same; the
 # callers answer OK only then, so the daemon never takes a lost write for
-# the applied settings.
+# the applied settings. A text that does not read back is replaced by the
+# old one again, but only under the lock: without it the text may be
+# another writer's confirmed one. Only when the restore fails or cannot be
+# made does a 0 leave the unverified text behind; the WebUI reads the file
+# back for that case.
 sub pgenerator_conf_update (@) {
  my $change = shift;
  my $lock;
+ my $locked = 0;
  if(open($lock,">>","$pattern_conf.lock")) {
-  flock($lock,LOCK_EX);
+  $locked = flock($lock,LOCK_EX) ? 1 : 0;
  } else {
   undef $lock;
  }
  my $ok = 0;
+ my $existed = -e $pattern_conf;
  my $before = &read_pgenerator_conf_text();
  if(defined $before) {
   my $content = $change->($before);
   if(&write_file("$pattern_conf.tmp.$$","$pattern_conf","$content\n")) {
    my $after = &read_pgenerator_conf_text();
    $ok = (defined $after && $after eq $content) ? 1 : 0;
+   if(!$ok && $locked && !$existed) {
+    unlink($pattern_conf);
+   } elsif(!$ok && $locked && !&write_file("$pattern_conf.tmp.$$","$pattern_conf",($before eq "") ? "" : "$before\n")) {
+    unlink("$pattern_conf.tmp.$$");
+   }
   } else {
    unlink("$pattern_conf.tmp.$$");
   }

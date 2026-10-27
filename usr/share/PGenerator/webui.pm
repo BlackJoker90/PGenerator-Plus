@@ -21,7 +21,8 @@ use PGMath ();
 use PGPlaylists ();
 use PGTVMenu ();
 use PGCalibrationMath qw(
- calibration_target_context saturation_stimulus_for_gamuts standard_gamut_records
+ calibration_target_context hlg_display_rgb_relative saturation_stimulus_for_gamuts
+ standard_gamut_records
 );
 use PGEdidDolby qw(dolby_vsvdb_from_edid dolby_vsvdb_json);
 use PGSignalCode qw(
@@ -4702,6 +4703,9 @@ if($signal_mode eq "dv") {
  # tracking display lands on the target linear — otherwise chromaticities
  # shift outward (measured appears oversaturated vs target xy).
  my $target_gamma_exp_resolved=($target_gamma eq "bt1886")?2.4:(($target_gamma eq "srgb")?2.4:($target_gamma+0.0));
+ # A Target Gamma that is not a number (st2084 outside HDR10, e.g. in HLG)
+ # once divided by zero below and killed the series start.
+ $target_gamma_exp_resolved=2.4 if(!($target_gamma_exp_resolved>0));
 my $dv_map_mode=($signal_mode eq "dv") ? ($request_dv_map_mode || $pgenerator_conf{"dv_map_mode"} || "2") : "";
 my $dv_interface=($signal_mode eq "dv") ? &pg_dv_transport_interface($request_dv_transport) : 0;
  my $target_linear_to_signal=sub {
@@ -5743,7 +5747,7 @@ my $dv_interface=($signal_mode eq "dv") ? &pg_dv_transport_interface($request_dv
 	      $target_Yn_for_step=$white_ref>0 ? (94.37844/$white_ref)*$target_mix_Y : 0;
 	     }
 	     $target_Yn_for_step=0 if($target_Yn_for_step < 0);
-	     my $series_mode_json=$points==29?',\"series_mode\":\"hcfr-constant-luminance\"':'';
+	     my $series_mode_json=$points==29?',"series_mode":"hcfr-constant-luminance"':'';
 	     push @steps, "{\"ire\":100,\"r\":$r,\"g\":$g,\"b\":$b,\"name\":\"$name\",\"series_color\":\"$series_color\",\"sat_pct\":100,\"target_x\":$target_x,\"target_y\":$target_y,\"target_Yn\":$target_Yn_for_step,\"input_max\":$chroma_input_max$series_mode_json}";
 	    }
  } elsif($type eq "saturations") {
@@ -5934,7 +5938,10 @@ my $dv_interface=($signal_mode eq "dv") ? &pg_dv_transport_interface($request_dv
 		      if($stimulus) {
 		       ($rl,$gl,$bl)=@{$stimulus->{rgb}};
 		       my $target_Y=$stimulus->{target_y};
-		       $target_Yn_for_step=$target_Y*(($signal_mode eq "sdr") ? 1 : (($sat_white_ref>0)?(10000/$sat_white_ref):1));
+		       # Only a PQ level (HDR10, DV absolute) is nits/10000, made
+		       # relative to white here; SDR, HLG and DV relative levels
+		       # already are.
+		       $target_Yn_for_step=$target_Y*((($signal_mode eq "hdr10" || ($signal_mode eq "dv" && $dv_map_mode eq "1")) && $sat_white_ref>0) ? (10000/$sat_white_ref) : 1);
 		      }
 	     }
 	     $rl=0 if $rl<0;$gl=0 if $gl<0;$bl=0 if $bl<0;
@@ -5945,10 +5952,46 @@ my $dv_interface=($signal_mode eq "dv") ? &pg_dv_transport_interface($request_dv
 	    $b=$hcfr_constant_luminance?$encode_hcfr_channel->($bl):$encode_channel->($bl,$name);
 	    }
 	    $target_Yn_for_step=0 if($target_Yn_for_step < 0);
-	    my $series_mode_json=$hcfr_constant_luminance?',\"series_mode\":\"hcfr-constant-luminance\"':'';
+	    my $series_mode_json=$hcfr_constant_luminance?',"series_mode":"hcfr-constant-luminance"':'';
 	    push @steps, "{\"ire\":$sat,\"r\":$r,\"g\":$g,\"b\":$b,\"name\":\"$name $sat%\",\"series_color\":\"$name\",\"sat_pct\":$sat,\"target_x\":$tx,\"target_y\":$ty,\"target_Yn\":$target_Yn_for_step,\"input_max\":$chroma_input_max$series_mode_json}";
 	   }
 	  }
+	 }
+
+	 # HLG colour and saturation targets are what a BT.2100 display shows for
+	 # the codes sent (ITU-R BT.2100-2 HLG EOTF, L_W = max_luma, L_B = 0, in
+	 # the BT.2020 container), relative to white. The builders above author
+	 # the codes; their own targets assumed a gamma 2.4 or an OETF-only
+	 # decode, so a 75% signal grey targeted 0.708 of white instead of 0.203.
+	 # Neutral patches keep the target white's chromaticity. Custom series
+	 # carry their own targets.
+	 if($signal_mode eq "hlg" && !scalar(@custom_series_steps)
+	  && ($type eq "colors" || $type eq "saturations") && $chroma_span_code > 0) {
+	  my @hlg_rgb_to_xyz=@{&webui_meter_gamut_definitions()->{bt2020}{RGB_TO_XYZ}};
+	  my $hlg_peak=($max_luma+0)>0 ? ($max_luma+0) : 1000;
+	  my $num=qr/-?\d+(?:\.\d+)?(?:[eE][-+]?\d+)?/;
+	  @steps=map {
+	   my $step=$_;
+	   my %code;
+	   for my $channel (qw(r g b)) { $code{$channel}=$1 if($step=~/"$channel"\s*:\s*($num)/); }
+	   if(defined $code{r} && defined $code{g} && defined $code{b} && $step=~/"target_Yn"\s*:/) {
+	    my @signal=map { ($code{$_}-$chroma_min_code)/$chroma_span_code } qw(r g b);
+	    my $display=hlg_display_rgb_relative(\@signal,$hlg_peak,0);
+	    my @xyz=map {
+	     my $row=$hlg_rgb_to_xyz[$_];
+	     $row->[0]*$display->[0]+$row->[1]*$display->[1]+$row->[2]*$display->[2];
+	    } (0..2);
+	    my $sum=$xyz[0]+$xyz[1]+$xyz[2];
+	    my $yn=$xyz[1]>0 ? $xyz[1] : 0;
+	    $step=~s/"target_Yn"\s*:\s*$num/"target_Yn":$yn/;
+	    if($sum>0 && !($code{r}==$code{g} && $code{g}==$code{b})) {
+	     my ($x,$y)=($xyz[0]/$sum,$xyz[1]/$sum);
+	     $step=~s/"target_x"\s*:\s*$num/"target_x":$x/;
+	     $step=~s/"target_y"\s*:\s*$num/"target_y":$y/;
+	    }
+	   }
+	   $step;
+	  } @steps;
 	 }
 
 	 # Colour, saturation, and profiling series do not necessarily contain
@@ -10121,13 +10164,17 @@ sub webui_signal_owner (@) {
 }
 
 # A decoded JSON scalar as the text of its conf line: a string as sent, a
-# number in plain decimal notation (1e1 is "10", 1e-05 is "0.00001").
+# number in plain decimal notation (1e1 is "10", 1e-05 is "0.00001") with
+# Perl's 15 significant digits: 1000.3 stays "1000.3", not the binary
+# double's 1000.299999999999955.
 sub _webui_conf_value_text (@) {
  my $v=shift;
  require B;
  return "$v" if(B::svref_2object(\$v)->FLAGS & B::SVp_POK());
  return sprintf("%.0f",$v) if($v == int($v) && abs($v) < 1e15);
- my $t=sprintf("%.15f",$v);
+ my $t=sprintf("%.15g",$v);
+ return $t if($t!~/e/i);
+ $t=sprintf("%.15f",$v);
  $t=~s/0+$//;
  $t=~s/\.$//;
  return $t;
@@ -10355,7 +10402,10 @@ sub webui_apply_config (@) {
  $dv_on=1 if(int($effective{"is_ll_dovi"} || 0) || int($effective{"is_std_dovi"} || 0));
  if($dv_on) {
   my $dv_transport=&pg_dv_transport_mode($effective{"dv_transport"} || $requested_dv_transport);
-  my $dv_map_mode=(defined $changes{"dv_map_mode"} && $changes{"dv_map_mode"} ne "") ? $changes{"dv_map_mode"} : ($effective{"dv_map_mode"} || "2");
+  # "0" (Perceptual) is a map mode, not an unset one: only a missing or
+  # empty value falls back to 2 (Relative).
+  my $dv_map_mode=(defined $changes{"dv_map_mode"} && $changes{"dv_map_mode"} ne "") ? $changes{"dv_map_mode"}
+                 : ((defined $effective{"dv_map_mode"} && $effective{"dv_map_mode"} ne "") ? $effective{"dv_map_mode"} : "2");
   my $dv_metadata=(defined $changes{"dv_metadata"} && $changes{"dv_metadata"} ne "") ? $changes{"dv_metadata"} : (($dv_map_mode eq "1") ? "3" : (($dv_map_mode eq "2") ? "4" : "2"));
   if(!defined $changes{"dv_map_mode"} || $changes{"dv_map_mode"} eq "") {
    $dv_map_mode="0" if($dv_metadata eq "2");
@@ -10476,9 +10526,9 @@ sub webui_apply_config (@) {
    # SET_PGENERATOR_CONF_MULTI below. dv_metadata/dv_map_mode stay
    # unconditional: the helper rewrites each as the other's pair.
    next if(!$value_changed && $k ne "dv_metadata" && $k ne "dv_map_mode");
-   # sudo() joins base64 args with spaces, so an empty value (delete the
-   # key) would vanish and shift every later pair: write those singly.
-   if("$changes{$k}" eq "") { push(@conf_deletes,$k); }
+   # An empty value deletes the key. Deletes go after the writes, in the
+   # same helper call: one write, so the file takes all of it or none.
+   if("$changes{$k}" eq "") { push(@conf_deletes,$k,""); }
    else { push(@conf_writes,$k,$changes{$k}); }
    $conf_written{$k}=$changes{$k};
    # Only a restart-key whose value actually CHANGED bounces the renderer.
@@ -10491,18 +10541,30 @@ sub webui_apply_config (@) {
     $changed_restart_keys{$k}=1;
    }
   }
-  # The helper answers OK only once PGenerator.conf reads back as written.
-  # Memory, the applied snapshot and the end of a refusal follow the file,
-  # so a lost write changes none of them and restarts nothing.
+  # The helper answers OK only once PGenerator.conf reads back as written,
+  # and puts the old text back when it does not. Memory, the applied
+  # snapshot and the end of a refusal follow the file, so a lost write
+  # changes none of them and restarts nothing.
   my $written=1;
+  push(@conf_writes,@conf_deletes);
   $written=0 if(@conf_writes && (&sudo("SET_PGENERATOR_CONF_MULTI",@conf_writes) // "")!~/^OK/);
-  foreach my $k (@conf_deletes) {
-   last if(!$written);
-   $written=0 if((&sudo("SET_PGENERATOR_CONF",$k,"") // "")!~/^OK/);
+  if(!$written) {
+   # No OK, yet the file can hold the write: the helper's timeout can end
+   # it after the rename, before it answers. Then it is saved and is what
+   # the renderer reads; reported as failed, an unchanged retry would
+   # restart nothing and the output would never get it.
+   &webui_reload_pgenerator_conf();
+   my $landed=1;
+   foreach my $k (keys %conf_written) {
+    $landed=0 if((defined($pgenerator_conf{$k}) ? "$pgenerator_conf{$k}" : "") ne "$conf_written{$k}");
+   }
+   if($landed) {
+    &log("WebUI: conf helper gave no OK, but PGenerator.conf reads back as written");
+    $written=1;
+   }
   }
   if(!$written) {
    &log("WebUI: settings not saved, writing PGenerator.conf failed");
-   &webui_reload_pgenerator_conf();
    my $result='{"status":"error","message":"The settings could not be saved: writing PGenerator.conf failed. The output was not changed."}';
    return wantarray ? ($result,0) : $result;
   }

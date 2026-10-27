@@ -23,6 +23,9 @@ our @EXPORT_OK = qw(
  effective_de_limits_for_ire
  finite_number
  gamut_xy_definition
+ hlg_display_rgb_relative
+ hlg_inverse_oetf
+ hlg_system_gamma
  named_gamut_matrix
  saturation_stimulus_for_gamuts
  smooth_dpg_low_end
@@ -327,6 +330,49 @@ sub target_relative_luminance_for_context {
   $signal,$white_y,$black_y)
   if($context->{"transfer_policy"} eq "bt1886_3d_root_blend_relative");
  return target_linear_for_context($context,$signal);
+}
+
+# Reference HLG, Recommendation ITU-R BT.2100-2 (Table 5); formulas as in
+# the colour-science reference implementation of BT.2100-2. The page has the
+# same functions (webui-app.js hlgOotf, hlgRgbSignalToDisplay).
+# System gamma 1.2 + 0.42 log10(L_W/1000). Outside 400..2000 cd/m2 the
+# extended form is kept as the page had it (its source is not confirmed).
+sub hlg_system_gamma {
+ my ($peak)=@_;
+ $peak=1000 if(!defined($peak) || !looks_like_number($peak) || $peak <= 0);
+ return 1.2*(1.111 ** (log($peak/1000)/log(2))) if($peak < 400 || $peak > 2000);
+ return 1.2+0.42*log($peak/1000)/log(10);
+}
+
+# Inverse OETF: non-linear signal E' (0..1) -> normalised scene light E.
+sub hlg_inverse_oetf {
+ my ($signal)=@_;
+ $signal=_clamp_target_unit($signal);
+ return $signal*$signal/3 if($signal <= 0.5);
+ return (exp(($signal-0.55991073)/0.17883277)+0.28466892)/12;
+}
+
+# EOTF of an R'G'B' signal (BT.2020 RGB, 0..1 each) on a display with peak
+# L_W and black L_B (cd/m2). The black lift beta = sqrt(3 (L_B/L_W)^(1/gamma))
+# acts on the signal; the OOTF scales every channel by Y_S^(gamma-1),
+# Y_S = 0.2627 R_S + 0.6780 G_S + 0.0593 B_S. Returns display R, G, B as a
+# fraction of L_W.
+sub hlg_display_rgb_relative {
+ my ($rgb,$peak,$black)=@_;
+ return [0,0,0] if(ref($rgb) ne "ARRAY");
+ $peak=1000 if(!defined($peak) || !looks_like_number($peak) || $peak <= 0);
+ $black=0 if(!defined($black) || !looks_like_number($black) || $black < 0);
+ my $gamma=hlg_system_gamma($peak);
+ my $beta=sqrt(3*(($black/$peak) ** (1/$gamma)));
+ my @e=map {
+  my $v=_clamp_target_unit($_);
+  my $lifted=(1-$beta)*$v+$beta;
+  hlg_inverse_oetf($lifted < 0 ? 0 : $lifted);
+ } @{$rgb}[0..2];
+ my $ys=0.2627*$e[0]+0.6780*$e[1]+0.0593*$e[2];
+ return [0,0,0] if($ys <= 0);
+ my $k=$ys ** ($gamma-1);
+ return [map { $k*$_ } @e];
 }
 
 sub gamut_xy_definition {

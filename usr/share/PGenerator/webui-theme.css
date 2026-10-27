@@ -1023,11 +1023,17 @@ body.apply-settings-success .apply-settings-actions{display:none}
 /* Fact tiles follow the same rows: label on top, value below, so every
    value in a row of tiles sits at the height of the dropdowns. */
 :is(.devinfo-card,.facts-host) .devinfo-facts .info-item{align-content:center}
+/* Software Update: the Current tile can hold a third line (its chip); the
+   tiles beside it keep label and value on the same lines, at the top. */
+:is(.devinfo-card,.facts-host) .devinfo-facts.update-facts .info-item{align-content:start}
 :is(.devinfo-card,.facts-host) .devinfo-facts .info-item:not(.devinfo-control){row-gap:6px}
 /* Tiles in one row share the label and the value/dropdown row, also where
    a label wraps or the dropdown is taller (touch). */
 @supports (grid-template-rows:subgrid){
  :is(.devinfo-card,.facts-host) .devinfo-facts .info-item{grid-row:span 2;grid-template-rows:subgrid;row-gap:6px}
+ /* Software Update: the Current tile has a third line (its chip), which two
+    shared rows cannot hold; these tiles size on their own. */
+ :is(.devinfo-card,.facts-host) .devinfo-facts.update-facts .info-item{grid-row:auto;grid-template-rows:none}
 }
 .devinfo-facts .info-item:not(.devinfo-control)>.label{grid-column:1;grid-row:1;margin:0;align-self:end}
 .devinfo-facts .info-item:not(.devinfo-control)>.value{grid-column:1;grid-row:2;margin-top:0}

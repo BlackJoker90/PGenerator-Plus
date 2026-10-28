@@ -140,6 +140,13 @@ inline bool usesRendererShader() {
  return usesYCbCrConversionShader() || ofxRPI4Window::is_std_DoVi;
 }
 
+// The colorimetry the Y'CbCr encode uses: the AVI one, with No Data
+// resolved to the default of the running format (SD BT.601, HD BT.709).
+// The window is the mode (currentWindowRect), so its height is Vactive.
+inline int encodeColorimetry() {
+ return YCbCrMatrixColorimetry(ofxRPI4Window::avi_info.colorimetry, ofGetWindowHeight());
+}
+
 inline void setShaderYCbCrCoeffs(int colorimetry) {
  YCbCrCoeffs k = YCbCrCoeffsForColorimetry(colorimetry);
  ofxRPI4Window::shader.setUniform3f("coeffs_num", k.Kr, k.Kg, k.Kb);
@@ -737,7 +744,7 @@ void ofApp::setBackground(int redbg, int greenbg, int bluebg) {
    if(cur_op().redbg != -1) {
 	if (ofxRPI4Window::avi_info.output_format != 0) {
      RGB data = RGB(redbg,greenbg,bluebg);
-     YCbCr bg = RGB2YCbCr(data,10, ofxRPI4Window::avi_info.colorimetry, ofxRPI4Window::avi_info.rgb_quant_range);
+     YCbCr bg = RGB2YCbCr(data,10, encodeColorimetry(), ofxRPI4Window::avi_info.rgb_quant_range);
      if (ofxRPI4Window::avi_info.output_format == 1) of10bitBackground(bg.Cb,bg.Cr,bg.Y);  //in YCbCr444, luminance is last channel
      if (ofxRPI4Window::avi_info.output_format == 2) of10bitBackground(bg.Y,bg.Cb,bg.Cr);  //in YCbCr422
     } else                                           of10bitBackground(redbg,greenbg,bluebg);
@@ -746,7 +753,7 @@ void ofApp::setBackground(int redbg, int greenbg, int bluebg) {
    if(cur_op().redbg != -1) {
 	if (ofxRPI4Window::avi_info.output_format != 0) {
      RGB data = RGB(redbg,greenbg,bluebg);
-     YCbCr bg = RGB2YCbCr(data,8,ofxRPI4Window::avi_info.colorimetry, ofxRPI4Window::avi_info.rgb_quant_range);
+     YCbCr bg = RGB2YCbCr(data,8,encodeColorimetry(), ofxRPI4Window::avi_info.rgb_quant_range);
      if (ofxRPI4Window::avi_info.output_format == 1) ofBackground(bg.Cb,bg.Cr,bg.Y);  //in YCbCr444, luminance is last channel
      if (ofxRPI4Window::avi_info.output_format == 2) ofBackground(bg.Y,bg.Cb,bg.Cr);  //in YCbCr422
     } else                                           ofBackground(redbg,greenbg,bluebg);
@@ -760,7 +767,7 @@ void ofApp::setBackground(int redbg, int greenbg, int bluebg) {
 	  of10bitBackground(redbg,greenbg,bluebg);
 	 } else {
 	     RGB data = RGB(redbg,greenbg,bluebg);
-	     YCbCr bg = RGB2YCbCr(data,10, ofxRPI4Window::avi_info.colorimetry, ofxRPI4Window::avi_info.rgb_quant_range);
+	     YCbCr bg = RGB2YCbCr(data,10, encodeColorimetry(), ofxRPI4Window::avi_info.rgb_quant_range);
 	     if (ofxRPI4Window::avi_info.output_format == 1) 					of10bitBackground(bg.Cb,bg.Cr,bg.Y);  //in YCbCr444, luminance is last channel
 	     if (ofxRPI4Window::avi_info.output_format == 2) 					of10bitBackground(bg.Y,bg.Cb,bg.Cr);  //in YCbCr422
 		 if (ofxRPI4Window::is_std_DoVi && ofxRPI4Window::colorspace_on)	ofApp::setDoViBackground(redbg,greenbg,bluebg); //set dovi background only if standard dovi mode and drawing patterns
@@ -774,7 +781,7 @@ void ofApp::setBackground(int redbg, int greenbg, int bluebg) {
 		  ofBackground(redbg,greenbg,bluebg);
 		 } else {
 	     RGB data = RGB(redbg,greenbg,bluebg);
-	     YCbCr bg = RGB2YCbCr(data,8,ofxRPI4Window::avi_info.colorimetry, ofxRPI4Window::avi_info.rgb_quant_range);
+	     YCbCr bg = RGB2YCbCr(data,8,encodeColorimetry(), ofxRPI4Window::avi_info.rgb_quant_range);
 	     if (ofxRPI4Window::avi_info.output_format == 1)					ofBackground(bg.Cb,bg.Cr,bg.Y);  //in YCbCr444, luminance is last channel
 	     if (ofxRPI4Window::avi_info.output_format == 2) 					ofBackground(bg.Y,bg.Cb,bg.Cr);  //in YCbCr422
 		 if (ofxRPI4Window::is_std_DoVi && ofxRPI4Window::colorspace_on) 	ofApp::setDoViBackground(redbg,greenbg,bluebg);  //set dovi background only if standard dovi mode and drawing patterns
@@ -1078,8 +1085,9 @@ void ofApp::shader_begin(int is_image) {
 	int scalar2;
 
 	// Same colorimetry -> coefficient and range mapping as RGB2YCbCr():
-	// unknown colorimetry falls back to BT.709, Default range to Limited.
-	setShaderYCbCrCoeffs(ofxRPI4Window::avi_info.colorimetry);
+	// No Data takes the CTA-861 default (BT.601 on SD, BT.709 from 720
+	// lines; encodeColorimetry), Default range to Limited.
+	setShaderYCbCrCoeffs(encodeColorimetry());
 	int shift = ofxRPI4Window::bit_depth - 8;
 	YCbCrRangeScalars(ofxRPI4Window::bit_depth, ofxRPI4Window::avi_info.rgb_quant_range, scalar1, scalar2);
 	int offset = 128 << shift;
@@ -1147,7 +1155,7 @@ void ofApp::YCbCr2RGB(){
 				}
 
 				YCbCr data = YCbCr(Y,Cb,Cr);
-				RGB rgb = YCbCrToRGB(data,bits,ofxRPI4Window::avi_info.colorimetry, ofxRPI4Window::avi_info.rgb_quant_range);
+				RGB rgb = YCbCrToRGB(data,bits,encodeColorimetry(), ofxRPI4Window::avi_info.rgb_quant_range);
 				//Set red 
 				pixels[ index ] = rgb.R;
 				//Set green 

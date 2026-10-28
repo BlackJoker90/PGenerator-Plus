@@ -72,7 +72,10 @@ public:
  *   9 BT2020_RGB / 10 BT2020_YCC              -> BT.2020
  *   1 SMPTE_170M_YCC, 3 XVYCC_601, 5 SYCC_601,
  *   6 OPYCC_601                                -> BT.601
- *   everything else (0 Default, 2 BT709_YCC)   -> BT.709 (HD/UHD default)
+ *   everything else (0 Default, 2 BT709_YCC)   -> BT.709 (HD/UHD default;
+ *                       an SD mode maps 0 to 1 first, YCbCrMatrixColorimetry)
+ * 8 BT2020_CYCC (constant luminance) is no 3x3 matrix and cannot be encoded
+ * here; it falls to BT.709 like the rest.
  */
 struct YCbCrCoeffs
 {
@@ -82,6 +85,22 @@ struct YCbCrCoeffs
 	float d;
 	float e;
 };
+
+/*
+ * The colorimetry whose matrix a Y'CbCr picture must be encoded with, given
+ * the one sent in the AVI InfoFrame and the active line count. The kernel
+ * (linux 5.10 hdmi_colorimetry_val[]) sends No Data (C=0) for 0 Default and
+ * for values past BT2020_YCC (11/12 DCI-P3; a hand-edited negative value
+ * reaches the kernel as 0 through drm_override); the Sink then takes the default
+ * colorimetry of CTA-861-F 5.1: SMPTE 170M (BT.601) for an SD format (fewer
+ * than 720 active lines), BT.709 for HD and 2160p. vactive 0 = unknown: HD.
+ */
+static inline int YCbCrMatrixColorimetry(int colorimetry, int vactive) {
+	bool no_data = (colorimetry <= 0 || colorimetry > 10);
+	if (no_data && vactive > 0 && vactive < 720)
+		return 1;
+	return colorimetry;
+}
 
 static inline YCbCrCoeffs YCbCrCoeffsForColorimetry(int colorimetry) {
 	if (colorimetry == 9 || colorimetry == 10) {

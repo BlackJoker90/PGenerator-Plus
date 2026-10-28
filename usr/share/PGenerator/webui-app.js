@@ -3653,6 +3653,8 @@ const SELFTEST_MODES=[
  {id:'hdr10_rgb_lim_10',group:'HDR10',label:'RGB Limited',depth:10,quick:false},
  {id:'hdr10_ycc422_10',group:'HDR10',label:'YCbCr 4:2:2',depth:10,quick:false},
  {id:'hdr10_ycc444_10',group:'HDR10',label:'YCbCr 4:4:4',depth:10,quick:true},
+ {id:'hlg_rgb_lim_10',group:'HLG',label:'RGB Limited',depth:10,quick:false},
+ {id:'hlg_ycc444_10',group:'HLG',label:'YCbCr 4:4:4',depth:10,quick:false},
  {id:'dv_std_rgb_8',group:'Dolby Vision',label:'Standard',depth:8,quick:false},
  {id:'lldv_ycc422_12',group:'Dolby Vision',label:'Low Latency',depth:12,quick:false}
 ];
@@ -3667,7 +3669,8 @@ function pgHtmlEsc(v){
 // Swatch fill for a test window: the code's level on its own scale.
 function selftestSwatchColor(sw){
  if(!sw) return 'transparent';
- const scale=sw.max>=1023?4:1;
+ // 8-, 10- and 12-bit source codes (SOURCE_MAX 255, 1023, 4095).
+ const scale=sw.max>=4095?16:sw.max>=1023?4:1;
  const lo=sw.full?0:16*scale, span=sw.full?sw.max:219*scale;
  const lvl=v=>Math.round(Math.max(0,Math.min(1,(v-lo)/span))*255);
  return 'rgb('+lvl(sw.r)+','+lvl(sw.g)+','+lvl(sw.b)+')';
@@ -3685,7 +3688,7 @@ function selftestModeRow(mode,result,running){
  const r=result||{status:'pending',checks:[],passed:0,total:0};
  const status=r.status||'pending';
  const windows=(r.checks||[]).filter(c=>c.swatch);
- const groupKey=mode.group==='SDR'?'sdr':mode.group==='HDR10'?'hdr':'dv';
+ const groupKey=mode.group==='SDR'?'sdr':(mode.group==='HDR10'||mode.group==='HLG')?'hdr':'dv';
  // Narrow cards show "DV" so the state still fits on the first line.
  const groupLabel=groupKey==='dv'?'<span class="selftest-group-long">'+pgHtmlEsc(mode.group)+'</span><span class="selftest-group-short" aria-hidden="true">DV</span>':pgHtmlEsc(mode.group);
  const open=!!selftestOpen[mode.id]&&(r.checks||[]).length>0;

@@ -43,6 +43,79 @@ sub auto_select_4k_mode (@) {
  }
 }
 
+###############################################
+#   Keep the chosen mode across mode lists    #
+###############################################
+# mode_idx indexes the connected connector's mode list, and that list
+# depends on the port and the EDID: on a Pi 4 with the same TV, #21 was
+# 1080p60 at HDMI0 and 1080p29.97 at HDMI1 (HDMI1 lists no modes above
+# 340 MHz). mode_timing holds the full timing mode_idx had when it was
+# recorded, mode_timing_idx the index it was recorded for.
+
+# {idx => timing} of the first connected connector in modetest -c output.
+# Timing: name@refresh:h,v timings:clock:flags, e.g.
+# 1920x1080@60.00:1920,2008,2052,2200,1080,1084,1089,1125:148500:phsync,pvsync
+sub mode_timing_modes (@) {
+ my $out=shift;
+ my %modes;
+ my $in=0;
+ foreach my $line (split(/\n/,defined $out ? $out : "")) {
+  if($line=~/^\d+\s+\d+\s+(connected|disconnected|unknown)\s/) {
+   last if($in);
+   $in=($1 eq "connected") ? 1 : 0;
+   next;
+  }
+  next if(!$in);
+  if($line=~/^\s*#(\d+)\s+(\S+)\s+([\d.]+)\s+((?:\d+\s+){8})(\d+)\s+flags:\s*([^;]*);/) {
+   my ($idx,$name,$refresh,$t,$clock,$flags)=($1,$2,$3,$4,$5,$6);
+   $t=~s/\s+$//; $t=~s/\s+/,/g;
+   $flags=~s/\s+//g;
+   $modes{$idx}="$name\@$refresh:$t:$clock:$flags";
+  }
+ }
+ return \%modes;
+}
+
+# Before a renderer start: a mode_idx that someone set since the last record
+# is recorded with its timing; a mode_idx that still is the recorded one but
+# now names another timing (the list changed under it) is moved to the index
+# that has the recorded timing. Without that timing on this display, or
+# without a display, nothing changes.
+sub mode_idx_follow_timing (@) {
+ my $out=shift;
+ return if(!$is_kms);
+ my $idx=$pgenerator_conf{"mode_idx"};
+ return if(!defined $idx || $idx!~/^\d+$/);
+ $out=`timeout 3 $modetest -c 2>/dev/null` if(!defined $out);
+ my $modes=&mode_timing_modes($out);
+ return if(!%$modes);
+ my $rec=defined $pgenerator_conf{"mode_timing"} ? $pgenerator_conf{"mode_timing"} : "";
+ my $rec_idx=defined $pgenerator_conf{"mode_timing_idx"} ? $pgenerator_conf{"mode_timing_idx"} : "";
+ if($rec eq "" || $rec_idx ne $idx) {
+  if(defined $modes->{$idx}) {
+   my %before=map { ($_ => $pgenerator_conf{$_}) } qw(mode_timing mode_timing_idx);
+   if((&set_pgenerator_conf_runtime_multi("mode_timing",$modes->{$idx},"mode_timing_idx",$idx) || "")!~/^\Q$ok_response\E/) {
+    @pgenerator_conf{keys %before}=values %before;
+    &log("Mode: could not record the timing of mode_idx $idx (conf not written)");
+   }
+  }
+  return;
+ }
+ return if(defined $modes->{$idx} && $modes->{$idx} eq $rec);
+ my ($to)=sort { $a <=> $b } grep { $modes->{$_} eq $rec } keys %$modes;
+ if(!defined $to) {
+  &log("Mode: mode_idx $idx is no longer $rec and this display has no such mode; left as is");
+  return;
+ }
+ # The renderer reads mode_idx from the file: only a written move counts.
+ if((&set_pgenerator_conf_runtime_multi("mode_idx",$to,"mode_timing_idx",$to) || "")!~/^\Q$ok_response\E/) {
+  @pgenerator_conf{qw(mode_idx mode_timing_idx)}=($idx,$rec_idx);
+  &log("Mode: mode_idx $idx should follow $rec to $to, but the conf could not be written; left as is");
+  return;
+ }
+ &log("Mode: mode_idx $idx -> $to: the display's mode list changed (port or EDID); $rec kept");
+}
+
 sub webui_preferred_rgb_quant_range (@) {
  my $quant_range=$webui_rgb_quant_range_preferred;
  $quant_range=$pgenerator_conf{"rgb_quant_range"} if($quant_range eq "");
@@ -133,7 +206,9 @@ sub set_pgenerator_conf_runtime_multi(@) {
   else { push(@batch,$key,$value); }
   $pgenerator_conf{$key}="$value";
  }
- &sudo("SET_PGENERATOR_CONF_MULTI",@deletes,@batch) if(@deletes || @batch);
+ # The helper's answer ("OK" when the file was written), for callers
+ # that must not go on with a value only held in memory.
+ return (@deletes || @batch) ? &sudo("SET_PGENERATOR_CONF_MULTI",@deletes,@batch) : $ok_response;
 }
 
 # Classic CMD protocol (DeviceControl / custom clients) uses 1.6 wire units for
@@ -205,7 +280,8 @@ sub normalize_dv_transport_conf(@) {
  );
  my @writes=();
  for my $key (sort keys %wanted) {
-  next if(($pgenerator_conf{$key} || "") eq $wanted{$key});
+  # A stored "0" is a value: is_sdr=0 must not be rewritten on every start.
+  next if((defined $pgenerator_conf{$key} ? $pgenerator_conf{$key} : "") eq $wanted{$key});
   push(@writes,$key,$wanted{$key});
  }
  &set_pgenerator_conf_runtime_multi(@writes) if(@writes);
@@ -1400,6 +1476,41 @@ sub renderer_waiting_for_hdmi (@) {
  return -e &renderer_waiting_for_hdmi_path() ? 1 : 0;
 }
 
+our $hdmi_status_glob="/sys/class/drm/card*-HDMI-A-*/status";
+our $renderer_port_restart_last=0;
+
+# Names of the connected HDMI connectors (HDMI-A-1, HDMI-A-2).
+sub hdmi_connected_ports (@) {
+ my @ports;
+ foreach my $status (sort glob($hdmi_status_glob)) {
+  open(my $fh,"<",$status) or next;
+  my $state=<$fh>;
+  close($fh);
+  next if(!defined $state || $state!~/^connected/);
+  push(@ports,$1) if($status=~m{card\d+-(HDMI-A-\d+)/status$});
+ }
+ return @ports;
+}
+
+# The cable moved to the other port while the renderer runs: it keeps its
+# CRTC on the old, now disconnected connector and the display gets no
+# signal until the renderer starts again (audit 2026-10-25, HDMI0 -> HDMI1).
+# Restart it like "Restart output" does; at most once a minute, so a
+# renderer that comes back on the old connector does not restart forever.
+sub renderer_follow_connected_port (@) {
+ my $driving=&signal_renderer_port();
+ return 0 if($driving eq "");
+ my @connected=&hdmi_connected_ports();
+ return 0 if(!@connected || grep { $_ eq $driving } @connected);
+ return 0 if(time()-$renderer_port_restart_last < 60);
+ $renderer_port_restart_last=time();
+ &log("Renderer: drives $driving, but the display is on ".join(",",@connected)."; restarting the renderer");
+ &pattern_generator_stop();
+ &pattern_generator_start();
+ &load_new_pattern_file("hdmi port change") if(!&pattern_generator_is_running());
+ return 1;
+}
+
 # Called from the daemon's idle tick (every 5s without socket traffic).
 sub renderer_start_when_hdmi_connected (@) {
  if(!&hdmi_sink_connected()) {
@@ -1411,7 +1522,10 @@ sub renderer_start_when_hdmi_connected (@) {
   }
   return;
  }
- return if(!&renderer_waiting_for_hdmi());
+ if(!&renderer_waiting_for_hdmi()) {
+  &renderer_follow_connected_port() if(&pattern_generator_is_running());
+  return;
+ }
  if(&pattern_generator_is_running()) {
   unlink(&renderer_waiting_for_hdmi_path());
   return;
@@ -1532,6 +1646,7 @@ sub pattern_generator_start(@) {
  # configuration before choosing PGeneratord vs PGeneratord.dv.
  &normalize_signal_mode_conf();
  &auto_select_4k_mode();
+ &mode_idx_follow_timing();
  &apply_drm_properties("prelaunch");
  # apply_drm_properties() above issued up to 6 modetest -w writes; wait for
  # the kernel to release DRM master before spawning the renderer (see
@@ -1846,7 +1961,8 @@ sub pgenerator_cmd (@) {
   $pgenerator_conf{$conf_key}=$conf_value;
   if($conf_key eq "dv_metadata") {
    my $map_mode=&dv_map_mode_for_metadata($conf_value);
-   if($map_mode ne "" && (($pgenerator_conf{"dv_map_mode"} || "") ne $map_mode)) {
+   # dv_map_mode "0" (Perceptual) is a value, not empty.
+   if($map_mode ne "" && ((defined $pgenerator_conf{"dv_map_mode"} ? $pgenerator_conf{"dv_map_mode"} : "") ne $map_mode)) {
     &sudo("SET_PGENERATOR_CONF","dv_map_mode",$map_mode);
     $pgenerator_conf{"dv_map_mode"}=$map_mode;
    }

@@ -3,10 +3,12 @@
 # pgen_selftest.pl - PGenerator+ signal self-test.
 #
 # Walks the output through a fixed set of signal modes (SDR RGB/YCbCr,
-# HDR10, Low Latency Dolby Vision), draws test windows with known codes and
-# reads back what the vc4 plane scans out (pgen_scanout via PGenerator_cmd.pl
+# HDR10, HLG, Dolby Vision), draws test windows with known codes and reads
+# back what the vc4 plane scans out (pgen_scanout via PGenerator_cmd.pl
 # SCANOUT_PROBE), plus the measured link depth, the range CSC, the connector
-# range property and the AVI infoframe. Results go to a JSON state file the
+# range property and the infoframes: AVI format, range, colorimetry and VIC,
+# the DRM (HDR) metadata field by field, the Dolby Vision VSIF. The expected
+# values are in PGSelfTestCheck.pm. Results go to a JSON state file the
 # WebUI polls. The user's signal settings are put back at the end, also on
 # cancel and on error.
 #
@@ -20,6 +22,8 @@ use IO::Select;
 use JSON::PP ();
 use MIME::Base64 qw(encode_base64);
 use Time::HiRes qw(sleep time);
+use lib "/usr/share/PGenerator";
+use PGSelfTestCheck;
 
 my $state_file=shift || "/tmp/pgen-selftest.json";
 my $set=lc(shift || "full");
@@ -32,37 +36,48 @@ my $JSON=JSON::PP->new->utf8->canonical;
 
 #
 # Scenarios. "codes" are drawn as BITS=10 windows, "codes8" as BITS=8 windows
-# (an 8-bit pattern on a deeper link, e.g. G1 plates and test images). Each
-# entry is [label, r, g, b].
+# (an 8-bit pattern on a deeper link, e.g. G1 plates and test images),
+# "codes12" as 12-bit source codes (SOURCE_MAX=4095) on the 10-bit link.
+# Each entry is [label, r, g, b]. The Y'CbCr colours are expected by the
+# matrix the AVI colorimetry names, so SDR Y'CbCr sets BT.709 explicitly.
 #
 my @grey10=(["Black",64,64,64],["Black +1",65,65,65],["Grey 50 %",502,502,502],["Grey 75 %",721,721,721],["White",940,940,940]);
 my @grey8=(["8-bit black",16,16,16],["8-bit grey",126,126,126],["8-bit white",235,235,235]);
+my @colour10=(["Red 75 %",721,64,64],["Green 50 %",64,502,64],["Blue 50 %",64,64,502]);
+my @grey12=(["12-bit grey",2011,2011,2011]);
 my @scenarios=(
  { id=>"sdr_rgb_lim_8", group=>"SDR", label=>"RGB Limited", depth=>8,
    config=>{signal_mode=>"sdr",color_format=>"0",max_bpc=>"8",rgb_quant_range=>"1"},
    range=>"LIMITED", codes8=>[["Black",16,16,16],["Grey 50 %",126,126,126],["Grey 75 %",180,180,180],["White",235,235,235],["Red 75 %",180,16,16]] },
  { id=>"sdr_rgb_lim_10", group=>"SDR", label=>"RGB Limited", depth=>10,
    config=>{signal_mode=>"sdr",color_format=>"0",max_bpc=>"10",rgb_quant_range=>"1"},
-   range=>"LIMITED", codes=>[@grey10,["Red 75 %",721,64,64]], codes8=>[@grey8] },
+   range=>"LIMITED", codes=>[@grey10,["Red 75 %",721,64,64]], codes8=>[@grey8], codes12=>[@grey12] },
  { id=>"sdr_rgb_full_10", group=>"SDR", label=>"RGB Full", depth=>10,
    config=>{signal_mode=>"sdr",color_format=>"0",max_bpc=>"10",rgb_quant_range=>"2"},
    range=>"FULL", codes=>[["Black",0,0,0],["Black +1",1,1,1],["Grey 50 %",513,513,513],["Grey 75 %",767,767,767],["Blue 75 %",0,0,767]],
-   codes8=>[["8-bit black",0,0,0],["8-bit grey",128,128,128],["8-bit white",255,255,255]] },
+   codes8=>[["8-bit black",0,0,0],["8-bit grey",128,128,128],["8-bit white",255,255,255]],
+   codes12=>[["12-bit grey",2050,2050,2050]] },
  { id=>"sdr_ycc422_10", group=>"SDR", label=>"YCbCr 4:2:2", depth=>10,
-   config=>{signal_mode=>"sdr",color_format=>"2",max_bpc=>"10",rgb_quant_range=>"1"},
-   codes=>[@grey10], codes8=>[@grey8] },
+   config=>{signal_mode=>"sdr",color_format=>"2",max_bpc=>"10",rgb_quant_range=>"1",colorimetry=>"2"},
+   codes=>[@grey10,@colour10], codes8=>[@grey8] },
  { id=>"sdr_ycc444_10", group=>"SDR", label=>"YCbCr 4:4:4", depth=>10,
-   config=>{signal_mode=>"sdr",color_format=>"1",max_bpc=>"10",rgb_quant_range=>"1"},
-   codes=>[@grey10], codes8=>[@grey8] },
+   config=>{signal_mode=>"sdr",color_format=>"1",max_bpc=>"10",rgb_quant_range=>"1",colorimetry=>"2"},
+   codes=>[@grey10,@colour10], codes8=>[@grey8], codes12=>[@grey12] },
  { id=>"hdr10_rgb_lim_10", group=>"HDR10", label=>"RGB Limited", depth=>10,
    config=>{signal_mode=>"hdr10",color_format=>"0",max_bpc=>"10",rgb_quant_range=>"1"},
    range=>"LIMITED", codes=>[@grey10,["Red 75 %",721,64,64]], codes8=>[@grey8], drm=>1 },
  { id=>"hdr10_ycc422_10", group=>"HDR10", label=>"YCbCr 4:2:2", depth=>10,
    config=>{signal_mode=>"hdr10",color_format=>"2",max_bpc=>"10",rgb_quant_range=>"1"},
-   codes=>[@grey10], codes8=>[@grey8], drm=>1 },
+   codes=>[@grey10,@colour10], codes8=>[@grey8], drm=>1 },
  { id=>"hdr10_ycc444_10", group=>"HDR10", label=>"YCbCr 4:4:4", depth=>10,
    config=>{signal_mode=>"hdr10",color_format=>"1",max_bpc=>"10",rgb_quant_range=>"1"},
-   codes=>[@grey10], codes8=>[@grey8], drm=>1 },
+   codes=>[@grey10,@colour10], codes8=>[@grey8], codes12=>[@grey12], drm=>1 },
+ { id=>"hlg_rgb_lim_10", group=>"HLG", label=>"RGB Limited", depth=>10,
+   config=>{signal_mode=>"hlg",color_format=>"0",max_bpc=>"10",rgb_quant_range=>"1"},
+   range=>"LIMITED", codes=>[@grey10,["Red 75 %",721,64,64]], drm=>1 },
+ { id=>"hlg_ycc444_10", group=>"HLG", label=>"YCbCr 4:4:4", depth=>10,
+   config=>{signal_mode=>"hlg",color_format=>"1",max_bpc=>"10",rgb_quant_range=>"1"},
+   codes=>[@grey10,@colour10], drm=>1 },
  # Standard DV tunnels 12-bit YCbCr 4:2:2 in full-range 8-bit RGB. At 8 bpc
  # the 8-bit framebuffer holds the packed bytes exactly (a 10 bpc surface
  # rescales them), so this mode is pinned to 8 bpc.
@@ -81,7 +96,8 @@ my %state=(
  scenarios=>[ map { { id=>$_->{id}, group=>$_->{group}, label=>$_->{label}, depth=>$_->{depth},
                       status=>"pending", note=>"", link=>{}, checks=>[], passed=>0, total=>0 } } @scenarios ],
 );
-$state{steps}+=1+scalar(@{$_->{codes} || []})+scalar(@{$_->{codes8} || []}) for(@scenarios);
+sub window_count { my $sc=shift; return scalar(@{$sc->{codes} || []})+scalar(@{$sc->{codes8} || []})+scalar(@{$sc->{codes12} || []}); }
+$state{steps}+=1+&window_count($_) for(@scenarios);
 
 sub write_state {
  my $tmp="$state_file.$$.tmp";
@@ -270,6 +286,76 @@ sub vendor_infoframe {
  return { kind=>"other", label=>"vendor infoframe, OUI $oui, length ".sprintf("0x%02x",$len) };
 }
 
+# The kernel's atomic state (debugfs, readable by the daemon user), from
+# the DRM device whose CRTC drives an HDMI connector: the scanned-out mode
+# for the VIC check.
+sub dri_state {
+ foreach my $file (sort glob("/sys/kernel/debug/dri/*/state")) {
+  open(my $fh,"<",$file) or next;
+  local $/;
+  my $text=<$fh>;
+  close($fh);
+  return $text if(defined($text) && PGSelfTestCheck::crtc_mode_from_state($text));
+ }
+ return "";
+}
+
+# AVI checksum, colorimetry and VIC, and the DRM metadata field by field,
+# against what the mode must signal (PGSelfTestCheck.pm names the sources).
+# $conf is the daemon's conf after the switch; $state_text the debugfs
+# state; $drm_line the packet RAM line of slot 7 (HDMI_PACKET).
+sub infoframe_checks {
+ my ($entry,$sc,$format,$conf,$avi_bytes,$state_text,$drm_line)=@_;
+ my $mode=$sc->{config}{signal_mode} || "sdr";
+ my $avi=PGSelfTestCheck::avi_fields($avi_bytes);
+ if(!$avi) {
+  add_check($entry,"AVI infoframe","in the kernel log","not found",0);
+ } else {
+  add_check($entry,"AVI checksum","valid",$avi->{checksum_ok} ? "valid" : "invalid",$avi->{checksum_ok});
+  if(!%$conf) {
+   add_check($entry,"AVI colorimetry","per the settings","not verified (settings unreadable)",0,1);
+   $entry->{unverified}=1;
+  } else {
+   my $want=PGSelfTestCheck::avi_colorimetry_expect($mode,$format,$conf->{colorimetry});
+   add_check($entry,"AVI colorimetry",PGSelfTestCheck::colorimetry_name(@$want),PGSelfTestCheck::colorimetry_name($avi->{C},$avi->{EC}),
+             $avi->{C} == $want->[0] && ($want->[0] != 3 || $avi->{EC} == $want->[1]));
+  }
+  my $crtc=PGSelfTestCheck::crtc_mode_from_state($state_text);
+  if(!$crtc) {
+   add_check($entry,"AVI VIC","the mode's VIC","not verified (scanned-out mode unreadable), sent VIC $avi->{VIC}",0,1);
+   $entry->{unverified}=1;
+  } else {
+   my ($ok,$info,$expect)=PGSelfTestCheck::vic_verdict($avi->{VIC},PGSelfTestCheck::cea_vic_for_mode($crtc));
+   add_check($entry,"AVI VIC","$expect ($crtc->{name}, $crtc->{vrefresh} Hz)","VIC $avi->{VIC}",$ok,$info);
+  }
+ }
+ return if(!$sc->{drm});
+ my $eotf=($mode eq "hlg") ? 3 : 2;
+ my $want=%$conf ? PGSelfTestCheck::drm_expect($eotf,$conf) : undef;
+ my $what=($eotf == 3) ? "HLG, no mastering metadata" : "ST 2084";
+ if(!$want) {
+  my $why=%$conf ? "primaries ".(defined($conf->{primaries}) ? $conf->{primaries} : "unset")." name no standard gamut" : "settings unreadable";
+  add_check($entry,"HDR metadata fields",$what,"not judged ($why)",0,1);
+  return;
+ }
+ if($eotf == 2) {
+  $what.=", ".$PGSelfTestCheck::PRIMARIES_NAME[$conf->{primaries}].", ".($want->[18]+($want->[19] << 8))."/".sprintf("%.4f",($want->[20]+($want->[21] << 8))/10000)." cd/m2".
+         ", MaxCLL ".($want->[22]+($want->[23] << 8)).", MaxFALL ".($want->[24]+($want->[25] << 8));
+ }
+ my $pkt=PGSelfTestCheck::packet_fields($drm_line,7);
+ if(!$pkt) {
+  add_check($entry,"HDR metadata fields",$what,"not verified (packet RAM not readable)",0,1);
+  $entry->{unverified}=1;
+  return;
+ }
+ my @diff;
+ push(@diff,sprintf("type %02x version %02x length %02x",$pkt->{type},$pkt->{version},$pkt->{length}))
+  if($pkt->{type} != 0x87 || $pkt->{version} != 1 || $pkt->{length} != 26);
+ push(@diff,"bad checksum") if(!$pkt->{checksum_ok});
+ push(@diff,PGSelfTestCheck::drm_differences($pkt->{pb},$want)) if(!@diff);
+ add_check($entry,"HDR metadata fields",$what,@diff ? join("; ",@diff) : "as expected",!@diff);
+}
+
 sub write_pattern {
  my ($bits,$max,$range,$rgb,$bg,$w,$h)=@_;
  my $s=sqrt(0.10);
@@ -288,9 +374,10 @@ sub write_pattern {
  return 1;
 }
 
-# Expected framebuffer channels for a grey or colour window.
+# Expected framebuffer channels for a grey or colour window. $max 4095:
+# 12-bit source codes, sent as the 10-bit code BT.2100 Table 9 gives.
 sub expected_fb {
- my ($sc,$link_format,$bits,$r,$g,$b)=@_;
+ my ($sc,$link_format,$bits,$r,$g,$b,$max)=@_;
  # Standard DV packer (dovi_pattern_shader): source code -> 12 bit, a grey
  # is Y=code, Cb=Cr=2048; each pixel carries R=C>>4, G=Y>>4,
  # B=(Y&15)|((C&15)<<4), so a grey reads 128, Y>>4, Y&15.
@@ -298,8 +385,13 @@ sub expected_fb {
   my $y=($bits == 8) ? ($g << 4) : ($g << 2);
   return [2048 >> 4,$y >> 4,$y & 15];
  }
- my $promote=($bits == 8 && $sc->{depth} >= 10);
  my @c=($r,$g,$b);
+ if(($max || 0) == 4095) {
+  my $full=($link_format eq "RGB" && ($sc->{range} || "") eq "FULL");
+  @c=map { PGSelfTestCheck::code12_to_10($_,$full) } @c;
+  $bits=10;
+ }
+ my $promote=($bits == 8 && $sc->{depth} >= 10);
  if($promote) {
   if($link_format eq "RGB" && ($sc->{range} || "") eq "FULL") {
    @c=map { int(($_*1023+127)/255) } @c;
@@ -307,11 +399,19 @@ sub expected_fb {
    @c=map { $_ << 2 } @c;
   }
  }
- my $neutral=($sc->{depth} >= 10) ? 512 : 128;
- # YCbCr: greys only; the renderer stores 4:4:4 as Cb,Cr,Y and 4:2:2 as Y,Cb,Cr.
- return [$neutral,$neutral,$c[2]] if($link_format eq "YCbCr 4:4:4");
- return [$c[0],$neutral,$neutral] if($link_format eq "YCbCr 4:2:2");
- return [@c];
+ return [@c] if($link_format eq "RGB");
+ # Y'CbCr: a grey is Y=code, Cb=Cr neutral; a colour takes the matrix the
+ # AVI colorimetry names ($sc->{matrix}). The renderer stores 4:4:4 as
+ # Cb,Cr,Y and 4:2:2 as Y,Cb,Cr.
+ my $fb_bits=($sc->{depth} >= 10) ? 10 : 8;
+ my $neutral=1 << ($fb_bits-1);
+ my ($y,$cb,$cr)=($c[0],$neutral,$neutral);
+ if($c[0] != $c[1] || $c[1] != $c[2]) {
+  return undef if(!$sc->{matrix});
+  ($y,$cb,$cr)=@{PGSelfTestCheck::ycc_codes(\@c,$fb_bits,$fb_bits,$sc->{matrix})->[0]};
+ }
+ return [$cb,$cr,$y] if($link_format eq "YCbCr 4:4:4");
+ return [$y,$cb,$cr];
 }
 
 sub link_format_for {
@@ -338,12 +438,22 @@ my %restore;
 sub save_user_state {
  my ($code,$cfg)=&http_json("GET","/api/config");
  return 0 if($code != 200 || !%$cfg);
- my $mode=$cfg->{signal_mode} || "";
- if($mode eq "") {
-  $mode=(($cfg->{dv_status} || 0) == 1) ? "dv" : (($cfg->{is_hdr} || 0) == 1) ? ((($cfg->{eotf} || 0) == 3) ? "hlg" : "hdr10") : "sdr";
+ # The mode the output runs, from the flags as the server reads them
+ # (command.pm signal_mode_from_conf). HCFR writes the flags one by one
+ # without signal_mode, so that key can lag behind; it counts only when
+ # the conf has no flags at all.
+ my $mode;
+ if(grep { defined($cfg->{$_}) && "$cfg->{$_}" ne "" } qw(dv_status is_ll_dovi is_std_dovi is_hdr)) {
+  $mode=(int($cfg->{dv_status} || 0) || int($cfg->{is_ll_dovi} || 0) || int($cfg->{is_std_dovi} || 0)) ? "dv" :
+        int($cfg->{is_hdr} || 0) ? ((int($cfg->{eotf} || 0) == 3) ? "hlg" : "hdr10") : "sdr";
+ } else {
+  $mode=$cfg->{signal_mode} || "sdr";
  }
  %restore=(signal_mode=>$mode);
- foreach my $k (qw(color_format max_bpc rgb_quant_range colorimetry dv_transport)) {
+ # sdr_colorimetry: the SDR choice the daemon keeps while HDR or DV runs.
+ # The SDR Y'CbCr modes set BT.709 and the next switch to HDR stores that
+ # there, so it is put back too.
+ foreach my $k (qw(color_format max_bpc rgb_quant_range colorimetry sdr_colorimetry dv_transport)) {
   $restore{$k}="$cfg->{$k}" if(defined($cfg->{$k}) && "$cfg->{$k}" ne "");
  }
  # The result holds for this output mode: the WebUI names it and flags the
@@ -428,7 +538,7 @@ for(my $n=0;$n<@scenarios;$n++) {
  $state{step}++;
  if($refusal) {
   $entry->{status}="skip"; $entry->{refused}=1; $entry->{note}="Not possible here: $refusal"; $refused++;
-  $state{step}+=scalar(@{$sc->{codes} || []})+scalar(@{$sc->{codes8} || []});
+  $state{step}+=&window_count($sc);
   &write_state();
   next;
  }
@@ -440,14 +550,14 @@ for(my $n=0;$n<@scenarios;$n++) {
  }
  if($err) {
   $entry->{status}="fail"; $entry->{note}=$err; $failed++;
-  $state{step}+=scalar(@{$sc->{codes} || []})+scalar(@{$sc->{codes8} || []});
+  $state{step}+=&window_count($sc);
   &write_state();
   next;
  }
  my ($w,$h)=&screen_size();
  if(!$w) {
   $entry->{status}="fail"; $entry->{note}="Nothing is being scanned out after the mode switch."; $failed++;
-  $state{step}+=scalar(@{$sc->{codes} || []})+scalar(@{$sc->{codes8} || []});
+  $state{step}+=&window_count($sc);
   &write_state();
   next;
  }
@@ -506,24 +616,39 @@ for(my $n=0;$n<@scenarios;$n++) {
   add_check($entry,"Dolby Vision signalling",$want_dv,$vsif->{label},$dv_kind eq $want_dv);
  }
 
+ # AVI colorimetry and VIC, DRM metadata fields. The conf after the switch
+ # holds the values the renderer was given; its colorimetry also names the
+ # matrix the Y'CbCr colour windows are expected with.
+ my ($ccode,$conf)=&http_json("GET","/api/config");
+ $conf={} if($ccode != 200 || ref($conf) ne "HASH");
+ $sc->{matrix}=%$conf ? PGSelfTestCheck::ycc_matrix_for(@{PGSelfTestCheck::avi_colorimetry_expect($sc->{config}{signal_mode},$format,$conf->{colorimetry})},$h) : "";
+ &infoframe_checks($entry,$sc,$format,$conf,\@avi,&dri_state(),$sc->{drm} ? &sudo_cmd("HDMI_PACKET",7) : "");
+
  # Scanout = wire only while the range CSC is unity (YCbCr, RGB Full, RGB
  # Limited on the patched vc4). Otherwise the codes are not provable here.
  my $provable=$csc_unity;
  if(!$provable) {
   $entry->{note}="The vc4 range CSC is active after the framebuffer, so the codes on the cable cannot be read back in this mode.";
-  $state{step}+=scalar(@{$sc->{codes} || []})+scalar(@{$sc->{codes8} || []});
+  $state{step}+=&window_count($sc);
  }
  my $range=($format eq "RGB") ? ($sc->{range} || "LIMITED") : "";
  my @windows=();
  push(@windows,map { [10,1023,$_] } @{$sc->{codes} || []}) if($provable);
  push(@windows,map { [8,255,$_] } @{$sc->{codes8} || []}) if($provable);
+ push(@windows,map { [10,4095,$_] } @{$sc->{codes12} || []}) if($provable && !$sc->{tunnel});
  my $fb_format="";
  foreach my $win (@windows) {
   &finish("cancelled","The self-test was stopped. Your signal settings are back.") if(&cancelled());
   my ($bits,$max,$code)=@$win;
   my ($label,$r,$g,$b)=@$code;
-  my $black=($range eq "FULL") ? 0 : ($bits == 10 ? 64 : 16);
-  my $expect=&expected_fb($sc,$format,$bits,$r,$g,$b);
+  my $black=($range eq "FULL") ? 0 : ($max == 4095 ? 256 : $bits == 10 ? 64 : 16);
+  my $expect=&expected_fb($sc,$format,$bits,$r,$g,$b,$max);
+  if(!$expect) {
+   # A Y'CbCr colour with no matrix the AVI names (opRGB, DCI-P3).
+   add_check($entry,$label,"a matrix named by the AVI","not drawn (colorimetry names none)",0,1);
+   $state{step}++;
+   next;
+  }
   $state{message}="$sc->{group} $sc->{label}: drawing $label.";
   &write_state();
   if($sc->{tunnel} && $bits == 10) {
@@ -564,7 +689,7 @@ for(my $n=0;$n<@scenarios;$n++) {
   # Codes fine but the infoframe could not be read: not a pass.
   if($entry->{status} eq "pass" && $entry->{unverified}) {
    $entry->{status}="skip";
-   $entry->{note}="The Dolby Vision infoframe could not be read, so this mode is not fully verified.";
+   $entry->{note}="An infoframe or the scanned-out mode could not be read, so this mode is not fully verified.";
    $skipped++;
   }
  }

@@ -245,7 +245,7 @@ const LG_PRE2022_PICTURE_MODES_BY_SIGNAL={
 const LG_DISPLAY_CONTROL_ITEMS=[
  {key:'brightness',label:'Brightness',type:'number',min:0,max:100,step:1},
  {key:'contrast',label:'Contrast',type:'number',min:0,max:100,step:1},
- {key:'blackLevel',label:'Black Level / Range',type:'select',options:['auto','low','high','limited','full']},
+ {key:'blackLevel',label:'Black Level / Range',type:'select',options:['auto','low','high']},
  {key:'blackLevelAdjust',label:'Black Level Adjust',type:'number',min:0,max:100,step:1},
  {key:'backlight',label:'Backlight',type:'number',min:0,max:100,step:1},
  {key:'oledLight',label:'OLED Light',type:'number',min:0,max:100,step:1},
@@ -949,6 +949,16 @@ function lgDisplayControlCurrentValue(key){
  return Object.prototype.hasOwnProperty.call(lgDisplayControlValues,key)?lgDisplayControlValues[key]:null;
 }
 
+// webOS reports some picture settings per signal type, e.g. blackLevel as
+// {ntsc:'low',pal:'auto',...,unknown:'auto'} (bscpylgtv settings dumps, C8
+// to G6). One value for all types reads as that value, else as 'mixed'.
+function lgDisplayControlScalar(value){
+ if(!value||typeof value!=='object'||Array.isArray(value)) return value;
+ const vals=Object.keys(value).map(k=>String(value[k]));
+ if(!vals.length) return null;
+ return vals.every(v=>v===vals[0])?vals[0]:'mixed';
+}
+
 function lgDisplayControlOptionHtml(meta,value){
  const raw=String(value==null?'':value);
  const seen={};
@@ -990,7 +1000,7 @@ function lgDisplayControlRender(){
  }
  let html='';
  LG_DISPLAY_CONTROL_ITEMS.forEach(meta=>{
-  const value=lgDisplayControlCurrentValue(meta.key);
+  const value=lgDisplayControlScalar(lgDisplayControlCurrentValue(meta.key));
   const supported=value!==null&&value!==undefined;
   const disabled=(!supported||lgDisplayControlPending)?' disabled':'';
   const displayValue=supported?String(value):'--';

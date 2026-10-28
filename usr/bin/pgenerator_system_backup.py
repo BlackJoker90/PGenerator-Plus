@@ -10,6 +10,7 @@ from __future__ import print_function
 
 import argparse
 import datetime
+import fcntl
 import hashlib
 import io
 import json
@@ -298,7 +299,24 @@ def copy_file_atomic(source, destination):
         os.unlink(temp_path)
     shutil.copyfile(source, temp_path)
     os.chmod(temp_path, 0o644)
-    os.rename(temp_path, destination)
+    if os.path.basename(destination) != "PGenerator.conf":
+        os.rename(temp_path, destination)
+        return
+    # The conf helper (PGenerator_cmd.pl pgenerator_conf_update) rewrites the
+    # conf under an exclusive flock on PGenerator.conf.lock; renaming under
+    # the same lock keeps its read-modify-write from undoing the restore. As
+    # in the helper, a lock file that cannot be opened does not stop it.
+    try:
+        lock = open(destination + ".lock", "a")
+    except (IOError, OSError):
+        lock = None
+    try:
+        if lock is not None:
+            fcntl.flock(lock, fcntl.LOCK_EX)
+        os.rename(temp_path, destination)
+    finally:
+        if lock is not None:
+            lock.close()
 
 
 def merge_tree(source, destination):

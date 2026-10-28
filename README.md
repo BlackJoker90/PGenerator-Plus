@@ -38,7 +38,7 @@ What no other PGenerator build does today. The comparison basis is the latest up
 <td width="50%" valign="top">
 
 ### 🔬 Codes proven on the cable
-The Pi reads back its own scanout. The built-in **Signal Self-Test** draws known codes in ten signal modes and checks the pixels, the link depth, the AVI infoframe, the HDR metadata and the Dolby Vision infoframe. 10-bit codes stay 10-bit, and **RGB Limited goes out without the kernel's compression** (patched vc4). A full 0–1023 sweep comes back exact.
+The Pi reads back its own scanout. The built-in **Signal Self-Test** draws known codes in twelve signal modes and checks the pixels, the link depth, the AVI infoframe (format, range, colorimetry, VIC), the HDR metadata field by field and the Dolby Vision infoframe. 10-bit codes stay 10-bit, and **RGB Limited goes out without the kernel's compression** (patched vc4). A full 0–1023 sweep comes back exact.
 
 </td>
 <td width="50%" valign="top">
@@ -147,7 +147,7 @@ mDNS answers AAAA queries with an NSEC record, so clients do not wait for an IPv
 <td valign="top">
 
 ### 🧪 Signal self-test
-One button in **System** runs ten signal modes (SDR RGB Limited/Full and YCbCr 4:2:2/4:4:4, HDR10 RGB Limited and YCbCr 4:2:2/4:4:4, Dolby Vision Standard and Low Latency). In each mode it draws known codes, **reads back what the Pi scans out** and checks the link depth and AVI infoframe. It also reads the infoframes from the HDMI packet RAM: HDR metadata only in HDR, and in Dolby Vision the infoframe the display switches on (the Dolby VSIF for Low Latency, the HDMI 1.4b VSIF for Standard). Your signal settings come back afterwards; a quick check covers three modes in about 40 s.
+One button in **Output** runs twelve signal modes (SDR RGB Limited/Full and YCbCr 4:2:2/4:4:4, HDR10 RGB Limited and YCbCr 4:2:2/4:4:4, HLG RGB Limited and YCbCr 4:4:4, Dolby Vision Standard and Low Latency). In each mode it draws known codes (greys, colours checked against the BT.709/BT.2020 Y'CbCr formulas, 8-bit and 12-bit source codes), **reads back what the Pi scans out** and checks the link depth and the AVI infoframe: format, range, colorimetry and the VIC of the running mode. It also reads the infoframes from the HDMI packet RAM: HDR metadata only in HDR, field by field against your settings (ST 2084 primaries and luminances; HLG without mastering data), and in Dolby Vision the infoframe the display switches on (the Dolby VSIF for Low Latency, the HDMI 1.4b VSIF for Standard). Your signal settings come back afterwards; a quick check covers three modes in about 40 s.
 
 </td>
 <td valign="top">
@@ -205,7 +205,7 @@ Next to the settings, **On the cable** shows what is actually sent (format, rang
 | HDMI link readout | – | measured link depth and clock |
 | CPU scaling governor | fixed in `/etc/default/rcPGenerator` | **Scaling Type in the WebUI**, applies without a reboot |
 | OTA | latest release only | release notes, progress, **reinstall / rollback**, ~20 % smaller packages |
-| Self-test of the HDMI output | – | **built in**: scanout readback, link depth, AVI, HDR and Dolby Vision infoframes per mode |
+| Self-test of the HDMI output | – | **built in**: scanout readback, link depth, AVI (colorimetry, VIC), HDR metadata fields and Dolby Vision infoframes per mode, HLG included |
 | Pattern playlists | – | **stepped with the TV remote** (HDMI-CEC), own playlists |
 | On-screen pattern menu | – | **every pattern on the TV**, picked with the remote |
 | Start and restart | static splash, WebUI just goes offline | **animated progress on the TV** (real boot steps, in the WebUI theme), restart dialog in the WebUI that reconnects by itself; WebUI up about 25 s after the kernel starts |
@@ -230,7 +230,7 @@ Next to the settings, **On the cable** shows what is actually sent (format, rang
 <td colspan="2" valign="top"><img src="screenshots/webui-system.png" alt="System workspace: Device Info with CPU, memory and temperature meters and tiles for board, hostname, resolution, uptime, RAM and network, plus the GPU Memory and Scaling Type selects, and Software Update below"/><br/><p align="center"><sub>System: CPU, memory and temperature at a glance, the device facts, GPU memory and CPU Scaling Type set right in their tiles, and the OTA update</sub></p></td>
 </tr>
 <tr>
-<td colspan="2" valign="top"><img src="screenshots/webui-selftest.png" alt="Signal self-test in Output: bit-exact in 10 of 10 modes, with link details and the drawn swatches per mode"/><br/><p align="center"><sub>Signal self-test, right below Display Settings: every mode read back from the scanout on a real Pi 4, bit-exact in 10 of 10</sub></p></td>
+<td colspan="2" valign="top"><img src="screenshots/webui-selftest.png" alt="Signal self-test in Output: all 12 modes bit-exact (SDR, HDR10, HLG, Dolby Vision), with link details and the drawn swatches per mode"/><br/><p align="center"><sub>Signal self-test, right below Display Settings: every mode read back from the scanout on a real Pi 4, bit-exact in 12 of 12</sub></p></td>
 </tr>
 <tr>
 <td colspan="2" valign="top"><img src="screenshots/tv-restart.png" alt="Restart screen on the TV: PGenerator+ logo, Restarting PGenerator+, a progress bar and the steps Shut down (done), Restart (current) and Start"/><br/><p align="center"><sub>On the TV during a restart, in the Volt theme (rendered by the Pi's start screen program); at start-up the same screen follows System, Network, Services and PGenerator+</sub></p></td>
@@ -363,7 +363,7 @@ Served on **port 80** at `http://pgenerator.local`. It has a **Desktop** layout 
 
 | Workspace | What's in it |
 |---|---|
-| **Output** | Signal mode (SDR / HDR10 / HLG / Dolby Vision), resolution from the EDID, bit depth, colour format, colorimetry, range, and HDR10 and DV metadata (with hints for measuring Dolby Vision). Options the Pi or the display cannot carry stay visible but locked, with the reason. **On the cable** shows what is actually sent and any quiet adjustment; banners show refused settings (with what works) and HDMI link interruptions during a measurement. Shows a banner while no display is connected. Below it the **Signal Self-Test**: draws known codes in every signal mode and reads the scanout back, next to link depth, range CSC, AVI infoframe, HDR metadata and the Dolby Vision infoframe |
+| **Output** | Signal mode (SDR / HDR10 / HLG / Dolby Vision), resolution from the EDID, bit depth, colour format, colorimetry, range, and HDR10 and DV metadata (with hints for measuring Dolby Vision). Options the Pi or the display cannot carry stay visible but locked, with the reason. **On the cable** shows what is actually sent and any quiet adjustment; banners show refused settings (with what works) and HDMI link interruptions during a measurement. Shows a banner while no display is connected. Moving the cable to the other HDMI port keeps the resolution (the mode is followed by its timing, not its list position) and the output follows the cable. Below it the **Signal Self-Test**: draws known codes in every signal mode and reads the scanout back, next to link depth, range CSC, AVI infoframe, HDR metadata and the Dolby Vision infoframe |
 | **Patterns** | Calman G1 plates (favourites Basic Alignment, Warm-Up, Granger Rainbow, plus all others; Basic Alignment doubles as an overscan check: numbered rings 1 to 5 % in from each edge, so the outermost ring still visible shows how much the display crops), the test images Range Check (sub-black codes show whether the display decodes the signal as Limited or Full, next to the range on the cable; an EDID check from the display's EDID and the Pi's AVI infoframe says whether the display on Auto should match), White Clipping and Black Clipping, your own uploaded images and videos, and **playlists** you step through with the TV remote; "Show menu on TV" opens the on-screen pattern menu |
 | **Calibration** | Meter detection, single and continuous reads, series runs (Greyscale 21/11, Colors 30, Saturation 24), charts, and session export |
 | **Meter Profiler** | Meter correction (CCSS) editor and preview |

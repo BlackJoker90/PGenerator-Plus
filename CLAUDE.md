@@ -37,6 +37,16 @@ top priority, above any feature, in SDR, HDR10, HLG and Dolby Vision alike:
 `.git/info/exclude`). They exist on the maintainer's machine, not in a clone.
 Check before relying on them.
 
+## TASKS.md stays current
+
+Tick an item yourself as soon as the test that proves it passes, in the
+same step, without being asked: `- [x] … (evidence: t/x.t, commit, readback)`,
+including duplicates of the item elsewhere in the file. An item that is
+only implemented, or tested locally but not on the Pi, stays open with the
+level it reached. Before ending a session, check every open box against
+git log and the code and tick what is proven. In a worktree, TASKS.md is
+the main checkout's copy.
+
 ## Verify after a change
 
 Run what applies and say what was and was not checked:

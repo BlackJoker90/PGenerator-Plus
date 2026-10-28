@@ -8841,10 +8841,8 @@ sub _webui_ensure_custom_storage_dir (@) {
   $safe_dir=~s/'/'"'"'/g;
   system("/bin/mkdir -p '$safe_dir' >/dev/null 2>&1");
  }
- if((!-d $dir || !-w $dir) && defined($pg_cmd_env) && $pg_cmd_env ne "" && defined($sudo_cmd) && $sudo_cmd ne "") {
-  my @args_b64=map { encode_base64($_,"") } ("ENSURE_CCSS_STORAGE",$dir);
-  system("timeout 5 env $pg_cmd_env=\"@args_b64\" $sudo_cmd >/dev/null 2>&1");
- }
+ # The init script creates ccss/custom and hands it to the daemon user at
+ # every start; the root helper has no action for it.
  return (-d $dir && -w $dir) ? 1 : 0;
 }
 
@@ -12897,6 +12895,44 @@ sub webui_tvmenu_boot (@) {
 #
 our $_selftest_state_file="/tmp/pgen-selftest.json";
 our $_selftest_cancel_file="/tmp/pgen-selftest.cancel";
+# Held by the maintainer's signal tests (signal_audit, pi_scale_check,
+# dv_vsif_ab) and deploy.sh: a directory with the holder's pid. They refuse
+# while the self-test runs; the self-test refuses while they hold one.
+our @_selftest_foreign_locks=(
+ ["/tmp/pgen-signal-test.lock","A signal test is running on the Pi. Wait for it to finish."],
+ ["/tmp/pgen-deploy.lock","Files are being deployed to the Pi. Wait for it to finish."]
+);
+
+# The reason a foreign lock blocks the self-test, or "". A lock without a
+# pid counts for 5 s (its holder writes the pid right after mkdir); a lock
+# whose holder is gone does not block.
+# /tmp is on the SD card, so a lock can outlive a reboot and its pid be
+# taken by another process: a lock from before the boot does not count.
+our $_selftest_proc_stat="/proc/stat";
+sub webui_selftest_foreign_lock (@) {
+ my $boot=0;
+ if(open(my $sf,"<",$_selftest_proc_stat)) {
+  while(my $l=<$sf>) { if($l=~/^btime\s+(\d+)/) { $boot=$1; last; } }
+  close($sf);
+ }
+ foreach my $lock (@_selftest_foreign_locks) {
+  my ($dir,$why)=@$lock;
+  next if(!-d $dir);
+  next if($boot && ((stat(_))[9] || 0) < $boot);
+  my $pid="";
+  if(open(my $fh,"<","$dir/pid")) { $pid=<$fh>; close($fh); }
+  $pid=defined($pid) ? $pid : "";
+  $pid=~s/\s+//g;
+  if($pid!~/^\d+$/) {
+   my $mtime=(stat($dir))[9] || 0;
+   return $why if(time()-$mtime < 5);
+   next;
+  }
+  # The holders run as root: EPERM still means the process is there.
+  return $why if(kill(0,$pid) || $!{EPERM});
+ }
+ return "";
+}
 
 sub webui_selftest_read_state (@) {
  my $json="";
@@ -13018,6 +13054,8 @@ sub webui_selftest_start (@) {
   return '{"status":"error","message":"'.$sw.' is connected. Disconnect it before running the self-test."}';
  }
  return '{"status":"error","message":"A measurement series is running. Wait for it to finish."}' if(&webui_meter_series_alive());
+ my $foreign=&webui_selftest_foreign_lock();
+ return '{"status":"error","message":"'.&_webui_json_escape($foreign).'"}' if($foreign ne "");
  return '{"status":"error","message":"No display is connected. Connect a display first."}' if(!&webui_hdmi_connected());
  my $set=($body=~/"set"\s*:\s*"quick"/) ? "quick" : "full";
  unlink($_selftest_cancel_file);
@@ -14416,7 +14454,12 @@ sub webui_pattern (@) {
 	 # components are legal-range. SOURCE_RANGE describes those authored
 	 # components; transport_signal_range remains the wire setting.
 	 my $source_range=($signal_mode eq "dv" || int($pattern_signal_range || 0) == 1) ? "LIMITED" : "FULL";
-	 local $webui_pattern_image_source_range=($pattern_color_format == 0) ? $source_range : "FULL";
+	 # IMAGE plates author video-level codes. Outside DV the renderer takes
+	 # SOURCE_RANGE=LIMITED texels as those codes (passthrough) or expands
+	 # them itself (vc4 CSC), so they go into the PNG unchanged, as on YCbCr.
+	 # Standard DV skips the renderer's image normalisation and keeps the
+	 # stretch to 0..255 here.
+	 local $webui_pattern_image_source_range=($pattern_color_format == 0 && $signal_mode eq "dv") ? $source_range : "FULL";
 	 my $w=$w_s || 1920; my $h=$h_s || 1080;
  my $pat=""; my $img=&webui_pattern_diag_image_file($name); my $pat_bits=&webui_pattern_effective_bits("",$signal_mode);
  # Simulated-meter capture: raw patch codes (pre bit-scaling) recorded for

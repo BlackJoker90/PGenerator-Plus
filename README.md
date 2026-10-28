@@ -321,7 +321,7 @@ PGenerator+ is a free, open-source display calibration suite for the Raspberry P
 
 - **Protocol:** SpectraCal Unified Pattern Generator Control Interface (port `2100`)
 - **Connect:** **Find Source** → Manufacturer `SpectraCal` (or `Portrait Displays`) → Model `SpectraCal - Unified Pattern Generator Control Interface`. Enter the Pi's IP and connect.
-  - *Calman control:* Calman switches SDR / HDR10 / HLG / Dolby Vision, EOTF, colorimetry, format and mastering metadata directly; PGenerator+ applies them in real time.
+  - *Calman control:* Calman switches SDR / HDR10 / HLG / Dolby Vision, EOTF, colorimetry, format and mastering metadata directly; PGenerator+ applies them in real time. In HDR10, HLG and Dolby Vision the colorimetry stays BT.2020, the container these signals are defined in; a BT.709 gamut target is drawn inside it.
   - *Bit depth:* the Calman thread follows the configured bit depth. 10-bit codes stay exact, and codes are rounded to the output depth with a notice when one is not exact.
   - *Modes:* `CONF_FORMAT` requests resolve to the EDID copy of a mode rather than the userdef boot mode. G1 sessions start at Calman's RGB 8-bit default.
   - *Windows and APL:* fixed, custom and gray-surround APL windows (`RGB_S`, `RGB_A`, `CommandRGB`, `10_SIZE`, `11_APL`). With limited range, window backgrounds are drawn at black.
@@ -538,7 +538,7 @@ All endpoints are on port 80 and return JSON.
 | GET | `/api/ping` | Health check; `boot` is the kernel boot id, new after every reboot |
 | GET | `/api/info` | Device info (hostname, temp, IPs, Wi-Fi, resolution, calibration status with `sessions`: software, protocol, port, peer, start and last data per session) |
 | GET | `/api/config` | Current configuration |
-| POST | `/api/config` | Apply configuration changes (only the keys you send). Signal settings the Pi or display cannot carry are refused (`"refused":true` with the reason, nothing written); so are signal changes while Calman, ColourSpace or LightSpace is connected (`"locked":true`; `/api/info` reports it as `calibration.owns_signal`); quiet adjustments come back in `adjusted` |
+| POST | `/api/config` | Apply configuration changes (only the keys you send). Signal settings the Pi or display cannot carry are refused (`"refused":true` with the reason, nothing written); so are signal changes while Calman, ColourSpace or LightSpace is connected (`"locked":true`; `/api/info` reports it as `calibration.owns_signal`), and colorimetry 7 (opRGB) or 8 (BT.2020 constant luminance) with YCbCr, which the renderer cannot encode. In HDR10, HLG and Dolby Vision the colorimetry is always BT.2020 (9). Quiet adjustments come back in `adjusted` |
 | GET | `/api/modes` | HDMI modes from the display EDID |
 | POST | `/api/restart` | Restart the pattern generator |
 | POST | `/api/reboot` | Reboot the device |

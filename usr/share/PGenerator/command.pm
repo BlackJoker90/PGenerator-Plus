@@ -886,6 +886,26 @@ sub renderer_reconfigure_in_place (@) {
   &log("Renderer reconfigure: the Dolby Vision renderer is running; restarting for $what");
   return 0;
  }
+ # HDR10/HLG are BT.2020 signals. A restart pins colorimetry 9
+ # (normalize_signal_mode_conf); the reload in place keeps the same rule
+ # for a value that got into the conf in HDR. The renderer reads the file,
+ # so that is what counts. The memory copy changes only once the file is
+ # written: after a failed write the restart path still sees the old value
+ # and pins it again.
+ my $file_conf=&renderer_conf_read();
+ if(!$file_conf) {
+  &log("Renderer reconfigure: $pattern_conf is unreadable; using the restart path for $what");
+  return 0;
+ }
+ if(int($file_conf->{"is_hdr"} || 0) == 1 && ($file_conf->{"colorimetry"} // "") ne "9") {
+  if((&sudo("SET_PGENERATOR_CONF_MULTI","colorimetry","9") || "")!~/^\Q$ok_response\E/) {
+   $pgenerator_conf{"colorimetry"}=$file_conf->{"colorimetry"} // "";
+   &log("Renderer reconfigure: colorimetry 9 for HDR could not be written; using the restart path for $what");
+   return 0;
+  }
+  $pgenerator_conf{"colorimetry"}="9";
+  &log("Renderer reconfigure: HDR colorimetry ".($file_conf->{"colorimetry"} // "")." set to 9 (BT.2020)");
+ }
  my $pid=&process_pid("$pattern_generator","get");
  if($pid eq "" || $pid=~/\s/) {
   &log("Renderer reconfigure: ".($pid eq "" ? "renderer is not running" : "several renderer processes ($pid)")."; using the restart path for $what");

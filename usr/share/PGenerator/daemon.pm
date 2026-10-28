@@ -1803,11 +1803,11 @@ sub pattern_daemon {
 	      $want_signal_mode="hdr10" if($eotf_val == 1);
 	      my $want_is_sdr=($eotf_val >= 2) ? "0" : "1";
 	      my $want_is_hdr=($eotf_val >= 2) ? "1" : "0";
-	      # Colorimetry: BT.2020 (9) for HDR/HLG; BT.709 (2) for SDR.
-	      # If primaries is BT.709 (0) inside an HDR eotf, the reference
-	      # signaled a non-BT.2020 HDR mode — match the existing
-	      # CONF_HDR primary-detection logic and use BT.709 (2).
-	      my $want_colorimetry=($eotf_val >= 2) ? (($prim_val == 0) ? "2" : "9") : "2";
+	      # Colorimetry: BT.2020 (9) for HDR/HLG, whatever the gamut
+	      # target (BT.709 primaries are patches inside the BT.2020
+	      # container; a renderer start pins 9 too,
+	      # normalize_signal_mode_conf); BT.709 (2) for SDR.
+	      my $want_colorimetry=($eotf_val >= 2) ? "9" : "2";
 	      # Resolve the final signal_mode / DV flags before building
 	      # the write list, so a DV transition overrides the
 	      # eotf-derived signal_mode (otherwise the initial hdr10
@@ -1916,6 +1916,12 @@ sub pattern_daemon {
 	      # never exited: it spun replaying SPECIALTY:ALIGNMENT
 	      # forever and starved the GCI socket of RGB_S / 100% /
 	      # 109% pattern commands (DV Autocal stuck on alignment).
+	      # HDR10/HLG/DV are BT.2020 signals: a gamut or colour-space
+	      # command (PRIM, CLSP, CONF_HDR with BT.709 primaries) does not
+	      # turn the colorimetry to BT.709 while HDR is on. drm_override
+	      # reads the conf on every commit, so it would reach the wire.
+	      # Calman's mode switches write is_hdr before the colorimetry.
+	      $conf_val="9" if($conf_key eq "colorimetry" && int($pgenerator_conf{"is_hdr"} || 0) == 1);
 	      my $new_val=defined($conf_val) ? "$conf_val" : "";
 	      my $cur_val=defined($pgenerator_conf{$conf_key}) ? "$pgenerator_conf{$conf_key}" : "";
 	      if($cur_val eq $new_val) {

@@ -10471,6 +10471,42 @@ sub webui_apply_config (@) {
   # YCbCr 4:2:2 renderer path is supported at 10-bit only.
   $changes{"max_bpc"}="10";
  }
+ my @adjusted=();
+ # HDR10, HLG and DV are BT.2020 signals (normalize_signal_mode_conf does
+ # the same on every renderer start): the colorimetry is 9 in them. A
+ # posted 10 (BT2020_YCC) is the same on the wire (drm_override maps 9 to
+ # 10 for YCbCr), so only another posted value is reported.
+ my $effective_colorimetry=defined $changes{"colorimetry"} ? $changes{"colorimetry"} : ($pgenerator_conf{"colorimetry"} // "");
+ # Judged on the flags the renderer reads, not the signal_mode text (an
+ # empty one passes validation and is not derived again).
+ my $hdr_after=int(defined $changes{"is_hdr"} ? $changes{"is_hdr"} : ($pgenerator_conf{"is_hdr"} || 0)) == 1 || $dv_on;
+ if($hdr_after) {
+  push(@adjusted,"HDR10, HLG and Dolby Vision are sent as BT.2020.")
+   if(defined $posted{"colorimetry"} && $posted{"colorimetry"} ne "" && $posted{"colorimetry"} ne "9" && $posted{"colorimetry"} ne "10");
+  if($effective_colorimetry ne "9") {
+   $changes{"colorimetry"}="9";
+   $effective_colorimetry="9";
+  }
+ }
+ # Y'CbCr with opRGB (7, an RGB colorimetry) or BT.2020 constant luminance
+ # (8, EC=5: no 3x3 matrix, the renderer would encode BT.709): the signal
+ # would name a matrix the codes are not in. A posted value, or a posted
+ # YCbCr format with a stored one, is refused; one derived here (the SDR
+ # colorimetry given back when leaving HDR) is sent as BT.709. Other
+ # settings still save. The self-test's restore puts the user's state back
+ # as it was.
+ if(!$selftest && ($effective_color_format == 1 || $effective_color_format == 2) && $effective_colorimetry=~/^[78]$/) {
+  my $name=($effective_colorimetry eq "7") ? "opRGB (colorimetry 7) is an RGB colorimetry" : "BT.2020 constant luminance (colorimetry 8) cannot be encoded by the renderer";
+  if(!exists $posted{"colorimetry"} && defined $changes{"colorimetry"}) {
+   push(@adjusted,"$name: YCbCr is sent as BT.709.");
+   $changes{"colorimetry"}="2";
+   $effective_colorimetry="2";
+  } elsif(exists $posted{"colorimetry"} || exists $posted{"color_format"}) {
+   &log("WebUI: settings refused, colorimetry $effective_colorimetry with YCbCr");
+   my $result='{"status":"error","message":"'.&_webui_json_escape("$name: with YCbCr choose BT.709 (2) or BT.2020 (10), or use RGB.").'"}';
+   return wantarray ? ($result,0) : $result;
+  }
+ }
  # Refused settings (PGSignalCheck.pm): a signal the board or the display
  # cannot carry is not written, so the output stays as it was instead of
  # the HDMI driver quietly sending something else. Checked only when a
@@ -10483,7 +10519,6 @@ sub webui_apply_config (@) {
   next if(!exists $changes{$k} || $k eq "signal_mode");
   $signal_changed=1 if("$changes{$k}" ne (defined($pgenerator_conf{$k}) ? "$pgenerator_conf{$k}" : ""));
  }
- my @adjusted=();
  if($signal_changed) {
   my ($check,$req)=eval { &signal_check_conf(\%signal_after) };
   if($check && !$check->{ok}) {

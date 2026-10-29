@@ -532,6 +532,11 @@ public:
 	   (nothing is changed in that case). */
 	static const char *(*reloadConf)();
 	void ReloadSignalConf();
+	/* Raised by ofApp for each pattern it loads; the first completed flip
+	   showing a new value writes running/presented (pid, this value, DRM
+	   flip sequence, flip time in us, frame period in us) for the daemon. */
+	static unsigned long frame_tag;
+	unsigned long presented_tag = 0;
 	bool exit_started = false;
 	bool reload_pending = false;
 	bool exit_reset_done = false;

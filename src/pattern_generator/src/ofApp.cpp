@@ -25,6 +25,7 @@
 /* Start Patch RPI P4 */
 #include "rgb2ycbcr.h"
 #include "pattern_parse.h"
+#include "dovi_tunnel.h"
 /* End Patch RPI P4 */
 
 namespace {
@@ -112,6 +113,12 @@ inline int effectivePatternBits(int bits) {
 // 8-bit pattern promoted to the 10-bit framebuffer by effectivePatternBits().
 inline bool promotedEightBitPattern(int arr_bits) {
  return arr_bits == 8 && ofxRPI4Window::bit_depth == 10 && !ofxRPI4Window::is_std_DoVi;
+}
+
+// Standard DV metadata tunnel: dovi_tunnel.h (pixels 0..3071, ETSI GS CCM
+// 001 6.4.1 and 6.4.3).
+inline int doviWindowMetadataLines() {
+	return doviMetadataLines(ofGetWindowWidth());
 }
 
 inline bool usesLowLatencyDoVi422Transport() {
@@ -290,7 +297,9 @@ void ofApp::update(){
 	source_range=0;
    }
   }
-
+  // A pattern was read: the next completed flip shows it (running/presented).
+  if(entered)
+   ofxRPI4Window::frame_tag++;
  }
   /* Start Patch RPI P4 */
 	if (draw_type == "IMAGE") {
@@ -1291,7 +1300,6 @@ void ofApp::dovi_metadata_update() {
  ##########################################################
 */
 void ofApp::dovi_metadata_create() {
-	int Y=0, Cb=0, Cr=0;
 	int num_bits=0;
 	ofShortPixels short_pix;
 	ofPixels pix;
@@ -1299,11 +1307,12 @@ void ofApp::dovi_metadata_create() {
 	ofImage img;
 
 
+	const int meta_lines = doviWindowMetadataLines();
 	if (ofxRPI4Window::bit_depth == 10) {
-		short_pix.allocate(ofGetWindowWidth(), 2, OF_IMAGE_COLOR_ALPHA);
+		short_pix.allocate(ofGetWindowWidth(), meta_lines, OF_IMAGE_COLOR_ALPHA);
 		short_pix.setColor(1023);
 	} else {
-		pix.allocate(ofGetWindowWidth(), 2, OF_IMAGE_COLOR_ALPHA);
+		pix.allocate(ofGetWindowWidth(), meta_lines, OF_IMAGE_COLOR_ALPHA);
 		pix.setColor(255);
 	}
 
@@ -1338,54 +1347,15 @@ void ofApp::dovi_metadata_create() {
 	}
 	//    printf("Total number of Cal bits %d\n",num_bits);
 
-	/* Create DoVi RPU Display Management Data */
-	int x=0;
-	int cycles=0;
-
-	for(auto line: pix.getLines(0,2)) {
-
-		for(auto pixel: line.getPixels()) {
-			if (cycles < 3) {
-				if (x == 1024) {
-					x = 0;
-					cycles++;
-				}				
-		//		printf("posx=%d posy=%d z=%d Before: Y %d ,Cb %d , Cr %d ",x, y, z, Y, Cb, Cr);
-				if (ofxRPI4Window::bit_depth == 10){
-					Cr = 1016;
-					Cb = 0xff80; 
-				} else {
-					Y = 128;// << shift;
-					Cb = 16;// << shift;
-				}
-				if (total_bits[x] == 0) {
-					if (ofxRPI4Window::bit_depth == 10) {
-						Y = 0x1000;
-//				Cb= 0;
-					} else {
-						Cr = 0;
-					}
-//				printf(".");
-				}
-				if (total_bits[x] == 1) {
-					if (ofxRPI4Window::bit_depth == 10) {
-						Y = 0x1010;
-//				Cb = 1016;
-					} else {
-						Cr = 16;// << shift;
-					}
-//				printf("^");								
-				}
-
-				pixel[0] = Y;
-				pixel[1] = Cb;
-				pixel[2] = Cr;
-	//			printf("==> After: Y %d ,Cb %d , Cr %d \n",Y, Cb, Cr);
-			 	x++;	
-			}
- 			if (cycles == 3) break;
-		}
-	}
+	/* Create DoVi RPU Display Management Data (dovi_tunnel.h): pixels
+	 * 0..3071 carry the packet three times. 1.6 wrote one pixel more (3073,
+	 * the start of a fourth copy) on two lines whatever the width, which left
+	 * white pixels after the metadata at 3840 and cut the third copy below
+	 * 1536. Only the 8-bit buffer gets the bits; the 10-bit branch gets none,
+	 * as before (the old loop iterated the 8-bit buffer, which is not
+	 * allocated there). */
+	if (ofxRPI4Window::bit_depth != 10)
+		doviFillTunnel8(pix.getData(), ofGetWindowWidth(), meta_lines, total_bits);
 
 	if (ofxRPI4Window::bit_depth == 10) {
 
@@ -1393,16 +1363,14 @@ void ofApp::dovi_metadata_create() {
 		ofSet10bitColor(1023,1023,1023,1023); 
 		fbo_dovi.begin();
 		short_img.getTexture().setTextureMinMagFilter(GL_NEAREST, GL_NEAREST);
-		short_img.drawSubsection(0,0,ofGetWindowWidth(),1,0,0,ofGetWindowWidth(),1);
-		short_img.drawSubsection(0,1,1153,1,0,1);
+		drawDoviMetadataPixels(short_img, ofGetWindowWidth());
 		fbo_dovi.end();
 	} else {
 		img.setFromPixels(pix);
 		ofSetColor(255,255,255,255); 
 		fbo_dovi.begin();
 		img.getTexture().setTextureMinMagFilter(GL_NEAREST, GL_NEAREST);
-		img.drawSubsection(0,0,ofGetWindowWidth(),1,0,0,ofGetWindowWidth(),1);
-		img.drawSubsection(0,1,1153,1,0,1);
+		drawDoviMetadataPixels(img, ofGetWindowWidth());
 		fbo_dovi.end();	
 	}	
 }	
@@ -1418,11 +1386,11 @@ void ofApp::dovi_metadata_mux() {
 	if (ofxRPI4Window::bit_depth == 10) {
 		ofSetColor(1023,1023,1023,1023); 
 		fbo10.draw(0,0,ofGetWindowWidth(),ofGetWindowHeight());
-		fbo_dovi.draw(0,0,ofGetWindowWidth(),2);		
+		fbo_dovi.draw(0,0,ofGetWindowWidth(),doviWindowMetadataLines());
 	} else {
 		ofSetColor(255,255,255,255); 
 		fbo8.draw(0,0,ofGetWindowWidth(),ofGetWindowHeight());		
-		fbo_dovi.draw(0,0,ofGetWindowWidth(),2);
+		fbo_dovi.draw(0,0,ofGetWindowWidth(),doviWindowMetadataLines());
 		}
 }
 
@@ -1451,7 +1419,7 @@ void ofApp::fbo_allocate() {
 	if (ofxRPI4Window::is_std_DoVi) {
 		ofFboSettings settings;
         settings.width                      = ofGetWidth();
-        settings.height                     = 2;
+        settings.height                     = doviWindowMetadataLines();
         settings.internalformat             = GL_RGBA;
 		//set pixel precision
         settings.minFilter                  = GL_NEAREST;

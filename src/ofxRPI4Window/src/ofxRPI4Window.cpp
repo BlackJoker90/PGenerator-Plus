@@ -1585,6 +1585,7 @@ int ofxRPI4Window::isHDR = 0;
 int ofxRPI4Window::isDoVi = 0;
 int ofxRPI4Window::is_std_DoVi = 0;
 int ofxRPI4Window::bit_depth = 0;
+unsigned long ofxRPI4Window::frame_tag = 0;
 int ofxRPI4Window::wire_bpc = 8;
 int ofxRPI4Window::mode_idx = 0;
 int ofxRPI4Window::dv_profile = 2;
@@ -3376,8 +3377,16 @@ glm::vec2 ofxRPI4Window::getWindowPosition(){
     return glm::vec2(currentWindowRect.getPosition());
 }
 
+/* The last completed flip: DRM vblank sequence and time (CLOCK_MONOTONIC). */
+static unsigned int pg_flip_seq = 0, pg_flip_sec = 0, pg_flip_usec = 0;
+static bool pg_flip_seen = false;
+
 static void on_pageflip_event(int fd, unsigned int frame, unsigned int sec,	unsigned int usec, void *userdata) 
 {
+	pg_flip_seq = frame;
+	pg_flip_sec = sec;
+	pg_flip_usec = usec;
+	pg_flip_seen = true;
 	ofLog() << "DRM: page flip event ocurred: " << /*%12.6f\n",*/ std::fixed  << std::setprecision(6) << sec + (usec / 1000000.0);
 }
 
@@ -3555,6 +3564,18 @@ void ofxRPI4Window::swapBuffers()
 		ofLogError() << "DRM: Failed to wait for page flip completion";
 		ofExit(1);
 		return;
+	}
+
+	if (pg_flip_seen && frame_tag != presented_tag) {
+		// first completed flip showing a newly loaded pattern
+		presented_tag = frame_tag;
+		const double hz = (mode.htotal && mode.vtotal) ? mode_vrefresh(&mode) : 0.0;
+		char line[128];
+		snprintf(line, sizeof(line), "%ld %lu %u %llu %ld\n", (long)getpid(), frame_tag, pg_flip_seq,
+		         (unsigned long long)pg_flip_sec * 1000000ULL + pg_flip_usec,
+		         hz > 0.0 ? (long)(1000000.0 / hz + 0.5) : 0L);
+		if (!WriteRunningFile("presented", line))
+			fprintf(stderr, "PGEN: unable to write running/presented: %s\n", strerror(errno));
 	}
 
 	if (reload_pending) {

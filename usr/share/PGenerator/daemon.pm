@@ -2098,12 +2098,12 @@ sub pattern_daemon {
      # Snapshot of the mode-affecting conf keys as of the last
      # successful stop/start apply. If the current conf matches
      # this snapshot, no renderer restart is needed — the
-     # renderer's updateHDR_Infoframe() reads luminance / primaries
-     # / min_luma from the conf on every page flip, and
+     # renderer's updateHDR_Infoframe() reads min/max luminance,
+     # CLL and FALL from the conf on every page flip, and
      # drm_override.so re-applies connector properties (Colorimetry,
      # output_format, max_bpc, rgb_quant_range) on every atomic
      # commit. Skipping the stop+start cycle for non-mode changes
-     # (the common case: reference adjusting luminance, primaries, or
+     # (the common case: reference adjusting luminance, or
      # rgb_quant_range during a calibration pass) avoids the
      # documented DRM-master race that was killing the renderer
      # on every "apply" call. Stored in a package-global hash keyed
@@ -2112,6 +2112,7 @@ sub pattern_daemon {
      # lexical my() here would be re-initialized each time.
      my %calman_applied_mode_keys=%{$main::calman_applied_mode_keys{$connection} || {}};
      my $calman_mode_key_snapshot = sub {
+      my $conf=shift || \%pgenerator_conf;
       my %k=();
       # dv_map_mode is included because the pattern renderer only
       # loads it from conf at process start (main.cpp → ofApp /
@@ -2120,16 +2121,30 @@ sub pattern_daemon {
       # conf write left the wire on the previous map mode while
       # conf already said Absolute/Relative (operator saw no
       # change on PGen when flipping Calman DV map mode).
-      for my $k (qw(mode_idx signal_mode is_hdr is_sdr eotf colorimetry
+      for my $k (qw(mode_idx is_hdr eotf colorimetry
                     color_format max_bpc dv_status is_ll_dovi is_std_dovi
                     dv_map_mode)) {
-       $k{$k}="$pgenerator_conf{$k}";
+       $k{$k}=defined($conf->{$k}) ? "$conf->{$k}" : "";
+      }
+      # signal_mode and is_sdr are daemon bookkeeping, not renderer inputs
+      # (main.cpp): the mode as the flags above give it, so "hdr" saved by
+      # a Calman mode command and the "hdr10" a renderer start writes back
+      # are the same mode, not a restart on every command.
+      $k{"signal_mode"}=&signal_mode_from_conf($conf);
+      # The other DV keys main.cpp reads at start only (interface,
+      # profile, colour space, min/max PQ, diagonal) go into the DV
+      # metadata (ofApp.cpp) and nowhere else: they count in DV only.
+      # Entering or leaving DV changes dv_status, which restarts anyway.
+      if(&signal_mode_from_conf($conf) eq "dv") {
+       for my $k (qw(dv_interface dv_profile dv_color_space dv_minpq dv_maxpq dv_diagonal)) {
+        $k{$k}=defined($conf->{$k}) ? "$conf->{$k}" : "";
+       }
       }
       # Keys the renderer can take in place (SIGHUP reconfigure) but that
       # do not count as a mode change: tracked so a non-mode apply knows
       # what actually changed.
       for my $k (qw(rgb_quant_range primaries min_luma max_luma max_cll max_fall)) {
-       $k{"meta:$k"}="$pgenerator_conf{$k}";
+       $k{"meta:$k"}=defined($conf->{$k}) ? "$conf->{$k}" : "";
       }
       return \%k;
      };
@@ -2170,6 +2185,22 @@ sub pattern_daemon {
         # renderer reads on every frame — no stop+start needed,
         # just refresh the HDR metadata blob and connector props.
         my $now=$calman_mode_key_snapshot->();
+        # What the running renderer was started with (or reconfigured to in
+        # place) decides whether a mode key changed: a connection that has
+        # applied nothing yet has no snapshot, and one from an earlier
+        # connection on the same handle is stale, so the first apply after
+        # connecting restarted the renderer for every key, even when the
+        # output already was what the conf says. The metadata keys follow
+        # the record too: primaries is read at start and on SIGHUP only.
+        # The renderer reads the file, so the file is compared with it: a
+        # conf write that did not land (memory set, sudo failed) restarts
+        # nothing that would read the old file again.
+        my $renderer_conf=&renderer_running_conf();
+        my $disk_conf=$renderer_conf ? &renderer_conf_read() : undef;
+        if($renderer_conf && $disk_conf) {
+         %calman_applied_mode_keys=%{$calman_mode_key_snapshot->($renderer_conf)};
+         $now=$calman_mode_key_snapshot->($disk_conf);
+        }
         my $mode_changed=0;
         my %changed_keys=();
         for my $k (keys %$now) {
@@ -2192,6 +2223,12 @@ sub pattern_daemon {
         # range the running renderer process has not taken yet needs work.
         delete $changed_keys{"rgb_quant_range"} if($renderer_running && &renderer_has_applied_range());
         my $range_changed=$changed_keys{"rgb_quant_range"} ? 1 : 0;
+        # The renderer re-reads luminance, CLL and FALL on every frame, the
+        # primaries only at start and on SIGHUP: in HDR10 (the DRM infoframe
+        # carries them; HLG sends them as zero) a change it did not take in
+        # place needs a restart.
+        my $primaries_changed=($changed_keys{"primaries"} &&
+                               &signal_mode_from_conf(\%pgenerator_conf) eq "hdr10") ? 1 : 0;
         my $applied_in_place=0;
         if($renderer_running && %changed_keys) {
          # Same-transport changes (format, range, colorimetry, bpc, HDR
@@ -2203,10 +2240,10 @@ sub pattern_daemon {
         if($applied_in_place) {
          &log("Calman: applied ".join(",",sort keys %changed_keys)." in place (no renderer restart)");
          %calman_applied_mode_keys=%$now;
-        } elsif(!$mode_changed && (!$renderer_running || !$range_changed)) {
+        } elsif(!$mode_changed && (!$renderer_running || (!$range_changed && !$primaries_changed))) {
          # Mode unchanged — only metadata / luminance / range
          # changed. The renderer's updateHDR_Infoframe() reads
-         # min_luma / max_luma / max_cll / max_fall / primaries
+         # min_luma / max_luma / max_cll / max_fall
          # from the conf on every page flip, so the new values
          # take effect on the next atomic commit without touching
          # the renderer. We re-apply connector properties
@@ -2220,10 +2257,11 @@ sub pattern_daemon {
          # renderer is being (re)started.
           # A running renderer owns the connector properties and DRM
           # master; modetest -w writes (apply_drm_properties) would steal
-          # master from it. Luminance / primaries are re-read from conf
+          # master from it. Luminance, CLL and FALL are re-read from conf
           # by updateHDR_Infoframe() on every flip, so nothing else is
-          # needed. Range changes on a running renderer that could not
-          # take them in place go through the restart branch below.
+          # needed. Range and HDR primaries changes on a running renderer
+          # that could not take them in place go through the restart
+          # branch below.
           if($renderer_running) {
            &log("Calman: applying non-mode changes (no renderer restart) — renderer re-reads HDR metadata per frame");
           } else {

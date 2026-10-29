@@ -817,6 +817,18 @@ sub renderer_started_conf_current (@) {
  return (&renderer_conf_text($rec->{conf}) eq &renderer_conf_text($now)) ? 1 : 0;
 }
 
+# The conf the running renderer works from ({key=>value}, its start record,
+# kept current by in-place reconfigures); undef when there is no record for
+# it or it is not up (no DRM master, stuck in the HDMI driver). A Calman
+# connection that has applied nothing yet compares against this, so its
+# first apply restarts the renderer only for keys that really differ.
+sub renderer_running_conf (@) {
+ return undef if(!$is_kms || !&pattern_generator_is_running());
+ return undef if(&renderer_stuck_in_kernel() ne "" || !&pattern_generator_has_drm_master());
+ my $rec=&renderer_started_conf_load();
+ return $rec ? $rec->{conf} : undef;
+}
+
 # After an in-place reconfigure the renderer has re-read the keys it takes in
 # place ($in_place: {key=>1}). The record follows only when nothing else
 # differs; otherwise it is dropped and the next classic restart restarts.

@@ -1,0 +1,276 @@
+#!/usr/bin/perl
+#
+# pgen_test_edid - use the EDID in PGenerator-test-EDID.bin on the boot
+# partition (the FAT partition a PC sees) instead of the display's own.
+#
+# Run as root by /etc/init.d/PGenerator before the renderer starts. With the
+# file there and valid, it goes to every HDMI connector's debugfs
+# edid_override (PGTestEdid.pm has the kernel side); without it, or with an
+# invalid file, an override left from an earlier start is reset, so the file
+# alone decides. When an override changed or is in use, a probe follows
+# (modetest -c), so the mode list and the EDID property follow it before the
+# renderer starts; an earlier run whose probe failed is made good this way.
+# The result goes to stdout; what the user has to know (a test EDID in use or
+# not applied) also goes to PGTestEdid's status file for the WebUI.
+#
+# Usage: pgen_test_edid [apply]
+# Exit 0 when everything it had to do worked, 1 when something failed (the
+# reason is on stdout/stderr and, where the user has to know, in the status).
+# Tests set PGEN_TEST_EDID_FILE (the file itself, no mount), PGEN_DRI_DEBUGFS,
+# PGEN_TEST_EDID_STATUS, PGEN_TEST_EDID_REPROBE and PGEN_TEST_EDID_LOCK.
+#
+use strict;
+use warnings;
+use Fcntl qw(:flock);
+use File::Basename qw(dirname);
+use File::Temp ();
+use lib "/usr/share/PGenerator";
+use PGTestEdid;
+
+my $cmd=shift(@ARGV);
+$cmd="apply" if(!defined($cmd));
+if($cmd ne "apply") {
+ print STDERR "Usage: pgen_test_edid [apply]\n";
+ exit 2;
+}
+$PGTestEdid::dri_debugfs=$ENV{PGEN_DRI_DEBUGFS} if(defined($ENV{PGEN_DRI_DEBUGFS}));
+$PGTestEdid::status_file=$ENV{PGEN_TEST_EDID_STATUS} if(defined($ENV{PGEN_TEST_EDID_STATUS}));
+my $reprobe=defined($ENV{PGEN_TEST_EDID_REPROBE}) ? $ENV{PGEN_TEST_EDID_REPROBE} : "timeout 5 /usr/bin/modetest -M vc4 -c >/dev/null 2>&1";
+my $lock_file=defined($ENV{PGEN_TEST_EDID_LOCK}) ? $ENV{PGEN_TEST_EDID_LOCK} : "/var/run/pgen_test_edid.lock";
+my $name=$PGTestEdid::FILE_NAME;
+my @msg;
+my $rc=0;
+
+# A message for stdout and, unless $quiet, the status file the WebUI shows
+# (it only holds what the user has to know: a test EDID in use or not
+# applied).
+sub note {
+ my ($text,$quiet)=@_;
+ push(@msg,$text) if(!$quiet);
+ print "pgen_test_edid: $text\n";
+}
+
+# One run at a time: two overlapping runs (the init script and a manual
+# call) would interleave their writes to the ports and the status file.
+# Waits up to 10 s for the other run; its timeouts keep it shorter. Without
+# the lock nothing is done (a lock that cannot be taken protects nothing).
+my $lock;
+if(!open($lock,">>",$lock_file)) {
+ print STDERR "pgen_test_edid: cannot open $lock_file ($!), nothing done\n";
+ exit 1;
+}
+{
+ my $locked=0;
+ for my $try (1..10) {
+  last if($locked=flock($lock,LOCK_EX|LOCK_NB));
+  sleep(1);
+ }
+ if(!$locked) {
+  print STDERR "pgen_test_edid: another run holds $lock_file, nothing done\n";
+  exit 1;
+ }
+}
+
+# Mount point of $dev in /proc/mounts, "" when it is not mounted.
+sub mounted_at {
+ my ($dev)=@_;
+ open(my $fh,"<","/proc/mounts") or return "";
+ while(my $l=<$fh>) {
+  my ($d,$mp)=split(/ /,$l);
+  next if(!defined($mp) || $d ne $dev);
+  close($fh);
+  $mp=~s/\\([0-7]{3})/chr(oct($1))/ge;
+  return $mp;
+ }
+ close($fh);
+ return "";
+}
+
+# Path of the test EDID file, the temporary mount to undo ("" if none) and
+# an error ("" when the boot partition could be read).
+sub boot_file {
+ return ($ENV{PGEN_TEST_EDID_FILE},"","") if(defined($ENV{PGEN_TEST_EDID_FILE}));
+ my $dev=`blkid -L BOOT_PG 2>/dev/null`;
+ chomp($dev);
+ $dev="/dev/mmcblk0p1" if($dev!~m{^/dev/});
+ my $mp=&mounted_at($dev);
+ return ("$mp/$name","","") if($mp ne "");
+ my $dir=eval { File::Temp::tempdir("/tmp/pgen-bootfat-XXXXXX") };
+ return ("","","no temporary directory for the boot partition") if(!$dir);
+ if(system("mount","-t","vfat","-o","ro,nosuid,nodev,noexec",$dev,$dir) != 0) {
+  rmdir($dir);
+  return ("","","boot partition $dev could not be mounted");
+ }
+ return ("$dir/$name",$dir,"");
+}
+
+# "" when the temporary mount is gone, else why not. A mount left behind is
+# reused by the next run (mounted_at), so only this run is affected.
+sub unmount_boot {
+ my ($dir)=@_;
+ return "" if($dir eq "");
+ return "umount $dir failed" if(system("umount",$dir) != 0);
+ rmdir($dir) or return "rmdir $dir failed: $!";
+ return "";
+}
+
+# The file's bytes (undef when it is not there) and a read error.
+sub read_file {
+ my ($path)=@_;
+ return (undef,"") if($path eq "" || !-e $path);
+ open(my $fh,"<:raw",$path) or return (undef,"cannot read $path: $!");
+ my $raw="";
+ my $n=read($fh,$raw,$PGTestEdid::MAX_BYTES+1);
+ my $err=$!;
+ close($fh);
+ return (undef,"cannot read $path: $err") if(!defined($n));
+ return ($raw,"");
+}
+
+sub port_of {
+ my ($path)=@_;
+ return $path=~m{/(HDMI-A-\d+)/edid_override$} ? $1 : $path;
+}
+
+# Drops every active override; returns how many were reset and how many
+# could not be.
+sub reset_all {
+ my ($n,$bad)=(0,0);
+ for my $path (PGTestEdid::test_edid_paths()) {
+  my $cur=PGTestEdid::test_edid_read($path);
+  if(!defined($cur)) {
+   # Unknown whether an override is active: counts as not reset.
+   &note("the test EDID on ".&port_of($path)." could not be read, so it may still be active");
+   $bad++;
+   next;
+  }
+  next if($cur eq "");
+  my $err=PGTestEdid::test_edid_write($path,"reset");
+  my $after=PGTestEdid::test_edid_read($path);
+  $err="still active after reset" if($err eq "" && (!defined($after) || $after ne ""));
+  if($err ne "") {
+   &note("resetting the test EDID on ".&port_of($path)." failed: $err");
+   $bad++;
+  } else {
+   $n++;
+  }
+ }
+ return ($n,$bad);
+}
+
+# "" when the status file now holds @msg, else why not. On failure the old
+# file is removed, so the WebUI shows no message from an earlier run.
+sub write_status {
+ my $file=$PGTestEdid::status_file;
+ my $dir=dirname($file);
+ mkdir($dir,0755) if(!-d $dir);
+ my $tmp="$file.$$.tmp";
+ my $err="";
+ if(open(my $fh,">",$tmp)) {
+  print $fh join("\n",@msg).(@msg ? "\n" : "") or $err="write failed: $!";
+  close($fh) or $err ||= "close failed: $!";
+  if($err eq "") {
+   rename($tmp,$file) or $err="rename failed: $!";
+  }
+ } else {
+  $err="open failed: $!";
+ }
+ return "" if($err eq "");
+ unlink($tmp);
+ if(-e $file && !unlink($file)) {
+  $err.="; the old $file stays: $!";
+ }
+ return $err;
+}
+
+my ($path,$mount,$err)=&boot_file();
+my ($raw,$rerr)=("","");
+if($err eq "") {
+ ($raw,$rerr)=&read_file($path);
+}
+my $uerr=&unmount_boot($mount);
+if($uerr ne "") {
+ print STDERR "pgen_test_edid: $uerr\n";
+ $rc=1;
+}
+my @paths=PGTestEdid::test_edid_paths();
+my $changed=0;
+my $in_use=0;
+if($err ne "" || $rerr ne "") {
+ # Unknown whether there is a file: leave any override as it is. Only worth
+ # a banner while an override from an earlier start is active.
+ my @active=PGTestEdid::test_edid_active();
+ &note(($err ne "" ? $err : $rerr).": the test EDID was not checked".(@active ? "; the one from the last start stays on ".join(", ",@active) : "").".",!@active);
+ $rc=1;
+} elsif(!defined($raw)) {
+ my ($n,$bad)=&reset_all();
+ $changed+=$n;
+ $rc=1 if($bad);
+ &note("$name removed: the display's own EDID is used again.",1) if($n);
+} elsif(!@paths) {
+ &note("$name: no edid_override in $PGTestEdid::dri_debugfs (debugfs).");
+ $rc=1;
+} else {
+ my $why=PGTestEdid::test_edid_check($raw);
+ if($why ne "") {
+  &note("$name ignored ($why): the display's own EDID is used.");
+  my ($n,$bad)=&reset_all();
+  $changed+=$n;
+  $rc=1;
+ } else {
+  my (@ok,@failed);
+  for my $p (@paths) {
+   my $cur=PGTestEdid::test_edid_read($p);
+   if(defined($cur) && $cur eq $raw) {
+    push(@ok,&port_of($p));
+    next;
+   }
+   my $werr=PGTestEdid::test_edid_write($p,$raw);
+   my $after=PGTestEdid::test_edid_read($p);
+   $werr="the kernel did not take it" if($werr eq "" && (!defined($after) || $after ne $raw));
+   if($werr eq "") {
+    push(@ok,&port_of($p));
+    $changed++;
+   } else {
+    push(@failed,&port_of($p).": $werr");
+   }
+  }
+  $in_use=scalar(@ok);
+  &note("$name (".length($raw)." bytes) replaces the display's own EDID on ".join(", ",@ok).". Remove the file and restart for normal use.") if(@ok);
+  if(@failed) {
+   &note("$name could not be written on ".join("; ",@failed));
+   $rc=1;
+  }
+ }
+}
+# A failed probe leaves a marker next to the status file; every later run
+# probes until one works, also when nothing changed (after a reset, or with
+# an override kept because the file could not be read).
+my $probe_marker="$PGTestEdid::status_file.probe";
+my $probe_due=-e $probe_marker;
+my $probe_failed=0;
+if(($changed || $in_use || $probe_due) && $reprobe ne "") {
+ if(system($reprobe) != 0) {
+  &note("the probe after setting the EDID failed ($reprobe): modes and capabilities may lag until the next probe.");
+  $probe_failed=1;
+  $rc=1;
+ }
+}
+my $serr=&write_status();
+if($serr ne "") {
+ print STDERR "pgen_test_edid: status file $PGTestEdid::status_file not written: $serr\n";
+ $rc=1;
+}
+if($probe_failed && !$probe_due) {
+ my $ok=open(my $m,">",$probe_marker);
+ $ok=close($m) && $ok if($ok);
+ if(!$ok) {
+  print STDERR "pgen_test_edid: cannot mark the probe for the next run ($probe_marker): $!\n";
+ }
+} elsif(!$probe_failed && $probe_due && $reprobe ne "") {
+ if(!unlink($probe_marker)) {
+  print STDERR "pgen_test_edid: cannot remove $probe_marker: $!\n";
+  $rc=1;
+ }
+}
+exit $rc;

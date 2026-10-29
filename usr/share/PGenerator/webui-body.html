@@ -93,6 +93,7 @@ __PG_LOGO_DARK__
   <div id="displayNoHdmiBanner" style="display:none;background:color-mix(in srgb,var(--orange) 8%,var(--surface-inset));border:1px solid color-mix(in srgb,var(--orange) 45%,var(--border));border-radius:6px;padding:10px 12px;margin-bottom:10px;font-size:.82rem;color:var(--text);line-height:1.45"><strong>No HDMI display connected.</strong> Settings can still be changed and saved; the renderer starts when a display is plugged in. The resolution list appears once the display is detected.</div>
   <div id="signalRefusedAlert" class="signal-alert" data-tone="refused" role="alert" hidden><strong>Settings refused</strong> <span id="signalRefusedText"></span></div>
   <div id="signalOwnerAlert" class="signal-alert" data-tone="owner" role="status" hidden><strong id="signalOwnerTitle"></strong> <span id="signalOwnerText"></span></div>
+  <div id="signalTestEdidAlert" class="signal-alert" role="status" hidden><strong id="signalTestEdidTitle">Test EDID in use</strong> <span id="signalTestEdidText"></span></div>
   <div id="signalLinkAlert" class="signal-alert" role="alert" hidden><strong>HDMI link interrupted</strong> <span id="signalLinkText"></span> <button type="button" class="btn btn-sm btn-secondary signal-alert-dismiss" onclick="pgSignalLinkDismiss()">Dismiss</button></div>
   <div class="signal-overview">
     <section id="signalPort" class="signal-port" aria-labelledby="signalPortTitle" hidden>

@@ -1859,7 +1859,8 @@ sub webui_handle_request (@) {
      $stats=~s/\}$/sprintf(',"notice":{"id":"%s","title":"%s","text":"%s"}}',&_webui_json_escape($nid),&_webui_json_escape($ntitle),&_webui_json_escape($ntext))/e;
     }
    }
-   # Refused settings and HDMI link interruptions (cheap: two small files).
+   # Refused settings, HDMI link interruptions and the test EDID (cheap:
+   # small files).
    my $signal_state=eval { &webui_signal_state_json() };
    $stats=~s/\}$/,"signal":{$signal_state}}/ if($signal_state);
    my $len=length($stats);
@@ -11433,6 +11434,9 @@ sub webui_capabilities_json (@) {
   .",\"has_ycbcr422\":".($has_422?"true":"false")
   .",\"has_hdr_st2084\":".($has_st2084?"true":"false")
   .",\"has_hdr_hlg\":".($has_hlg?"true":"false")
+  .",\"hdr_max_nits\":".sprintf("%.3f",$ecaps->{hdr_max_nits} || 0)
+  .",\"hdr_max_fall_nits\":".sprintf("%.3f",$ecaps->{hdr_max_fall_nits} || 0)
+  .",\"hdr_min_nits\":".sprintf("%.4f",$ecaps->{hdr_min_nits} || 0)
 		  .",\"has_dv\":".($has_dv?"true":"false")
 		  .",\"dv_444_10b12b\":".($dv_444_10b12b?"true":"false")
 		  .",\"dv_transport_is_ll_dovi\":\"$dv_transport_is_ll\""
@@ -11448,9 +11452,11 @@ sub webui_capabilities_json (@) {
 	  .",\"vic_420\":[".join(",",@v420)."]}";
 }
 
-# Refused settings and HDMI link events as a JSON fragment: the refusal a
-# calibration program is left in (command.pm signal_gate_conf) and the last
-# link interruption seen during a measurement (webui_hdmi_link_watch).
+# Refused settings, HDMI link events and the test EDID as a JSON fragment:
+# the refusal a calibration program is left in (command.pm
+# signal_gate_conf), the last link interruption seen during a measurement
+# (webui_hdmi_link_watch) and a test EDID in use or not applied
+# (PGTestEdid.pm, pgen_test_edid).
 sub webui_signal_state_json (@) {
  my $f=&signal_refused_read();
  my $refused="null";
@@ -11462,7 +11468,13 @@ sub webui_signal_state_json (@) {
  if($ev) {
   $link="{".join(",",map {"\"$_\":\"".&_webui_json_escape(defined($ev->{$_}) ? $ev->{$_} : "")."\""} qw(id time event during text))."}";
  }
- return "\"refused\":$refused,\"link_event\":$link";
+ require PGTestEdid;
+ my $te=eval { PGTestEdid::test_edid_status() } || {active=>[],message=>""};
+ my $test_edid="null";
+ if(@{$te->{active}} || $te->{message} ne "") {
+  $test_edid="{\"active\":[".join(",",map {"\"".&_webui_json_escape($_)."\""} @{$te->{active}})."],\"message\":\"".&_webui_json_escape($te->{message})."\"}";
+ }
+ return "\"refused\":$refused,\"link_event\":$link,\"test_edid\":$test_edid";
 }
 
 # The vendor infoframe slot on the wire (pgen_hdmi_packet through

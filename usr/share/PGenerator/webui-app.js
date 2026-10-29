@@ -1637,6 +1637,13 @@ function pgDvDisplayPeak(){
  const d=pgDvDisplayBlock();
  return d?Number(d.max_nits):0;
 }
+// HDR10: the Desired Content Max Luminance of the display's HDR static
+// metadata block (caps.hdr_max_nits, PGEdidCaps.pm), 0 when it declares none
+// (most TVs leave it out).
+function pgHdrDisplayPeak(){
+ const v=caps?Number(caps.hdr_max_nits):0;
+ return v>0?v:0;
+}
 function pgDvDisplayMinLuma(d){
  return Math.round(Number(d.min_nits||0)*10000)/10000;
 }
@@ -2342,7 +2349,7 @@ async function pgSignalSummaryRefresh(){
  const r=await fetchJSON('/api/signal',{_quiet:true,_timeoutMs:10000});
  if(!r||r.status!=='ok') return;
  pgSignalWire=r;
- pgApplySignalState({refused:r.refused,link_event:r.link_event},true);
+ pgApplySignalState({refused:r.refused,link_event:r.link_event,test_edid:r.test_edid},true);
 }
 function pgSignalSummaryMaybeRefresh(){
  if(Date.now()-pgSignalWireAt>3000) pgSignalSummaryRefresh();
@@ -2384,6 +2391,19 @@ function pgRenderSignalAlerts(){
   la.hidden=!ev||ev.id===seen;
   if(ev&&ev.id!==seen){
    document.getElementById('signalLinkText').textContent=(ev.text||'')+' The display may have reset or changed its picture settings, so readings taken across it can\u2019t be combined: check the display, then run the measurements again from the start.';
+  }
+ }
+ // Test EDID (pgen_test_edid): the modes and capabilities shown are the
+ // file's, not the display's.
+ const ta=document.getElementById('signalTestEdidAlert');
+ if(ta){
+  const t=st.test_edid;
+  const active=!!(t&&t.active&&t.active.length);
+  ta.hidden=!t;
+  if(t){
+   document.getElementById('signalTestEdidTitle').textContent=active?'Test EDID in use':'Test EDID not applied';
+   document.getElementById('signalTestEdidText').textContent=(t.message||'')
+    +(active?' Modes, formats and HDR or Dolby Vision support shown here come from that file, not from the display.':'');
   }
  }
  pgRenderSignalPort();

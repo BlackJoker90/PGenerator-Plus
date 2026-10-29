@@ -54,7 +54,7 @@ usb_dhcp_follow_rebuild () {
  pgen_mark "usb: dhcp restarted for RNDIS"
 }
 
-# USB gadget (Pi Zero, Pi 4): keep ECM when the host has talked to it,
+# USB gadget (Pi Zero, Pi 4): keep NCM when the host has talked to it,
 # else rebuild it as RNDIS. Runs in the background of the boot.
 usb_gadget_ecm_or_rndis () {
  /bin/sleep 5
@@ -65,6 +65,9 @@ usb_gadget_ecm_or_rndis () {
   cd /sys/kernel/config/usb_gadget/
   cd PGenerator
   echo "" > UDC
+  # The NCM gadget links its config into os_desc; configs/c.1 cannot be
+  # removed while that link exists.
+  rm os_desc/c.1
   rm configs/c.1/rndis.usb0
   rm configs/c.1/ecm.usb0
   rm configs/c.1/acm.usb0
@@ -116,7 +119,7 @@ usb_gadget_ecm_or_rndis () {
   ifconfig usb0 $USB_NET".1" netmask 255.255.255.0 up
   # END Windows
  else
-  pgen_mark "usb: ECM host connected"
+  pgen_mark "usb: NCM host connected"
   return
  fi
  pgen_mark "usb: rebuilt as RNDIS"
@@ -222,13 +225,21 @@ rc_PGenerator_start () {
    mkdir -p strings/0x408
    echo "111111111111111" > strings/0x408/serialnumber
    echo "RB8" > strings/0x408/manufacturer
-   echo "PGenerator ECM" > strings/0x408/product
+   echo "PGenerator NCM" > strings/0x408/product
    mkdir -p configs/c.1/strings/0x408 
-   echo "Config 1: ECM network" > configs/c.1/strings/0x408/configuration
+   echo "Config 1: NCM network" > configs/c.1/strings/0x408/configuration
+   # CDC-NCM: Linux cdc_ncm and macOS take it by class; Windows 11 lists
+   # UsbNcm.sys for the NCM subclass, and the Microsoft OS descriptor
+   # (compatible ID WINNCM, in f_ncm of the Pi's 5.10 kernel) binds it without an INF.
+   # A host that binds nothing gets the RNDIS rebuild below.
+   echo "1" > os_desc/use
+   echo "0xcd" > os_desc/b_vendor_code
+   echo "MSFT100" > os_desc/qw_sign
    mkdir -p functions/acm.usb0
    ln -s functions/acm.usb0 configs/c.1/
-   mkdir -p functions/ecm.usb0
-   ln -s functions/ecm.usb0 configs/c.1/
+   mkdir -p functions/ncm.usb0
+   echo "WINNCM" > functions/ncm.usb0/os_desc/interface.ncm/compatible_id
+   ln -s functions/ncm.usb0 configs/c.1/
    mkdir -p functions/mass_storage.usb0
    echo 1 > functions/mass_storage.usb0/stall
    echo 0 > functions/mass_storage.usb0/lun.0/cdrom
@@ -236,13 +247,14 @@ rc_PGenerator_start () {
    echo 0 > functions/mass_storage.usb0/lun.0/nofua
    echo $BOOT_PARTITION > functions/mass_storage.usb0/lun.0/file
    ln -s functions/mass_storage.usb0 configs/c.1/
+   ln -s configs/c.1 os_desc
    ls /sys/class/udc > UDC
    #kill -1 1
    ifconfig usb0 hw ether $MAC_ADDRESS_USB
    ifconfig usb0 $USB_NET".1" netmask 255.255.255.0 up
    # END Linux
  
-   # A host that speaks ECM (macOS, Linux) sends packets within 5 s;
+   # A host that speaks NCM (Linux, macOS, Windows 11) sends packets within 5 s;
    # without any, the gadget is rebuilt as RNDIS (Windows). Decided in the
    # background: WiFi, dhcpd and PGenerator (HDMI, WebUI) do not wait.
    ( usb_gadget_ecm_or_rndis ) </dev/null >>/tmp/rcPGenerator-usb.log 2>&1 &

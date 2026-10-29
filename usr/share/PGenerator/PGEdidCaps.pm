@@ -36,6 +36,10 @@ sub edid_caps_from_raw {
   max_tmds_mhz=>0,         # 0 = not declared
   hf_vsdb=>0, scdc=>0,
   has_hdr_sdr=>0, has_hdr_st2084=>0, has_hdr_hlg=>0,
+  # HDR static metadata block, optional luminance bytes in cd/m2 (0 = not
+  # declared): CV -> 50 * 2^(CV/32), min = max * (CV/255)^2 / 100, as
+  # edid-decode (edid-decode.c, cta_hdr_static_metadata_block) decodes them.
+  hdr_max_nits=>0, hdr_max_fall_nits=>0, hdr_min_nits=>0,
   has_dv=>0,
   bt2020_rgb=>0, bt2020_ycc=>0,
   quant_rgb_selectable=>0, quant_ycc_selectable=>0,
@@ -79,6 +83,9 @@ sub edid_caps_from_raw {
      $c{has_hdr_sdr}=1    if($p[1] & 0x01);
      $c{has_hdr_st2084}=1 if($p[1] & 0x04);
      $c{has_hdr_hlg}=1    if($p[1] & 0x08);
+     $c{hdr_max_nits}=50*2**($p[3]/32) if($len >= 4 && $p[3]);
+     $c{hdr_max_fall_nits}=50*2**($p[4]/32) if($len >= 5 && $p[4]);
+     $c{hdr_min_nits}=$c{hdr_max_nits}*($p[5]/255)**2/100 if($len >= 6 && $c{hdr_max_nits});
     } elsif($ext_tag == 0x05 && $len >= 2) {    # Colorimetry
      $c{bt2020_rgb}=1 if($p[1] & 0x80);
      $c{bt2020_ycc}=1 if($p[1] & 0x40);

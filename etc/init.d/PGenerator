@@ -77,6 +77,16 @@ case "$1" in
         chown $PGENERATOR_USER_GROUP.$PGENERATOR_USER_GROUP $DEVICES_VIDEO 2>/dev/null
         chmod 660 /dev/cec* 2>/dev/null
         chown $PGENERATOR_USER_GROUP.$PGENERATOR_USER_GROUP /dev/cec* 2>/dev/null
+        # Test EDID: PGenerator-test-EDID.bin on the boot partition replaces
+        # the display's own EDID; without the file an earlier override is
+        # reset. Before pgsethdr and the renderer, which read the connector.
+        # What the WebUI shows is in /var/log/PGenerator/test-edid.txt, the
+        # whole output of the run (also a boot partition that could not be
+        # read) in test-edid.log.
+        if [ -x /usr/bin/pgen_test_edid ]; then
+         mkdir -p /var/log/PGenerator 2>/dev/null
+         /usr/bin/pgen_test_edid apply >/var/log/PGenerator/test-edid.log 2>&1 || true
+        fi
         # Pre-set the HDR_OUTPUT_METADATA connector property from
         # /etc/PGenerator/PGenerator.conf so the LG C2 (and other LG OLEDs)
         # does not apply a near-black lift when min_dml=0 is on the wire.

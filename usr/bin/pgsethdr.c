@@ -305,47 +305,42 @@ static int find_connector_and_hdr_prop(uint32_t *connector_id, uint32_t *prop_id
  return -1;
 }
 
-static void set_bt2020_primaries(struct hdr_output_metadata *meta) {
- meta->hdmi_metadata_type1.display_primaries[0].x = coord_to_u16(0.7080);
- meta->hdmi_metadata_type1.display_primaries[0].y = coord_to_u16(0.2920);
- meta->hdmi_metadata_type1.display_primaries[1].x = coord_to_u16(0.1700);
- meta->hdmi_metadata_type1.display_primaries[1].y = coord_to_u16(0.7970);
- meta->hdmi_metadata_type1.display_primaries[2].x = coord_to_u16(0.1310);
- meta->hdmi_metadata_type1.display_primaries[2].y = coord_to_u16(0.0460);
- meta->hdmi_metadata_type1.white_point.x = coord_to_u16(0.3127);
- meta->hdmi_metadata_type1.white_point.y = coord_to_u16(0.3290);
-}
+/* Same table and index as the renderer's DisplayChromacityList
+ * (src/ofxRPI4Window/src/ofxRPI4Window.h): red x/y, green x/y, blue x/y,
+ * white x/y. 0 BT.709, 1 BT.2020, 2 P3-D65, 3 P3-DCI, 4 P3-D60,
+ * 5 videoforge. */
+static const double display_primaries_list[][8] = {
+ { 0.64000, 0.33000, 0.30000, 0.60000, 0.15000, 0.06000, 0.31270, 0.32900 },
+ { 0.70800, 0.29200, 0.17000, 0.79700, 0.13100, 0.04600, 0.31270, 0.32900 },
+ { 0.68000, 0.32000, 0.26500, 0.69000, 0.15000, 0.06000, 0.31270, 0.32900 },
+ { 0.68000, 0.32000, 0.26500, 0.69000, 0.15000, 0.06000, 0.31400, 0.35100 },
+ { 0.68000, 0.32000, 0.26500, 0.69000, 0.15000, 0.06000, 0.32168, 0.33767 },
+ { 0.67030, 0.32970, 0.26060, 0.67320, 0.14420, 0.05120, 0.31270, 0.32900 },
+};
 
-static void set_bt709_primaries(struct hdr_output_metadata *meta) {
- meta->hdmi_metadata_type1.display_primaries[0].x = coord_to_u16(0.6400);
- meta->hdmi_metadata_type1.display_primaries[0].y = coord_to_u16(0.3300);
- meta->hdmi_metadata_type1.display_primaries[1].x = coord_to_u16(0.3000);
- meta->hdmi_metadata_type1.display_primaries[1].y = coord_to_u16(0.6000);
- meta->hdmi_metadata_type1.display_primaries[2].x = coord_to_u16(0.1500);
- meta->hdmi_metadata_type1.display_primaries[2].y = coord_to_u16(0.0600);
- meta->hdmi_metadata_type1.white_point.x = coord_to_u16(0.3127);
- meta->hdmi_metadata_type1.white_point.y = coord_to_u16(0.3290);
-}
-
-static void set_p3_primaries(struct hdr_output_metadata *meta) {
- meta->hdmi_metadata_type1.display_primaries[0].x = coord_to_u16(0.6800);
- meta->hdmi_metadata_type1.display_primaries[0].y = coord_to_u16(0.3200);
- meta->hdmi_metadata_type1.display_primaries[1].x = coord_to_u16(0.2650);
- meta->hdmi_metadata_type1.display_primaries[1].y = coord_to_u16(0.6900);
- meta->hdmi_metadata_type1.display_primaries[2].x = coord_to_u16(0.1500);
- meta->hdmi_metadata_type1.display_primaries[2].y = coord_to_u16(0.0600);
- meta->hdmi_metadata_type1.white_point.x = coord_to_u16(0.3127);
- meta->hdmi_metadata_type1.white_point.y = coord_to_u16(0.3290);
-}
-
+/* The payload must equal the renderer's updateHDR_Infoframe() byte for
+ * byte (and PGenerator 1.6's): primaries in the order green, blue, red
+ * (CTA-861-G 6.9.1 allows any order), then the white point; HLG (EOTF 3)
+ * leaves Data Bytes 3-26 zero, i.e. "not provided". */
 static void fill_hdr_metadata(struct hdr_output_metadata *meta, const struct config_state *cfg) {
+ const double *p;
+ int idx = cfg->primaries;
+
  memset(meta, 0, sizeof(*meta));
  meta->metadata_type = 0;
  meta->hdmi_metadata_type1.metadata_type = 0;
  meta->hdmi_metadata_type1.eotf = (uint8_t)cfg->eotf;
- if (cfg->primaries == 0) set_bt709_primaries(meta);
- else if (cfg->primaries == 2) set_p3_primaries(meta);
- else set_bt2020_primaries(meta);
+ if (cfg->eotf == 3) return;
+ if (idx < 0 || idx >= (int)(sizeof(display_primaries_list) / sizeof(display_primaries_list[0]))) idx = 1;
+ p = display_primaries_list[idx];
+ meta->hdmi_metadata_type1.display_primaries[0].x = coord_to_u16(p[2]);
+ meta->hdmi_metadata_type1.display_primaries[0].y = coord_to_u16(p[3]);
+ meta->hdmi_metadata_type1.display_primaries[1].x = coord_to_u16(p[4]);
+ meta->hdmi_metadata_type1.display_primaries[1].y = coord_to_u16(p[5]);
+ meta->hdmi_metadata_type1.display_primaries[2].x = coord_to_u16(p[0]);
+ meta->hdmi_metadata_type1.display_primaries[2].y = coord_to_u16(p[1]);
+ meta->hdmi_metadata_type1.white_point.x = coord_to_u16(p[6]);
+ meta->hdmi_metadata_type1.white_point.y = coord_to_u16(p[7]);
  meta->hdmi_metadata_type1.max_display_mastering_luminance = clamp_u16_int(cfg->max_luma);
  meta->hdmi_metadata_type1.min_display_mastering_luminance = min_luma_to_u16(cfg->min_luma);
  meta->hdmi_metadata_type1.max_cll = clamp_u16_int(cfg->max_cll);

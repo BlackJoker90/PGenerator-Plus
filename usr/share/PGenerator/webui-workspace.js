@@ -12590,16 +12590,25 @@ function meterUpdateColorDeltaEScrollLayout(sortedSteps){
  meterGreyscaleScrollSyncing=false;
 }
 
-// Dolby Vision on a PQ curve: a greyscale patch whose signal decodes above
-// the peak the display declares in its EDID Dolby block is clipped by the
-// display, so its reading cannot track the target. Returns the patch's PQ
-// level in nits when it is above that peak, else 0.
+// The peak the display declares for the active PQ series: Dolby Vision from
+// its EDID Dolby block, HDR10 from the Desired Content Max Luminance of its
+// HDR static metadata block. 0 for HLG and SDR (relative) or when none is
+// declared.
+function meterDisplayDeclaredPeak(){
+ if(meterChartIsDv()) return typeof pgDvDisplayPeak==='function'?pgDvDisplayPeak():0;
+ if(meterChartIsPq()) return typeof pgHdrDisplayPeak==='function'?pgHdrDisplayPeak():0;
+ return 0;
+}
+// A greyscale patch whose PQ signal decodes above that peak is clipped (DV)
+// or tone-mapped or clipped (HDR10) by the display, so its reading cannot
+// track the target. Returns the patch's PQ level in nits when it is above
+// the peak, else 0.
 function meterStepOverDisplayPeak(step){
- if(typeof pgDvDisplayPeak!=='function'||!meterChartIsDv()||!meterSeriesStepIsGreyscale(step)) return 0;
- const peak=pgDvDisplayPeak();
+ if(!meterSeriesStepIsGreyscale(step)) return 0;
+ const peak=meterDisplayDeclaredPeak();
  if(!(peak>0)) return 0;
- // Relative mapping scales 100 % to the peak (gamma 2.2), nothing exceeds it.
- if(meterDvMapModeValue()==='2'&&!meterDvUsesPqTargetCurve()) return 0;
+ // Relative DV mapping scales 100 % to the peak (gamma 2.2), nothing exceeds it.
+ if(meterChartIsDv()&&meterDvMapModeValue()==='2'&&!meterDvUsesPqTargetCurve()) return 0;
  const nits=meterChartPqDecodeNormalized(meterDvTargetSignalFraction(step.ire,step.r));
  return nits>peak+0.5?nits:0;
 }
@@ -12671,7 +12680,7 @@ function meterBuildPatchThumbs(sortedSteps,completedIres,currentIre){
 	  thumb.dataset.colorKey=[step.r,step.g,step.b,step.preview_r,step.preview_g,step.preview_b].join(',');
   if(overPeak[index]){
    thumb.classList.add('is-over-peak');
-   thumb.title=Math.round(overPeak[index])+' cd/m\u00B2: above the display\u2019s declared peak ('+pgDvDisplayPeak()+' cd/m\u00B2), the display clips this patch';
+   thumb.title=Math.round(overPeak[index])+' cd/m\u00B2: above the display\u2019s declared peak ('+Math.round(meterDisplayDeclaredPeak())+' cd/m\u00B2), the display '+(meterChartIsDv()?'clips':'tone-maps or clips')+' this patch';
   }
    fragment.appendChild(thumb);
   });
@@ -12682,7 +12691,9 @@ function meterBuildPatchThumbs(sortedSteps,completedIres,currentIre){
  if(overNote){
   const overCount=overPeak.filter(Boolean).length;
   overNote.hidden=!overCount;
-  if(overCount) overNote.textContent=overCount+(overCount===1?' patch is':' patches are')+' above the display\u2019s declared Dolby Vision peak ('+pgDvDisplayPeak()+' cd/m\u00B2, EDID) and will be clipped by the display.';
+  if(overCount) overNote.textContent=meterChartIsDv()
+   ?overCount+(overCount===1?' patch is':' patches are')+' above the display\u2019s declared Dolby Vision peak ('+Math.round(meterDisplayDeclaredPeak())+' cd/m\u00B2, EDID) and will be clipped by the display.'
+   :overCount+(overCount===1?' patch is':' patches are')+' above the display\u2019s declared HDR peak ('+Math.round(meterDisplayDeclaredPeak())+' cd/m\u00B2, desired content max luminance in its EDID): the display tone-maps or clips '+(overCount===1?'it':'them')+', so the reading cannot follow the PQ target.';
  }
  if(container.dataset.thumbClickBound!=='1'){
   container.dataset.thumbClickBound='1';

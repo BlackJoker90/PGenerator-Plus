@@ -1647,7 +1647,39 @@ function pgHdrDisplayPeak(){
 function pgDvDisplayMinLuma(d){
  return Math.round(Number(d.min_nits||0)*10000)/10000;
 }
+// Standard DV carries the mastering display as source_min/max_PQ (12-bit PQ,
+// ETSI GS CCM 001 6.2.2). The renderer takes them from conf dv_minpq /
+// dv_maxpq with atoi(), 62 / 3696 when a key is missing (main.cpp), the
+// Dolby defaults that PGenerator 1.6 sends too; Max/Min Luma do not reach them.
+const PG_DV_SOURCE_PQ_DEFAULT={min:62,max:3696};
+function pgDvSourcePq(key,fallback){
+ const v=(config||{})[key];
+ if(v==null) return fallback;
+ const n=parseInt(String(v),10);
+ return Number.isFinite(n)?n:0;
+}
+function pgRenderDvMasteringNote(){
+ const note=document.getElementById('dvMasteringNote');
+ if(!note) return;
+ note.hidden=dvTransportDefaults(getVal('dv_transport')).dv_transport!=='standard';
+ if(note.hidden) return;
+ // ofApp.cpp writes the low 16 bits (v>>8 & 0xff, v & 0xff).
+ const min=pgDvSourcePq('dv_minpq',PG_DV_SOURCE_PQ_DEFAULT.min)&0xffff;
+ const max=pgDvSourcePq('dv_maxpq',PG_DV_SOURCE_PQ_DEFAULT.max)&0xffff;
+ if(min>4095||max>4095){
+  note.textContent='Standard DV metadata: source PQ '+min+' / '+max+' is outside 0–4095 (ETSI GS CCM 001), not a valid mastering display. Max/Min Luma do not change it.';
+  return;
+ }
+ const nits=pq=>{
+  const v=meterChartPqDecodeNormalized(pq/4095);
+  return v<1?String(Number(v.toPrecision(2))):Math.round(v).toLocaleString('en-US');
+ };
+ const isDefault=min===PG_DV_SOURCE_PQ_DEFAULT.min&&max===PG_DV_SOURCE_PQ_DEFAULT.max;
+ note.textContent='Standard DV metadata: mastering display '+nits(min)+'–'+nits(max)+' cd/m² (source PQ '+min+' / '+max+
+  (isDefault?', the Dolby default':', not the Dolby default 62 / 3696')+'). Max/Min Luma do not change it.';
+}
 function pgRenderDvDisplayInfo(){
+ pgRenderDvMasteringNote();
  const box=document.getElementById('dvDisplayInfo');
  if(!box) return;
  const d=pgDvDisplayBlock();

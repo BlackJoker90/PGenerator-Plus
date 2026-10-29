@@ -211,6 +211,7 @@ Next to the settings, **On the cable** shows what is actually sent (format, rang
 | Start and restart | static splash, WebUI just goes offline | **animated progress on the TV** (real boot steps, in the WebUI theme), restart dialog in the WebUI that reconnects by itself; WebUI up about 25 s after the kernel starts |
 | Popups | success and error toasts | warnings and errors only |
 | Test EDID | – | **file on the boot partition** replaces the display's EDID (kernel `edid_override`), banner while in use |
+| ColourSpace's `PiTPG` hardware entry | – | **PiTPG protocol 2 on port 85**: patches with frame timing, signal settings, the 11 PiTPG test patterns, EDID / HDMI / InfoFrame texts |
 
 > The left column describes upstream behaviour as stated in the fork commits that changed it. Run `git log origin/main..main` in a clone with both remotes for the full list.
 
@@ -305,7 +306,7 @@ PGenerator+ is a free, open-source display calibration suite for the Raspberry P
 
 - **Precision HDMI patterns:** full-screen patches, windows, APL backgrounds, custom RGB triplets and patch sizes, drawn through DRM/KMS.
 - **HDR and Dolby Vision:** HDR10 (ST.2084 PQ with mastering metadata), HLG, standard and Low Latency Dolby Vision. AVI, DRM and DOVI infoframes are set correctly, and capabilities are detected from the EDID.
-- **Network control:** Calman (UPGCI, port 2100), ColourSpace / LightSpace and HCFR (port 85), DeviceControl, and the Resolve XML protocol (port 20002, outbound). UDP discovery runs on port 1977.
+- **Network control:** Calman (UPGCI, port 2100), ColourSpace / LightSpace and HCFR (port 85; ColourSpace also through its `PiTPG` entry, PiTPG protocol 2), DeviceControl, and the Resolve XML protocol (port 20002, outbound). UDP discovery runs on port 1977.
 - **Web dashboard:** signal settings, diagnostic patterns, a live infoframe decoder, HDMI-CEC, networking, OTA, and meter measurements. The measurement workspaces can be hidden for pattern-only setups.
 - **LG AutoCal (SDR and HDR):** on-device closed-loop calibration of LG TVs: 26-point greyscale, RGB balance, 3D LUT and HDR tone mapping, with an optional Tone Mapping Shadow Fix.
 - **Meter workflows:** ArgyllCMS `spotread` with persistent sessions, greyscale, colour and saturation sweeps, CCSS management, and live ΔE and chromaticity charts.
@@ -339,6 +340,10 @@ PGenerator+ is a free, open-source display calibration suite for the Raspberry P
 
 - **Protocol:** XML network calibration protocol (port `85`)
 - **Connect:** **Hardware Options** → Hardware `Network` (or `PGenerator`) → enter the Pi's IP.
+- **Connect as PiTPG:** in a Profiling window, **Hardware Options** → Hardware `PiTPG` → enter the Pi's IP in *Network Address* (PGenerator+ is `pgenerator.local`, not `PiTPG.local`). Port 85 tells the two protocols apart by the client's first bytes, so the classic entry keeps working.
+  - *What it does:* PiTPG protocol 2 as PiTPG 2.0.0 answers it (reported edition `basic`): settings with PiTPG's value ranges, rolled back when one is refused; modes matched to the display's own list within 0.005 Hz, the EDID's timing preferred over the userdef boot mode; patches whose reply carries the DRM flip that showed them (sequence, time, frame period); the 11 test patterns (Contrast, Brightness, ANSI 1/2, Corner Box 1/2, Probe Alignment, Granger, horizontal and vertical ramps, FALD) drawn in the last patch's window; a peak note for HDR10 and Dolby Vision patches above the display's declared peak; HDMI info, EDID, InfoFrames, log and kernel log as texts.
+  - *Codes and depth:* as in PiTPG, patch codes go out unchanged: the patch scale (Full, Legal, Extended) sets the RGB range in the AVI infoframe, not the codes, and the link follows the patch depth (8-bit patches on an 8-bit link, 10-bit patches need a 10-bit one). Both end with the next settings change and when ColourSpace disconnects, and the output settings in effect before them come back.
+  - *Differences from a PiTPG:* standard Dolby Vision goes out limited range only (a Full or Extended patch scale is refused there), Granger is not drawn in Dolby Vision, YCbCr with a Full scale is refused (YCbCr is always Limited), and refused settings are put back rather than kept. Ted's Edition content is not part of it.
 
 **3. HCFR**
 

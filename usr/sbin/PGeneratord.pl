@@ -78,6 +78,7 @@ do "file.pm"          || die "Error";
 do "log.pm"           || die "Error";
 do "pattern.pm"       || die "Error";
 do "daemon.pm"        || die "Error";
+do "pitpg.pm"         || die "Error";
 do "client.pm"        || die "Error";
 do "resolve.pm"       || die "Error";
 do "discovery.pm"     || die "Error";
@@ -90,6 +91,9 @@ do "serial.pm"        || die "Error";
 #                Get Conf                   #
 #############################################
 &get_conf();
+# Settings a PiTPG client's patch depth or scale replaced when the daemon
+# last stopped go back before the renderer starts (pitpg.pm).
+&pitpg_client_values_recover();
 
 #############################################
 #        LG: no auto-reconnect on boot      #

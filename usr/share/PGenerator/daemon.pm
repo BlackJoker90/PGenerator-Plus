@@ -630,6 +630,8 @@ sub calman_render_rgb_pattern (@) {
 #     Portrait Displays G1 specialty patterns  #
 ###############################################
 use PGG1Patterns qw(g1_pattern_key g1_pattern_render g1_pattern_level g1_pattern_has_10bit);
+# PiTPG protocol 2 framing: port 85 tells its clients apart with it.
+use PGPiTPG ();
 
 # Rendered plates are kept across patterns (clean_pattern_files() empties
 # running/ on every pattern) and dropped when the pattern code changes.
@@ -945,6 +947,7 @@ our $calibration_sessions_owner="";
 sub calibration_session_protocol (@) {
  my $connection=shift;
  my $kind=$pattern_socket_kind{$connection} || "";
+ return "PiTPG" if($pitpg_conn{$connection});
  return "G1 RPC" if($kind eq "rpc" || $rpc_client{$connection});
  return "UPGCI" if($kind eq "calman");
  return "classic";
@@ -1287,6 +1290,29 @@ sub pattern_daemon {
       my $close_reason=$recv_timeout ? "recv timeout" : "recv error: $recv_error";
       &close_connection($connection,$close_reason);
       last;
+     }
+     # PiTPG protocol 2 (ColourSpace's "PiTPG" entry, pitpg.pm) on port 85:
+     # told apart from a classic client by its first 4 bytes, "PTG2". Until
+     # 4 bytes are in, a prefix of the magic waits in $cmd.
+     if(($pattern_socket_kind{$connection} || "") eq "classic") {
+      if($pitpg_conn{$connection}) {
+       &pitpg_receive($connection,$key);
+       last;
+      }
+      if(!$pitpg_checked{$connection}) {
+       my $start=($cmd{$connection} // "").$key;
+       my $is_pitpg=PGPiTPG::detect($start);
+       if(!defined($is_pitpg) && $key ne "") {
+        $cmd{$connection}=$start;
+        last;
+       }
+       $pitpg_checked{$connection}=1;
+       if($is_pitpg) {
+        $cmd{$connection}="";
+        &pitpg_open($connection,substr($start,length($PGPiTPG::MAGIC)));
+        last;
+       }
+      }
      }
      # Port 85 and 2100 commands end with a terminator ($end_cmd_string,
      # $end_cmd_string_calman). One read can carry several commands, or the
@@ -3493,6 +3519,9 @@ sub close_connection {
  $reason=~s/\s+$//;
  my $conn_ip=$client_ip{$connection} || "";
  my $socket_kind=delete $pattern_socket_kind{$connection};
+ my $pitpg=delete $pitpg_conn{$connection};
+ delete $pitpg_checked{$connection};
+ $socket_kind="pitpg" if($pitpg);
  $socket_kind="rpc" if($socket_kind eq "" && $rpc_client{$connection});
  $socket_kind="calman" if($socket_kind eq "" && $calman{$connection});
  $socket_kind="classic" if($socket_kind eq "");
@@ -3510,6 +3539,7 @@ sub close_connection {
    if($owner eq "$connection" || ($owner eq "" && $had_session));
  }
  &release_source_rgb_quant_range("hcfr") if($is_hcfr);
+ &pitpg_closed($connection,$pitpg) if($pitpg);
  $calman{$connection}=0;
  $cmd{$connection}="";
  delete $pending_cmd{$connection};

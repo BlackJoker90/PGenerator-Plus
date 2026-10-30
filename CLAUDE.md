@@ -120,11 +120,19 @@ reviewed / confirmed on the Pi. The release refuses to run without `t/` or
 
 ## Working on the Pi
 
-- Before probes or restarts: `sh /root/pi_calman_busy.sh` (source
-  `tools/pi_calman_busy.sh`). It counts only client traffic and prints the
+Everything goes through `.claude/skills/pi/scripts/pgen-pi` (the `pi`
+skill). The hooks in `.claude/settings.json` enforce the rules below:
+`pi_guard.py` refuses raw ssh, a written-out password, dummy bodies,
+unbacked system writes and unchecked probes; `pi_stop.py` stops the end of
+a turn while a snapshot is open.
+
+- Before probes or restarts: `pgen-pi busy`, as its own step (runs
+  `.claude/skills/pi/scripts/pi_calman_busy.sh` on the Pi, the only copy;
+  `tools/pi_calman_busy.sh` must stay identical, t/pi_calman_busy.t). It
+  counts only client traffic and prints the
   log line behind each reason; read that line before telling the user the
   Pi is in use (an older copy on the Pi matched every "Calman" log line):
-  - In use: an established socket from a foreign peer on 2100/2101, or
+  - In use: an established socket from a foreign peer on 85/2100/2101, or
     client traffic (`Calman RAW:`/`UPGCI:`/RPC, `INIT` without a close)
     from a foreign peer within the last minutes.
   - Not in use: `Calman G1: basic_alignment …` (the alignment plate drawn
@@ -133,10 +141,13 @@ reviewed / confirmed on the Pi. The release refuses to run without `t/` or
     Mac's IP).
   If a real session is found, do not touch the device; ask. If it is
   still unclear after checking, ask and say what you found.
-- Deploy safely: diff the Pi's file against the branch first, back up to
-  `/root/pgen-backups/`, upload, guard against empty files, compare md5.
+- Deploy safely: `pgen-pi deploy` (names the Pi file's version against
+  the branch and stops on another branch's, backs up to
+  `/root/pgen-backups/`, guards against empty files, compares md5, writes a
+  restore.sh).
 - OLED: test on screen with dim windows (20 IRE, 10 %), not full white.
-- Give the user's signal settings back at the end of a test.
+- Give the user's signal settings back at the end of a test: `pgen-pi
+  snapshot` before, `pgen-pi restore` after.
 - Without a display the renderer waits; forcing the connector on without
   an EDID crashes the renderer on mode switches.
 

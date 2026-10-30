@@ -1,0 +1,608 @@
+#!/usr/bin/env python3
+"""pgen-pi: every step on the PGenerator+ Pi from the Mac, with the house
+rules built in (CLAUDE.md "Working on the Pi"). Needs the sandbox off (LAN).
+
+  pgen-pi busy                      Calman/ColourSpace check; the result is
+                                    remembered for the guard hook (FREE for 10 min)
+  pgen-pi status                    daemon, ports, signal, vc4 module, kernel,
+                                    locks; plus the busy result and open snapshot
+  pgen-pi ssh 'CMD'                 run CMD as root (password from README.md)
+  pgen-pi scp SRC... DEST           copy to the Pi
+  pgen-pi snapshot [LABEL]          save the user's conf + pattern before a test
+  pgen-pi snapshot --close REASON   end the open snapshot without a restore
+  pgen-pi diff                      what differs from the open snapshot now
+  pgen-pi restore                   give the snapshot back (busy-checked)
+  pgen-pi deploy [--base REF] [--label L] [--force] [--check] PATH[:REMOTE]...
+                                    Pi file against the branch, backup, install
+                                    with md5 checks, daemon restart, restore.sh
+  pgen-pi restart                   restart the daemon (busy-checked), wait for ports
+  pgen-pi reboot                    reboot (busy-checked), wait, re-copy the probes
+  pgen-pi probes                    copy the verify probes to /tmp on the Pi
+  pgen-pi wait --log PATH --until REGEX [--timeout S] [--every S]
+                                    wait for a line in a log on the Pi; run it
+                                    again after an interruption, it resumes
+
+Exit status: 0 ok, 1 refused or failed (reason printed), 2 usage.
+Environment: PI_HOST (default 192.168.1.235), PGPASS (default: README.md),
+PGEN_PI_STATE_DIR (default ~/.local/state/pgen-pi), PGEN_PI_EXP (tests).
+"""
+import hashlib, io, json, os, re, shlex, signal, subprocess, sys, tarfile, tempfile, time
+
+HERE = os.path.dirname(os.path.realpath(__file__))
+REPO = os.path.realpath(os.path.join(HERE, "..", "..", "..", ".."))
+VERIFY = os.path.join(REPO, ".claude", "skills", "verify", "scripts")
+EXP = os.environ.get("PGEN_PI_EXP", os.path.join(HERE, "pi.exp"))
+HOST = os.environ.get("PI_HOST", "192.168.1.235")
+STATE_DIR = os.environ.get("PGEN_PI_STATE_DIR", os.path.expanduser("~/.local/state/pgen-pi"))
+STATE = os.path.join(STATE_DIR, "state.json")
+BUSY_FRESH = 600          # seconds a FREE counts (the guard hook reads the same)
+TOOLS = "/root/pgen-tools"
+PORTS = (80, 85, 2100, 2101)
+PROMPT = re.compile(r"^.*?'s password: ?")
+# A repo path maps to the same path on the Pi; these are installed under
+# another name (tools/build_pgenerator_plus_ota.sh installs the static build).
+RENAMES = {"usr/bin/pgsethdr.static": "/usr/bin/pgsethdr"}
+SYSTEM_TOPS = ("usr/", "etc/", "lib/", "boot/", "var/")
+LABEL_RX = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")
+
+
+def die(msg, code=1):
+    sys.stdout.write(msg + "\n")
+    sys.exit(code)
+
+
+# --- state shared with the guard hook ---------------------------------------
+
+def load_state():
+    try:
+        with open(STATE) as f:
+            return json.load(f)
+    except (OSError, ValueError):
+        return {}
+
+
+def save_state(st):
+    os.makedirs(STATE_DIR, exist_ok=True)
+    tmp = STATE + ".%d" % os.getpid()
+    with open(tmp, "w") as f:
+        json.dump(st, f, indent=1, sort_keys=True)
+    os.replace(tmp, STATE)
+
+
+def log_action(what, **kw):
+    os.makedirs(STATE_DIR, exist_ok=True)
+    kw.update(time=int(time.time()), what=what, cwd=os.getcwd())
+    with open(os.path.join(STATE_DIR, "log.jsonl"), "a") as f:
+        f.write(json.dumps(kw, sort_keys=True) + "\n")
+
+
+# --- talking to the Pi ------------------------------------------------------
+
+def password():
+    if os.environ.get("PGPASS"):
+        return os.environ["PGPASS"]
+    try:
+        with open(os.path.join(REPO, "README.md"), encoding="utf-8") as f:
+            m = re.search(r"\*\*SSH\*\* \(`root` / `([^`]+)`\)", f.read())
+    except OSError:
+        m = None
+    if not m:
+        die("STOP: no root password: README.md has no '**SSH** (`root` / `...`)' line and PGPASS is not set")
+    return m.group(1)
+
+
+def _env():
+    e = dict(os.environ)
+    e["PGPASS"] = password()
+    e["PI_HOST"] = HOST
+    e.setdefault("TMPDIR", tempfile.gettempdir())
+    return e
+
+
+def _run(argv, capture):
+    """argv through pi.exp; the password only in its environment. Returns
+    (exit status, output without the password prompt)."""
+    p = subprocess.Popen([EXP] + argv, env=_env(), stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+    buf = []
+    for raw in iter(p.stdout.readline, b""):
+        line = PROMPT.sub("", raw.decode("utf-8", "replace"), count=1) if b"'s password:" in raw else raw.decode("utf-8", "replace")
+        if not line.strip() and b"'s password:" in raw:
+            continue
+        if capture:
+            buf.append(line)
+        else:
+            sys.stdout.write(line)
+            sys.stdout.flush()
+    return p.wait(), "".join(buf)
+
+
+def ssh(cmd, capture=False):
+    return _run(["ssh", cmd], capture)
+
+
+def scp(srcs, dest):
+    return _run(["scp"] + list(srcs) + [dest], True)
+
+
+def md5_file(path):
+    h = hashlib.md5()
+    with open(path, "rb") as f:
+        for chunk in iter(lambda: f.read(1 << 20), b""):
+            h.update(chunk)
+    return h.hexdigest()
+
+
+def sync_tool(local, remote):
+    """remote = local on the Pi (md5), uploaded beside it and moved over
+    only when it arrived whole."""
+    want = md5_file(local)
+    rc, outp = ssh("md5sum %s 2>/dev/null | cut -d' ' -f1" % shlex.quote(remote), capture=True)
+    if rc == 0 and outp.strip() == want:
+        return True
+    d = os.path.dirname(remote)
+    rc, outp = ssh("mkdir -p %s" % shlex.quote(d), capture=True)
+    if rc != 0:
+        die("STOP: cannot create %s on the Pi: %s" % (d, outp.strip()))
+    rc, outp = scp([local], remote + ".new")
+    if rc != 0:
+        die("STOP: upload of %s failed: %s" % (local, outp.strip()))
+    q, qn = shlex.quote(remote), shlex.quote(remote + ".new")
+    rc, outp = ssh("[ -s %s ] && [ \"$(md5sum %s | cut -d' ' -f1)\" = %s ] && chmod 755 %s && mv -f %s %s && echo OK" % (qn, qn, want, qn, qn, q), capture=True)
+    if "OK" not in outp:
+        die("STOP: %s did not arrive whole on the Pi: %s" % (remote, outp.strip()))
+    return True
+
+
+# --- busy -------------------------------------------------------------------
+
+def busy(quiet=False):
+    """Runs the busy check on the Pi and records it. True only for FREE."""
+    sync_tool(os.path.join(HERE, "pi_calman_busy.sh"), "/root/pi_calman_busy.sh")
+    rc, outp = ssh("sh /root/pi_calman_busy.sh", capture=True)
+    lines = [l for l in outp.splitlines() if l.strip()]
+    last = lines[-1].strip() if lines else ""
+    result = "FREE" if (rc == 0 and last == "FREE") else ("BUSY" if last == "BUSY" else "ERROR")
+    st = load_state()
+    st["busy"] = {"result": result, "time": int(time.time()), "reasons": lines[:-1][-20:], "host": HOST}
+    save_state(st)
+    log_action("busy", result=result)
+    if not quiet or result != "FREE":
+        sys.stdout.write(outp if outp.endswith("\n") or not outp else outp + "\n")
+    if result == "ERROR":
+        sys.stdout.write("busy check failed (ssh status %d): counts as BUSY\n" % rc)
+    return result == "FREE"
+
+
+def require_free(what):
+    if not busy(quiet=True):
+        die("STOP: not FREE, %s not done. Look at the lines above (CLAUDE.md: a real session -> do not touch the device, ask)." % what)
+    sys.stdout.write("busy check: FREE\n")
+
+
+# A deploy between stop and install, a signal test or the WebUI self-test
+# would be cut by a restart or reboot (half-installed tree, lost settings).
+LOCKS_SH = r"""bad=0
+alive() { case "$1" in (''|*[!0-9]*) return 1;; esac; [ -d /proc/$1 ]; }
+if [ -d /tmp/pgen-deploy.lock ]; then echo "a deploy holds /tmp/pgen-deploy.lock (pid $(cat /tmp/pgen-deploy.lock/pid 2>/dev/null))"; bad=1; fi
+if [ -d /tmp/pgen-signal-test.lock ]; then p=$(cat /tmp/pgen-signal-test.lock/pid 2>/dev/null); alive "$p" && { echo "a signal test holds /tmp/pgen-signal-test.lock (pid $p)"; bad=1; }; fi
+st=$(cat /tmp/pgen-selftest.json 2>/dev/null)
+if echo "$st" | grep -Eq '"state"[[:space:]]*:[[:space:]]*"running"'; then p=$(echo "$st" | sed -n 's/.*"pid"[[:space:]]*:[[:space:]]*\([0-9][0-9]*\).*/\1/p'); if [ -z "$p" ] || alive "$p"; then echo "the WebUI signal self-test is running"; bad=1; fi; fi
+[ -f /root/dv_vsif_ab.state.json ] && { echo "dv_vsif_ab.pl is not restored yet (/root/dv_vsif_ab.state.json)"; bad=1; }
+[ $bad = 0 ] && echo NOLOCK
+exit $bad"""
+
+
+def require_idle(what):
+    """FREE, and no deploy, signal test or self-test under way."""
+    require_free(what)
+    rc, outp = ssh(LOCKS_SH, capture=True)
+    if rc != 0 or "NOLOCK" not in outp:
+        die("STOP: %s not done: %s" % (what, outp.strip() or "lock check failed (ssh status %d)" % rc))
+
+
+def cmd_busy(args):
+    if args:
+        die("usage: pgen-pi busy", 2)
+    return 0 if busy() else 1
+
+
+# --- status -----------------------------------------------------------------
+
+STATUS_SH = r"""
+echo "uptime: $(uptime)"
+# [P]: the pattern must not match this shell's own command line.
+echo "daemon: $(pgrep -f '[P]Generatord[.]pl' | tr '\n' ' ') renderer: $(pgrep -x PGeneratord | tr '\n' ' ')$(pgrep -x PGeneratord.dv | tr '\n' ' ')"
+L=$( (netstat -ltn 2>/dev/null || ss -ltn 2>/dev/null) )
+for p in 80 85 2100 2101; do echo "$L" | grep -q "[:.]$p[[:space:]]" && printf 'port %s up  ' $p || printf 'port %s DOWN  ' $p; done; echo
+[ -f /root/pgen-tools/pi_state.py ] && python3 /root/pgen-tools/pi_state.py show
+echo "vc4 srcversion: $(cat /sys/module/vc4/srcversion 2>/dev/null)"
+echo "kernel tainted: $(cat /proc/sys/kernel/tainted)  bad dmesg lines: $(dmesg | grep -cE 'refcount_t|use-after-free|Oops|BUG:|Unable to handle kernel|Internal error|WARNING: CPU')"
+for l in /tmp/pgen-deploy.lock /tmp/pgen-signal-test.lock; do [ -d $l ] && echo "LOCK $l pid $(cat $l/pid 2>/dev/null)"; done
+grep -q '"running"' /tmp/pgen-selftest.json 2>/dev/null && echo "self-test state: running"
+[ -f /tmp/pgenerator-watchdog.pause ] && echo "watchdog paused until $(cat /tmp/pgenerator-watchdog.pause)"
+true
+"""
+
+
+def cmd_status(args):
+    if args:
+        die("usage: pgen-pi status", 2)
+    sync_tool(os.path.join(HERE, "pi_state.py"), TOOLS + "/pi_state.py")
+    rc, _ = ssh(STATUS_SH)
+    st = load_state()
+    b = st.get("busy")
+    if b:
+        sys.stdout.write("last busy check: %s, %d s ago\n" % (b["result"], time.time() - b["time"]))
+    s = st.get("snapshot")
+    if s:
+        sys.stdout.write("OPEN snapshot: %s (%d min ago, from %s)\n" % (s["label"], (time.time() - s["time"]) / 60, s.get("cwd", "?")))
+    return rc
+
+
+# --- ssh / scp --------------------------------------------------------------
+
+def cmd_ssh(args):
+    if not args:
+        die("usage: pgen-pi ssh 'CMD'", 2)
+    log_action("ssh", cmd=" ".join(args)[:300])
+    rc, _ = ssh(" ".join(args))
+    return rc
+
+
+def cmd_scp(args):
+    if len(args) < 2:
+        die("usage: pgen-pi scp SRC... DEST", 2)
+    log_action("scp", args=args)
+    rc, outp = scp(args[:-1], args[-1])
+    sys.stdout.write(outp)
+    return rc
+
+
+# --- snapshot / restore -----------------------------------------------------
+
+def cmd_snapshot(args):
+    st = load_state()
+    if args[:1] == ["--close"]:
+        if len(args) < 2 or not " ".join(args[1:]).strip():
+            die("usage: pgen-pi snapshot --close REASON", 2)
+        s = st.pop("snapshot", None)
+        if not s:
+            die("no open snapshot")
+        save_state(st)
+        log_action("snapshot-close", label=s["label"], reason=" ".join(args[1:]))
+        sys.stdout.write("closed %s without a restore: %s\n" % (s["label"], " ".join(args[1:])))
+        return 0
+    if len(args) > 1:
+        die("usage: pgen-pi snapshot [LABEL] | --close REASON", 2)
+    if st.get("snapshot"):
+        s = st["snapshot"]
+        die("STOP: snapshot %s is open (from %s). pgen-pi restore, or pgen-pi snapshot --close REASON" % (s["label"], s.get("cwd", "?")))
+    label = args[0] if args else time.strftime("snap-%Y%m%d-%H%M%S")
+    if not LABEL_RX.match(label):
+        die("STOP: label must be 1-64 of A-Z a-z 0-9 . _ -", 2)
+    sync_tool(os.path.join(HERE, "pi_state.py"), TOOLS + "/pi_state.py")
+    rc, outp = ssh("python3 %s/pi_state.py save %s" % (TOOLS, shlex.quote(label)), capture=True)
+    sys.stdout.write(outp)
+    if rc != 0:
+        return 1
+    st["snapshot"] = {"label": label, "time": int(time.time()), "cwd": os.getcwd(), "host": HOST}
+    save_state(st)
+    log_action("snapshot", label=label)
+    return 0
+
+
+def open_snapshot():
+    s = load_state().get("snapshot")
+    if not s:
+        die("no open snapshot (pgen-pi snapshot first)")
+    return s
+
+
+def cmd_diff(args):
+    s = open_snapshot()
+    sync_tool(os.path.join(HERE, "pi_state.py"), TOOLS + "/pi_state.py")
+    rc, _ = ssh("python3 %s/pi_state.py diff %s" % (TOOLS, shlex.quote(s["label"])))
+    return rc
+
+
+def cmd_restore(args):
+    if args:
+        die("usage: pgen-pi restore", 2)
+    s = open_snapshot()
+    require_free("restore")
+    sync_tool(os.path.join(HERE, "pi_state.py"), TOOLS + "/pi_state.py")
+    rc, _ = ssh("python3 %s/pi_state.py restore %s" % (TOOLS, shlex.quote(s["label"])))
+    log_action("restore", label=s["label"], rc=rc)
+    if rc == 0:
+        st = load_state()
+        st.pop("snapshot", None)
+        save_state(st)
+        sys.stdout.write("snapshot %s closed\n" % s["label"])
+        return 0
+    if rc == 3:
+        sys.stdout.write("snapshot %s stays open: decide about the keys above, then pgen-pi snapshot --close REASON\n" % s["label"])
+    else:
+        sys.stdout.write("snapshot %s stays open: the settings are not back (see above)\n" % s["label"])
+    return 1
+
+
+# --- deploy -----------------------------------------------------------------
+
+def git(*a, check=True):
+    p = subprocess.run(["git", "-C", REPO] + list(a), stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    if check and p.returncode != 0:
+        raise RuntimeError("git %s: %s" % (" ".join(a), p.stderr.decode().strip()))
+    return p.stdout
+
+
+def blob_md5(rev, rel):
+    p = subprocess.run(["git", "-C", REPO, "show", "%s:%s" % (rev, rel)], stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+    return hashlib.md5(p.stdout).hexdigest() if p.returncode == 0 else None
+
+
+def map_target(spec):
+    """(local file, repo-relative path or None, Pi path) of PATH[:REMOTE]."""
+    local, _, remote = spec.partition(":")
+    full = os.path.realpath(local if os.path.isabs(local) else os.path.join(os.getcwd(), local))
+    rel = os.path.relpath(full, REPO)
+    if rel.startswith(".."):
+        rel = None
+    if not remote:
+        if rel is None:
+            die("STOP: %s is outside the repo: give the Pi path as PATH:REMOTE" % local, 2)
+        remote = RENAMES.get(rel) or ("/" + rel if rel.startswith(SYSTEM_TOPS) else "")
+        if not remote:
+            die("STOP: %s has no place on the Pi by its path; give it as PATH:REMOTE" % local, 2)
+    if not remote.startswith("/") or ".." in remote.split("/"):
+        die("STOP: %s: the Pi path must be absolute, without .." % spec, 2)
+    if not os.path.isfile(full) or os.path.getsize(full) == 0:
+        die("STOP: %s is missing or empty" % local)
+    return full, rel, remote
+
+
+_blob_md5s = {}
+
+
+def history_match(rev, rel, pi_md5):
+    """The newest commit in rev's history of rel whose file is pi_md5, or None."""
+    for c in git("log", rev, "-n", "300", "--format=%H", "--", rel, check=False).decode().split():
+        blob = git("rev-parse", "-q", "--verify", "%s:%s" % (c, rel), check=False).decode().strip()
+        if not blob:
+            continue
+        if blob not in _blob_md5s:
+            _blob_md5s[blob] = blob_md5(c, rel)
+        if _blob_md5s[blob] == pi_md5:
+            return c
+    return None
+
+
+def who_has(rel, pi_md5, base):
+    """Which version of rel the Pi has: (text, safe). Safe only when this
+    branch's history holds that version (the Pi is at or behind the
+    branch for this file). Not safe: base's version when the branch does
+    not contain it (a branch behind base would undo base's fixes), another
+    branch's, a worktree's uncommitted copy, or an unknown file."""
+    if rel is None:
+        return ("not in the repo", False)
+    on_base = blob_md5(base, rel) == pi_md5
+    c = history_match("HEAD", rel, pi_md5)
+    if c:
+        subj = git("log", "-1", "--format=%h %s", c).decode().strip()
+        return ("= %s" % base if on_base else "= commit %s" % subj[:70], True)
+    if on_base:
+        return ("= %s, which this branch does not contain for this file (behind %s: merge or rebase first)" % (base, base), False)
+    c = history_match("--all", rel, pi_md5)
+    if c:
+        subj = git("log", "-1", "--format=%h %s", c).decode().strip()
+        return ("= commit %s (NOT in this branch)" % subj[:70], False)
+    for line in git("worktree", "list", "--porcelain", check=False).decode().splitlines():
+        if line.startswith("worktree "):
+            wt = line[9:]
+            f = os.path.join(wt, rel)
+            if os.path.realpath(wt) != REPO and os.path.isfile(f) and md5_file(f) == pi_md5:
+                return ("= working copy of worktree %s (uncommitted there)" % wt, False)
+    return ("unknown version", False)
+
+
+def cmd_deploy(args):
+    base, label, force, check, specs = "fork/main", None, False, False, []
+    it = iter(args)
+    for a in it:
+        if a == "--base":
+            base = next(it, None) or die("usage: --base REF", 2)
+        elif a == "--label":
+            label = next(it, None) or die("usage: --label L", 2)
+        elif a == "--force":
+            force = True
+        elif a == "--check":
+            check = True
+        elif a.startswith("--"):
+            die("unknown option %s" % a, 2)
+        else:
+            specs.append(a)
+    if not specs:
+        die("usage: pgen-pi deploy [--base REF] [--label L] [--force] [--check] PATH[:REMOTE]...", 2)
+    if git("rev-parse", "--verify", "-q", base, check=False).strip() == b"":
+        die("STOP: --base %s is not a git revision here" % base, 2)
+    if label is None:
+        head = git("rev-parse", "--short", "HEAD").decode().strip()
+        label = "%s%s" % (head, "-dirty" if git("status", "--porcelain", "--untracked-files=no").strip() else "")
+    if not LABEL_RX.match(label):
+        die("STOP: label must be 1-64 of A-Z a-z 0-9 . _ -", 2)
+    items = [map_target(s) for s in specs]
+    # The Pi side of every target: real path (symlinks resolved, as the
+    # installer replaces files, not links), md5 or "-".
+    probe = "; ".join("r=$(readlink -f %s 2>/dev/null || echo %s); echo \"$r $( [ -f \"$r\" ] && md5sum \"$r\" | cut -d' ' -f1 || echo -)\"" % (shlex.quote(r), shlex.quote(r)) for _, _, r in items)
+    rc, outp = ssh(probe, capture=True)
+    rows = [l.split() for l in outp.splitlines() if len(l.split()) == 2 and l.startswith("/")]
+    if rc != 0 or len(rows) != len(items):
+        die("STOP: could not read the files on the Pi: %s" % outp.strip())
+    manifest, seen, stop = [], {}, False
+    sys.stdout.write("Pi files against %s:\n" % base)
+    for (full, rel, remote), (real, pi_md5) in zip(items, rows):
+        new = md5_file(full)
+        if real in seen:
+            if seen[real] != new:
+                die("STOP: %s and another file both go to %s (a symlink) with different content" % (remote, real))
+            continue
+        seen[real] = new
+        if pi_md5 == new:
+            what, ok = "already the new one", True
+        elif pi_md5 == "-":
+            what, ok = "not there yet", True
+        else:
+            what, ok = who_has(rel, pi_md5, base)
+        sys.stdout.write("  %-45s %s%s\n" % (real + ("" if real == remote else " (via %s)" % remote), what, "" if ok else "  <-- STOP"))
+        stop |= not ok
+        # A file that is already the new one stays out of the bundle: in
+        # the manifest it would count as "new" next to "old" ones, and
+        # pi_deploy.sh would take that for a half-done earlier run.
+        if pi_md5 != new:
+            manifest.append((real, pi_md5, new, full))
+    if stop and not force:
+        die("STOP: the Pi has a version marked above that this deploy would throw away. Look at it first (CLAUDE.md: diff the Pi's file against the branch); --force if it may go.")
+    if not manifest:
+        sys.stdout.write("Already installed: every file is the new one. Nothing done.\n")
+        return 0
+    if not check:
+        require_free("deploy")
+    with tempfile.TemporaryDirectory() as td:
+        tgz = os.path.join(td, "bundle.tgz")
+        with tarfile.open(tgz, "w:gz") as t:
+            def add_bytes(name, data, mode=0o644):
+                ti = tarfile.TarInfo(name)
+                ti.size, ti.mode, ti.mtime = len(data), mode, int(time.time())
+                t.addfile(ti, io.BytesIO(data))
+            add_bytes("MANIFEST", "".join("%s %s %s\n" % m[:3] for m in manifest).encode())
+            add_bytes("LABEL", (label + "\n").encode())
+            for name in ("pi_deploy.sh", "pi_calman_busy.sh"):
+                with open(os.path.join(HERE, name), "rb") as f:
+                    add_bytes(name, f.read(), 0o755)
+            for real, _, _, full in manifest:
+                with open(full, "rb") as f:
+                    add_bytes("files" + real, f.read(), os.stat(full).st_mode & 0o777)
+        tgz_md5 = md5_file(tgz)
+        d = "/root/pgen-deploy/%s-%s" % (label, time.strftime("%Y%m%d-%H%M%S"))
+        rc, outp = ssh("mkdir -p %s" % d, capture=True)
+        if rc != 0:
+            die("STOP: cannot create %s: %s" % (d, outp.strip()))
+        rc, outp = scp([tgz], d + "/bundle.tgz")
+        if rc != 0:
+            die("STOP: upload failed: %s" % outp.strip())
+    log_action("deploy", label=label, check=check, files=[m[0] for m in manifest], dir=d)
+    env = "FORCE=1 " if force else ""
+    rc, _ = ssh("cd %s && { [ \"$(md5sum bundle.tgz | cut -d' ' -f1)\" = %s ] || { echo 'STOP: bundle.tgz did not arrive whole'; exit 1; }; } && tar xzf bundle.tgz && %ssh %s/pi_deploy.sh%s" % (
+        d, tgz_md5, env, d, " --check" if check else ""))
+    return rc
+
+
+# --- restart / reboot / probes / wait ---------------------------------------
+
+WAIT_PORTS = r"""i=0; while [ $i -lt %d ]; do L=$( (netstat -ltn 2>/dev/null || ss -ltn 2>/dev/null) ); ok=1; for p in 80 85 2100 2101; do echo "$L" | grep -q "[:.]$p[[:space:]]" || ok=0; done; [ $ok = 1 ] && { echo "all four ports listen after $i s"; exit 0; }; sleep 1; i=$((i+1)); done; echo "NOT all ports listen after %d s; see /tmp/pgen-restart.log"; exit 1"""
+
+
+def cmd_restart(args):
+    if args:
+        die("usage: pgen-pi restart", 2)
+    require_idle("restart")
+    log_action("restart")
+    # The init script's stop pkills by the renderer's path: this command
+    # line must not contain it (it would kill this shell).
+    rc, outp = ssh("setsid /etc/init.d/PGenerator restart </dev/null >/tmp/pgen-restart.log 2>&1 & sleep 3; " + WAIT_PORTS % (60, 60), capture=True)
+    sys.stdout.write(outp)
+    return rc
+
+
+def cmd_reboot(args):
+    if args:
+        die("usage: pgen-pi reboot", 2)
+    require_idle("reboot")
+    log_action("reboot")
+    ssh("setsid sh -c 'sleep 2; reboot' </dev/null >/dev/null 2>&1 &", capture=True)
+    sys.stdout.write("reboot requested; waiting for the Pi to go and come back ...\n")
+    t, gone = time.time(), False
+    while time.time() - t < 300:
+        time.sleep(5)
+        rc, outp = ssh("cat /proc/uptime", capture=True)
+        up = float(outp.split()[0]) if rc == 0 and outp.split() and re.match(r"^[0-9.]+$", outp.split()[0]) else None
+        if up is None:
+            gone = True
+            continue
+        if gone or up < time.time() - t + 5:
+            sys.stdout.write("back after %d s (uptime %d s)\n" % (time.time() - t, up))
+            rc, outp = ssh(WAIT_PORTS % (90, 90), capture=True)
+            sys.stdout.write(outp)
+            cmd_probes([])
+            return rc
+    die("STOP: the Pi is not back after 300 s")
+
+
+def cmd_probes(args):
+    names = ("pgprobe.py", "fbprobe", "pitpgprobe.py")
+    paths = [os.path.join(VERIFY, n) for n in names if os.path.isfile(os.path.join(VERIFY, n))]
+    rc, outp = scp(paths, "/tmp/")
+    if rc != 0:
+        die("STOP: probes not copied: %s" % outp.strip())
+    rc, outp = ssh("chmod 755 /tmp/fbprobe 2>/dev/null; md5sum " + " ".join("/tmp/" + os.path.basename(p) for p in paths), capture=True)
+    want = dict((os.path.basename(p), md5_file(p)) for p in paths)
+    got = dict((l.split()[1].rsplit("/", 1)[-1], l.split()[0]) for l in outp.splitlines() if len(l.split()) == 2)
+    bad = [n for n in want if got.get(n) != want[n]]
+    if bad:
+        die("STOP: on the Pi but not whole: %s" % ", ".join(bad))
+    sys.stdout.write("probes in /tmp: %s\n" % ", ".join(sorted(want)))
+    return 0
+
+
+def cmd_wait(args):
+    log, until, timeout, every = None, None, 3600, 30
+    it = iter(args)
+    for a in it:
+        if a == "--log":
+            log = next(it, None)
+        elif a == "--until":
+            until = next(it, None)
+        elif a == "--timeout":
+            timeout = int(next(it, "0"))
+        elif a == "--every":
+            every = max(5, int(next(it, "30")))
+        else:
+            die("unknown argument %s" % a, 2)
+    if not log or not until:
+        die("usage: pgen-pi wait --log PATH --until REGEX [--timeout S] [--every S]", 2)
+    t, last = time.time(), None
+    while True:
+        # Markers around the hit: ssh warnings ("Permanently added ...")
+        # come before the remote output and must not count as one.
+        rc, outp = ssh("echo '--hit--'; grep -E -m1 -- %s %s; echo '--tail--'; tail -n1 %s" % (shlex.quote(until), shlex.quote(log), shlex.quote(log)), capture=True)
+        hit, _, tail = outp.partition("--hit--")[2].partition("--tail--")
+        if rc == 0 and hit.strip():
+            sys.stdout.write("found: %s\n" % hit.strip())
+            return 0
+        tail = tail.strip()
+        if tail and tail != last:
+            sys.stdout.write("[%ds] %s\n" % (time.time() - t, tail[:200]))
+            sys.stdout.flush()
+            last = tail
+        if time.time() - t > timeout:
+            die("not found after %d s" % timeout)
+        time.sleep(every)
+
+
+COMMANDS = {"busy": cmd_busy, "status": cmd_status, "ssh": cmd_ssh, "scp": cmd_scp,
+            "snapshot": cmd_snapshot, "diff": cmd_diff, "restore": cmd_restore,
+            "deploy": cmd_deploy, "restart": cmd_restart, "reboot": cmd_reboot,
+            "probes": cmd_probes, "wait": cmd_wait}
+
+
+def main(argv):
+    if len(argv) < 2 or argv[1] in ("-h", "--help", "help") or argv[1] not in COMMANDS:
+        sys.stdout.write(__doc__)
+        return 0 if len(argv) >= 2 and argv[1] in ("-h", "--help", "help") else 2
+    return COMMANDS[argv[1]](argv[2:])
+
+
+if __name__ == "__main__":
+    # Piped into head: end quietly (on the Pi, pi_deploy.sh ignores SIGPIPE
+    # and finishes on its own).
+    signal.signal(signal.SIGPIPE, signal.SIG_DFL)
+    sys.exit(main(sys.argv))

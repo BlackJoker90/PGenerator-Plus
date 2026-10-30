@@ -13,35 +13,27 @@ change") is separate and still needed.
 
 ## Ground rules (from the user)
 
-- Before any probe, restart or reboot: Calman must be idle.
-  `scripts/pi_calman_busy.sh` on the Pi (FREE/BUSY), plus
-  `netstat -tn | grep -E ':210[01] .*ESTAB'`. Calman VM 192.168.1.6 uses
-  port 2101. BUSY or user session visible in `/var/log/PGenerator/calman-patches.log`
-  (`peer=192.168.1.6`) -> stop and ask. Run the check as its own step, never
-  chained in front of a probe. Your own probes (`peer=127.0.0.1` or the Mac)
-  also count as activity for 15 min: if BUSY, look at the peers in the last
-  lines of calman-patches.log before deciding.
-- Reboot, push, release: only with the user's explicit OK.
+All Pi access goes through the `pi` skill: `P=.claude/skills/pi/scripts/pgen-pi`
+(busy check, ssh/scp, snapshot/restore, deploy, restart, reboot; the guard
+hook refuses raw ssh). Read `.claude/skills/pi/SKILL.md` first.
+
+- Before any probe, restart or reboot: `$P busy` as its own step (FREE counts
+  10 min for the hook). BUSY: read the reason lines; a real session (Calman
+  VM 192.168.1.6 on 2101, classic on 2100, ColourSpace/PiTPG on 85) -> stop
+  and ask. Our own probes (127.0.0.1, the Mac) do not count.
+- Reboot, push, release: only with the user's explicit OK (the hook asks).
 - Never POST `{}` or dummy bodies. Partial `/api/config` bodies
   (`{"max_bpc":"10"}`) are fine; the handler only touches given keys.
-- Back up before overwriting (`/root/pgen-backups/<file>.before-<change>`),
-  guard copies with `[ -s new ]`, compare md5 afterwards.
-- Restore the user's state at the end (back up `/etc/PGenerator/PGenerator.conf`
-  first, compare after).
+- `$P snapshot` before the first change, `$P restore` at the end.
 - TV tests use a dim window (20 IRE / 10 %), not full white.
 
 ## Handle
 
-All Pi access needs `dangerouslyDisableSandbox: true` (LAN).
-`PGPASS` = root password from README.md (Login section); never write it to a file.
-
 ```sh
-V=.claude/skills/verify/scripts
-PGPASS='...' $V/pi.exp ssh 'uptime'
-PGPASS='...' $V/pi.exp scp $V/pgprobe.py $V/fbprobe $V/pi_calman_busy.sh /tmp/
+P=.claude/skills/pi/scripts/pgen-pi
+$P status
+$P probes        # pgprobe.py, fbprobe, pitpgprobe.py -> /tmp (cleared on reboot)
 ```
-
-`/tmp` on the Pi is cleared on reboot: re-copy the probes after one.
 
 ### Build the renderer (PGeneratord, PGeneratord.dv, drm_override.so)
 
@@ -59,18 +51,16 @@ means every lib and symbol resolved) can be run on their own.
 
 ### Deploy
 
-The running renderer cannot be overwritten ("Text file busy"). Stop first, and
-never put "PGenerator" in your own command line: `/etc/init.d/PGenerator stop`
-runs `pkill -f /usr/sbin/PGeneratord...` and kills a wrapper shell that mentions it.
-
 ```sh
-pi.exp ssh '/etc/init.d/PGenerator stop'           # session may drop; that is fine
-pi.exp ssh '[ -s /tmp/new ] && cp /tmp/new /usr/sbin/PGeneratord && cp /tmp/new /usr/sbin/PGeneratord.dv && sync && md5sum /usr/sbin/PGeneratord*'
-pi.exp ssh 'setsid /etc/init.d/PGenerator start </dev/null >/tmp/pgen-restart.log 2>&1 &'
+$P deploy usr/sbin/PGeneratord usr/sbin/PGeneratord.dv usr/share/PGenerator/daemon.pm
 ```
 
-"Killed ... setsid sudo" in the start log is the sudo wrapper; check that
-`PGeneratord.pl` listens on 80/2100/2101.
+It stops the daemon before installing (a running renderer is "Text file
+busy"), backs up, checks md5, restarts and waits for ports 80/85/2100/2101.
+By hand: the init script's stop runs `pkill -f` on `/usr/sbin/PGeneratord`,
+`PGeneratord.pl`, `PGenerator_cmd.pl`, `PGenerator_serial.pl`; a command line
+that names one of them is killed with it (the hook refuses that).
+"Killed ... setsid sudo" in the start log is the sudo wrapper.
 
 ## Drive and read back
 
@@ -79,7 +69,7 @@ Run `pgprobe.py` on the Pi with all commands of one scenario in ONE call
 back to the WebUI and restarts the renderer):
 
 ```sh
-pi.exp ssh 'python3 /tmp/pgprobe.py "CONF_LEVEL:Bits 10" "RGB_S:0513,0513,0513,010" "post:{\"max_bpc\":\"8\"}" "RGB_S:0068,0068,0068,010"'
+$P ssh 'python3 /tmp/pgprobe.py "CONF_LEVEL:Bits 10" "RGB_S:0513,0513,0513,010" "post:{\"max_bpc\":\"8\"}" "RGB_S:0068,0068,0068,010"'
 ```
 
 State line per pattern:
@@ -97,17 +87,18 @@ scanout does not prove wire codes.
 Sweeps: build the code list in the Pi shell and evaluate on the Mac:
 
 ```sh
-pi.exp ssh 'L=""; for v in $(seq 0 255); do c=$(printf %04d $((v*4))); L="$L RGB_S:$c,$c,$c,010"; done; python3 /tmp/pgprobe.py $L' > $TMPDIR/sweep8.txt
-python3 .claude/skills/verify/scripts/evalsweep.py $TMPDIR/sweep8.txt 8
+$P ssh 'L=""; for v in $(seq 0 255); do c=$(printf %04d $((v*4))); L="$L RGB_S:$c,$c,$c,010"; done; python3 /tmp/pgprobe.py $L' > $TMPDIR/sweep8.txt
+python3 .claude/skills/verify/scripts/evalsweep.py $TMPDIR/sweep8.txt 8      # add "ycc" for YCbCr 4:4:4 (B=Y)
 ```
 
 About 3 s per code (256 codes = ~13 min): run long sweeps with
-`run_in_background`. The first line after a renderer restart can show the
+`run_in_background`. One ssh call gives up after 600 s without output
+(pi.exp idle timeout, `PI_TIMEOUT=` to change); pgprobe prints a line per code. The first line after a renderer restart can show the
 previous frame (e.g. 30 for code 0064): re-probe it before calling it a bug.
 
 ## Flows worth driving
 
-- RGB Limited 8 and 10 bpc: prop 3, unity CSC, AVI `12:a8:04:10`, codes = code>>2 (8 bpc) / exact (10 bpc), incl. codes off the 8-bit grid.
+- RGB Limited 8 and 10 bpc: prop 3, unity CSC, AVI `12:a8:04:10`, codes = (code+2)>>2 capped at 255 (8 bpc: the daemon rounds to the nearest code, daemon.pm calman_scale_value) / exact (10 bpc), incl. codes off the 8-bit grid.
 - RGB Full (`CONF_LEVEL:Range Full`): prop 2, AVI PB3 0x08.
 - YCbCr (`CONF_LEVEL:Format YCC444_10`, `YCC422_10`): prop 3 (since 2.13.23; 1 made vc4 signal Q/YQ Full on modes without a CEA VIC), CSC unchanged (the YCbCr CSC ignores the range), AVI PB3 0x04 and PB5 YQ 0x00 also on mode 20 (VIC 0). `CONF_LEVEL:Range Full` on YCbCr stays prop 3 / Limited; full-range codes come as SOURCE_RANGE=FULL and are compressed (10 bit 0/205 -> 64/240). LLDV keeps prop 1.
 - Dolby Vision LLDV (`post:{"signal_mode":"dv","dv_transport":"lldv"}`, back with `{"signal_mode":"sdr"}`): prop 1.
@@ -139,7 +130,7 @@ before and after).
 ## Where to look
 
 - Daemon: `/tmp/pgenerator_debug.log`; patterns: `/var/log/PGenerator/calman-patches.log` (`range=LIMITED`, `bg=`); updater: `/var/log/PGenerator/update.log`; renderer stderr: `/tmp/pg_stderr.log`; drm_override: `/tmp/drm_override.log`.
-- vc4 module: `/sys/module/vc4/srcversion` is `24E978B6C622711RQ3V1SPD` when the patched module is loaded (RQ3 range patch + no SPD infoframe; the renderer looks for `RQ3V1`). SPD must never be on the wire: bit 3 of `HDMI_RAM_PACKET_CONFIG` stays 0.
+- vc4 module: `/sys/module/vc4/srcversion` contains `RQ3V1` when a patched module is loaded; the renderer (ofxRPI4Window.cpp) and the WebUI (webui.pm rgbLimitedPassthroughSupported) test only for that. Known builds: `24E978B6C622711RQ3V1SPD` (RQ3 range patch + no SPD infoframe), `24E978B6C622RQ3V1SPDVIC` (+ D8: the real VIC in the Standard DV AVI, `vc4-rq3-nospd-dvvic.ko`). `$P status` prints it. SPD must never be on the wire: bit 3 of `HDMI_RAM_PACKET_CONFIG` stays 0.
 - WebUI range text: `/var/lib/PGenerator/running/info/GET_OUTPUT_RANGE.info`.
 
 `scripts/fbprobe` is prebuilt (armhf, libdrm). Source `scripts/fbprobe.c`; rebuild

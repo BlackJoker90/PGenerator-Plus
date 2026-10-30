@@ -111,7 +111,7 @@ The UPGCI handshake now has proper ACKs and the settings format Calman actually 
 <td valign="top">
 
 ### 🌈 Dolby Vision, fixed
-Low Latency DV renders at **12-bit** and really switches the TV into DV, with pattern codes sent at 10-bit. The display's EDID Dolby block sets the DV metadata defaults. Standard DV always uses the 8-bit tunnel the TV expects, also after a 10-bit Calman session. Leaving DV signals "DV off" properly and gives back the format, range and depth you had before DV, and the SDR colorimetry. Calman DV consistently runs as standard DV.
+Low Latency DV renders at **12-bit** and really switches the TV into DV, with pattern codes sent at 10-bit. The display's EDID Dolby block sets the DV metadata defaults. Standard DV always uses the 8-bit tunnel the TV expects, also after a 10-bit Calman session, and its AVI infoframe names the timing's own VIC instead of a fixed 1080p60 (CTA-861). Leaving DV signals "DV off" properly and gives back the format, range and depth you had before DV, and the SDR colorimetry. Calman DV consistently runs as standard DV.
 
 </td>
 </tr>
@@ -187,6 +187,7 @@ Next to the settings, **On the cable** shows what is actually sent (format, rang
 | HLG meter targets | power curve: 50 % HLG targeted 435 cd/m² on a 1000 cd/m² display | **ITU-R BT.2100 HLG** (50 % → 51 cd/m², 75 % → 203 cd/m²); colour and saturation targets are the BT.2100 display of the codes sent |
 | Signal-mode switch | ~10 s | **~3.5–4.5 s** |
 | Low Latency Dolby Vision | TV did not switch into DV | 12-bit, TV switches into DV |
+| Standard Dolby Vision AVI infoframe | VIC always 16 (1080p60), also at 24, 30 Hz or 4K | **the VIC of the timing on the cable** (e.g. 1080p24 → 32, 2160p24 → 93; patched vc4) |
 | Calman UPGCI | settings replies Calman could not parse | ACK + parseable settings, `GET_SETTINGS` |
 | Calman YCbCr 4:2:0 request | no defined answer | clean NAK, current format kept, WebUI notice |
 | Settings the Pi or display can't carry | applied anyway: vc4 quietly lowers the depth, or the display shows nothing | **refused with the reason** (link bandwidth, EDID), output kept, patches refused until working settings arrive |

@@ -85,7 +85,7 @@ Run what applies and say what was and was not checked:
   sudo actions, port-85 templates). `t/webui_called_functions.t` covers the
   page JS.
 - Independent review before a code change is reported done: a fresh agent
-  (same model) gets the diff, the code it touches and this file, and none
+  (same model; the `pgen-reviewer` agent in `.claude/agents/`) gets the diff, the code it touches and this file, and none
   of the reasoning behind the change. It reports each finding as confirmed
   (repro) or plausible (code path); verify each one, fix or answer it, and
   report what the review found.

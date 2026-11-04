@@ -12775,7 +12775,7 @@ function meterUpdateThumbStyles(container,completedIres,currentIre){
    thumb.style.zIndex='1';
   } else if(done){
    thumb.style.animation='none';
-    thumb.style.boxShadow='inset 0 0 0 2px var(--status-success),inset 0 0 0 3px var(--surface-page)';
+    thumb.style.boxShadow='inset 0 0 0 1px var(--status-success),inset 0 0 0 2px var(--surface-page)';
    thumb.style.zIndex='';
   } else {
    thumb.style.animation='none';
@@ -15534,7 +15534,7 @@ function colorHighlightThumb(name){
   const isMatch=t.dataset.name===name;
   const done=completedNames.has(t.dataset.name);
   t.dataset.visualState=isMatch?'selected':(done?'done':'idle');
-  t.style.boxShadow=isMatch?'inset 0 0 0 3px var(--accent)':(done?'inset 0 0 0 2px var(--status-success),inset 0 0 0 3px var(--surface-page)':'none');
+  t.style.boxShadow=isMatch?'inset 0 0 0 3px var(--accent)':(done?'inset 0 0 0 1px var(--status-success),inset 0 0 0 2px var(--surface-page)':'none');
   t.style.animation='none';
   t.style.zIndex=isMatch?'1':'';
  }

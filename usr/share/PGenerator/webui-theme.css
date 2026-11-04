@@ -10,7 +10,7 @@ button,input,select,textarea{font-family:inherit}
 --surface-page:#0b0b0c;--surface-header:#111113;--surface-sidebar:#0e0e10;--surface-card:#151517;--surface-drawer:#111113;--surface-modal:#151517;--surface-popover:#1b1b1e;--surface-inset:#0e0e10;--surface-field:#09090a;
 --text-primary:#e4e4e7;--text-secondary:#a0a0a7;--text-muted:#94949b;--text-inverse:#fff;--text-disabled:#6a6a70;
 --divider:#2a2a2e;--focus-ring:#b6c4f5;--shadow:rgba(0,0,0,.42);--overlay:rgba(0,0,0,.82);--selected-bg:rgba(127,153,242,.16);--hover-bg:rgba(255,255,255,.055);
---chart-bg:#0e0e10;--chart-grid:#1f1f22;--chart-axis:#3b3b40;--chart-label:#a0a0a7;--chart-tooltip:#1b1b1e;--chart-empty:#94949b;--chart-annotation:#aaa;--chart-eotf-measured:#ffeb3b;--chart-target:#ffb74d;--chart-measured:#7ecbff;--chart-rgb-r:#ff6666;--chart-rgb-g:#66cc77;--chart-rgb-b:#65aaff;--chart-gamut-line:rgba(220,228,245,.9);--meter-bar-track:#111113;--meter-bar-zero:rgba(255,255,255,.28);
+--chart-bg:#0e0e10;--chart-grid:#1f1f22;--chart-axis:#3b3b40;--chart-label:#a0a0a7;--chart-tooltip:#1b1b1e;--chart-empty:#94949b;--chart-annotation:#aaa;--chart-eotf-measured:#e3cf6a;--chart-target:#ffb74d;--chart-measured:#7ecbff;--chart-rgb-r:#ff6666;--chart-rgb-g:#66cc77;--chart-rgb-b:#65aaff;--chart-gamut-line:rgba(220,228,245,.9);--meter-bar-track:#111113;--meter-bar-zero:rgba(255,255,255,.28);
 --scroll-track:#18181a;--scroll-thumb:#55555a;--scroll-thumb-border:#6c6c72;--scroll-thumb-hover:#68686e;
 --status-success:#5fb878;--status-warning:#e8a55b;--status-error:#ee7570;--status-hdmi:#d9534f;--status-dv:#b9a3f5;--status-calibration:#7f99f2;--badge-neutral:#a0a0a7;
 --accent-fill:#4d66d4;--accent-fill2:#6a55cf;--on-accent:#fff;--success-fill:#2e7d32;--on-success:#fff;--danger-fill:#c23a36;--on-danger:#fff;--warning-text:#e8a55b;--neutral-fill:var(--border);
@@ -18,17 +18,17 @@ button,input,select,textarea{font-family:inherit}
 --control-disabled-bg:color-mix(in srgb,var(--text-primary) 7%,var(--surface-card));--control-disabled-text:color-mix(in srgb,var(--text-primary) 50%,var(--surface-card));
 --tile-bg:color-mix(in srgb,var(--text-primary) 3.5%,var(--surface-card));--tile-border:color-mix(in srgb,var(--text-primary) 11%,transparent);--tile-pad:10px 12px;
 --fs-2xs:.6875rem;--fs-xs:.75rem;--fs-sm:.8125rem;--fs-md:.875rem;--fs-lg:1rem;--fs-xl:1.125rem;--fs-2xl:1.25rem;
---r-xs:4px;--r-sm:6px;--r-md:8px;--r-lg:12px;--control-h:32px}
+--r-xs:4px;--r-sm:6px;--r-md:8px;--r-lg:12px;--control-h:30px;--shadow-soft:rgba(0,0,0,.34)}
 [data-theme="light"]{color-scheme:light;--bg:#f3f5f8;--card:#fff;--panel:#fff;--border:#c7ced9;--accent:#315dd8;--accent2:#6445d5;
 --text:#18202b;--text2:#465466;--green:#217a36;--red:#c62828;--orange:#a55300;--dv:#7044bd;
---surface-page:#f3f5f8;--surface-header:#fff;--surface-sidebar:#f7f8fb;--surface-card:#fff;--surface-drawer:#fff;--surface-modal:#fff;--surface-popover:#f7f8fb;--surface-inset:#f3f5f8;--surface-field:#fff;
+--surface-page:#f3f5f8;--surface-header:#fff;--surface-sidebar:#f7f8fb;--surface-card:#fff;--surface-drawer:#fff;--surface-modal:#fff;--surface-popover:#f7f8fb;--surface-inset:#eceff4;--surface-field:#fff;
 --text-primary:#18202b;--text-secondary:#465466;--text-muted:#596676;--text-inverse:#fff;--text-disabled:#687586;
 --divider:#c7ced9;--focus-ring:#174fc4;--shadow:rgba(18,29,45,.22);--overlay:rgba(4,8,14,.72);--selected-bg:rgba(49,93,216,.13);--hover-bg:rgba(24,32,43,.07);
 --chart-bg:#fff;--chart-grid:#dfe4eb;--chart-axis:#8793a3;--chart-label:#4f5d6d;--chart-tooltip:#fff;--chart-empty:#6b7685;--chart-annotation:#344255;--chart-eotf-measured:#8a6400;--chart-target:#a85f00;--chart-measured:#1f6fb5;--chart-rgb-r:#c62828;--chart-rgb-g:#217a36;--chart-rgb-b:#1f5fc4;--chart-gamut-line:#334b70;--meter-bar-track:#f1f3f7;--meter-bar-zero:rgba(70,84,102,.28);
 --scroll-track:#e3e7ed;--scroll-thumb:#9aa5b3;--scroll-thumb-border:#7f8b9a;--scroll-thumb-hover:#7f8b9a;
 --status-success:#217a36;--status-warning:#a55300;--status-error:#c62828;--status-hdmi:#b51d1d;--status-dv:#7044bd;--status-calibration:#315dd8;--badge-neutral:#d5dce7;
 --accent-fill:#315dd8;--accent-fill2:#6445d5;--success-fill:#217a36;--danger-fill:#c62828;--warning-text:#8f4700;
---field-border:color-mix(in srgb,var(--text-primary) 54%,var(--surface-card));--field-border-hover:color-mix(in srgb,var(--text-primary) 72%,var(--surface-card));
+--shadow-soft:rgba(18,29,45,.1);--field-border:color-mix(in srgb,var(--text-primary) 54%,var(--surface-card));--field-border-hover:color-mix(in srgb,var(--text-primary) 72%,var(--surface-card));
 --control-disabled-bg:color-mix(in srgb,var(--text-primary) 8%,var(--surface-card));--control-disabled-text:color-mix(in srgb,var(--text-primary) 58%,var(--surface-card))}
 /* Palettes: colour overrides over the dark or light base theme (data-palette). */
 [data-palette="oled"]{--bg:#000;--card:#0b0b0b;--panel:#0b0b0b;--border:#242424;--divider:#242424;
@@ -298,7 +298,7 @@ body.ui-offline .dashboard,body.ui-offline .site-footer{filter:grayscale(.35);op
 body.ui-offline .offline-mask{display:flex}
 /* The restart dialog already says the Pi is away and that the page reconnects. */
 body.pg-restarting .offline-mask-card{display:none}
-.offline-mask-card{max-width:430px;padding:18px 20px;border:1px solid var(--border);border-radius:var(--r-lg);background:var(--surface-modal);box-shadow:0 12px 30px var(--shadow);text-align:center}
+.offline-mask-card{max-width:430px;padding:18px 20px;border:1px solid color-mix(in srgb,var(--status-error) 55%,var(--border));border-radius:var(--r-lg);background:var(--surface-modal);box-shadow:0 12px 30px var(--shadow);text-align:center}
 .meter-autocal-mask{position:fixed;inset:0;z-index:9000;display:none;align-items:center;justify-content:center;padding:18px;background:var(--overlay)}
 body.meter-autocal-active .dashboard,body.meter-autocal-active .site-footer{filter:grayscale(.25);opacity:.42;pointer-events:none;user-select:none}
 body.meter-autocal-active .meter-autocal-mask{display:flex}
@@ -346,7 +346,7 @@ body.layout-tablet .fac-option-controls select{min-height:44px}
 .meter-workflow-progress{display:block;height:18px;border-radius:var(--r-xs);background:var(--meter-bar-track);border:1px solid var(--border);overflow:hidden;position:relative}
 .meter-workflow-progress-fill{height:100%;width:100%;transform:scaleX(0);transform-origin:left;background:var(--accent-fill);transition:transform .25s var(--ease-out)}
 @media(max-width:720px){.meter-workflow-progress-wrap{grid-template-columns:minmax(0,1fr) auto}.meter-workflow-progress{grid-column:1 / -1;grid-row:2}}
-.offline-mask-title{font-size:var(--fs-lg);font-weight:700;margin-bottom:6px}
+.offline-mask-title{font-size:var(--fs-lg);font-weight:700;margin-bottom:6px;color:var(--status-error)}
 .offline-mask-text{font-size:var(--fs-md);line-height:1.45;color:var(--text2)}
 .status-bar{display:flex;align-items:center;justify-content:flex-end;flex-wrap:wrap;gap:2px 12px;min-width:0;font-size:var(--fs-sm);color:var(--text2)}
 .status-bar span{display:flex;align-items:center;gap:4px}
@@ -479,7 +479,6 @@ body.layout-desktop .meter-card-header-row .meter-xyz-gear{width:30px;height:30p
 .setting-tiles>.field{display:grid;grid-template-columns:minmax(0,1fr);grid-template-rows:auto auto;row-gap:6px;align-items:center;padding:0;min-width:0}
 .setting-tiles>.field>label{grid-column:1;grid-row:1;align-self:end}
 .setting-tiles>.field>select,.setting-tiles>.field>.mode-select-wrap{grid-column:1;grid-row:2;width:100%;min-width:0}
-.setting-tiles>.field select{background-color:var(--surface-card,var(--surface-field))}
 @container (max-width:720px){.grid.setting-tiles{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @container (max-width:420px){.grid.setting-tiles{grid-template-columns:minmax(0,1fr)}}
 .grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
@@ -511,7 +510,7 @@ background-repeat:no-repeat;background-position:right 8px center;padding-right:2
 .mode-select-value{position:absolute;left:10px;right:24px;top:50%;transform:translateY(-50%);
 pointer-events:none;color:var(--text);font-size:var(--fs-sm);line-height:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .inline-select{background-color:var(--surface-field);border:1px solid var(--field-border);color:var(--text);
-padding:4px 24px 4px 8px;border-radius:var(--r-sm);font-size:var(--fs-xs);outline:none;transition:border .2s,box-shadow .2s;min-height:28px}
+padding:4px 24px 4px 8px;border-radius:var(--r-sm);font-size:var(--fs-xs);outline:none;transition:border .2s,box-shadow .2s;min-height:var(--control-h)}
 .inline-select:focus{outline:none}
 .inline-select:focus-visible{border-color:var(--accent);box-shadow:0 0 0 1px color-mix(in srgb,var(--accent) 35%,transparent)}
 /* Select groups. .sel-rows: inline label + select rows that share one label
@@ -556,7 +555,7 @@ padding:4px 24px 4px 8px;border-radius:var(--r-sm);font-size:var(--fs-xs);outlin
 #meterSettingsGrid .field-patch{width:150px}
 #meterSettingsGrid .field-refresh{width:170px}
 /* Phone: the select fields sit on a two-column rhythm, so the rows share edges. */
-@media(max-width:600px){body.layout-tablet #meterSettingsGrid :is(.field-display,.field-gamut,.field-gamma,.field-chromaticity,.field-delay,.field-patch,.field-refresh){width:calc(50% - 6px)}}
+@media(max-width:600px){body.layout-tablet #meterSettingsGrid :is(.field-gamut,.field-gamma,.field-chromaticity,.field-delay,.field-patch,.field-refresh){width:calc(50% - 6px)}body.layout-tablet #meterSettingsGrid .field-display{width:100%}}
 #meterSeriesBtnRow .inline-select{width:15rem;max-width:100%}
 /* Chart-toolbar Delta E pickers: one width for both, height from .inline-select. */
 #meterTwoPointDeltaEForm,#meterColorDeltaEForm{width:9.5rem;max-width:100%;box-sizing:border-box}
@@ -686,11 +685,10 @@ body.layout-tablet .meter-live-primary-values{flex-wrap:nowrap!important;overflo
    .btn-row-end  trailing Cancel ... Primary footer for dialogs and forms (stacks full-width on phones)
    .btn-grid     peer actions in equal columns that line up row to row (-sm/-lg set the column floor)
    .btn-seg      tab-like selector strip whose segments share the full width */
-:root{--btn-gap:8px;--btn-h-sm:28px}
+:root{--btn-gap:8px;--btn-h-sm:var(--control-h)}
 .btn-row{display:flex;gap:var(--btn-gap);flex-wrap:wrap;align-items:center}
 .btn-row-end{justify-content:flex-end}
-/* Modal dialogs (confirm, prompt) centre their footer under the centred card. */
-[aria-modal="true"]>.btn-row-end{justify-content:center}
+[aria-modal="true"]>.btn-row-end{justify-content:flex-end}
 .btn-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,var(--btn-grid-min,160px)),1fr));gap:var(--btn-gap)}
 .btn-grid-sm{--btn-grid-min:120px}
 .btn-grid-lg{--btn-grid-min:200px}
@@ -724,7 +722,7 @@ font-weight:600;transition:background-color .15s ease-out,color .15s ease-out,bo
 /* Dense in-chart steppers and inline chips keep their own fixed size. */
 .meter-lg-rgb-button,.meter-lg-rgb-luma-button,.meter-companion-downloads .btn,#meterSettingsGrid .meter-target-measure-btn{min-height:0}
 .btn-primary{background:var(--accent-fill);color:var(--on-accent)}
-.btn-primary:hover{filter:brightness(.92)}
+.btn-primary:hover{filter:brightness(.86)}
 .btn-danger{background:var(--danger-fill);color:var(--on-danger)}
 .btn-danger:hover{filter:brightness(.92)}
 .btn-secondary{background:var(--neutral-fill);color:var(--text)}
@@ -744,7 +742,7 @@ font-weight:600;transition:background-color .15s ease-out,color .15s ease-out,bo
 .card h2 .card-h2-action{margin-left:auto}
 /* Reset Defaults: tinted in the warning colour like the reboot button, so
    it reads as "puts things back", not as one more neutral control. */
-.card h2 .btn-reset{--rst:var(--status-warning);gap:6px;padding:6px 14px 6px 12px;min-height:30px;color:var(--warning-text);background:color-mix(in srgb,var(--rst) 14%,transparent);box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--rst) 32%,transparent);transition:background-color .15s ease-out,box-shadow .15s ease-out,transform .1s var(--ease-out)}
+.card h2 .btn-reset{--rst:var(--status-warning);gap:6px;padding:6px 14px 6px 12px;min-height:30px;color:var(--warning-text);background:transparent;box-shadow:inset 0 0 0 1px currentColor;transition:background-color .15s ease-out,box-shadow .15s ease-out,transform .1s var(--ease-out)}
 .card h2 .btn-reset:hover,.card h2 .btn-reset:focus-visible{background:color-mix(in srgb,var(--rst) 24%,transparent);box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--rst) 55%,transparent)}
 .card h2 .btn-reset svg{flex:0 0 auto;width:14px;height:14px}
 .card:not(.collapsed) h2:has(.card-h2-action)::after{margin-left:0}
@@ -752,7 +750,7 @@ font-weight:600;transition:background-color .15s ease-out,color .15s ease-out,bo
 .btn:focus-visible,.icon-btn:focus-visible{outline:2px solid var(--focus-ring);outline-offset:2px}
 .btn.btn:disabled,.btn.btn:disabled:hover{cursor:not-allowed;opacity:1;background:var(--control-disabled-bg);color:var(--control-disabled-text);box-shadow:none;filter:none;transform:none}
 /* Press feedback: the button gives a little under the pointer. */
-.btn:active:not(:disabled){transform:scale(.97)}
+.btn:active:not(:disabled){transform:scale(.97);filter:brightness(.78)}
 .btn-custom-series{border:1px dashed var(--accent)}
 .chart-expand-btn{position:absolute;right:6px;bottom:6px;width:24px;height:24px;padding:0;display:flex;align-items:center;justify-content:center;font-size:14px;line-height:1;background:rgba(20,24,34,.82);border:1px solid var(--border);border-radius:var(--r-xs);color:var(--text2);cursor:pointer;z-index:4}
 .chart-expand-btn:hover{color:var(--text);border-color:var(--accent)}
@@ -1026,7 +1024,7 @@ body.apply-settings-success .apply-settings-actions{display:none}
 /* Setting tiles (GPU memory, scaling type): the select takes the value's place, as in Output */
 :is(.devinfo-card,.facts-host) .devinfo-facts .devinfo-control{row-gap:6px}
 .devinfo-facts .devinfo-control>.label{grid-column:1;grid-row:1;display:flex;align-items:center;gap:6px;margin:0;align-self:end}
-.devinfo-facts .devinfo-control>select{grid-column:1;grid-row:2;width:100%;min-width:0;background-color:var(--surface-card,var(--surface-field))}
+.devinfo-facts .devinfo-control>select{grid-column:1;grid-row:2;width:100%;min-width:0}
 /* Fact tiles follow the same rows: label on top, value below, so every
    value in a row of tiles sits at the height of the dropdowns. */
 :is(.devinfo-card,.facts-host) .devinfo-facts .info-item{align-content:center}
@@ -1503,7 +1501,7 @@ background:linear-gradient(135deg,var(--sw-bg) 0 50%,var(--sw-card) 50% 100%)}
    HDR orange, DV violet) and the result colours; the text mixes towards the
    theme's text colour so it stays legible on light and dark themes. The
    hues are shared with the signal preset chips. */
-:root{--bits-8:#3aa99f;--bits-10:#4f8ff0;--bits-12:#d062b8}
+:root{--bits-8:var(--text-secondary);--bits-10:var(--text-secondary);--bits-12:var(--text-secondary)}
 .selftest-bits{--bits:var(--bits-8);justify-self:start;flex:0 0 auto;padding:4px 10px;border-radius:999px;font-size:var(--fs-xs);line-height:1.2;font-weight:700;font-variant-numeric:tabular-nums;white-space:nowrap;color:color-mix(in oklab,var(--bits) 58%,var(--text-primary));background:color-mix(in srgb,var(--bits) 16%,transparent);box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--bits) 38%,transparent)}
 .selftest-bits[data-bits="10"]{--bits:var(--bits-10)}
 .selftest-bits[data-bits="12"]{--bits:var(--bits-12)}

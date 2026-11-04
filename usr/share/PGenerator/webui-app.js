@@ -12085,7 +12085,7 @@ function meterContrastTextColor(css){
  const m=String(css||'').match(/\d+/g)||[];
  if(m.length<3) return '#222';
  const lum=0.299*parseInt(m[0],10)+0.587*parseInt(m[1],10)+0.114*parseInt(m[2],10);
- return lum<145?'#eee':'#222';
+ return lum<120?'#fff':'#111';
 }
 
 // CIE 1931 spectral locus xy coordinates (5nm intervals, 380-700nm)

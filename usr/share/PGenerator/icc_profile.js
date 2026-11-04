@@ -1789,7 +1789,7 @@ async function meterIccLoadProfiles(){
    cube.onclick=()=>meterIccConvertProfileToCube(profile.name,cube);
    const remove=document.createElement('button');
    remove.type='button';
-   remove.className='btn btn-sm btn-danger';
+   remove.className='btn btn-sm btn-danger-quiet';
    remove.textContent='×';
    remove.title='Delete this profile';
    remove.setAttribute('aria-label','Delete '+profile.name);

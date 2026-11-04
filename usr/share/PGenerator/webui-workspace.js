@@ -61,7 +61,7 @@ function meterRenderCustomSeriesManager(){
     +'<button class="btn btn-sm btn-secondary" onclick="meterManagerEditSeries('+series.id+')">Edit</button>'
     +'<button class="btn btn-sm btn-secondary" onclick="meterExportCustomSeriesById('+series.id+',\'calman\')" title="Export as CalMAN 8-bit CSV">CalMAN</button>'
     +'<button class="btn btn-sm btn-secondary" onclick="meterExportCustomSeriesById('+series.id+',\'colourspace\')" title="Export as ColourSpace CSV">CSpace</button>'
-    +'<button class="btn btn-sm btn-danger" onclick="meterManagerDeleteSeries('+series.id+')">Delete</button>'
+    +'<button class="btn btn-sm btn-danger-quiet" onclick="meterManagerDeleteSeries('+series.id+')">Delete</button>'
    +'</div></td>'
   +'</tr>';
  }).join('');
@@ -451,7 +451,7 @@ async function meterLoadSolvedLutList(){
     +'<span class="meter-solved-lut-name-main">'+esc(name)+'</span><span class="meter-solved-lut-name-date">'+esc(when)+'</span></button>'
     +'<button class="btn btn-sm btn-secondary" title="Download the .cube file" onclick="meterDownloadSolvedLut(\''+escJs(name)+'\')">.cube</button>'
     +'<button class="btn btn-sm btn-secondary" title="Convert and download as Autodesk/Kodak .3dl (Lustre, Flame)" onclick="meterDownloadSolvedLutAs3dl(\''+escJs(name)+'\')">.3dl</button>'
-    +'<button class="btn btn-sm btn-danger" title="Delete this LUT (and its .bin/.json companions) from the history" onclick="meterDeleteSolvedLut(\''+escJs(name)+'\')">&#10005;</button>'
+    +'<button class="btn btn-sm btn-danger-quiet" title="Delete this LUT (and its .bin/.json companions) from the history" onclick="meterDeleteSolvedLut(\''+escJs(name)+'\')">&#10005;</button>'
    +'</div>';
   }).join('');
   return luts;
@@ -1578,7 +1578,7 @@ function meterRenderCustomSeriesEditor(){
    cells+='<td style="padding:6px"><input type="number" min="0" max="1" step="0.0001" placeholder="auto" title="Explicit target chromaticity y. Blank = derive from the patch codes." data-cs-row="'+i+'" data-cs-field="target_y" value="'+(p.target_y!=null?p.target_y:'')+'" oninput="meterCustomSeriesEditorSync(this)" style="'+inputStyle+'"></td>';
   }
   if(isHdr) cells+='<td style="padding:6px"><input type="number" min="0" max="10000" step="0.1" placeholder="auto" data-cs-row="'+i+'" data-cs-field="target_nits" value="'+(p.target_nits!=null?p.target_nits:'')+'" oninput="meterCustomSeriesEditorSync(this)" style="'+inputStyle+'"></td>';
-  cells+='<td style="padding:6px"><button class="btn btn-sm btn-danger" onclick="meterCustomSeriesEditorRemoveRow('+i+')" title="Remove patch">&#10005;</button></td>';
+  cells+='<td style="padding:6px"><button class="btn btn-sm btn-danger-quiet" onclick="meterCustomSeriesEditorRemoveRow('+i+')" title="Remove patch">&#10005;</button></td>';
   return '<tr data-cs-row-index="'+i+'" class="'+(meterCustomSeriesPatchDrag&&meterCustomSeriesPatchDrag.index===i?'is-patch-dragging':'')+'" style="border-bottom:1px solid var(--border)">'+cells+'</tr>';
  }).join('');
 }
@@ -13639,21 +13639,21 @@ function drawGammaLegend(ctx,chart,targetLabel,avgText){
   measuredY=y2;
  }
  ctx.setLineDash([4,4]);
- ctx.strokeStyle='#ffb74d';
+ ctx.strokeStyle=pgThemeColor('--chart-target','#ffb74d');
  ctx.lineWidth=2;
  ctx.beginPath();
  ctx.moveTo(targetX,targetY-3);
  ctx.lineTo(targetX+18,targetY-3);
  ctx.stroke();
  ctx.setLineDash([]);
- ctx.fillStyle='#ffb74d';
+ ctx.fillStyle=pgThemeColor('--chart-target','#ffb74d');
  ctx.fillText(targetText,targetX+24,targetY);
- ctx.strokeStyle='#7ecbff';
+ ctx.strokeStyle=pgThemeColor('--chart-measured','#7ecbff');
  ctx.beginPath();
  ctx.moveTo(measuredX,measuredY-3);
  ctx.lineTo(measuredX+18,measuredY-3);
  ctx.stroke();
- ctx.fillStyle='#7ecbff';
+ ctx.fillStyle=pgThemeColor('--chart-measured','#7ecbff');
  ctx.fillText(measuredText,measuredX+24,measuredY);
  if(avgText){
   ctx.textAlign='right';
@@ -13698,7 +13698,7 @@ function drawGammaValuePreset(gsSteps){
   if(g!=null&&isFinite(g)) tgtPts.push([meterGammaChartX(s,chartSteps,idx),Math.max(0,Math.min(1,(g-yMin)/(yMax-yMin)))]);
  });
  const tgtPtsAnchored=meterGammaValueAnchorPoints(tgtPts);
- if(tgtPtsAnchored.length>1) drawDashedLine(ctx,chart,tgtPtsAnchored,'#ffb74d');
+ if(tgtPtsAnchored.length>1) drawDashedLine(ctx,chart,tgtPtsAnchored,pgThemeColor('--chart-target','#ffb74d'));
  drawGammaLegend(ctx,chart,targetLabel,'');
 }
 
@@ -13789,12 +13789,12 @@ function drawGammaValueChart(gs,allSteps,readingMap){
   const mg=gammaMap[step.ire];
   if(mg!=null&&isFinite(mg)) mPts.push([x,Math.max(0,Math.min(1,(mg-yMin)/(yMax-yMin)))]);
  });
- if(tgtPts.length>1) drawDashedLine(ctx,chart,tgtPts,'#ffb74d');
- if(mPts.length>1) drawLine(ctx,chart,mPts,'#7ecbff',2);
+ if(tgtPts.length>1) drawDashedLine(ctx,chart,tgtPts,pgThemeColor('--chart-target','#ffb74d'));
+ if(mPts.length>1) drawLine(ctx,chart,mPts,pgThemeColor('--chart-measured','#7ecbff'),2);
  // Marker on every measured gamma point: without these the first interior
  // read of a series (e.g. 5% right after 100%/0%) has no neighbour to draw
  // a line to and the chart stays blank until the next patch lands.
- if(mPts.length) drawDots(ctx,chart,mPts,'#7ecbff',2.5);
+ if(mPts.length) drawDots(ctx,chart,mPts,pgThemeColor('--chart-measured','#7ecbff'),2.5);
  // Optional per-channel gamma overlay (R/G/B from the cached
  // meterPerChannelGamma computed in drawAllCharts).
  const pcToggle=document.getElementById('meterPerChannelGamma');
@@ -13811,9 +13811,9 @@ function drawGammaValueChart(gs,allSteps,readingMap){
    if(yg!=null) gPts.push([x,yg]);
    if(yb!=null) bPts.push([x,yb]);
   });
-  if(rPts.length>1) drawLine(ctx,chart,rPts,'#ff5555',1.5);
-  if(gPts.length>1) drawLine(ctx,chart,gPts,'#55dd55',1.5);
-  if(bPts.length>1) drawLine(ctx,chart,bPts,'#5588ff',1.5);
+  if(rPts.length>1) drawLine(ctx,chart,rPts,pgThemeColor('--chart-rgb-r','#ff5555'),1.5);
+  if(gPts.length>1) drawLine(ctx,chart,gPts,pgThemeColor('--chart-rgb-g','#55dd55'),1.5);
+  if(bPts.length>1) drawLine(ctx,chart,bPts,pgThemeColor('--chart-rgb-b','#5588ff'),1.5);
  }
  let avgText='';
  if(mPts.length>0){
@@ -14533,6 +14533,8 @@ function drawChartGrid(ctx,opts){
  // keeps the visible patch range obvious after the shared 16k width cap.
  const maxLargeSeriesLabels=Math.max(1,Math.floor(dw/(opts.rotateX?52:44)));
  const xStride=xSteps>160?Math.max(1,Math.ceil(xSteps/maxLargeSeriesLabels)):1;
+ // A 45-degree label needs about 16 px of axis; a phone cannot give every step that.
+ const xRotStride=Math.max(xStride,Math.ceil(16/Math.max(1,dw/Math.max(1,xSteps))));
  const firstXLabel=opts.xLabel?String(opts.xLabel(0,xSteps)||''):'';
  const densePatchAxis=xSteps>160&&opts.rotateX&&/^Patch\s+\d+$/i.test(firstXLabel);
  if(densePatchAxis){
@@ -14578,7 +14580,7 @@ function drawChartGrid(ctx,opts){
  if(opts.rotateX){
   if(densePatchAxis){
    ctx.font='11px sans-serif';
-   for(let i=0;i<=xSteps;i++){
+   for(let i=0;i<=xSteps;i+=xRotStride){
     const lbl=String(opts.xLabel(i,xSteps)||'').replace(/^Patch\s+/i,'');
     if(!lbl) continue;
     const p=viewX(i/xSteps);
@@ -14592,7 +14594,7 @@ function drawChartGrid(ctx,opts){
     ctx.restore();
    }
   } else {
-   for(let i=0;i<=xSteps;i+=xStride){
+   for(let i=0;i<=xSteps;i+=xRotStride){
     const lbl=opts.xLabel?opts.xLabel(i,xSteps):(i*100/xSteps).toFixed(0);
     if(!lbl) continue;
     const p=viewX(i/xSteps);
@@ -14605,7 +14607,7 @@ function drawChartGrid(ctx,opts){
     ctx.fillText(lbl,0,4);
     ctx.restore();
    }
-   if(xSteps%xStride){
+   if(xSteps%xRotStride){
     const lbl=opts.xLabel?opts.xLabel(xSteps,xSteps):'100';
    if(lbl){
     const p=viewX(1);
@@ -14841,7 +14843,7 @@ function drawEOTFChart(gs,allSteps,readingMap){
  // reading (e.g. the first interior patch of a manual series) is visible
  // before a neighbour exists to draw a line to.
  mSegments.forEach(seg=>{
-  if(seg.length>1) drawLine(ctx,chart,seg,'#ffeb3b',1.25);
+  if(seg.length>1) drawLine(ctx,chart,seg,pgThemeColor('--chart-eotf-measured','#ffeb3b'),1.25);
  });
  drawDots(ctx,chart,meterMeasuredEotfLuminanceDotPoints(measureSteps,readingMap,axisMax,eotfPlotMeasured,'eotf'),'#ffeb3b',2.2);
  // Optional per-channel R/G/B EOTF overlay (mirrors the Gamma chart's
@@ -14856,7 +14858,7 @@ function drawEOTFChart(gs,allSteps,readingMap){
   const rw=whiteXYZ?xyzToLinRgb(whiteXYZ.X,whiteXYZ.Y,whiteXYZ.Z,pcGamut.xyzToRgb):null;
   if(rw){
    const pcSteps=plotSteps.length?plotSteps:targetSteps;
-   [{i:0,c:'#ff5555'},{i:1,c:'#55dd55'},{i:2,c:'#5588ff'}].forEach(ch=>{
+   [{i:0,c:pgThemeColor('--chart-rgb-r','#ff5555')},{i:1,c:pgThemeColor('--chart-rgb-g','#55dd55')},{i:2,c:pgThemeColor('--chart-rgb-b','#5588ff')}].forEach(ch=>{
     const pts=[];
     pcSteps.forEach((step,idx)=>{
      const rd=readingMap[step.ire];
@@ -14949,7 +14951,7 @@ function drawGammaChart(gs,allSteps,readingMap){
   }
  );
  mSegments.forEach(seg=>{
-  if(seg.length>1) drawLine(ctx,chart,seg,'#ffeb3b',1.25);
+  if(seg.length>1) drawLine(ctx,chart,seg,pgThemeColor('--chart-eotf-measured','#ffeb3b'),1.25);
  });
  // Marker on every actual read so a lone reading is visible before a
  // neighbour exists to draw a line to.
@@ -15086,7 +15088,7 @@ function drawDeltaEChart(gs,allSteps,readingMap,rawGs){
    }
    ctx.fillStyle=pgThemeColor('--chart-annotation','#ccc');ctx.font='11px sans-serif';
    ctx.textAlign='center';
-   ctx.fillText(dE.toFixed(2),cx,y-4);
+   if(i%Math.ceil(26/Math.max(1,(chart.dw||chart.w)/n))===0) ctx.fillText(dE.toFixed(2),cx,y-4);
   } else {
    // Placeholder: thin grey line
    ctx.fillStyle='#33333380';
@@ -15176,7 +15178,7 @@ function drawDeltaE2000Chart(gs,allSteps,readingMap){
    ctx.fillRect(cx-barW/2,y,barW,Math.max(2,barH*chart.h));
    ctx.fillStyle=pgThemeColor('--chart-annotation','#ccc');ctx.font='11px sans-serif';
    ctx.textAlign='center';
-   ctx.fillText(dE.toFixed(2),cx,y-4);
+   if(i%Math.ceil(26/Math.max(1,(chart.dw||chart.w)/n))===0) ctx.fillText(dE.toFixed(2),cx,y-4);
   } else {
    ctx.fillStyle='#33333380';
    ctx.fillRect(cx-1,chart.pad.t+chart.h-2,2,2);
@@ -19456,7 +19458,7 @@ async function loadCustomCcssList(){
    : customCcssFile===f;
   return '<div style="display:flex;align-items:center;gap:6px;margin-bottom:3px">'
   +'<button class="btn btn-sm '+(active?'btn-success':'btn-secondary')+'" data-ccss-filename="'+ccssPreviewEscapeHtml(f)+'" style="flex:1;font-size:.78rem;padding:2px 6px;text-align:left" onclick="selectCustomCcss(\''+f+'\')"><span data-ccss-selected-mark>'+(active?'\u2713 ':'')+'</span>['+format+'] '+label+'</button>'
-  +'<button class="btn btn-sm" style="font-size:.78rem;padding:2px 6px;color:var(--red)" onclick="deleteCustomCcss(\''+f+'\')">\u2715</button></div>';
+  +'<button class="btn btn-sm btn-danger-quiet" style="font-size:.78rem;padding:2px 6px" onclick="deleteCustomCcss(\''+f+'\')">\u2715</button></div>';
  }).join('');
 }
 

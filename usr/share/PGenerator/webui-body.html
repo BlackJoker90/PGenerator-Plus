@@ -906,7 +906,7 @@ __PG_LOGO_DARK__
    </div>
    <div class="btn-row" id="meterReadBtnRow" style="margin:0">
     <button class="btn btn-sm btn-secondary" id="meterCalibrateBtn" onclick="meterCalibrateSelectedMeter()" style="display:none" disabled>Calibrate Meter</button>
-    <button class="btn btn-sm btn-danger" id="meterClearChartBtn" onclick="meterClearResults()" style="display:none">Clear Chart Data</button>
+    <button class="btn btn-sm btn-danger-quiet" id="meterClearChartBtn" onclick="meterClearResults()" style="display:none">Clear Chart Data</button>
     <button class="btn btn-sm btn-secondary" id="meterReadOnce" onclick="meterReadOnce()" style="display:none" disabled>&#9679; Read Once</button>
     <button class="btn btn-sm btn-secondary" id="meterContinuous" onclick="meterToggleContinuous()" style="display:none" disabled>&#8635; Continuous</button>
     <button class="btn btn-sm btn-secondary" id="meterReadSeriesBtn" onclick="meterReadSeriesPrimaryAction()" style="display:none">&#9654; Read Series</button>
@@ -1052,7 +1052,7 @@ __PG_LOGO_DARK__
     </div>
     <div style="display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap">
      <div class="btn-row" id="meterCustomSeriesExportRow" style="margin:0">
-      <button class="btn btn-sm btn-danger" id="meterCustomSeriesDeleteBtn" onclick="meterDeleteCustomSeries()" style="display:none">Delete Series</button>
+      <button class="btn btn-sm btn-danger-quiet" id="meterCustomSeriesDeleteBtn" onclick="meterDeleteCustomSeries()" style="display:none">Delete Series</button>
       <button class="btn btn-sm btn-secondary" onclick="meterExportCustomSeries('calman')" title="Export the patch list as 8-bit RGB triplets (CalMAN import)">Export CalMAN CSV</button>
       <button class="btn btn-sm btn-secondary" onclick="meterExportCustomSeries('colourspace')" title="Export the patch list as a ColourSpace CSV (10-bit, # Bitdepth/# Range header)">Export ColourSpace CSV</button>
      </div>

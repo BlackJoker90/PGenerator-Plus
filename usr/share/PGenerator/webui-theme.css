@@ -18,7 +18,7 @@ button,input,select,textarea{font-family:inherit}
 --control-disabled-bg:color-mix(in srgb,var(--text-primary) 7%,var(--surface-card));--control-disabled-text:color-mix(in srgb,var(--text-primary) 50%,var(--surface-card));
 --tile-bg:color-mix(in srgb,var(--text-primary) 3.5%,var(--surface-card));--tile-border:color-mix(in srgb,var(--text-primary) 11%,transparent);--tile-pad:10px 12px;
 --fs-2xs:.6875rem;--fs-xs:.75rem;--fs-sm:.8125rem;--fs-md:.875rem;--fs-lg:1rem;--fs-xl:1.125rem;--fs-2xl:1.25rem;
---r-xs:4px;--r-sm:6px;--r-md:8px;--r-lg:12px}
+--r-xs:4px;--r-sm:6px;--r-md:8px;--r-lg:12px;--control-h:32px}
 [data-theme="light"]{color-scheme:light;--bg:#f3f5f8;--card:#fff;--panel:#fff;--border:#c7ced9;--accent:#315dd8;--accent2:#6445d5;
 --text:#18202b;--text2:#465466;--green:#217a36;--red:#c62828;--orange:#a55300;--dv:#7044bd;
 --surface-page:#f3f5f8;--surface-header:#fff;--surface-sidebar:#f7f8fb;--surface-card:#fff;--surface-drawer:#fff;--surface-modal:#fff;--surface-popover:#f7f8fb;--surface-inset:#f3f5f8;--surface-field:#fff;
@@ -28,7 +28,7 @@ button,input,select,textarea{font-family:inherit}
 --scroll-track:#e3e7ed;--scroll-thumb:#9aa5b3;--scroll-thumb-border:#7f8b9a;--scroll-thumb-hover:#7f8b9a;
 --status-success:#217a36;--status-warning:#a55300;--status-error:#c62828;--status-hdmi:#b51d1d;--status-dv:#7044bd;--status-calibration:#315dd8;--badge-neutral:#d5dce7;
 --accent-fill:#315dd8;--accent-fill2:#6445d5;--success-fill:#217a36;--danger-fill:#c62828;--warning-text:#8f4700;
---field-border:color-mix(in srgb,var(--text-primary) 50%,var(--surface-card));--field-border-hover:color-mix(in srgb,var(--text-primary) 72%,var(--surface-card));
+--field-border:color-mix(in srgb,var(--text-primary) 54%,var(--surface-card));--field-border-hover:color-mix(in srgb,var(--text-primary) 72%,var(--surface-card));
 --control-disabled-bg:color-mix(in srgb,var(--text-primary) 8%,var(--surface-card));--control-disabled-text:color-mix(in srgb,var(--text-primary) 58%,var(--surface-card))}
 /* Palettes: colour overrides over the dark or light base theme (data-palette). */
 [data-palette="oled"]{--bg:#000;--card:#0b0b0b;--panel:#0b0b0b;--border:#242424;--divider:#242424;
@@ -323,8 +323,8 @@ body.meter-autocal-active .meter-autocal-mask{display:flex}
    edge, which is the ragged hanging indent the hints used to show. */
 .fac-option-hint{display:block;margin:5px 0 0 24px;font-size:var(--fs-xs);color:var(--text2);line-height:1.5}
 .fac-option-controls{margin:7px 0 0 24px;display:flex;gap:8px;flex-wrap:wrap;align-items:center}
-.fac-option-controls select{width:15rem;max-width:100%;min-height:30px;box-sizing:border-box}
-.fac-option-controls select{background:var(--surface-field);border:1px solid var(--border);border-radius:var(--r-sm);color:var(--text);padding:6px 10px}
+.fac-option-controls select{width:15rem;max-width:100%;min-height:var(--control-h);box-sizing:border-box}
+.fac-option-controls select{background:var(--surface-field);border:1px solid var(--field-border);border-radius:var(--r-sm);color:var(--text);padding:6px 10px}
 body.layout-tablet .fac-option-controls select{min-height:44px}
 [data-theme="light"] .fac-option-controls select{background:var(--surface-inset);color:var(--text-primary)}
 /* Wizard display-type step: keep panel tech + CCSS selects inside the card. */
@@ -452,7 +452,7 @@ body.layout-tablet .meter-ccss-profile-control-row > #meterCcssProfile{width:100
 .meter-companion-pair-code{font-family:'Courier New',monospace;font-weight:700;font-size:var(--fs-md);letter-spacing:.1em;color:var(--accent)}
 .meter-card-header-meter{display:flex;align-items:center;gap:6px;width:100%;max-width:100%;margin:0}
 /* Same metrics as .field select so Meter/Display Type match Target Colorspace etc. */
-.meter-card-header-select{width:100%;max-width:100%;box-sizing:border-box;background:var(--surface-inset);border:1px solid var(--border);color:var(--text);padding:6px 24px 6px 10px;border-radius:var(--r-sm);font-size:var(--fs-sm);line-height:normal;outline:none;transition:border .2s;-webkit-appearance:none;appearance:none;cursor:pointer;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' fill='%23888'%3E%3Cpath d='M5 7L0 2h10z'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 8px center}
+.meter-card-header-select{width:100%;max-width:100%;box-sizing:border-box;background:var(--surface-field);border:1px solid var(--field-border);color:var(--text);padding:6px 24px 6px 10px;border-radius:var(--r-sm);font-size:var(--fs-sm);line-height:normal;outline:none;transition:border .2s;-webkit-appearance:none;appearance:none;cursor:pointer;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' fill='%23888'%3E%3Cpath d='M5 7L0 2h10z'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 8px center}
 .meter-card-header-select:focus{border-color:var(--accent)}
 .meter-card-header-select option,.meter-card-header-select optgroup{background:var(--surface-inset);color:var(--text)}
 .meter-ccss-profile-row{display:flex;flex-direction:column;gap:3px;width:100%;max-width:100%;min-width:0}
@@ -479,7 +479,7 @@ body.layout-desktop .meter-card-header-row .meter-xyz-gear{width:30px;height:30p
 .setting-tiles>.field{display:grid;grid-template-columns:minmax(0,1fr);grid-template-rows:auto auto;row-gap:6px;align-items:center;padding:0;min-width:0}
 .setting-tiles>.field>label{grid-column:1;grid-row:1;align-self:end}
 .setting-tiles>.field>select,.setting-tiles>.field>.mode-select-wrap{grid-column:1;grid-row:2;width:100%;min-width:0}
-.setting-tiles>.field select{background-color:var(--surface-card,var(--surface-field));font-weight:600}
+.setting-tiles>.field select{background-color:var(--surface-card,var(--surface-field))}
 @container (max-width:720px){.grid.setting-tiles{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @container (max-width:420px){.grid.setting-tiles{grid-template-columns:minmax(0,1fr)}}
 .grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
@@ -487,13 +487,13 @@ body.layout-desktop .meter-card-header-row .meter-xyz-gear{width:30px;height:30p
 .field label{font-size:var(--fs-sm);color:var(--text2)}
 /* Base look for every drop-down select, so unclassed ones match .field select.
    Zero specificity: class and inline styles still win, except for the chevron. */
-:where(select:not([multiple]):not([size])){background-color:var(--surface-inset);border:1px solid var(--border);color:var(--text-primary);
-border-radius:var(--r-sm);padding:6px 10px;font-size:var(--fs-sm);min-height:29px;font-family:inherit;outline:none;transition:border-color .2s}
+:where(select:not([multiple]):not([size])){background-color:var(--surface-field);border:1px solid var(--field-border);color:var(--text-primary);
+border-radius:var(--r-sm);padding:6px 10px;font-size:var(--fs-sm);min-height:var(--control-h);font-family:inherit;outline:none;transition:border-color .2s}
 select:not([multiple]):not([size]){-webkit-appearance:none!important;appearance:none!important;cursor:pointer;padding-right:26px!important;
 background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' fill='%23888'%3E%3Cpath d='M5 7L0 2h10z'/%3E%3C/svg%3E")!important;
 background-repeat:no-repeat!important;background-position:right 8px center!important}
 select:not([multiple]):not([size]):focus-visible{border-color:var(--accent);box-shadow:0 0 0 1px color-mix(in srgb,var(--accent) 35%,transparent)}
-.field select,.field input{background:var(--surface-inset);border:1px solid var(--border);color:var(--text);
+.field select,.field input{background:var(--surface-field);border:1px solid var(--field-border);color:var(--text);
 padding:6px 10px;border-radius:var(--r-sm);font-size:var(--fs-sm);outline:none;transition:border .2s}
 .field select:focus,.field input:focus{border-color:var(--accent)}
 .field select,.inline-select{cursor:pointer;-webkit-appearance:none;appearance:none;
@@ -510,7 +510,7 @@ background-repeat:no-repeat;background-position:right 8px center;padding-right:2
 .mode-select-wrap.is-no-display .mode-select-value::before{content:"";position:absolute;left:1px;top:50%;width:7px;height:7px;margin-top:-3.5px;border-radius:50%;background:var(--orange);box-shadow:0 0 0 3px color-mix(in srgb,var(--orange) 22%,transparent)}
 .mode-select-value{position:absolute;left:10px;right:24px;top:50%;transform:translateY(-50%);
 pointer-events:none;color:var(--text);font-size:var(--fs-sm);line-height:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.inline-select{background-color:var(--surface-inset);border:1px solid var(--border);color:var(--text);
+.inline-select{background-color:var(--surface-field);border:1px solid var(--field-border);color:var(--text);
 padding:4px 24px 4px 8px;border-radius:var(--r-sm);font-size:var(--fs-xs);outline:none;transition:border .2s,box-shadow .2s;min-height:28px}
 .inline-select:focus{outline:none}
 .inline-select:focus-visible{border-color:var(--accent);box-shadow:0 0 0 1px color-mix(in srgb,var(--accent) 35%,transparent)}
@@ -535,7 +535,7 @@ padding:4px 24px 4px 8px;border-radius:var(--r-sm);font-size:var(--fs-xs);outlin
 #meterSettingsGrid .field label.meter-field-label{white-space:normal}
 #meterSettingsGrid .field > select{width:100%}
 #meterSettingsGrid .field > input[type="text"],
-#meterSettingsGrid .field > input[type="number"]{width:100%;min-height:34px}
+#meterSettingsGrid .field > input[type="number"]{width:100%;min-height:var(--control-h)}
 #meterSettingsGrid .field-display{width:170px;max-width:100%}
 #meterSettingsGrid .field-gamut{width:150px;max-width:100%}
 #meterSettingsGrid .field-gamut > select{width:100%;max-width:100%}
@@ -572,7 +572,7 @@ body.layout-desktop [data-widget="lg"] .grid>.field>input:not([type=checkbox]),b
 .ccss-file-input{display:block;width:100%;margin-bottom:10px;padding:0;border:0;background:transparent;font:inherit;font-size:var(--fs-sm);color:var(--text-secondary)}
 .ccss-file-input::file-selector-button{margin-right:10px;padding:7px 12px;border:0;border-radius:var(--r-sm);background:var(--neutral-fill);color:var(--text);font:inherit;font-weight:600;cursor:pointer}
 .ccss-file-input::file-selector-button:hover{filter:brightness(1.12)}
-.ccss-input{box-sizing:border-box;min-height:34px;padding:6px 10px;border:1px solid var(--border);border-radius:var(--r-sm);background:var(--surface-field);color:var(--text-primary);font:inherit;font-size:var(--fs-sm);outline:none;transition:border-color .2s}
+.ccss-input{box-sizing:border-box;min-height:var(--control-h);padding:6px 10px;border:1px solid var(--field-border);border-radius:var(--r-sm);background:var(--surface-field);color:var(--text-primary);font:inherit;font-size:var(--fs-sm);outline:none;transition:border-color .2s}
 .ccss-input:focus,.ccss-input:focus-visible{border-color:var(--accent)}
 .ccss-input:disabled{opacity:.55;cursor:not-allowed}
 .ccss-upload-row{display:flex;gap:8px;align-items:center}
@@ -593,12 +593,12 @@ body.layout-desktop [data-widget="lg"] .grid>.field>input:not([type=checkbox]),b
 .ccss-legend-peak{color:var(--text-secondary)}
 @media(max-width:700px){.ccss-editor-layout{grid-template-columns:minmax(0,1fr)}}
 .meter-inline-value{display:inline-flex;align-items:center;gap:6px;padding:0}
-.meter-inline-value input:not([type=checkbox]){width:54px;min-height:0;padding:6px 10px;border:1px solid var(--border) !important;background:var(--surface-inset) !important;border-radius:var(--r-sm)}
+.meter-inline-value input:not([type=checkbox]){width:54px;min-height:0;padding:6px 10px;border:1px solid var(--field-border) !important;background:var(--surface-field) !important;border-radius:var(--r-sm)}
 .meter-inline-value input[type=checkbox]{width:16px;height:16px;margin:0;accent-color:var(--accent);flex:0 0 auto}
 #meterSettingsGrid .field-delay #meterDelay{height:auto;box-sizing:border-box}
 .meter-inline-value input:focus{outline:none;border-color:var(--accent) !important}
 .meter-inline-unit{font-size:var(--fs-2xs);color:var(--text2);white-space:nowrap}
-.meter-chart-inline-input{width:62px;height:22px;min-height:0;padding:2px 6px;border:1px solid var(--border);background:var(--surface-inset);color:var(--text);border-radius:var(--r-sm);font-size:var(--fs-2xs);box-sizing:border-box}
+.meter-chart-inline-input{width:62px;height:22px;min-height:0;padding:2px 6px;border:1px solid var(--field-border);background:var(--surface-field);color:var(--text);border-radius:var(--r-sm);font-size:var(--fs-2xs);box-sizing:border-box}
 .meter-chart-inline-input:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 1px color-mix(in srgb,var(--accent) 25%,transparent)}
 /* Muted per-field target readout in the live Patch Reading box. */
 .meter-live-tgt{font-size:var(--fs-xs);color:var(--text2);font-weight:400;white-space:nowrap}
@@ -971,7 +971,7 @@ body.dv-profile-done-error #dvProfileDoneStatus{color:#e08184}
 .lg-connect-card{width:min(480px,calc(100vw - 36px))}
 .apply-settings-pin{margin-top:14px;display:flex;flex-direction:column;align-items:stretch;gap:6px}
 .apply-settings-pin-label{font-size:var(--fs-2xs);color:var(--text2);text-align:left}
-.apply-settings-pin-input{flex:1;min-width:0;min-height:34px;background:var(--surface-field);border:1px solid var(--border);border-radius:var(--r-sm);color:var(--text);font-size:var(--fs-lg);font-weight:600;letter-spacing:.18em;padding:6px 12px;box-sizing:border-box;color-scheme:dark;text-align:center;outline:none}
+.apply-settings-pin-input{flex:1;min-width:0;min-height:var(--control-h);background:var(--surface-field);border:1px solid var(--field-border);border-radius:var(--r-sm);color:var(--text);font-size:var(--fs-lg);font-weight:600;letter-spacing:.18em;padding:6px 12px;box-sizing:border-box;color-scheme:dark;text-align:center;outline:none}
 .apply-settings-pin-input:focus{border-color:var(--accent)}
 .apply-settings-pin-input:disabled{opacity:.55;cursor:not-allowed}
 .apply-settings-pin-hint{font-size:var(--fs-xs);color:var(--text2);line-height:1.4;margin-top:2px;text-align:center}
@@ -1026,7 +1026,7 @@ body.apply-settings-success .apply-settings-actions{display:none}
 /* Setting tiles (GPU memory, scaling type): the select takes the value's place, as in Output */
 :is(.devinfo-card,.facts-host) .devinfo-facts .devinfo-control{row-gap:6px}
 .devinfo-facts .devinfo-control>.label{grid-column:1;grid-row:1;display:flex;align-items:center;gap:6px;margin:0;align-self:end}
-.devinfo-facts .devinfo-control>select{grid-column:1;grid-row:2;width:100%;min-width:0;background-color:var(--surface-card,var(--surface-field));font-weight:600}
+.devinfo-facts .devinfo-control>select{grid-column:1;grid-row:2;width:100%;min-width:0;background-color:var(--surface-card,var(--surface-field))}
 /* Fact tiles follow the same rows: label on top, value below, so every
    value in a row of tiles sits at the height of the dropdowns. */
 :is(.devinfo-card,.facts-host) .devinfo-facts .info-item{align-content:center}
@@ -1379,7 +1379,7 @@ body.layout-desktop #meter3dLutWorkspaceCard[data-desktop-active="true"]{border-
 .meter-3dlut-workspace-head{display:flex;align-items:flex-start;justify-content:space-between;gap:18px;margin-bottom:18px}
 .meter-3dlut-workspace-head h2{margin:0 0 5px;font-size:var(--fs-lg);color:var(--text)}
 .meter-3dlut-workspace-head p{margin:0;color:var(--text2);font-size:var(--fs-sm);line-height:1.45}
-.meter-3dlut-workspace-section{padding:14px;background:var(--surface-inset);border-radius:var(--r-md);margin-bottom:16px}
+.meter-3dlut-workspace-section{padding:14px;background:var(--surface-card);border:1px solid var(--border);border-radius:var(--r-md);margin-bottom:16px}
 .meter-3dlut-workspace-label{margin-bottom:9px;color:var(--text2);font-size:var(--fs-xs);font-weight:700;}
 .meter-3dlut-workspace-status{margin-top:9px;color:var(--text2);font-size:var(--fs-xs)}
 body.layout-desktop #meter3dLutWorkspaceCard #meterSeriesGroup3dLut{display:flex!important;width:100%;align-items:center}
@@ -1636,7 +1636,7 @@ background:linear-gradient(135deg,var(--sw-bg) 0 50%,var(--sw-card) 50% 100%)}
 .playlist-editor{margin-top:4px;padding-top:14px;border-top:1px solid var(--border)}
 .playlist-editor-head{display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin-bottom:14px}
 .playlist-name-field{flex:1 1 260px;max-width:420px}
-.playlist-name-field input{width:100%;min-height:34px;font-size:var(--fs-md);font-weight:600}
+.playlist-name-field input{width:100%;min-height:var(--control-h);font-size:var(--fs-md);font-weight:600}
 .playlist-editor-grid{display:grid;grid-template-columns:minmax(0,1.25fr) minmax(0,1fr);gap:20px}
 .playlist-pane-title{margin-bottom:8px;font-size:var(--fs-xs);font-weight:600;color:var(--text2)}
 .playlist-count{text-transform:none;letter-spacing:normal;font-weight:500}

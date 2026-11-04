@@ -1936,7 +1936,7 @@ async function checkPing(){
   setUiOffline(false);
   pgAnnounceStatus('connection','online','Connection to PGenerator+ restored.');
   if(wasOffline){
-   document.getElementById('statusDot').style.background='#4caf50';
+   document.getElementById('statusDot').style.background='var(--status-success)';
    document.getElementById('statusText').textContent='Connected';
    document.getElementById('statusWrap').title='Connection to PGenerator+ restored';
    setPowerButtonState(true);
@@ -1980,7 +1980,7 @@ async function checkPing(){
  _pingLatencies.push(latency);
  if(_pingLatencies.length>3) _pingLatencies.shift();
  const slow=_pingLatencies.length===3&&Math.min.apply(null,_pingLatencies)>1000;
- document.getElementById('statusDot').style.background=slow?'var(--orange)':'#4caf50';
+ document.getElementById('statusDot').style.background=slow?'var(--orange)':'var(--status-success)';
  document.getElementById('statusText').textContent=slow?'Connected \u00b7 slow':'Connected';
  document.getElementById('statusWrap').title=(slow?'Connected, but PGenerator+ answers slowly':'Connected to PGenerator+')+' \u00b7 response time '+latency+' ms';
  setPowerButtonState(true);
@@ -2082,7 +2082,7 @@ async function loadInfo(quiet){
  const calDot=document.getElementById('calDot');
  const calText=document.getElementById('calStatusText');
  if(info.calibration && info.calibration.connected){
-  calDot.style.background='#4caf50';
+  calDot.style.background='var(--status-success)';
   calText.style.color='';
   calText.textContent=(info.calibration.software||'Calibration software')+' connected';
   calWrap.dataset.pgBaseTitle=(info.calibration.software||'Calibration software')+' connected from '+info.calibration.ip+pgCalibrationSessionsText(info.calibration);
@@ -4410,7 +4410,7 @@ async function cecScan(){
    const name=(cleanName.length>1)?cleanName:(vendor==='LG'&&d.type===0?'LG TV':('Device '+d.addr));
    const type=typeNames[d.type]||(d.type!==undefined?'Type '+d.type:'');
    const pwr=pwrNames[d.power]||(d.power!==undefined?''+d.power:'?');
-   const pwrColor=d.power===0?'#4caf50':d.power===1?'var(--orange)':'var(--text2)';
+   const pwrColor=d.power===0?pgThemeColor('--status-success','#4caf50'):d.power===1?'var(--orange)':'var(--text2)';
    html+='<tr style="border-bottom:1px solid var(--border)">';
    // Names and addresses come from the devices on the HDMI bus.
    html+='<td style="padding:2px 6px">'+pgHtmlEsc(name)+'</td>';
@@ -4437,7 +4437,7 @@ function renderCecStatus(tvPower,physAddr){
  if(!el) return;
  if(physAddr) cecLastPhysAddr=physAddr;
  const pwr=tvPower||'unknown';
- const pwrColors={on:'#4caf50',standby:'var(--orange)','powering-on':'var(--orange)','powering-off':'var(--orange)',unknown:'var(--text2)'};
+ const pwrColors={on:pgThemeColor('--status-success','#4caf50'),standby:'var(--orange)','powering-on':'var(--orange)','powering-off':'var(--orange)',unknown:'var(--text2)'};
  const pwrLabels={on:'On',standby:'Standby','powering-on':'Waking Up','powering-off':'Going to Standby',unknown:'Unknown'};
  const c=pwrColors[pwr]||'var(--text2)';
  const lbl=pwrLabels[pwr]||pwr;
@@ -17131,15 +17131,15 @@ function meterRgbDeltasForLive(reading,bal,includeDeltaE){
  const isDelta=(bal.mode==='delta');
  const center=isDelta?0:100;
  const entries=[
-  {key:'R',label:'R',color:'#f44',v:(bal.R!=null)?bal.R-center:null,labelV:(bal.R!=null)?(isDelta?(bal.R-center):bal.R):null,showPlus:isDelta},
-  {key:'G',label:'G',color:'#4caf50',v:(bal.G!=null)?bal.G-center:null,labelV:(bal.G!=null)?(isDelta?(bal.G-center):bal.G):null,showPlus:isDelta},
-  {key:'B',label:'B',color:'#42a5f5',v:(bal.B!=null)?bal.B-center:null,labelV:(bal.B!=null)?(isDelta?(bal.B-center):bal.B):null,showPlus:isDelta}
+  {key:'R',label:'R',color:pgThemeColor('--chart-rgb-r','#f44'),v:(bal.R!=null)?bal.R-center:null,labelV:(bal.R!=null)?(isDelta?(bal.R-center):bal.R):null,showPlus:isDelta},
+  {key:'G',label:'G',color:pgThemeColor('--chart-rgb-g','#4caf50'),v:(bal.G!=null)?bal.G-center:null,labelV:(bal.G!=null)?(isDelta?(bal.G-center):bal.G):null,showPlus:isDelta},
+  {key:'B',label:'B',color:pgThemeColor('--chart-rgb-b','#42a5f5'),v:(bal.B!=null)?bal.B-center:null,labelV:(bal.B!=null)?(isDelta?(bal.B-center):bal.B):null,showPlus:isDelta}
  ];
  if(includeDeltaE&&reading){
   let de=null;
   try{ de=meterGreyDeltaResult(reading,meterGreyRefMode(),meterDeltaEForm(),meterGrayWorldWeight()).value; }catch(e){}
-  if(Number.isFinite(de)) entries.push({key:'DE',label:'ΔE',color:de<1?'#4caf50':de<3?'#ff9800':'#ff4444',v:de,labelV:de,showPlus:false,unit:'',decimals:2});
-  else entries.push({key:'DE',label:'ΔE',color:'#888',v:null,labelV:null,showPlus:false,unit:'',decimals:2});
+  if(Number.isFinite(de)) entries.push({key:'DE',label:'ΔE',color:de<1?pgThemeColor('--status-success','#4caf50'):de<3?pgThemeColor('--status-warning','#ff9800'):pgThemeColor('--status-error','#f44'),v:de,labelV:de,showPlus:false,unit:'',decimals:2});
+  else entries.push({key:'DE',label:'ΔE',color:pgThemeColor('--text-muted','#888'),v:null,labelV:null,showPlus:false,unit:'',decimals:2});
  }
  return {title:'RGB Δ',unit:'%',entries,decimals:2,minHalfRange:5,scaleHeadroom:1.6};
 }
@@ -17385,14 +17385,14 @@ function drawRGBBars(bal){
  ctx.font='8px sans-serif';ctx.textAlign='center';ctx.fillStyle='#666';
  for(let g=Math.ceil(lo/5)*5;g<=hi;g+=5){
   const x=valToX(g);
-  ctx.strokeStyle=g===center?'#888':'#2a2a3a';
+  ctx.strokeStyle=g===center?pgThemeColor('--text-muted','#888'):'#2a2a3a';
   ctx.lineWidth=g===center?1.5:0.5;
   ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,H);ctx.stroke();
   ctx.fillStyle=g===center?'#aaa':'#555';
   ctx.fillText(g,x,H-1);
  }
  // Bars
- const channels=[{ch:'R',color:'#f44',v:bal.R},{ch:'G',color:'#4caf50',v:bal.G},{ch:'B',color:'#42a5f5',v:bal.B}];
+ const channels=[{ch:'R',color:pgThemeColor('--chart-rgb-r','#f44'),v:bal.R},{ch:'G',color:pgThemeColor('--chart-rgb-g','#4caf50'),v:bal.G},{ch:'B',color:pgThemeColor('--chart-rgb-b','#42a5f5'),v:bal.B}];
  const barH=Math.min(12,(H-16)/3-2);
  const topPad=2;
  channels.forEach((c,i)=>{

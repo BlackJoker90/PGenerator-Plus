@@ -1731,7 +1731,7 @@ async function meterIccLoadProfiles(){
    }
    const download=document.createElement('button');
    download.type='button';
-   download.className='btn btn-sm btn-primary';
+   download.className='btn btn-sm btn-secondary';
    download.textContent='Download';
    download.onclick=()=>{ window.location.href='/api/icc/download?file='+encodeURIComponent(profile.name); };
    const install=document.createElement('button');

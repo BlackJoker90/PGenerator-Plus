@@ -3628,9 +3628,9 @@ function meterRenderGreyRgbReadOnly(reading,metaText){
  const spec=meterRgbDeltasForLive(panelReading,liveRgb);
  const halfRange=meterGreyTvHalfRange(spec);
  const columns=[
-  meterGreyTvColumnHtml('r','R','#f44',null,meterGreyTvLiveEntry(spec,'R'),halfRange,true,true),
-  meterGreyTvColumnHtml('g','G','#4caf50',null,meterGreyTvLiveEntry(spec,'G'),halfRange,true,true),
-  meterGreyTvColumnHtml('b','B','#42a5f5',null,meterGreyTvLiveEntry(spec,'B'),halfRange,true,true)
+  meterGreyTvColumnHtml('r','R',pgThemeColor('--chart-rgb-r','#f44'),null,meterGreyTvLiveEntry(spec,'R'),halfRange,true,true),
+  meterGreyTvColumnHtml('g','G',pgThemeColor('--chart-rgb-g','#4caf50'),null,meterGreyTvLiveEntry(spec,'G'),halfRange,true,true),
+  meterGreyTvColumnHtml('b','B',pgThemeColor('--chart-rgb-b','#42a5f5'),null,meterGreyTvLiveEntry(spec,'B'),halfRange,true,true)
  ];
  host.innerHTML='<div class="meter-lg-rgb-host meter-lg-rgb-readonly-host">'+columns.join('')+'</div>';
  if(meta){
@@ -3714,9 +3714,9 @@ function meterRenderGreyTvControls(reading){
   (meterCurrentPatchStep&&(meterCurrentPatchStep.ddc_slot_locked||meterCurrentPatchStep.autocal_slot_locked||String(meterCurrentPatchStep.series_mode||'')==='lg-autocal-26'))
  );
 		 const columns=[
-		  meterGreyTvColumnHtml('r','R','#f44',selected?selected.r:null,meterGreyTvLiveEntry(spec,'R'),halfRange,disabled,ddcReadOnly),
-		  meterGreyTvColumnHtml('g','G','#4caf50',selected?selected.g:null,meterGreyTvLiveEntry(spec,'G'),halfRange,disabled,ddcReadOnly),
-		  meterGreyTvColumnHtml('b','B','#42a5f5',selected?selected.b:null,meterGreyTvLiveEntry(spec,'B'),halfRange,disabled,ddcReadOnly)
+		  meterGreyTvColumnHtml('r','R',pgThemeColor('--chart-rgb-r','#f44'),selected?selected.r:null,meterGreyTvLiveEntry(spec,'R'),halfRange,disabled,ddcReadOnly),
+		  meterGreyTvColumnHtml('g','G',pgThemeColor('--chart-rgb-g','#4caf50'),selected?selected.g:null,meterGreyTvLiveEntry(spec,'G'),halfRange,disabled,ddcReadOnly),
+		  meterGreyTvColumnHtml('b','B',pgThemeColor('--chart-rgb-b','#42a5f5'),selected?selected.b:null,meterGreyTvLiveEntry(spec,'B'),halfRange,disabled,ddcReadOnly)
 		 ];
 			 const lumaHtml=meterGreyTvSupportsLuminance(state)?meterGreyTvLuminanceHtml(selected?selected.lum:null,disabled,ddcReadOnly):'';
 			 host.innerHTML='<div class="meter-lg-rgb-host'+(busy?' has-busy':'')+'">'+meterGreyTvBusyHtml()+columns.join('')+lumaHtml+'</div>';
@@ -12775,7 +12775,7 @@ function meterUpdateThumbStyles(container,completedIres,currentIre){
    thumb.style.zIndex='1';
   } else if(done){
    thumb.style.animation='none';
-    thumb.style.boxShadow='inset 0 0 0 2px #4caf50';
+    thumb.style.boxShadow='inset 0 0 0 2px var(--status-success),inset 0 0 0 3px var(--surface-page)';
    thumb.style.zIndex='';
   } else {
    thumb.style.animation='none';
@@ -13567,8 +13567,8 @@ function drawDeltaEPreset(gsSteps){
   yLabel:(i,n)=>(yMax*i/n).toFixed(1),
   rotateX:rotateX
  });
- if(1/yMax<=1) drawDashedLine(ctx,chart,[[0,1/yMax],[1,1/yMax]],'#4caf5080');
- if(3/yMax<=1) drawDashedLine(ctx,chart,[[0,3/yMax],[1,3/yMax]],'#ff980080');
+ if(1/yMax<=1) drawDashedLine(ctx,chart,[[0,1/yMax],[1,1/yMax]],pgThemeColor('--status-success','#4caf50')+'80');
+ if(3/yMax<=1) drawDashedLine(ctx,chart,[[0,3/yMax],[1,3/yMax]],pgThemeColor('--status-warning','#ff9800')+'80');
 }
 function drawEOTFPreset(gsSteps){
  const ctx=getChartCtx('chartEOTF');
@@ -14757,7 +14757,7 @@ function drawRGBChart(gs,allSteps,readingMap){
    bPts.push([x,Math.max(0,Math.min(1,(bal.B-yMin)/(yMax-yMin)))]);
   }
  });
- if(rPts.length>1){drawLine(ctx,chart,rPts,'#f44',2);drawLine(ctx,chart,gPts,'#4caf50',2);drawLine(ctx,chart,bPts,'#42a5f5',2);}
+ if(rPts.length>1){drawLine(ctx,chart,rPts,pgThemeColor('--chart-rgb-r','#f44'),2);drawLine(ctx,chart,gPts,pgThemeColor('--chart-rgb-g','#4caf50'),2);drawLine(ctx,chart,bPts,pgThemeColor('--chart-rgb-b','#42a5f5'),2);}
  // R/G/B label at right
  if(rPts.length>0){
   const last=rPts.length-1;
@@ -14765,9 +14765,9 @@ function drawRGBChart(gs,allSteps,readingMap){
   if(lastX>=chart.view.x0&&lastX<=chart.view.x1){
    ctx.font='11px sans-serif';ctx.textAlign='left';
    const xOff=chart.toX(lastX)+6;
-   ctx.fillStyle='#f44';ctx.fillText('R',xOff,chart.toY(rPts[last][1])+3);
-   ctx.fillStyle='#4caf50';ctx.fillText('G',xOff,chart.toY(gPts[last][1])+3);
-   ctx.fillStyle='#42a5f5';ctx.fillText('B',xOff,chart.toY(bPts[last][1])+3);
+   ctx.fillStyle=pgThemeColor('--chart-rgb-r','#f44');ctx.fillText('R',xOff,chart.toY(rPts[last][1])+3);
+   ctx.fillStyle=pgThemeColor('--chart-rgb-g','#4caf50');ctx.fillText('G',xOff,chart.toY(gPts[last][1])+3);
+   ctx.fillStyle=pgThemeColor('--chart-rgb-b','#42a5f5');ctx.fillText('B',xOff,chart.toY(bPts[last][1])+3);
   }
  }
 }
@@ -14845,7 +14845,7 @@ function drawEOTFChart(gs,allSteps,readingMap){
  mSegments.forEach(seg=>{
   if(seg.length>1) drawLine(ctx,chart,seg,pgThemeColor('--chart-eotf-measured','#ffeb3b'),1.25);
  });
- drawDots(ctx,chart,meterMeasuredEotfLuminanceDotPoints(measureSteps,readingMap,axisMax,eotfPlotMeasured,'eotf'),'#ffeb3b',2.2);
+ drawDots(ctx,chart,meterMeasuredEotfLuminanceDotPoints(measureSteps,readingMap,axisMax,eotfPlotMeasured,'eotf'),pgThemeColor('--chart-eotf-measured','#ffeb3b'),2.2);
  // Optional per-channel R/G/B EOTF overlay (mirrors the Gamma chart's
  // per-channel option). Each channel's measured linear value is normalized to
  // the white reference's same channel, rescaled to the chart reference, then
@@ -14955,7 +14955,7 @@ function drawGammaChart(gs,allSteps,readingMap){
  });
  // Marker on every actual read so a lone reading is visible before a
  // neighbour exists to draw a line to.
- drawDots(ctx,chart,meterMeasuredEotfLuminanceDotPoints(measureSteps,readingMap,axisMax,scaleMeasuredLuminance,'luminance'),'#ffeb3b',2.2);
+ drawDots(ctx,chart,meterMeasuredEotfLuminanceDotPoints(measureSteps,readingMap,axisMax,scaleMeasuredLuminance,'luminance'),pgThemeColor('--chart-eotf-measured','#ffeb3b'),2.2);
  ctx.fillStyle=pgThemeColor('--chart-annotation','#aaa');ctx.font='11px sans-serif';
  ctx.textAlign='left';
  ctx.fillText('Min cd/m\u00B2: '+Lb.toFixed(2),chart.pad.l,ctx.h-2);
@@ -15039,8 +15039,8 @@ function drawDeltaEChart(gs,allSteps,readingMap,rawGs){
   rotateX:rotateX
  });
  // Reference lines
- if(1/yMax<=1) drawDashedLine(ctx,chart,[[0,1/yMax],[1,1/yMax]],'#4caf5080');
- if(3/yMax<=1) drawDashedLine(ctx,chart,[[0,3/yMax],[1,3/yMax]],'#ff980080');
+ if(1/yMax<=1) drawDashedLine(ctx,chart,[[0,1/yMax],[1,1/yMax]],pgThemeColor('--status-success','#4caf50')+'80');
+ if(3/yMax<=1) drawDashedLine(ctx,chart,[[0,3/yMax],[1,3/yMax]],pgThemeColor('--status-warning','#ff9800')+'80');
  // Draw bars for each x-axis step
  const barW=Math.max(8,Math.min(30,(chart.dw||chart.w)/(n*1.5)));
  ctx.save();
@@ -15056,7 +15056,7 @@ function drawDeltaEChart(gs,allSteps,readingMap,rawGs){
    const fullH=Math.max(2,baseY-y);
    // Threshold color judged on the drawn total (long hex so the faded
    // luminance cap can reuse it with an alpha suffix).
-   const color=dE<1?'#4caf50':dE<3?'#ff9800':'#ff4444';
+   const color=dE<1?pgThemeColor('--status-success','#4caf50'):dE<3?pgThemeColor('--status-warning','#ff9800'):pgThemeColor('--status-error','#f44');
    const chromaDE=sepLum?chromaMap[step.ire]:null;
    if(sepLum&&chromaDE!=null&&dE>0){
     // Split bar: the luminance segment (top, above the divider) is colored by
@@ -15065,7 +15065,7 @@ function drawDeltaEChart(gs,allSteps,readingMap,rawGs){
     // only dE on the same green/amber/red thresholds. So e.g. chroma 0.5
     // paints the lower half green while a total 1.8 paints the luminance cap
     // amber. The top cap keeps its soft self-colored glow.
-    const chromaColor=chromaDE<1?'#4caf50':chromaDE<3?'#ff9800':'#ff4444';
+    const chromaColor=chromaDE<1?pgThemeColor('--status-success','#4caf50'):chromaDE<3?pgThemeColor('--status-warning','#ff9800'):pgThemeColor('--status-error','#f44');
     const chromaH=Math.min(Math.max(chromaDE,0)/yMax,barH);
     const yChroma=chart.toY(chromaH);
     const capH=Math.max(0,yChroma-y);
@@ -15165,8 +15165,8 @@ function drawDeltaE2000Chart(gs,allSteps,readingMap){
   xLabel:(i)=>i<n?meterGreyscaleChartLabel(xSteps[i],xSteps,i):'',
   yLabel:(i,nn)=>(yMax*i/nn).toFixed(yMax>5?0:1)
  });
- if(1/yMax<=1) drawDashedLine(ctx,chart,[[0,1/yMax],[1,1/yMax]],'#4caf5080');
- if(3/yMax<=1) drawDashedLine(ctx,chart,[[0,3/yMax],[1,3/yMax]],'#ff980080');
+ if(1/yMax<=1) drawDashedLine(ctx,chart,[[0,1/yMax],[1,1/yMax]],pgThemeColor('--status-success','#4caf50')+'80');
+ if(3/yMax<=1) drawDashedLine(ctx,chart,[[0,3/yMax],[1,3/yMax]],pgThemeColor('--status-warning','#ff9800')+'80');
  const barW=Math.max(8,Math.min(30,(chart.dw||chart.w)/(n*1.5)));
  xSteps.forEach((step,i)=>{
   const cx=chart.toX(meterGreyCategoryChartX(xSteps,i));
@@ -15174,7 +15174,7 @@ function drawDeltaE2000Chart(gs,allSteps,readingMap){
   if(dE!=null){
    const barH=Math.max(0.005,Math.min(dE/yMax,1));
    const y=chart.pad.t+chart.h-barH*chart.h;
-   ctx.fillStyle=dE<1?'#4caf50':dE<3?'#ff9800':'#f44';
+   ctx.fillStyle=dE<1?pgThemeColor('--status-success','#4caf50'):dE<3?pgThemeColor('--status-warning','#ff9800'):pgThemeColor('--status-error','#f44');
    ctx.fillRect(cx-barW/2,y,barW,Math.max(2,barH*chart.h));
    ctx.fillStyle=pgThemeColor('--chart-annotation','#ccc');ctx.font='11px sans-serif';
    ctx.textAlign='center';
@@ -15197,8 +15197,8 @@ function drawDeltaE2000Preset(gsSteps){
   xLabel:(i)=>i<gsSteps.length?meterGreyscaleChartLabel(gsSteps[i],gsSteps,i):'',
   yLabel:(i,n)=>(yMax*i/n).toFixed(1)
  });
- if(1/yMax<=1) drawDashedLine(ctx,chart,[[0,1/yMax],[1,1/yMax]],'#4caf5080');
- if(3/yMax<=1) drawDashedLine(ctx,chart,[[0,3/yMax],[1,3/yMax]],'#ff980080');
+ if(1/yMax<=1) drawDashedLine(ctx,chart,[[0,1/yMax],[1,1/yMax]],pgThemeColor('--status-success','#4caf50')+'80');
+ if(3/yMax<=1) drawDashedLine(ctx,chart,[[0,3/yMax],[1,3/yMax]],pgThemeColor('--status-warning','#ff9800')+'80');
 }
 
 ///////////////////////////////////////////////
@@ -15239,9 +15239,9 @@ function drawColorReadingsTable(readings){
   const de=meterSeriesDeltaEForDisplay(rd,colorRefMode,colorForm);
    const hasDe=Number.isFinite(de);
    if(hasDe){deSum+=de;deCount++;}
-   const deCol=!hasDe?'#888':de<1?'#4caf50':de<3?'#ff9800':'#f44';
-  const dxCol=dx==null?'#888':(Math.abs(dx)<0.005?'#4caf50':Math.abs(dx)<0.01?'#ff9800':'#f44');
-  const dyCol=dy==null?'#888':(Math.abs(dy)<0.005?'#4caf50':Math.abs(dy)<0.01?'#ff9800':'#f44');
+   const deCol=!hasDe?pgThemeColor('--text-muted','#888'):de<1?pgThemeColor('--status-success','#4caf50'):de<3?pgThemeColor('--status-warning','#ff9800'):pgThemeColor('--status-error','#f44');
+  const dxCol=dx==null?pgThemeColor('--text-muted','#888'):(Math.abs(dx)<0.005?pgThemeColor('--status-success','#4caf50'):Math.abs(dx)<0.01?pgThemeColor('--status-warning','#ff9800'):pgThemeColor('--status-error','#f44'));
+  const dyCol=dy==null?pgThemeColor('--text-muted','#888'):(Math.abs(dy)<0.005?pgThemeColor('--status-success','#4caf50'):Math.abs(dy)<0.01?pgThemeColor('--status-warning','#ff9800'):pgThemeColor('--status-error','#f44'));
   html+='<tr data-name=\"'+(rd.name||'').replace(/"/g,'&quot;')+'\" style=\"border-bottom:1px solid var(--divider);cursor:pointer\" onclick=\"colorTableRowClick(this)\">';
   html+='<td style="padding:5px 8px;text-align:left"><span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:'+pc+';vertical-align:middle;margin-right:5px"></span>'+(rd.name||'')+'</td>';
   html+='<td style="padding:5px 6px;text-align:right;color:var(--text-muted)">'+(tgt?tgt.x.toFixed(4):'--')+'</td>';
@@ -15257,7 +15257,7 @@ function drawColorReadingsTable(readings){
  });
  if(deCount>0){
   const avg=deSum/deCount;
-  const avgCol=avg<1?'#4caf50':avg<3?'#ff9800':'#f44';
+  const avgCol=avg<1?pgThemeColor('--status-success','#4caf50'):avg<3?pgThemeColor('--status-warning','#ff9800'):pgThemeColor('--status-error','#f44');
   html+='<tr style="border-top:2px solid var(--border);font-weight:600">';
   html+='<td style="padding:5px 8px;text-align:left;color:var(--text-secondary)" colspan="9">Average</td>';
   html+='<td style="padding:5px 6px;text-align:right;color:'+avgCol+'">'+avg.toFixed(2)+'</td>';
@@ -15307,8 +15307,8 @@ function drawColorSeriesAverages(readings,colorRefMode){
  const rowFor=(label,g,bold)=>{
   const aDE=avg(g.de), mDE=mx(g.de);
   const aDx=avg(g.dx), aDy=avg(g.dy), aY=avg(g.Y);
-  const c=!Number.isFinite(aDE)?'#888':aDE<1?'#4caf50':aDE<3?'#ff9800':'#f44';
-  const cMax=!Number.isFinite(mDE)?'#888':mDE<1?'#4caf50':mDE<3?'#ff9800':'#f44';
+  const c=!Number.isFinite(aDE)?pgThemeColor('--text-muted','#888'):aDE<1?pgThemeColor('--status-success','#4caf50'):aDE<3?pgThemeColor('--status-warning','#ff9800'):pgThemeColor('--status-error','#f44');
+  const cMax=!Number.isFinite(mDE)?pgThemeColor('--text-muted','#888'):mDE<1?pgThemeColor('--status-success','#4caf50'):mDE<3?pgThemeColor('--status-warning','#ff9800'):pgThemeColor('--status-error','#f44');
   let r='<tr'+(bold?' style="border-top:2px solid var(--border);font-weight:600"':' style="border-bottom:1px solid var(--divider)"')+'>';
   r+='<td style="padding:5px 8px;text-align:left"><span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:'+(g.color||'#666')+';vertical-align:middle;margin-right:5px"></span>'+label+'</td>';
   r+='<td style="padding:5px 6px;text-align:right;color:var(--text-muted)">'+g.de.length+'</td>';
@@ -15324,7 +15324,7 @@ function drawColorSeriesAverages(readings,colorRefMode){
  if(isSat){
   order.forEach(k=>{html+=rowFor(k,groups[k],false);});
  }
- const overall={de:[],dx:[],dy:[],Y:[],color:'#888'};
+ const overall={de:[],dx:[],dy:[],Y:[],color:pgThemeColor('--text-muted','#888')};
  Object.keys(groups).forEach(k=>{
   const g=groups[k];
   overall.de=overall.de.concat(g.de);
@@ -15481,12 +15481,12 @@ function showColorReadingDetail(rd,opts){
  const my=measuredCoord?measuredCoord.y:null;
  const dx=(mx!=null&&tgt)?(mx-tgt.x):null;
  const dy=(my!=null&&tgt)?(my-tgt.y):null;
- const dYCol=lumInfo.deltaPct==null?'#888':(Math.abs(lumInfo.deltaPct)<2?'#4caf50':Math.abs(lumInfo.deltaPct)<5?'#ff9800':'#f44');
+ const dYCol=lumInfo.deltaPct==null?pgThemeColor('--text-muted','#888'):(Math.abs(lumInfo.deltaPct)<2?pgThemeColor('--status-success','#4caf50'):Math.abs(lumInfo.deltaPct)<5?pgThemeColor('--status-warning','#ff9800'):pgThemeColor('--status-error','#f44'));
  const de=(!isUnread&&hasMeasuredXYZ)?meterSeriesDeltaEForDisplay(view,meterColorRefMode()):NaN;
  const hasDe=Number.isFinite(de);
- const deCol=!hasDe?'#888':de<1?'#4caf50':de<3?'#ff9800':'#f44';
- const dxCol=dx==null?'#888':(Math.abs(dx)<0.005?'#4caf50':Math.abs(dx)<0.01?'#ff9800':'#f44');
- const dyCol=dy==null?'#888':(Math.abs(dy)<0.005?'#4caf50':Math.abs(dy)<0.01?'#ff9800':'#f44');
+ const deCol=!hasDe?pgThemeColor('--text-muted','#888'):de<1?pgThemeColor('--status-success','#4caf50'):de<3?pgThemeColor('--status-warning','#ff9800'):pgThemeColor('--status-error','#f44');
+ const dxCol=dx==null?pgThemeColor('--text-muted','#888'):(Math.abs(dx)<0.005?pgThemeColor('--status-success','#4caf50'):Math.abs(dx)<0.01?pgThemeColor('--status-warning','#ff9800'):pgThemeColor('--status-error','#f44'));
+ const dyCol=dy==null?pgThemeColor('--text-muted','#888'):(Math.abs(dy)<0.005?pgThemeColor('--status-success','#4caf50'):Math.abs(dy)<0.01?pgThemeColor('--status-warning','#ff9800'):pgThemeColor('--status-error','#f44'));
 
  let h='<div style="margin-bottom:10px;text-align:center">';
  h+='<span style="display:inline-block;width:18px;height:18px;border-radius:3px;background:'+targetColor+';vertical-align:middle;margin-right:6px"></span>';
@@ -15534,7 +15534,7 @@ function colorHighlightThumb(name){
   const isMatch=t.dataset.name===name;
   const done=completedNames.has(t.dataset.name);
   t.dataset.visualState=isMatch?'selected':(done?'done':'idle');
-  t.style.boxShadow=isMatch?'inset 0 0 0 3px var(--accent)':(done?'inset 0 0 0 2px #4caf50':'none');
+  t.style.boxShadow=isMatch?'inset 0 0 0 3px var(--accent)':(done?'inset 0 0 0 2px var(--status-success),inset 0 0 0 3px var(--surface-page)':'none');
   t.style.animation='none';
   t.style.zIndex=isMatch?'1':'';
  }
@@ -17860,17 +17860,17 @@ function drawColorDeltaE2000Chart(readings){
   yLabel:(i,nn)=>(yMaxDE*i/nn).toFixed(yMaxDE>5?0:1),
   rotateX:true
  });
- if(1/yMaxDE<=1) drawDashedLine(ctx,chart,[[0,1/yMaxDE],[1,1/yMaxDE]],'#4caf5080');
- if(3/yMaxDE<=1) drawDashedLine(ctx,chart,[[0,3/yMaxDE],[1,3/yMaxDE]],'#ff980080');
+ if(1/yMaxDE<=1) drawDashedLine(ctx,chart,[[0,1/yMaxDE],[1,1/yMaxDE]],pgThemeColor('--status-success','#4caf50')+'80');
+ if(3/yMaxDE<=1) drawDashedLine(ctx,chart,[[0,3/yMaxDE],[1,3/yMaxDE]],pgThemeColor('--status-warning','#ff9800')+'80');
  const barW=Math.max(8,Math.min(30,(chart.dw||chart.w)/(n*1.5)));
  deData.forEach((d,i)=>{
   const pos=axisIndex?axisIndex.get(String(d.name)):i;
   const cx=chart.toX(n>1?pos/(n-1):0.5);
   const barH=Math.max(0.005,Math.min(d.de/yMaxDE,1));
   const y=chart.pad.t+chart.h-barH*chart.h;
-  const totalColor=d.de<1?'#4caf50':d.de<3?'#ff9800':'#f44';
+  const totalColor=d.de<1?pgThemeColor('--status-success','#4caf50'):d.de<3?pgThemeColor('--status-warning','#ff9800'):pgThemeColor('--status-error','#f44');
   if(sepLum&&Number.isFinite(d.chroma)&&d.de>0){
-   const chromaColor=d.chroma<1?'#4caf50':d.chroma<3?'#ff9800':'#f44';
+   const chromaColor=d.chroma<1?pgThemeColor('--status-success','#4caf50'):d.chroma<3?pgThemeColor('--status-warning','#ff9800'):pgThemeColor('--status-error','#f44');
    const chromaH=Math.min(Math.max(d.chroma,0)/yMaxDE,barH);
    const yChroma=chart.toY(chromaH);
    ctx.fillStyle=chromaColor;
@@ -17906,8 +17906,8 @@ function drawColorDeltaE2000Preset(steps){
   yLabel:(i,nn)=>(yMax*i/nn).toFixed(1),
   rotateX:true
  });
- if(1/yMax<=1) drawDashedLine(ctx,chart,[[0,1/yMax],[1,1/yMax]],'#4caf5080');
- if(3/yMax<=1) drawDashedLine(ctx,chart,[[0,3/yMax],[1,3/yMax]],'#ff980080');
+ if(1/yMax<=1) drawDashedLine(ctx,chart,[[0,1/yMax],[1,1/yMax]],pgThemeColor('--status-success','#4caf50')+'80');
+ if(3/yMax<=1) drawDashedLine(ctx,chart,[[0,3/yMax],[1,3/yMax]],pgThemeColor('--status-warning','#ff9800')+'80');
 }
 
 // Chart interaction: hover tooltip + click to show reading

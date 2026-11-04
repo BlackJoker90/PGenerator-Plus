@@ -2011,7 +2011,7 @@ function lgRenderCalHistoryInto(el){
     +(it.picture_mode?(' · '+it.picture_mode):'')
     +de+'</small>'+note+'</div>'
     +'<div class="lg-cal-hist-actions">'
-    +(canUp?('<button type="button" class="btn btn-sm btn-primary" onclick="lgCalHistoryReupload(\''+String(it.id).replace(/'/g,"\\'")+'\')">Reupload</button>'):'')
+    +(canUp?('<button type="button" class="btn btn-sm btn-secondary" onclick="lgCalHistoryReupload(\''+String(it.id).replace(/'/g,"\\'")+'\')">Reupload</button>'):'')
     +((it.download||it.type==='1d'||(it.type==='3d'&&it.has_cube))?('<button type="button" class="btn btn-sm btn-secondary" onclick="lgCalHistoryDownload(\''+String(it.id).replace(/'/g,"\\'")+'\')">Download</button>'):'')
     +'</div></div>';
   });

@@ -5,7 +5,7 @@ body.layout-desktop #meter3dLutWorkspaceCard .meter-lut-tools-content{width:calc
 body.layout-desktop #meter3dLutWorkspaceCard .meter-lut-tools-content{display:block}
 body.layout-desktop #meter3dLutWorkspaceCard .meter-lut-tools-close{display:none!important}
 body.layout-desktop #meter3dLutWorkspaceCard #meterSolvedLutSection{min-width:0}
-body.layout-desktop #meter3dLutWorkspaceCard #lutCubeViewWrap{display:block!important;position:absolute;top:0;right:0;width:calc(50% - 9px);min-width:0;padding:14px;box-sizing:border-box;background:var(--surface-inset);border-radius:var(--r-md)}
+body.layout-desktop #meter3dLutWorkspaceCard #lutCubeViewWrap{display:block!important;position:absolute;top:0;right:0;width:calc(50% - 9px);min-width:0;padding:14px;box-sizing:border-box;background:var(--surface-card);border:1px solid var(--border);border-radius:var(--r-md)}
 body.layout-desktop #meter3dLutWorkspaceCard #lutCubeView{max-width:none!important}
 body.layout-desktop #meter3dLutWorkspaceCard #meterSolvedLutList{background:var(--surface-inset)!important}
 .meter-solved-lut-row{display:flex;align-items:center;gap:6px;padding:4px;border-radius:var(--r-sm)}
@@ -60,7 +60,7 @@ body.layout-desktop #chartsGreyscaleFullWrap.lg-calibration-mode #meterGreyscale
 body.layout-desktop #chartsGreyscaleFullWrap.lg-calibration-mode #meterGreyTvWrap{grid-row:1;width:100%!important;height:100%!important;min-height:220px!important}
 body.layout-desktop #meterGreyLiveRail #meterLiveReading{position:absolute;top:calc(var(--desktop-rgb-chart-height) + 10px);left:0;width:180px;margin:0!important;padding-top:18px;min-width:0;z-index:1}
 body.layout-desktop #meterGreyLiveRail #meterLiveReadingLabel{margin:0 0 4px!important}
-body.layout-desktop #meterGreyLiveRail #meterLiveReading>div:last-child{padding:9px!important}
+body.layout-desktop #meterGreyLiveRail #meterLiveReading>div:last-child{padding:9px!important;background:var(--surface-card);border:1px solid var(--border);border-radius:var(--r-md)}
 body.layout-desktop #meterGreyLiveRail .meter-live-primary-values{display:grid!important;grid-template-columns:1fr;gap:6px!important;margin:0!important;font-size:var(--fs-xs)!important}
 body.layout-desktop #meterGreyLiveRail .meter-live-primary-values>span{display:block;min-width:0;line-height:1.35;overflow-wrap:anywhere}
 body.layout-desktop #meterGreyLiveRail .meter-live-tgt{display:block;white-space:normal;margin-top:2px}
@@ -168,7 +168,7 @@ fieldset.signal-fields:disabled select,fieldset.signal-fields:disabled input{cur
 /* Same colours as the signal chips in the self-test (.selftest-group):
    SDR grey, HDR10/HLG orange, Dolby Vision violet. The value text takes the
    palette's text-safe variant where the raw hue misses 4.5:1 on the tint. */
-.sw-signal[data-signal="sdr"]{--sw:var(--text2);--sw-text:var(--text-primary)}
+.sw-signal[data-signal="sdr"]{--sw:var(--text2);--sw-text:var(--text-primary);background:var(--tile-bg);border-color:var(--tile-border)}
 .sw-signal[data-signal="hdr"]{--sw:var(--status-warning);--sw-text:var(--warning-text)}
 .sw-signal[data-signal="dv"]{--sw:var(--status-dv);--sw-text:color-mix(in oklab,var(--status-dv) 80%,var(--text-primary))}
 .sw-signal[data-signal="unknown"]{--sw:var(--text-secondary)}
@@ -254,8 +254,8 @@ body.meter-stop-active.layout-desktop .desktop-sidebar{filter:grayscale(.25);opa
 [data-theme="light"] #wifiConnectBtn:disabled{color:#fff!important}
 [data-theme="light"] #chartTooltip{background:var(--chart-tooltip)!important;color:var(--text-primary)!important;border-color:var(--border)!important;box-shadow:0 2px 8px var(--shadow)!important}
 [data-theme="light"] select option{background:var(--surface-field);color:var(--text-primary)}
-[data-theme="light"] input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]),
-[data-theme="light"] select,[data-theme="light"] textarea,[data-theme="light"] .meter-card-header-select,
+[data-theme="light"] input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]):not(:disabled),
+[data-theme="light"] select:not(:disabled),[data-theme="light"] textarea:not(:disabled),[data-theme="light"] .meter-card-header-select,
 [data-theme="light"] .inline-select,[data-theme="light"] .pat-btn,[data-theme="light"] .meter-chart-inline-input,
 [data-theme="light"] .meter-inline-value input{background-color:var(--surface-field)!important;color:var(--text-primary)!important}
 [data-theme="light"] #meterSettingsGrid #meterHdrDiffuseWhite.meter-input-disabled{background-color:var(--surface-field)!important;color:var(--text-primary)!important}
@@ -274,14 +274,14 @@ body.meter-stop-active.layout-desktop .desktop-sidebar{filter:grayscale(.25);opa
 [data-theme="light"] .meter-lg-rgb-luma-zero{background:var(--meter-bar-zero)}
 [data-theme="light"] .meter-lg-rgb-luma-fill{background:var(--text-primary)}
 [data-theme="light"] .meter-lg-rgb-tv{color:var(--text-primary)}
-[data-theme="light"] .meter-lg-rgb-tv-input{background:var(--surface-field);color:var(--text-primary);border-color:var(--border)}
+[data-theme="light"] .meter-lg-rgb-tv-input{background:var(--surface-field);color:var(--text-primary);border-color:var(--field-border)}
 [data-theme="light"] .meter-workflow-progress{background:var(--surface-inset);border-color:var(--border);box-shadow:inset 0 1px 2px rgba(70,84,102,.16),0 0 0 1px rgba(76,175,80,.12)}
 [data-theme="light"] .stat-card .meter{background:var(--badge-neutral);box-shadow:inset 0 0 0 1px rgba(70,84,102,.12)}
 [data-theme="light"] .meter-pattern-insert-popover,[data-theme="light"] .meter-xyz-gear-popover{background:var(--surface-popover);box-shadow:0 8px 24px var(--shadow)}
 [data-theme="light"] .meter-pattern-insert-gear,[data-theme="light"] .meter-xyz-gear{background:var(--surface-field);color:var(--text-secondary);border-color:var(--border)}
 [data-theme="light"] .meter-pattern-insert-gear:hover,[data-theme="light"] .meter-xyz-gear:hover{background:var(--hover-bg);color:var(--accent);border-color:var(--accent)}
 [data-theme="light"] #meterTwoPointControls,[data-theme="light"] #meterGreyProfileBar{background:var(--surface-inset)!important;border:1px solid var(--border)}
-[data-theme="light"] #meterTwoPointLow,[data-theme="light"] #meterTwoPointHigh{background:var(--surface-field)!important;color:var(--text-primary)!important;border-color:var(--border)!important}
+[data-theme="light"] #meterTwoPointLow,[data-theme="light"] #meterTwoPointHigh{background:var(--surface-field)!important;color:var(--text-primary)!important;border-color:var(--field-border)!important}
 [data-theme="light"] .meter-profile-title{color:var(--text-primary)}
 [data-theme="light"] .btn-secondary{background:var(--divider);color:var(--text-primary)}
 [data-theme="light"] .btn-secondary.btn-success,[data-theme="light"] .btn-secondary.btn-success:hover{background:var(--success-fill);color:var(--on-success)}
@@ -317,7 +317,7 @@ body.layout-desktop #uiSettingsCard .ui-settings-sections{grid-template-columns:
 body.layout-desktop #uiSettingsCard .theme-swatch-grid{grid-template-columns:repeat(auto-fill,minmax(150px,1fr))}
 body.layout-desktop #uiSettingsCard .ui-zoom-select{max-width:none;box-sizing:border-box}
 body.layout-desktop #uiSettingsCard .ui-settings-zoom{display:block}
-.ui-zoom-select{width:100%;max-width:130px;min-height:34px;padding:6px 28px 6px 10px;border:1px solid var(--border);border-radius:var(--r-sm);background:var(--surface-field);color:var(--text-primary);font-size:var(--fs-sm);cursor:pointer}
+.ui-zoom-select{width:100%;max-width:130px;min-height:var(--control-h);padding:6px 28px 6px 10px;border:1px solid var(--field-border);border-radius:var(--r-sm);background:var(--surface-field);color:var(--text-primary);font-size:var(--fs-sm);cursor:pointer}
 .ui-settings-group{min-width:0}
 .ui-settings-group h3{display:flex;align-items:center;gap:6px;margin:0 0 9px;font-size:var(--fs-sm);color:var(--text-primary)}
 .ui-choice-list{display:grid;gap:8px}
@@ -504,6 +504,14 @@ html input:not([type=checkbox],[type=radio],[type=range],[type=file],[type=color
 :where(input[type=checkbox],input[type=radio]){width:16px;height:16px;margin:0;accent-color:var(--accent);flex:0 0 auto}
 #lutCubeDotSize{min-height:0;padding:3px 6px;border:1px solid var(--field-border);border-radius:var(--r-sm);background:var(--surface-field);color:var(--text-primary);font:inherit}
 #lutCubeView,#ccssPreviewCanvas{box-shadow:inset 0 0 0 1px var(--border)}
-.mode-select-value{font-weight:600}
 [data-theme="light"] .btn-secondary{background:color-mix(in srgb,var(--text-primary) 9%,var(--surface-card))}
 [data-theme="light"] .btn-secondary:hover,[data-theme="light"] .pat-btn:hover{background:color-mix(in srgb,var(--text-primary) 14%,var(--surface-card))}
+html .mode-select-wrap select:disabled{color:transparent!important}
+::placeholder{color:var(--text-muted);opacity:1}
+select{text-overflow:ellipsis}
+body.layout-desktop .dashboard > .card > h2{min-height:32px;align-items:center}
+#chartRGB,#chartDeltaE,#chartGammaValue,#chartEOTF,#chartGamma,#chartCubeView,#chartCIE,#chartColorDE{box-shadow:inset 0 0 0 1px var(--border)}
+body.layout-tablet #meterSettingsGrid .meter-target-measure-btn{min-height:44px;padding:6px 12px;font-size:var(--fs-sm)}
+body.layout-tablet #meterGreyscaleRgbRow{flex-wrap:wrap}
+body.layout-tablet #meterGreyRgbLegacyWrap{flex:1 1 100%!important;width:100%!important;height:180px!important}
+body.layout-tablet .dashboard label:has(> input[type=checkbox]){display:inline-flex;gap:6px}

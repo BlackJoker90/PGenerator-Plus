@@ -503,7 +503,8 @@ input:not([type=checkbox],[type=radio],[type=range],[type=file],[type=color]):ho
 input:not([type=checkbox],[type=radio],[type=range],[type=file],[type=color]):focus,select:focus,textarea:focus{border-color:var(--accent)}
 html input:not([type=checkbox],[type=radio],[type=range],[type=file],[type=color]):disabled,html select:disabled,html textarea:disabled{background-color:var(--control-disabled-bg)!important;color:var(--control-disabled-text)!important;border-color:var(--divider);opacity:1;cursor:not-allowed}
 :where(input[type=checkbox],input[type=radio]){width:16px;height:16px;margin:0;accent-color:var(--accent);flex:0 0 auto}
-#lutCubeDotSize{min-height:0;padding:3px 6px;border:1px solid var(--field-border);border-radius:var(--r-sm);background:var(--surface-field);color:var(--text-primary);font:inherit}
+body.layout-desktop #lutCubeDotSize{min-height:0}
+#lutCubeDotSize{padding:3px 6px;border:1px solid var(--field-border);border-radius:var(--r-sm);background:var(--surface-field);color:var(--text-primary);font:inherit}
 #lutCubeView,#ccssPreviewCanvas{outline:1px solid var(--border);outline-offset:-1px}
 [data-theme="light"] .btn-secondary,[data-theme="light"] .ccss-file-input::file-selector-button{background:color-mix(in srgb,var(--surface-inset) 96%,var(--text-primary));box-shadow:inset 0 0 0 1px var(--border)}
 [data-theme="light"] .btn-secondary:active:not(:disabled){background:color-mix(in srgb,var(--surface-inset) 84%,var(--text-primary))}
@@ -564,11 +565,10 @@ div:has(>#lutCubeViewName){font-size:var(--fs-md)!important;font-weight:700;colo
 #lutCubeViewName{font-weight:400;color:var(--text2)}
 body.layout-desktop #meterGreyLiveRail .meter-live-desktop-details{font-size:var(--fs-xs)}
 body.layout-desktop .card[data-desktop-workspace="connectivity"] .info-grid{grid-template-columns:repeat(auto-fill,minmax(180px,1fr))}
-body.layout-tablet .toast{top:auto;bottom:calc(84px + env(safe-area-inset-bottom,0px));transform:translate(-50%,8px) scale(.97)}
+body.layout-tablet .toast{top:calc(var(--pg-header-height,61px) + 8px);transform:translate(-50%,-8px) scale(.97)}
 body.layout-tablet .toast.show{transform:translate(-50%,0) scale(1)}
 body.layout-tablet .dashboard>.card>h2,body.layout-tablet #meterCard>h2{column-gap:8px}
 body.layout-tablet .dashboard>.card>h2 .drag-handle{margin-right:0}
-body:has(#statusDot:not([style*="background"])) :is(#hdrCard,#dvCard){display:none!important}
 input[type=checkbox]:not(.pg-switch *){-webkit-appearance:none;appearance:none;display:inline-grid;place-content:center;box-sizing:border-box;width:16px;height:16px;min-height:0;margin:0;padding:0;border:1px solid var(--field-border);border-radius:var(--r-xs);background:var(--surface-field);cursor:pointer}
 input[type=checkbox]:not(.pg-switch *):hover:not(:disabled){border-color:var(--field-border-hover)}
 input[type=checkbox]:not(.pg-switch *):checked{border-color:var(--accent-fill);background:var(--accent-fill)}
@@ -579,12 +579,13 @@ input[type=checkbox]:not(.pg-switch *):disabled:checked::after{border-color:var(
 html[data-theme] .layout-switch-btn[aria-pressed="true"],html[data-theme] .layout-switch-btn[aria-pressed="true"]:hover{background:var(--selected-bg);color:var(--text-primary);box-shadow:inset 0 0 0 1px var(--accent)}
 .preset-filter-chip[aria-pressed="true"]:not([data-kind="hdr"],[data-kind="dv"]){--chip:var(--accent)}
 body.layout-desktop #meter3dLutWorkspaceCard #lutCubeViewWrap{background:transparent!important;border:0!important;padding:0!important}
-body.layout-desktop :is(#meterEotfBlock,#meterLuminanceBlock)>div:first-child{flex-wrap:nowrap!important;gap:6px!important}
+body.layout-desktop :is(#meterEotfBlock,#meterLuminanceBlock)>div:first-child{gap:6px!important}
+#chartEotfLabel{flex:0 0 auto;white-space:nowrap}
 body.layout-desktop :is(#meterEotfBlock,#meterLuminanceBlock) label:has(>input[type=checkbox]){font-size:var(--fs-xs)!important;white-space:nowrap}
 body.layout-tablet .devinfo-facts .devinfo-control{padding:0;border:0;background:transparent}
 @media(max-width:600px){
 html body.layout-tablet{--tile-pad:8px 10px}
-body.layout-tablet :is(.info-grid,.btn-grid,.devinfo-facts)>:last-child:nth-child(odd){grid-column:1/-1}
+body.layout-tablet :is(.info-grid,.devinfo-facts)>:last-child:nth-child(odd){grid-column:1/-1}
 }
 @keyframes pg-status-pulse{50%{opacity:.35}}
 @media(prefers-reduced-motion:reduce){#statusDot{animation:none!important}}

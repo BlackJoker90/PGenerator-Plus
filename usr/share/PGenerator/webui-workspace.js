@@ -14580,7 +14580,7 @@ function drawChartGrid(ctx,opts){
  if(opts.rotateX){
   if(densePatchAxis){
    ctx.font=pgChartFont(11);
-   for(let i=0;i<=xSteps;i+=xRotStride){
+   for(let i=0;i<=xSteps;i++){
     const lbl=String(opts.xLabel(i,xSteps)||'').replace(/^Patch\s+/i,'');
     if(!lbl) continue;
     const p=viewX(i/xSteps);
@@ -14777,8 +14777,8 @@ function drawRGBChart(gs,allSteps,readingMap){
 }
 
 // Which bars keep a value label. With room for all of them every bar does; on a
-// narrow chart the tallest win, and a label never sits on a taller neighbour,
-// runs off the plot or touches another label.
+// narrow chart the worst bar always does, and of the rest a label never sits on
+// a taller neighbour, runs off the plot or touches another label.
 function meterDeltaBarLabels(xSteps,deMap,pitch){
  const keep=new Set(),n=xSteps.length;
  const val=(i)=>deMap[xSteps[i].ire];
@@ -14786,7 +14786,8 @@ function meterDeltaBarLabels(xSteps,deMap,pitch){
  for(let i=0;i<n;i++) if(val(i)!=null) bars.push(i);
  if(pitch>=26){bars.forEach(i=>keep.add(i));return keep;}
  const half=Math.ceil(13/pitch),gap=Math.ceil(28/pitch);
- bars.sort((a,b)=>val(b)-val(a)).forEach(i=>{
+ bars.sort((a,b)=>val(b)-val(a)).forEach((i,rank)=>{
+  if(rank===0){keep.add(i);return;}
   if(i<half||i>=n-half) return;
   for(let j=i-half;j<=i+half;j++) if(val(j)>val(i)) return;
   for(const k of keep) if(Math.abs(k-i)<gap) return;
@@ -15115,7 +15116,7 @@ function drawDeltaEChart(gs,allSteps,readingMap,rawGs){
    }
    ctx.fillStyle=pgThemeColor('--chart-annotation','#ccc');ctx.font=pgChartFont(11);
    ctx.textAlign='center';
-   if(deLabels.has(i)) ctx.fillText(dE.toFixed(2),cx,y-4);
+   if(deLabels.has(i)) ctx.fillText(dE.toFixed(2),Math.max(chart.pad.l+14,Math.min(chart.pad.l+chart.w-14,cx)),y-4);
   } else {
    // Placeholder: thin grey line
    ctx.fillStyle='#33333380';
@@ -15208,7 +15209,7 @@ function drawDeltaE2000Chart(gs,allSteps,readingMap){
    ctx.fillRect(cx-barW/2,y,barW,Math.max(2,barH*chart.h));
    ctx.fillStyle=pgThemeColor('--chart-annotation','#ccc');ctx.font=pgChartFont(11);
    ctx.textAlign='center';
-   if(deLabels.has(i)) ctx.fillText(dE.toFixed(2),cx,y-4);
+   if(deLabels.has(i)) ctx.fillText(dE.toFixed(2),Math.max(chart.pad.l+14,Math.min(chart.pad.l+chart.w-14,cx)),y-4);
   } else {
    ctx.fillStyle='#33333380';
    ctx.fillRect(cx-1,chart.pad.t+chart.h-2,2,2);

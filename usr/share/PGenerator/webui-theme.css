@@ -42,7 +42,7 @@ button,input,select,textarea{font-family:inherit}
 --scroll-track:#1a1a1a;--scroll-thumb:#4e4e4e;--scroll-thumb-border:#626262;--scroll-thumb-hover:#666;--status-calibration:#6f86a3}
 [data-palette="nord"]{--bg:#2e3440;--card:#3b4252;--panel:#3b4252;--border:#4c566a;--divider:#4c566a;--accent:#9ab6d6;--accent2:#81a1c1;--accent-fill:#4f709a;--accent-fill2:#4c6a91;
 --text:#eceff4;--text2:#a7b1c2;--text-primary:#eceff4;--text-secondary:#a7b1c2;--text-muted:#aab3c3;--text-disabled:#7b8597;
---green:#a3be8c;--red:#e6a0a6;--orange:#e6a08f;--status-success:#a3be8c;--status-warning:#e6a08f;--status-error:#e6a0a6;--status-calibration:#5e81ac;--success-fill:#a3be8c;--on-success:#2e3440;--danger-fill:#a9444e;--warning-text:#eaa995;
+--green:#a3be8c;--red:#e6a0a6;--orange:#ebcb8b;--status-success:#a3be8c;--status-warning:#ebcb8b;--status-error:#e6a0a6;--status-calibration:#5e81ac;--success-fill:#a3be8c;--on-success:#2e3440;--danger-fill:#a9444e;--warning-text:#ebcb8b;
 --surface-page:#2e3440;--surface-header:#323946;--surface-sidebar:#2b313c;--surface-card:#3b4252;--surface-drawer:#323946;--surface-modal:#3b4252;--surface-popover:#434c5e;--surface-inset:#2b313c;--surface-field:#272c36;
 --shadow:rgba(10,13,18,.45);--selected-bg:rgba(136,192,208,.18);--hover-bg:rgba(236,239,244,.06);
 --chart-bg:#2b313c;--chart-grid:#3b4252;--chart-axis:#4c566a;--chart-label:#a7b1c2;--chart-tooltip:#434c5e;--meter-bar-track:#2b313c;

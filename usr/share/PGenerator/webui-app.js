@@ -4410,7 +4410,7 @@ async function cecScan(){
    const name=(cleanName.length>1)?cleanName:(vendor==='LG'&&d.type===0?'LG TV':('Device '+d.addr));
    const type=typeNames[d.type]||(d.type!==undefined?'Type '+d.type:'');
    const pwr=pwrNames[d.power]||(d.power!==undefined?''+d.power:'?');
-   const pwrColor=d.power===0?pgThemeColor('--status-success','#4caf50'):d.power===1?'var(--orange)':'var(--text2)';
+   const pwrColor=d.power===0?'var(--status-success)':d.power===1?'var(--orange)':'var(--text2)';
    html+='<tr style="border-bottom:1px solid var(--border)">';
    // Names and addresses come from the devices on the HDMI bus.
    html+='<td style="padding:2px 6px">'+pgHtmlEsc(name)+'</td>';

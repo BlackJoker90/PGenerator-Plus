@@ -2,10 +2,14 @@
   "permissions": {
     "ask": [
       "Bash(git push *)",
+      "Bash(git subtree push *)",
+      "Bash(gh api graphql *)",
       "Bash(gh release create *)",
+      "Bash(gh release new *)",
       "Bash(gh release upload *)",
       "Bash(gh release edit *)",
       "Bash(gh release delete *)",
+      "Bash(gh release delete-asset *)",
       "Bash(tools/release-ota.sh *)",
       "Bash(./tools/release-ota.sh *)",
       "Bash(bash tools/release-ota.sh *)",

@@ -80,7 +80,8 @@ POWER = {"reboot", "shutdown", "poweroff", "halt"}
 # bypassPermissions: Tools matched by an explicit ask rule").
 ASK_PROMPTS = {"default", "acceptEdits", "plan", "auto"}
 ASK_FORMS = ("`git push fork main`", "`.claude/skills/pi/scripts/pgen-pi reboot`",
-             "`gh release create ...`", "`tools/release-ota.sh ...`")
+             "`gh release create ...`", "`gh api graphql ...`", "`git subtree push ...`",
+             "`tools/release-ota.sh ...`")
 KEYWORDS = {"if", "then", "else", "elif", "fi", "do", "done", "while", "until", "!", "case", "esac",
             "export", "local", "readonly", "declare", "typeset"}
 ASSIGN = re.compile(r"^([A-Za-z_][A-Za-z0-9_]*)=(.*)$", re.S)
@@ -986,7 +987,7 @@ def check_rest_url(url, what, st):
     if not GH_REST.match(url):
         return
     if rest_path(url) == "graphql":
-        st.asks.append("graphql write from %s: its target is an id the guard cannot read. Check that it is %s." % (what, MY_REPO))
+        st.asks.append("graphql write from %s: its target is an id the guard cannot read. It needs the maintainer's OK: check that it is %s." % (what, MY_REPO))
     else:
         check_api_path(url, what, st)
 
@@ -1004,7 +1005,7 @@ def check_gh_api(args, st):
         if "bigshoots" in text:
             st.deny(P_ORIGIN, "gh api graphql write names BigShoots. %s" % ONLY_MINE)
         else:
-            st.asks.append("gh api graphql write: its target is an id the guard cannot read. Check that it is %s." % MY_REPO)
+            st.asks.append("gh api graphql write: its target is an id the guard cannot read. It needs the maintainer's OK: check that it is %s." % MY_REPO)
 
 
 def check_gh(a, st):

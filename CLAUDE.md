@@ -157,12 +157,16 @@ a turn while a snapshot is open.
   push, PR, issue, comment or release. `origin` is upstream BigShoots.
   Push only with `git push fork main`.
 - Every `gh` write names the repo (`-R BlackJoker90/PGenerator-Plus`; `gh
-  repo edit`, `sync`, `delete` and the like take it as argument): in a
-  GitHub fork without a default, gh aimed at the parent, which is how
-  BigShoots #61 was opened. `pi_guard.py` refuses what it can read as going
-  elsewhere; it is a net for slips, not a proof. A new clone needs `gh repo
-  set-default BlackJoker90/PGenerator-Plus` and `git remote set-url --push
-  origin PUSH-DISABLED-only-BlackJoker90-fork`, also in
+  repo edit`, `sync`, `delete` and the like take it as argument).
+  `pi_guard.py` refuses what it can read as going elsewhere, in Bash only;
+  it is a net for slips, not a proof.
+- T3's PR button does not run gh: it posts to the GitHub API and takes the
+  target from `GH_REPO`, then the `remote.*.gh-resolved` mark, then the
+  remote names, where `origin` beats `fork` (read in its app bundle). The
+  missing mark is the likely way BigShoots #61 was opened. A new clone
+  needs `gh repo set-default BlackJoker90/PGenerator-Plus`, which sets the
+  mark, and `git remote set-url --push origin
+  PUSH-DISABLED-only-BlackJoker90-fork`, also in
   `vendor/ArgyllCMS_ICC4.4` (its remote is BigShoots/ArgyllCMS_ICC4.4).
 - Releases are OTA packages (`tools/release-ota.sh`); a flashable image
   only for boot/base-system changes. The release script refuses untracked

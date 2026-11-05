@@ -157,8 +157,9 @@ METER = ("POST to /api/meter/settings: an earlier body wiped the meter settings.
          "and ask the maintainer before writing them.")
 STATE_WRITE = "pgen-pi's busy state is written by `pgen-pi busy` only, after it checked the Pi."
 
-# The only repo anything may go to. In a GitHub fork without a gh default,
-# gh aims at the parent: that is how BigShoots #61 was opened (2026-11-05).
+# The only repo anything may go to. Without the gh default (the gh-resolved
+# mark) T3's PR button picks origin, the likely way BigShoots #61 was opened
+# (2026-11-05). T3 posts to the API itself: this guard does not see that call.
 MY_REPO = "BlackJoker90/PGenerator-Plus"
 ONLY_MINE = "Everything goes only to %s, never to upstream BigShoots or any other repo (CLAUDE.md)." % MY_REPO
 GH_URL = re.compile(r"^(?:[a-z+]+://)?(?:[^/@]+@)?(?:www\.)?github\.com[:/]+([^/\s]+)/([^/\s?#]+)", re.I)
@@ -729,6 +730,9 @@ def write_targets(a, redir, loc):
     return [norm(h, loc) for h in hits if h]
 
 
+BACKTICK_RUNS = {"perl", "ruby", "php"}
+
+
 def is_interp(p):
     return re.match(r"^(?:python[0-9.]*|perl|node|ruby|php|expect)$", p) is not None
 
@@ -754,7 +758,7 @@ def code_of(a):
     return None, None
 
 
-def scan_code(code, loc, st, depth):
+def scan_code(code, loc, st, depth, backticks=False):
     """Interpreter code: what it would do, read from its text."""
     if loc.ctx == "mac":
         if st.mentions_host(code):
@@ -771,7 +775,8 @@ def scan_code(code, loc, st, depth):
                 argv = [next(g for g in x.groups() if g is not None) for x in LITERAL.finditer(m.group(0))]
                 if argv:
                     judge_mac(argv, [], st, depth + 1)
-        for s in re.findall(r"`([^`]*)`", code):           # perl, ruby
+        # In perl, ruby and php backticks run a command; elsewhere they are text.
+        for s in re.findall(r"`([^`]*)`", code) if backticks else []:
             if CODE_GIT.search(s):
                 judge(s, "mac", st, depth + 1)
         if CODE_REST_WRITE.search(code):
@@ -880,10 +885,10 @@ def judge_one(a, redir, heredocs, loc, st, depth):
             st.deny(P_RAW, RAW)
             return
         if code is not None:
-            scan_code(code, loc, st, depth)
+            scan_code(code, loc, st, depth, p in BACKTICK_RUNS)
         elif script is None:
             for body in heredocs:
-                scan_code(body, loc, st, depth)
+                scan_code(body, loc, st, depth, p in BACKTICK_RUNS)
         if ctx == "pi":
             if any(re.match(r"^post:\s*(?:\{\s*\})?\s*$", x) for x in a):
                 st.deny(P_DUMMY, "pgprobe `post:{}`: never POST dummy bodies (CLAUDE.md); give the keys to change.")
@@ -1026,7 +1031,7 @@ def check_gh(a, st):
         if "--view" in a or "-v" in a:
             return
         if "--unset" in a or "-u" in a:
-            st.deny(P_ORIGIN, "gh repo set-default --unset: without the default gh aims at BigShoots. %s" % ONLY_MINE)
+            st.deny(P_ORIGIN, "gh repo set-default --unset: without the default T3 picks origin = BigShoots. %s" % ONLY_MINE)
             return
     targets = repos + [w for w in words[2:] if URL_LIKE.match(w) and GH_URL.match(w)]
     env = st.gh_env if st.gh_env is not None else st.gh_export

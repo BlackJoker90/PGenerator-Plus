@@ -25,9 +25,14 @@ Deny (the reason goes back to Claude):
   - an init-script stop/restart in a command that names a path the init
     script pkills (it would kill its own shell);
   - writing pgen-pi's busy state by hand;
-  - pushes to origin (upstream BigShoots).
+  - anything that goes to another repo than BlackJoker90/PGenerator-Plus:
+    pushes to origin (upstream BigShoots) or any other remote, gh writes
+    (pr, issue, release, repo, api ...) that do not name the fork, API
+    POSTs by curl/wget, and undoing the block on origin's push URL.
 Ask (the user confirms in the prompt): reboot/shutdown (also POST
-/api/reboot and /api/power), push, release.
+/api/reboot and /api/power), push, release, gh api graphql mutations. In a
+mode without that prompt, an ask no rule in .claude/settings.json covers is
+refused.
 
 A net for slips, not a sandbox: a command built to hide what it does (a
 copied script, a host read from a file) can get past it.
@@ -88,7 +93,8 @@ WRAP = {
     "ionice": {"-c", "-n", "-p"},
     "nohup": set(), "setsid": set(), "exec": {"-a"}, "command": set(), "time": {"-f", "-o"},
     "stdbuf": {"-i", "-o", "-e"}, "busybox": set(),
-    "timeout": {"-s", "-k", "--signal", "--kill-after"},
+    "timeout": {"-s", "-k", "--signal", "--kill-after"}, "gtimeout": {"-s", "-k", "--signal", "--kill-after"},
+    "caffeinate": {"-t", "-w"},
     "xargs": {"-I", "-n", "-P", "-L", "-d", "-E", "-s", "-a", "-l", "--max-args", "--max-procs",
               "--delimiter", "--arg-file", "--replace", "--max-lines", "--eof"},
     "watch": {"-n", "--interval"},
@@ -121,6 +127,14 @@ CODE_SOCKET = re.compile(r"\bsocket\b|\.connect\s*\(|\bcreate_connection\b|\btel
 CODE_REMOTE = re.compile(r"\b(?:ssh|scp|sftp|rsync|spawn|paramiko|pexpect)\b")
 # A string in code that is a command line worth judging as one.
 CODE_CMDLINE = re.compile(r"pgen-pi\s+[a-z$]|pi\.exp\s+(?:ssh|scp)|(?:^|[\s;&|])(?:ssh|scp|sshpass|rsync|curl|wget)\s")
+# gh and git inside code: judged only where the code runs commands, a string
+# that merely says `git push origin main` is text.
+CODE_GIT = re.compile(r"(?:^|[\s;&|])(?:gh|git)\s")
+CODE_EXEC = re.compile(r"\bsubprocess\b|\bpopen\b|\bsystem\b|\bexec\s*\(|\bexecSync\b|\bspawn\w*\b|\bqx\b|child_process", re.I)
+CODE_ARGV = re.compile(r"(?:[\[(]|\bsystem\s)\s*['\"](?:[^'\"]*/)?(?:gh|git)['\"]\s*,[^\])\n;]*")
+# Writes to a URL in code; a variable named `data` is none.
+CODE_REST_WRITE = re.compile(r"\.(?:post|put|patch|delete)\s*\(|method\s*=\s*['\"]?(?:POST|PUT|PATCH|DELETE)|"
+                             r"\bRequest\s*\([^)]*\bdata\s*=|\.request\s*\(\s*['\"](?:POST|PUT|PATCH|DELETE)", re.I)
 POWER_API = re.compile(r"/api/(?:reboot|power)\b")
 MAX_DEPTH = 40
 CODE_SYS = re.compile(r"['\"{ ]/+(?:usr|etc|lib|boot|bin|sbin)/")
@@ -141,6 +155,34 @@ DUMMY = ("empty or `{}` body to the API: never POST dummy bodies to settings end
 METER = ("POST to /api/meter/settings: an earlier body wiped the meter settings. Read the handler (webui.pm) "
          "and ask the maintainer before writing them.")
 STATE_WRITE = "pgen-pi's busy state is written by `pgen-pi busy` only, after it checked the Pi."
+
+# The only repo anything may go to. In a GitHub fork without a gh default,
+# gh aims at the parent: that is how BigShoots #61 was opened (2026-11-05).
+MY_REPO = "BlackJoker90/PGenerator-Plus"
+ONLY_MINE = "Everything goes only to %s, never to upstream BigShoots or any other repo (CLAUDE.md)." % MY_REPO
+GH_URL = re.compile(r"^(?:[a-z+]+://)?(?:[^/@]+@)?(?:www\.)?github\.com[:/]+([^/\s]+)/([^/\s?#]+)", re.I)
+URL_LIKE = re.compile(r"^(?:[a-z+]+://|git@|(?:www\.)?github\.com[:/])\S*$", re.I)
+GH_REST = re.compile(r"^(?:https?://)?(?:api|uploads)\.github\.com(?:/|$)", re.I)
+# gh groups that act on no repo. Every other group counts as acting on one and
+# whatever in it is not a known read as a write, so what gh adds later is
+# refused rather than let through (`gh discussion`, `gh agent-task`).
+GH_FREE = {"auth", "config", "search", "status", "help", "browse", "completion", "extension", "extensions", "alias",
+           "version", "ssh-key", "gpg-key", "attestation", "accessibility", "preview", "copilot", "codespace", "cs",
+           "licenses", "co", "org", "ext", "at"}
+GH_READS = {"view", "list", "ls", "status", "checks", "diff", "checkout", "co", "download", "watch", "get", "check",
+            "verify", "verify-asset", "read-file", "read-dir", "gitignore", "license", "field-list", "item-list",
+            "search", "preview", "show"}
+# Their reads sit one level down: gh repo deploy-key list.
+GH_NESTED = {"deploy-key", "autolink", "artifact"}
+# gh repo subcommands whose first argument is the repo acted on.
+GH_REPO_ARG = {"archive", "unarchive", "delete", "set-default", "create", "fork"}
+# Free text, whatever it says is no target. Only flags that take a value in
+# every write: `gh pr merge -d` and `gh pr review -c` are switches, and taking
+# what follows them as text would hide a URL argument.
+GH_TEXT = {"-t", "--title", "-b", "--body", "-F", "--body-file", "-n", "--notes", "--notes-file", "--subject",
+           "--description", "--homepage"}
+GH_API_VALUE = {"-X", "--method", "-f", "--raw-field", "-F", "--field", "--input", "-H", "--header", "-q", "--jq",
+                "-t", "--template", "--cache", "-p", "--preview", "--hostname"}
 
 
 def password(project):
@@ -199,13 +241,44 @@ def foreign_snapshot(project):
 
 # --- reading the command like a shell --------------------------------------
 
+HEREDOC = re.compile(r"<<(-?)[ \t]*((?:[^\s;&|()<>'\"\\]|'[^'\n]*'|\"[^\"\n]*\"|\\.)+)")
+
+
 def match_paren(s, j):
-    """s[j] == "(": the index after its matching ")", quotes honoured."""
-    depth, i, n = 0, j, len(s)
+    """s[j] == "(": the index after its matching ")", quotes honoured and
+    heredoc bodies skipped: they are text, an apostrophe in a commit message
+    must not swallow the commands after it. Unmatched: len(s) + 1, so that
+    s[j + 1:k - 1] is all the rest, not one character short."""
+    depth, i, n, pending = 0, j, len(s), []
     while i < n:
         c = s[i]
         if c == "\\":
             i += 2
+            continue
+        if c == "\n" and pending:
+            i += 1
+            for delim, strip in pending:
+                k = i
+                while k < n:
+                    e = s.find("\n", k)
+                    line = s[k:] if e < 0 else s[k:e]
+                    k = n if e < 0 else e + 1
+                    if (line.lstrip("\t") if strip else line) == delim:
+                        i = k                          # no end line: not a heredoc, read on
+                        break
+            pending = []
+            continue
+        if s.startswith("$((", i):
+            k = s.find("))", i)
+            i = n if k < 0 else k + 2
+            continue
+        if s.startswith("<<<", i):
+            i += 3
+            continue
+        m = HEREDOC.match(s, i) if c == "<" else None
+        if m:
+            pending.append((re.sub(r"['\"\\]", "", m.group(2)), m.group(1) == "-"))
+            i = m.end()
             continue
         if c == "'":
             k = s.find("'", i + 1)
@@ -224,7 +297,7 @@ def match_paren(s, j):
             if depth == 0:
                 return i + 1
         i += 1
-    return n
+    return n + 1
 
 
 OPS = sorted([";;", "&&", "||", "|&", "&>>", "&>", ">>", ">&", "<&", ">|", "<>", "<<<", "<<-", "<<", "<(", ">(",
@@ -426,6 +499,7 @@ class St(object):
         self.denials, self.asks, self.pi_text, self.vars = [], [], [], {}
         self.mutating = self.power = self.init_stop = self.xargs = False
         self.cwd = ""
+        self.gh_env = self.gh_export = None    # GH_REPO of this command, of the export before it
 
     def deny(self, prio, reason):
         self.denials.append((prio, reason))
@@ -483,14 +557,18 @@ def strip_opts(a, valopts):
 
 def core(argv, st):
     """argv without assignments, keywords and wrappers (sudo, env, timeout ...)."""
-    a = list(argv)
+    a, exported = list(argv), False
+    st.gh_env = None
     while a:
         m = ASSIGN.match(a[0])
         if m:
             st.vars[m.group(1)] = m.group(2)
+            if m.group(1) == "GH_REPO":
+                st.gh_env = m.group(2)
             a = a[1:]
             continue
         if a[0] in KEYWORDS:
+            exported = exported or a[0] == "export"
             a = a[1:]
             continue
         b = os.path.basename(a[0])
@@ -499,11 +577,13 @@ def core(argv, st):
             if b == "command" and any(x in ("-v", "-V") for x in a[1:3]):
                 return []
             rest = strip_opts(a[1:], WRAP[b])
-            if b == "timeout" and rest:
+            if b in ("timeout", "gtimeout") and rest:
                 rest = rest[1:]
             a = rest
             continue
         break
+    if exported and st.gh_env is not None:
+        st.gh_export = st.gh_env
     return a
 
 
@@ -684,8 +764,20 @@ def scan_code(code, loc, st, depth):
             if POWER_API.search(code) and CODE_POST.search(code):
                 st.power = True
         lits = [next(g for g in m.groups() if g is not None) for m in LITERAL.finditer(code)]
+        runs = bool(CODE_EXEC.search(code))
+        if runs:
+            for m in CODE_ARGV.finditer(code):
+                argv = [next(g for g in x.groups() if g is not None) for x in LITERAL.finditer(m.group(0))]
+                if argv:
+                    judge_mac(argv, [], st, depth + 1)
+        for s in re.findall(r"`([^`]*)`", code):           # perl, ruby
+            if CODE_GIT.search(s):
+                judge(s, "mac", st, depth + 1)
+        if CODE_REST_WRITE.search(code):
+            for s in lits:
+                check_rest_url(s, "this code", st)
         for k, s in enumerate(lits):
-            if CODE_CMDLINE.search(s):
+            if CODE_CMDLINE.search(s) or (runs and CODE_GIT.search(s)):
                 judge(s, "mac", st, depth + 1)
             elif os.path.basename(s) == "pgen-pi" and k + 1 < len(lits):
                 # an argv list: pgen-pi, then its arguments as separate strings
@@ -808,6 +900,229 @@ def judge_one(a, redir, heredocs, loc, st, depth):
         judge_pi(a, loc, st)
 
 
+def is_mine(target):
+    m = GH_URL.match(target)
+    name = "%s/%s" % m.groups() if m else target
+    return re.sub(r"(?:\.git)?/*$", "", name).lower() == MY_REPO.lower()
+
+
+def gh_words(args):
+    """(positional words, repos named by -R/--repo, --help given)."""
+    words, repos, helped, i = [], [], False, 0
+    while i < len(args):
+        x = args[i]
+        i += 1
+        m = re.match(r"^(?:--repo=|-R=?)(.+)$", x, re.S)
+        if x in ("-R", "--repo"):
+            repos.append(args[i] if i < len(args) else "")
+            i += 1
+        elif m:
+            repos.append(m.group(1))
+        elif x in GH_TEXT:
+            i += 1
+        elif x == "--help":
+            helped = True
+        elif not x.startswith("-"):
+            words.append(x)
+    return words, repos, helped
+
+
+def gh_sync_dest(args):
+    """The destination of `gh repo sync`, as a list: its one positional."""
+    i = 0
+    while i < len(args):
+        x = args[i]
+        i += 1
+        if x in ("-s", "--source", "-b", "--branch"):
+            i += 1
+        elif not x.startswith("-"):
+            return [x]
+    return []
+
+
+def gh_api_args(args):
+    """(path, method, field values) of `gh api`; --input counts as an @file field."""
+    path, method, fields, i = "", "", [], 0
+    while i < len(args):
+        x = args[i]
+        i += 1
+        if x.startswith("--") and "=" in x:
+            k, v = x.split("=", 1)
+        elif re.match(r"^-[XfFHqtp].", x):
+            k, v = x[:2], x[2:]
+        elif x in GH_API_VALUE:
+            k, v = x, args[i] if i < len(args) else ""
+            i += 1
+        elif x.startswith("-"):
+            continue
+        else:
+            path = path or x
+            continue
+        if k in ("-X", "--method"):
+            method = v.upper()
+        elif k in ("-f", "--raw-field", "-F", "--field"):
+            fields.append(v)
+        elif k == "--input":
+            fields.append("@" + v)
+    return path, method, fields
+
+
+def rest_path(url):
+    return re.sub(r"[?#].*$", "", re.sub(r"^.*?(?:api|uploads)\.github\.com", "", url)).lstrip("/")
+
+
+def check_api_path(path, what, st):
+    """A write to a GitHub REST path goes to the fork, or it is refused."""
+    p = rest_path(path)
+    m = re.match(r"^repos/([^/?]+)/([^/?]+)", p, re.I)
+    if m and is_mine("%s/%s" % m.groups()):
+        return
+    if m or not p or p.startswith(("repositories/", "$")) or re.match(r"^(?:user|orgs/[^/]+)/repos\b", p):
+        st.deny(P_ORIGIN, "%s writes to %s. %s" % (what, path or "an unnamed path", ONLY_MINE))
+
+
+def check_rest_url(url, what, st):
+    """A write to a github.com API URL (curl, wget, code)."""
+    if not GH_REST.match(url):
+        return
+    if rest_path(url) == "graphql":
+        st.asks.append("graphql write from %s: its target is an id the guard cannot read. Check that it is %s." % (what, MY_REPO))
+    else:
+        check_api_path(url, what, st)
+
+
+def check_gh_api(args, st):
+    path, method, fields = gh_api_args(args)
+    if not (method not in ("GET", "HEAD") if method else fields):
+        return
+    if rest_path(path) != "graphql":
+        check_api_path(path, "gh api", st)
+        return
+    text = " ".join(fields).lower()
+    hidden = "$(" in text or "`" in text or any(f.split("=", 1)[-1].startswith(("@", "$")) for f in fields)
+    if "mutation" in text or hidden:
+        if "bigshoots" in text:
+            st.deny(P_ORIGIN, "gh api graphql write names BigShoots. %s" % ONLY_MINE)
+        else:
+            st.asks.append("gh api graphql write: its target is an id the guard cannot read. Check that it is %s." % MY_REPO)
+
+
+def check_gh(a, st):
+    if len(a) > 1 and a[1] == "api":
+        check_gh_api(a[2:], st)
+        return
+    words, repos, helped = gh_words(a[1:])
+    group, sub = (words + ["", ""])[:2]
+    if helped or not group or group in GH_FREE or not sub or sub in GH_READS:
+        return
+    if sub == "clone" and group in ("repo", "gist"):       # `gh label clone` writes
+        return
+    if sub in GH_NESTED and words[2:3] and words[2] in GH_READS:
+        return
+    if (group, sub) == ("issue", "develop") and ("--list" in a or "-l" in a):
+        return
+    if (group, sub) == ("repo", "set-default"):
+        if "--view" in a or "-v" in a:
+            return
+        if "--unset" in a or "-u" in a:
+            st.deny(P_ORIGIN, "gh repo set-default --unset: without the default gh aims at BigShoots. %s" % ONLY_MINE)
+            return
+    targets = repos + [w for w in words[2:] if URL_LIKE.match(w) and GH_URL.match(w)]
+    env = st.gh_env if st.gh_env is not None else st.gh_export
+    if env is not None:
+        targets.append(env)
+    if (group, sub) == ("issue", "transfer"):
+        targets += words[3:4]
+    if group == "repo" and sub in GH_REPO_ARG:
+        targets += words[2:3]
+    if (group, sub) == ("repo", "edit"):                   # values of its flags are words too
+        targets += [w for w in words[2:] if re.match(r"^[\w.-]+/[\w.-]+$", w)]
+    if (group, sub) == ("repo", "sync"):                   # the source is only read
+        targets += gh_sync_dest(a[a.index("sync") + 1:])[:1]
+    what = "gh %s %s" % (group, sub)
+    foreign = [t for t in targets if not is_mine(t)]
+    if foreign:
+        st.deny(P_ORIGIN, "%s goes to %s. %s" % (what, foreign[0] or "an unnamed repo", ONLY_MINE))
+    elif not targets:
+        st.deny(P_ORIGIN, "%s does not name its repo, and gh may pick BigShoots. Add `-R %s` (gh repo: the repo as "
+                "argument). %s" % (what, MY_REPO, ONLY_MINE))
+    if group == "release":
+        st.asks.append("gh release %s: releases need the maintainer's OK (CLAUDE.md)." % sub)
+
+
+def check_git(a, st, depth):
+    j, pushdefault, submodule = 1, False, False
+    while j < len(a) and a[j].startswith("-"):
+        if a[j] in ("-C", "-c", "--git-dir", "--work-tree", "--namespace") and j + 1 < len(a):
+            pushdefault = pushdefault or (a[j] == "-c" and a[j + 1].lower() == "remote.pushdefault=origin")
+            submodule = submodule or (a[j] != "-c" and "vendor/" in a[j + 1])
+            j += 2
+        else:
+            j += 1
+    sub, rest = (a[j], a[j + 1:]) if j < len(a) else ("", [])
+    if sub == "push":
+        k, remote = 0, ""
+        while k < len(rest):
+            if rest[k] in ("-o", "--push-option", "--repo", "--receive-pack", "--exec"):
+                k += 2
+            elif rest[k].startswith("-"):
+                k += 1
+            else:
+                remote = rest[k]
+                break
+        repo = [rest[k + 1] for k, x in enumerate(rest) if x == "--repo" and k + 1 < len(rest)]
+        repo += [x[7:] for x in rest if x.startswith("--repo=")]
+        # a path on this machine reaches no repo on GitHub
+        named = [x for x in [remote] + repo if x and x != "fork" and not is_mine(x) and not x.startswith((".", "/", "~"))]
+        recurse = [x for x in rest if x.startswith("--recurse-submodules") and x not in
+                   ("--recurse-submodules=no", "--recurse-submodules=check")]
+        if submodule or recurse:
+            st.deny(P_ORIGIN, "the submodule's remote is BigShoots/ArgyllCMS_ICC4.4. %s" % ONLY_MINE)
+        if named or pushdefault:
+            st.deny(P_ORIGIN, "push to %s. Push only with `git push fork main`. %s" % (named[0] if named else "origin", ONLY_MINE))
+        st.asks.append("git push %s: pushes need the maintainer's OK (CLAUDE.md)." % " ".join(rest)[:80])
+    elif sub == "submodule" and "foreach" in rest:
+        cmd = [x for x in rest[rest.index("foreach") + 1:] if x not in ("--recursive", "--quiet", "-q")]
+        judge(" ".join(cmd), "mac", st, depth + 1)
+    elif sub == "subtree" and rest[:1] == ["push"]:
+        k, plain = 1, []
+        while k < len(rest):
+            if rest[k] in ("-P", "--prefix"):
+                k += 1
+            elif not rest[k].startswith("-"):
+                plain.append(rest[k])
+            k += 1
+        if plain and plain[0] != "fork" and not is_mine(plain[0]):
+            st.deny(P_ORIGIN, "git subtree push to %s. %s" % (plain[0], ONLY_MINE))
+        st.asks.append("git subtree push: pushes need the maintainer's OK (CLAUDE.md).")
+    elif sub == "remote":
+        plain = [x for x in rest if not x.startswith("-")]
+        if plain[:1] and plain[0] in ("remove", "rm", "rename") and {"origin", "fork"} & set(plain[1:2]):
+            st.deny(P_ORIGIN, "the remotes origin and fork stay as they are. %s" % ONLY_MINE)
+        if plain[:2] == ["set-url", "origin"] and "--push" in rest and \
+                ("--delete" in rest or not any("PUSH-DISABLED" in x for x in rest)):
+            st.deny(P_ORIGIN, "origin's push URL stays disabled. %s" % ONLY_MINE)
+        if plain[:2] == ["set-url", "fork"] and ("--delete" in rest or not all(is_mine(x) for x in plain[2:])):
+            st.deny(P_ORIGIN, "the remote fork stays %s. %s" % (MY_REPO, ONLY_MINE))
+    elif sub == "config":
+        keys = {x.lower() for x in rest}
+        plain = [x for x in rest if not x.startswith("-")]
+        unset = plain[:1] == ["unset"] or any(x.startswith("--unset") for x in rest)
+        read = not unset and (len(plain) == 1 or plain[:1] in (["get"], ["list"]) or
+                              any(x.startswith("--get") or x in ("--list", "-l") for x in rest))
+        section = {"--remove-section", "--rename-section", "remove-section", "rename-section"} & set(rest)
+        if section and {"remote.origin", "remote.fork"} & keys:
+            st.deny(P_ORIGIN, "the remotes origin and fork stay as they are. %s" % ONLY_MINE)
+        elif read or section:
+            return
+        if "remote.origin.pushurl" in keys and (unset or not any("PUSH-DISABLED" in x for x in rest)):
+            st.deny(P_ORIGIN, "origin's push URL stays disabled. %s" % ONLY_MINE)
+        if "remote.pushdefault" in keys and (unset or "fork" not in rest):
+            st.deny(P_ORIGIN, "remote.pushdefault stays fork. %s" % ONLY_MINE)
+        if {"remote.fork.url", "remote.fork.pushurl"} & keys and (unset or not any(is_mine(x) for x in rest)):
+            st.deny(P_ORIGIN, "the remote fork stays %s. %s" % (MY_REPO, ONLY_MINE))
+
+
 def judge_mac(a, heredocs, st, depth, loc=None):
     p = prog(a)
     if p == "pgen-pi" or (a[0].startswith("$") and len(a) > 1 and a[1] in PGEN_SUBS):
@@ -854,39 +1169,24 @@ def judge_mac(a, heredocs, st, depth, loc=None):
         check_api(a, st)
     if p in NET and "-z" not in a and any(st.mentions_host(x) for x in a[1:]):
         st.mutating = True
+    if p in ("http", "https", "xh") and (any(x.upper() in POST_METHODS for x in a[1:3]) or
+                                         any(re.match(r"^[\w.-]+:?=", x) for x in a[1:])):
+        for x in a[1:]:
+            check_rest_url(x, p, st)
     if p in ("http", "https", "xh") and any(st.mentions_host(x) for x in a[1:]):
         # httpie: an explicit method or request items (key=value, key:=json) send a body
         if any(x.upper() in POST_METHODS for x in a[1:3]) or any(re.match(r"^[\w.-]+:?=", x) for x in a[1:]):
             st.mutating = True
             if any("/api/meter/settings" in x for x in a[1:]):
                 st.deny(P_METER, METER)
+    if p in ("curl", "wget") and http(a)[0] and not any(x == "--get" or re.match(r"^-[A-Za-z]*G[A-Za-z]*$", x) for x in a[1:]):
+        for x in a[1:]:
+            check_rest_url(re.sub(r"^--url=", "", x), p, st)
     if p == "git":
-        j, pushdefault = 1, False
-        while j < len(a) and a[j].startswith("-"):
-            if a[j] in ("-C", "-c", "--git-dir", "--work-tree", "--namespace") and j + 1 < len(a):
-                pushdefault = pushdefault or (a[j] == "-c" and a[j + 1].lower() == "remote.pushdefault=origin")
-                j += 2
-            else:
-                j += 1
-        if j < len(a) and a[j] == "push":
-            rest = a[j + 1:]
-            k, remote = 0, ""
-            while k < len(rest):
-                if rest[k] in ("-o", "--push-option", "--repo", "--receive-pack", "--exec"):
-                    k += 2
-                elif rest[k].startswith("-"):
-                    k += 1
-                else:
-                    remote = rest[k]
-                    break
-            repo = [rest[k + 1] for k, x in enumerate(rest) if x == "--repo" and k + 1 < len(rest)]
-            if remote == "origin" or pushdefault or "origin" in repo or \
-                    any("bigshoots" in x.lower() or x == "--repo=origin" for x in rest):
-                st.deny(P_ORIGIN, "push to origin = upstream BigShoots. Push only with `git push fork main` (CLAUDE.md).")
-            st.asks.append("git push %s: pushes need the maintainer's OK (CLAUDE.md)." % " ".join(rest)[:80])
+        check_git(a, st, depth)
+    if p == "gh":
+        check_gh(a, st)
     if p == "gh" and len(a) > 2:
-        if a[1] == "release" and a[2] in ("create", "upload", "edit", "delete"):
-            st.asks.append("gh release %s: releases need the maintainer's OK (CLAUDE.md)." % a[2])
         rest = a[2:]
         method = [rest[k + 1].upper() for k, x in enumerate(rest) if x in ("-X", "--method") and k + 1 < len(rest)]
         if a[1] == "api" and any("releases" in x for x in rest) and \

@@ -153,8 +153,17 @@ a turn while a snapshot is open.
 
 ## Git and releases
 
-- Push only with `git push fork main` (fork = BlackJoker90). `origin` is
-  upstream BigShoots: never push there.
+- Nothing ever goes to a repo other than BlackJoker90/PGenerator-Plus: no
+  push, PR, issue, comment or release. `origin` is upstream BigShoots.
+  Push only with `git push fork main`.
+- Every `gh` write names the repo (`-R BlackJoker90/PGenerator-Plus`; `gh
+  repo edit`, `sync`, `delete` and the like take it as argument): in a
+  GitHub fork without a default, gh aimed at the parent, which is how
+  BigShoots #61 was opened. `pi_guard.py` refuses what it can read as going
+  elsewhere; it is a net for slips, not a proof. A new clone needs `gh repo
+  set-default BlackJoker90/PGenerator-Plus` and `git remote set-url --push
+  origin PUSH-DISABLED-only-BlackJoker90-fork`, also in
+  `vendor/ArgyllCMS_ICC4.4` (its remote is BigShoots/ArgyllCMS_ICC4.4).
 - Releases are OTA packages (`tools/release-ota.sh`); a flashable image
   only for boot/base-system changes. The release script refuses untracked
   runtime files: `git add` new files first.

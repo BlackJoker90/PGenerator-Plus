@@ -1731,7 +1731,7 @@ async function meterIccLoadProfiles(){
    }
    const download=document.createElement('button');
    download.type='button';
-   download.className='btn btn-sm btn-primary';
+   download.className='btn btn-sm btn-secondary';
    download.textContent='Download';
    download.onclick=()=>{ window.location.href='/api/icc/download?file='+encodeURIComponent(profile.name); };
    const install=document.createElement('button');
@@ -1789,7 +1789,7 @@ async function meterIccLoadProfiles(){
    cube.onclick=()=>meterIccConvertProfileToCube(profile.name,cube);
    const remove=document.createElement('button');
    remove.type='button';
-   remove.className='btn btn-sm btn-danger';
+   remove.className='btn btn-sm btn-danger-quiet';
    remove.textContent='×';
    remove.title='Delete this profile';
    remove.setAttribute('aria-label','Delete '+profile.name);
@@ -2313,11 +2313,11 @@ function meterIccShowFineTuneReport(parent,result,passes){
  // the whole report fits without scrolling on a desktop viewport.
  card.style.cssText='width:min(1080px,100%);max-height:92vh;overflow:auto;background:#111723;border:1px solid #2a3140;border-radius:10px;padding:18px;box-sizing:border-box;color:var(--text2);';
  const fixed=value=>Number.isFinite(Number(value))?Number(value).toFixed(2):'--';
- const tableStyle='width:100%;border-collapse:collapse;font-size:.78rem;color:var(--text2)';
+ const tableStyle='width:100%;border-collapse:collapse;font-size:var(--fs-sm);color:var(--text2)';
  const cell='padding:3px 10px 3px 0';
  const cellRight='padding:3px 0 3px 10px;text-align:right';
- const heading='font-size:.82rem;font-weight:700;color:var(--text);margin:0 0 6px';
- const note='opacity:.65;font-size:.72rem;margin-top:4px;line-height:1.45';
+ const heading='font-size:var(--fs-sm);font-weight:700;color:var(--text);margin:0 0 6px';
+ const note='opacity:.65;font-size:var(--fs-xs);margin-top:4px;line-height:1.45';
  let left='';
  if(Array.isArray(passes)&&passes.length){
   left+='<div style="margin-bottom:14px"><div style="'+heading+'">Session passes</div><table style="'+tableStyle+'">'
@@ -2369,7 +2369,7 @@ function meterIccShowFineTuneReport(parent,result,passes){
   });
   right+='</table><div style="'+note+'">Predicted values assume the damped, bounded corrections land as computed; run a verification read of the new profile to confirm.</div></div>';
  }
- card.innerHTML='<div style="font-size:1rem;font-weight:700;color:var(--text);margin-bottom:4px">Fine-tune '+(result&&result.converged?'converged':'complete')+'</div>'
+ card.innerHTML='<div style="font-size:var(--fs-lg);font-weight:700;color:var(--text);margin-bottom:4px">Fine-tune '+(result&&result.converged?'converged':'complete')+'</div>'
   +'<div class="meter-icc-note" style="margin-bottom:14px">'+String(result.file||'')+' from '+String(parent||'')+'</div>'
   +'<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(400px,1fr));gap:0 28px;align-items:start"><div>'+left+'</div><div>'+right+'</div></div>';
  const close=document.createElement('button');

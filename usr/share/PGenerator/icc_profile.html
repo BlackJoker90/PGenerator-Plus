@@ -1,9 +1,9 @@
   <span id="meterIccProfileHome" hidden></span>
   <div id="meterIccProfileModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:10000;align-items:center;justify-content:center;padding:18px;box-sizing:border-box">
-   <div class="meter-modal-scroll" style="width:min(1160px,100%);max-height:92vh;overflow:auto;background:#111723;border:1px solid #2a3140;border-radius:10px;padding:16px;box-sizing:border-box">
+   <div class="meter-modal-scroll" style="width:min(1160px,100%);max-height:92vh;overflow:auto;background:var(--surface-modal);border:1px solid var(--border);border-radius:10px;padding:16px;box-sizing:border-box">
     <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:14px">
      <div>
-      <div class="meter-icc-dialog-title" style="font-size:1rem;font-weight:700;color:var(--text);margin-bottom:4px">Display Profiler</div>
+      <div class="meter-icc-dialog-title" style="font-size:var(--fs-lg);font-weight:700;color:var(--text);margin-bottom:4px">Display Profiler</div>
       <div class="meter-icc-note">Create a display profile from Patch Companion or PGenerator+ HDMI measurements, then download the finished file.</div>
      </div>
      <button type="button" class="btn btn-sm btn-secondary meter-icc-close" onclick="meterCloseIccProfileBuilder()">Close</button>
@@ -82,7 +82,7 @@
         </select>
        </div>
        <details id="meterIccFormatAdvanced" class="meter-icc-advanced" style="margin-top:12px">
-        <summary style="cursor:pointer;color:var(--text);font-size:.76rem;font-weight:600">ICC format and CICP</summary>
+        <summary style="cursor:pointer;color:var(--text);font-size:var(--fs-xs);font-weight:600">ICC format and CICP</summary>
         <div class="meter-icc-field" style="margin-top:10px">
          <label for="meterIccVersion">ICC profile version <span class="meter-icc-help" data-tip="Automatic uses ICC v4.4 with CICP for KDE HDR and ICC v2.2 for the other profile categories. Select a version explicitly for compatibility testing.">?</span></label>
          <select id="meterIccVersion" onchange="meterIccFormatChanged()">
@@ -197,7 +197,7 @@
         </select>
        </div>
        <details id="meterIccPatchAdvanced" class="meter-icc-advanced">
-        <summary style="cursor:pointer;color:var(--text);font-size:.76rem;font-weight:600">Options</summary>
+        <summary style="cursor:pointer;color:var(--text);font-size:var(--fs-xs);font-weight:600">Options</summary>
         <div class="meter-icc-field">
          <label for="meterIccPatchCount">Total patches: <span id="meterIccPatchCountLabel">425</span></label>
          <div style="display:grid;grid-template-columns:minmax(120px,1fr) 84px;gap:8px;align-items:center">
@@ -222,12 +222,12 @@
          <label for="meterIccDarkEmphasis">Dark region concentration: <span id="meterIccDarkEmphasisLabel">20%</span></label>
          <input id="meterIccDarkEmphasis" type="range" min="0" max="100" step="1" value="20" oninput="meterIccPatchControlChanged()">
         </div>
-        <label style="display:flex;align-items:center;gap:7px;margin:8px 0;color:var(--text);font-size:.75rem"><input id="meterIccGoodOptimization" type="checkbox" checked onchange="meterIccPatchControlChanged()"> Generate good optimized points rather than fast</label>
+        <label style="display:flex;align-items:center;gap:7px;margin:8px 0;color:var(--text);font-size:var(--fs-xs)"><input id="meterIccGoodOptimization" type="checkbox" checked onchange="meterIccPatchControlChanged()"> Generate good optimized points rather than fast</label>
         <div class="meter-icc-field">
          <label for="meterIccPreconditionProfile">Optional device ICC / pre-conditioning profile <span class="meter-icc-help" data-tip="A representative existing profile can guide OFPS placement toward the display gamut and nonlinear regions.">?</span></label>
          <select id="meterIccPreconditionProfile" onchange="meterIccPatchControlChanged()"><option value="">None</option></select>
         </div>
-        <label style="display:flex;align-items:center;gap:7px;margin:8px 0;color:var(--text);font-size:.75rem"><input id="meterIccAutoPrecondition" type="checkbox" checked onchange="meterIccPatchControlChanged()"> Auto-optimize from a 34-patch display pre-read <span class="meter-icc-help" data-tip="PGenerator+ first builds a temporary matrix characterization, then places the final patches using the measured response. Skipped when a known display profile is selected.">?</span></label>
+        <label style="display:flex;align-items:center;gap:7px;margin:8px 0;color:var(--text);font-size:var(--fs-xs)"><input id="meterIccAutoPrecondition" type="checkbox" checked onchange="meterIccPatchControlChanged()"> Auto-optimize from a 34-patch display pre-read <span class="meter-icc-help" data-tip="PGenerator+ first builds a temporary matrix characterization, then places the final patches using the measured response. Skipped when a known display profile is selected.">?</span></label>
        </details>
       </div>
       <div class="meter-icc-panel">
@@ -241,7 +241,7 @@
         <label for="meterIccMeterProfile">Meter profile (CCSS / CCMX)</label>
         <select id="meterIccMeterProfile" onchange="meterIccLinkedMeterProfileChanged()"></select>
        </div>
-       <label style="display:flex;align-items:center;gap:7px;margin:8px 0;color:var(--text);font-size:.75rem">
+       <label style="display:flex;align-items:center;gap:7px;margin:8px 0;color:var(--text);font-size:var(--fs-xs)">
         <input id="meterIccPatternInsertion" type="checkbox" onchange="meterIccLinkedPatternInsertionChanged()"> Pattern insertion <span class="meter-icc-help" data-tip="Uses the timing and level settings configured in the Calibration workspace.">?</span>
        </label>
       </div>
@@ -250,7 +250,7 @@
       <p class="meter-icc-section-intro">Review the active configuration, then begin the measurement run.</p>
       <div id="meterIccRunSummary" class="meter-icc-note" style="margin-bottom:10px"></div>
       <div id="meterIccProgress" style="display:none">
-       <div style="display:flex;justify-content:space-between;gap:10px;margin-bottom:6px;font-size:.72rem;color:var(--text2)">
+       <div style="display:flex;justify-content:space-between;gap:10px;margin-bottom:6px;font-size:var(--fs-xs);color:var(--text2)">
         <span id="meterIccProgressLabel">Preparing measurement</span>
         <span id="meterIccProgressCount">0 / 0</span>
        </div>
@@ -275,10 +275,10 @@
   </div>
 
   <div id="meterIccValidationModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.72);z-index:10020;align-items:center;justify-content:center;padding:18px;box-sizing:border-box">
-   <div style="width:min(760px,100%);max-height:90vh;overflow:auto;background:#111723;border:1px solid #2a3140;border-radius:10px;padding:18px;box-sizing:border-box">
+   <div style="width:min(760px,100%);max-height:90vh;overflow:auto;background:var(--surface-modal);border:1px solid var(--border);border-radius:10px;padding:18px;box-sizing:border-box">
     <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:14px">
      <div>
-      <div style="font-size:1rem;font-weight:700;color:var(--text)">Profile Check</div>
+      <div style="font-size:var(--fs-lg);font-weight:700;color:var(--text)">Profile Check</div>
       <div id="meterIccValidationFile" class="meter-icc-note" style="margin-top:4px"></div>
      </div>
      <div class="btn-row btn-row-end">
@@ -287,7 +287,7 @@
       <button type="button" class="btn btn-sm btn-secondary" onclick="meterIccCloseValidation()">Close</button>
      </div>
     </div>
-    <div id="meterIccValidationRating" style="font-size:1.05rem;font-weight:700;margin-bottom:12px"></div>
+    <div id="meterIccValidationRating" style="font-size:var(--fs-lg);font-weight:700;margin-bottom:12px"></div>
     <div class="meter-icc-validation-stats">
      <div class="meter-icc-panel" style="margin:0;text-align:center"><div class="meter-icc-note">Average ΔE00</div><strong id="meterIccValidationAverage" style="font-size:1.25rem;color:var(--text)">--</strong></div>
      <div class="meter-icc-panel" style="margin:0;text-align:center"><div class="meter-icc-note">RMS ΔE00</div><strong id="meterIccValidationRms" style="font-size:1.25rem;color:var(--text)">--</strong></div>
@@ -301,17 +301,17 @@
     <div id="meterIccValidationDistribution" class="meter-icc-note" style="margin-bottom:12px"></div>
     <div id="meterIccValidationScale" class="meter-icc-note" style="margin-bottom:12px;padding:9px;border:1px solid var(--border);border-radius:6px"></div>
     <div id="meterIccValidationMhc2" class="meter-icc-note" style="display:none;margin-bottom:12px;padding:9px;border:1px solid var(--success);border-radius:6px;color:var(--success)"></div>
-    <div style="font-size:.76rem;font-weight:700;color:var(--text);margin-bottom:7px">Largest profile-fit errors</div>
+    <div style="font-size:var(--fs-xs);font-weight:700;color:var(--text);margin-bottom:7px">Largest profile-fit errors</div>
     <div style="overflow-x:auto">
-     <table style="width:100%;border-collapse:collapse;font-size:.72rem;color:var(--text2)"><thead><tr><th style="text-align:left;padding:6px;border-bottom:1px solid var(--border)">Patch</th><th style="text-align:left;padding:6px;border-bottom:1px solid var(--border)">RGB %</th><th style="text-align:right;padding:6px;border-bottom:1px solid var(--border)">ΔE00</th></tr></thead><tbody id="meterIccValidationWorst"></tbody></table>
+     <table style="width:100%;border-collapse:collapse;font-size:var(--fs-xs);color:var(--text2)"><thead><tr><th style="text-align:left;padding:6px;border-bottom:1px solid var(--border)">Patch</th><th style="text-align:left;padding:6px;border-bottom:1px solid var(--border)">RGB %</th><th style="text-align:right;padding:6px;border-bottom:1px solid var(--border)">ΔE00</th></tr></thead><tbody id="meterIccValidationWorst"></tbody></table>
     </div>
     <div id="meterIccValidationNote" class="meter-icc-note" style="margin-top:12px;padding:9px;border:1px solid var(--border);border-radius:6px"></div>
    </div>
   </div>
 
   <div id="meterIccReuseModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.72);z-index:10021;align-items:center;justify-content:center;padding:18px;box-sizing:border-box">
-   <div style="width:min(560px,100%);background:#111723;border:1px solid #2a3140;border-radius:10px;padding:18px;box-sizing:border-box">
-    <div style="font-size:1rem;font-weight:700;color:var(--text);margin-bottom:8px">Reuse Previous Test Patch Read Results?</div>
+   <div style="width:min(560px,100%);background:var(--surface-modal);border:1px solid var(--border);border-radius:10px;padding:18px;box-sizing:border-box">
+    <div style="font-size:var(--fs-lg);font-weight:700;color:var(--text);margin-bottom:8px">Reuse Previous Test Patch Read Results?</div>
     <div id="meterIccReuseMessage" class="meter-icc-note" style="line-height:1.55;margin-bottom:14px"></div>
     <div class="btn-row btn-row-end" style="margin:0">
      <button type="button" class="btn btn-sm btn-secondary" onclick="meterIccResolveReuseChoice('cancel')">Cancel</button>
@@ -322,8 +322,8 @@
   </div>
 
   <div id="meterIccFineTuneModeModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.72);z-index:10023;align-items:center;justify-content:center;padding:18px;box-sizing:border-box">
-   <div style="width:min(560px,100%);background:#111723;border:1px solid #2a3140;border-radius:10px;padding:18px;box-sizing:border-box">
-    <div style="font-size:1rem;font-weight:700;color:var(--text);margin-bottom:8px">Fine-tune mode</div>
+   <div style="width:min(560px,100%);background:var(--surface-modal);border:1px solid var(--border);border-radius:10px;padding:18px;box-sizing:border-box">
+    <div style="font-size:var(--fs-lg);font-weight:700;color:var(--text);margin-bottom:8px">Fine-tune mode</div>
     <div id="meterIccFineTuneModeFile" class="meter-icc-note" style="margin-bottom:10px"></div>
     <div id="meterIccFineTuneModeMessage" class="meter-icc-note" style="line-height:1.55;margin-bottom:14px">Choose how to refine this Windows HDR cLUT profile.</div>
     <div id="meterIccFineTuneModeClosedLoopReason" class="meter-icc-note" style="line-height:1.55;margin-bottom:14px;display:none"></div>
@@ -336,10 +336,10 @@
   </div>
 
   <div id="meterIccFineTuneModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.72);z-index:10024;align-items:center;justify-content:center;padding:18px;box-sizing:border-box">
-   <div style="width:min(620px,100%);max-height:90vh;overflow:auto;background:#111723;border:1px solid #2a3140;border-radius:10px;padding:18px;box-sizing:border-box">
+   <div style="width:min(620px,100%);max-height:90vh;overflow:auto;background:var(--surface-modal);border:1px solid var(--border);border-radius:10px;padding:18px;box-sizing:border-box">
     <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:8px">
      <div>
-      <div style="font-size:1rem;font-weight:700;color:var(--text)">Fine-tune Progress</div>
+      <div style="font-size:var(--fs-lg);font-weight:700;color:var(--text)">Fine-tune Progress</div>
       <div id="meterIccFineTunePassLabel" class="meter-icc-note" style="margin-top:4px"></div>
      </div>
      <div style="display:flex;gap:8px">
@@ -354,8 +354,8 @@
   </div>
 
   <div id="meterIccCubeModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.72);z-index:10022;align-items:center;justify-content:center;padding:18px;box-sizing:border-box">
-   <div style="width:min(560px,100%);background:#111723;border:1px solid #2a3140;border-radius:10px;padding:18px;box-sizing:border-box">
-    <div style="font-size:1rem;font-weight:700;color:var(--text);margin-bottom:8px">3D LUT Created</div>
+   <div style="width:min(560px,100%);background:var(--surface-modal);border:1px solid var(--border);border-radius:10px;padding:18px;box-sizing:border-box">
+    <div style="font-size:var(--fs-lg);font-weight:700;color:var(--text);margin-bottom:8px">3D LUT Created</div>
     <div id="meterIccCubeSummary" class="meter-icc-note" style="line-height:1.55;margin-bottom:14px"></div>
     <div class="btn-row btn-row-end" style="margin:0">
      <button type="button" class="btn btn-sm btn-secondary" onclick="meterIccCloseCubeModal()">Close</button>

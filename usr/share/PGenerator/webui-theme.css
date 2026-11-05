@@ -17,7 +17,7 @@ button,input,select,textarea{font-family:inherit}
 --field-border:color-mix(in srgb,var(--text-primary) 42%,var(--surface-card));--field-border-hover:color-mix(in srgb,var(--text-primary) 62%,var(--surface-card));
 --control-disabled-bg:color-mix(in srgb,var(--text-primary) 7%,var(--surface-card));--control-disabled-text:color-mix(in srgb,var(--text-primary) 50%,var(--surface-card));
 --tile-bg:color-mix(in srgb,var(--text-primary) 3.5%,var(--surface-card));--tile-border:color-mix(in srgb,var(--text-primary) 11%,transparent);--tile-pad:10px 12px;
---fs-2xs:.6875rem;--fs-xs:.75rem;--fs-sm:.8125rem;--fs-md:.875rem;--fs-lg:1rem;--fs-xl:1.125rem;--fs-2xl:1.25rem;
+--tile-gap:4px;--read-w:78ch;--fs-3xl:1.5rem;--fs-2xs:.6875rem;--fs-xs:.75rem;--fs-sm:.8125rem;--fs-md:.875rem;--fs-lg:1rem;--fs-xl:1.125rem;--fs-2xl:1.25rem;
 --r-xs:4px;--r-sm:6px;--r-md:8px;--r-lg:12px;--control-h:30px;--shadow-soft:rgba(0,0,0,.34)}
 [data-theme="light"]{color-scheme:light;--bg:#f3f5f8;--card:#fff;--panel:#fff;--border:#c7ced9;--accent:#315dd8;--accent2:#6445d5;
 --text:#18202b;--text2:#465466;--green:#217a36;--red:#c62828;--orange:#a55300;--dv:#7044bd;
@@ -574,7 +574,7 @@ body.layout-desktop [data-widget="lg"] .grid>.field>input:not([type=checkbox]),b
 .ccss-file-input::file-selector-button:hover{filter:brightness(1.12)}
 .ccss-input{box-sizing:border-box;min-height:var(--control-h);padding:6px 10px;border:1px solid var(--field-border);border-radius:var(--r-sm);background:var(--surface-field);color:var(--text-primary);font:inherit;font-size:var(--fs-sm);outline:none;transition:border-color .2s}
 .ccss-input:focus,.ccss-input:focus-visible{border-color:var(--accent)}
-.ccss-input:disabled{opacity:.55;cursor:not-allowed}
+.ccss-input:disabled{cursor:not-allowed}
 .ccss-upload-row{display:flex;gap:8px;align-items:center}
 .ccss-upload-row .ccss-input{flex:1 1 auto;min-width:0}
 .ccss-editor-status{min-height:1.2em;margin-top:8px;font-size:var(--fs-sm);line-height:1.45;color:var(--text-secondary)}
@@ -723,7 +723,7 @@ font-weight:600;transition:background-color .15s ease-out,color .15s ease-out,bo
 /* Dense in-chart steppers and inline chips keep their own fixed size. */
 .meter-lg-rgb-button,.meter-lg-rgb-luma-button,.meter-companion-downloads .btn,#meterSettingsGrid .meter-target-measure-btn{min-height:0}
 .btn-primary{background:var(--accent-fill);color:var(--on-accent)}
-.btn-primary:hover{filter:brightness(.86)}
+.btn-primary:hover{background:color-mix(in srgb,var(--accent-fill) 86%,#000)}
 .btn-danger{background:var(--danger-fill);color:var(--on-danger)}
 .btn-danger:hover{filter:brightness(.92)}
 .btn-secondary{background:var(--neutral-fill);color:var(--text)}
@@ -762,7 +762,7 @@ font-weight:600;transition:background-color .15s ease-out,color .15s ease-out,bo
 /* Messages sit in the middle of the screen, where they are seen on a phone
    as on a desktop; they fade and settle in without blocking the page. */
 .toast{--toast-tone:var(--status-error);position:fixed;top:50%;left:50%;display:flex;align-items:flex-start;gap:12px;width:max-content;max-width:min(460px,calc(100vw - 32px));
-padding:14px 10px 14px 16px;border:1px solid color-mix(in srgb,var(--toast-tone) 70%,var(--border));border-radius:var(--r-lg);background:var(--surface-popover);color:var(--text-primary);
+padding:14px 10px 14px 16px;border:1px solid color-mix(in srgb,var(--toast-tone) 70%,var(--border));border-radius:var(--r-lg);background:color-mix(in srgb,var(--toast-tone) 7%,var(--surface-popover));color:var(--text-primary);
 box-shadow:0 0 0 1px color-mix(in srgb,var(--toast-tone) 12%,transparent),0 24px 64px var(--shadow),0 4px 14px var(--shadow);font-size:var(--fs-md);line-height:1.45;opacity:0;transform:translate(-50%,calc(-50% + 8px)) scale(.97);
 transition:opacity .15s ease-out,transform .15s ease-out;z-index:999;pointer-events:none}
 .toast.warn{--toast-tone:var(--status-warning)}
@@ -785,11 +785,11 @@ transition:opacity .15s ease-out,transform .15s ease-out;z-index:999;pointer-eve
 @media(prefers-reduced-motion:reduce){.toast,.toast.show{transform:translate(-50%,-50%);transition:opacity .2s ease-out}}
 @media(pointer:coarse){.toast-action,.toast-close{min-height:44px;min-width:44px}}
 .sr-only{position:absolute;width:1px;height:1px;margin:-1px;padding:0;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;border:0}
-.meter-reset-row{background:color-mix(in srgb,var(--status-warning) 10%,var(--surface-inset));border:1px solid color-mix(in srgb,var(--status-warning) 40%,var(--border));border-radius:var(--r-sm);padding:8px 12px;margin-bottom:10px;align-items:center;gap:10px}
+.meter-reset-row{background:color-mix(in srgb,var(--status-warning) 10%,var(--surface-card));border:1px solid color-mix(in srgb,var(--status-warning) 40%,var(--border));border-radius:var(--r-sm);padding:8px 12px;margin-bottom:10px;align-items:center;gap:10px}
 .meter-reset-row-text{color:var(--warning-text);font-size:var(--fs-md);line-height:1.4}
 /* Help tips (.meter-help-tip): click/tap/Enter/Space opens one shared popover;
    hover previews it on fine pointers. Text comes from the tip's title. */
-.meter-help-tip{position:relative;flex:0 0 auto;vertical-align:middle}
+.meter-help-tip{position:relative;flex:0 0 auto;vertical-align:middle;margin-inline-start:4px;border-color:color-mix(in srgb,var(--field-border) 60%,var(--border))}
 .meter-help-tip:hover,.meter-help-tip[aria-expanded="true"]{color:var(--text-primary);border-color:var(--accent)}
 .meter-help-tip:focus-visible{outline:2px solid var(--focus-ring);outline-offset:2px}
 /* Opaque popover surface, an accent-tinted edge, and a short rise from the tip's side. */
@@ -987,7 +987,7 @@ body.apply-settings-success .apply-settings-actions{display:none}
 .info-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(145px,1fr));gap:6px}
 .info-item{background:var(--tile-bg);border:1px solid var(--tile-border);padding:var(--tile-pad);border-radius:var(--r-md);min-width:0}
 .info-item .label{font-size:var(--fs-sm);color:var(--text2);}
-.info-item .value{font-size:var(--fs-md);font-weight:600;font-variant-numeric:tabular-nums;margin-top:2px;line-height:1.2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;word-break:normal;overflow-wrap:normal}
+.info-item .value{font-size:var(--fs-md);font-weight:600;font-variant-numeric:tabular-nums;margin-top:var(--tile-gap);line-height:1.2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;word-break:normal;overflow-wrap:normal}
 .stat-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:6px}
 .stat-card{background:var(--surface-inset);padding:8px;border-radius:var(--r-md)}
 #colorReadingsTable tr.color-reading-selected{background:var(--selected-bg)}
@@ -1026,7 +1026,7 @@ body.apply-settings-success .apply-settings-actions{display:none}
 @keyframes pgFactCopied{from{transform:scale(.9);opacity:.4}}
 @media (prefers-reduced-motion:reduce){.fact-copy,.fact-copy[data-state="copied"] svg{transition:none;animation:none}}
 /* Setting tiles (GPU memory, scaling type): the select takes the value's place, as in Output */
-:is(.devinfo-card,.facts-host) .devinfo-facts .devinfo-control{row-gap:6px}
+:is(.devinfo-card,.facts-host) .devinfo-facts .devinfo-control{row-gap:var(--tile-gap)}
 .devinfo-facts .devinfo-control>.label{grid-column:1;grid-row:1;display:flex;align-items:center;gap:6px;margin:0;align-self:end}
 .devinfo-facts .devinfo-control>select{grid-column:1;grid-row:2;width:100%;min-width:0}
 /* Fact tiles follow the same rows: label on top, value below, so every
@@ -1035,17 +1035,17 @@ body.apply-settings-success .apply-settings-actions{display:none}
 /* Software Update: the Current tile can hold a third line (its chip); the
    tiles beside it keep label and value on the same lines, at the top. */
 :is(.devinfo-card,.facts-host) .devinfo-facts.update-facts .info-item{align-content:start}
-:is(.devinfo-card,.facts-host) .devinfo-facts .info-item:not(.devinfo-control){row-gap:6px}
+:is(.devinfo-card,.facts-host) .devinfo-facts .info-item:not(.devinfo-control){row-gap:var(--tile-gap)}
 /* Tiles in one row share the label and the value/dropdown row, also where
    a label wraps or the dropdown is taller (touch). */
 @supports (grid-template-rows:subgrid){
- :is(.devinfo-card,.facts-host) .devinfo-facts .info-item{grid-row:span 2;grid-template-rows:subgrid;row-gap:6px}
+ :is(.devinfo-card,.facts-host) .devinfo-facts .info-item{grid-row:span 2;grid-template-rows:subgrid;row-gap:var(--tile-gap)}
  /* Software Update: the Current tile has a third line (its chip), which two
     shared rows cannot hold; these tiles size on their own. */
  :is(.devinfo-card,.facts-host) .devinfo-facts.update-facts .info-item{grid-row:auto;grid-template-rows:none}
 }
 .devinfo-facts .info-item:not(.devinfo-control)>.label{grid-column:1;grid-row:1;margin:0;align-self:end}
-.devinfo-facts .info-item:not(.devinfo-control)>.value{grid-column:1;grid-row:2;margin-top:0}
+.devinfo-facts .info-item:not(.devinfo-control)>.value{grid-column:1;grid-row:2;margin-top:0;align-self:start}
 /* Narrow card (phone, half-width tablet column): vitals stack, hairlines turn horizontal */
 @container facts (max-width:560px){
  .devinfo-vitals{grid-template-columns:1fr;margin-bottom:16px}
@@ -1092,7 +1092,7 @@ background:var(--surface-inset);padding:8px;border-radius:var(--r-sm);word-break
 .dv-display .btn{margin-top:8px}
 /* Pre-measurement checklist: the DV card's one loud element, tinted from --dv. */
 .dv-hints{margin-top:16px;padding:14px 16px 16px;border-radius:var(--r-md);
-background:color-mix(in srgb,var(--dv) 8%,var(--surface-inset));
+background:color-mix(in srgb,var(--dv) 8%,var(--surface-card));
 box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--dv) 34%,transparent);container-type:inline-size}
 .dv-hints-title{margin:0 0 12px;font-size:var(--fs-md);font-weight:700;line-height:1.3;letter-spacing:-.01em;
 color:color-mix(in oklab,var(--dv) 70%,var(--text-primary))}
@@ -1455,7 +1455,7 @@ background:linear-gradient(135deg,var(--sw-bg) 0 50%,var(--sw-card) 50% 100%)}
 @container (max-width:420px){.selftest-facts{grid-template-columns:minmax(0,1fr)}}
 /* The limit of the proof, styled as a warning so it is not read past; full
    width and the same radius as the verdict card below it. */
-.selftest-note{display:flex;gap:10px;align-items:flex-start;margin:0 0 14px;padding:10px 14px 10px 12px;border-radius:var(--r-md);font-size:var(--fs-sm);line-height:1.5;color:var(--text-secondary);background:color-mix(in srgb,var(--orange) 9%,var(--surface-inset));border:1px solid color-mix(in srgb,var(--orange) 40%,transparent)}
+.selftest-note{display:flex;gap:10px;align-items:flex-start;margin:0 0 14px;padding:10px 14px 10px 12px;border-radius:var(--r-md);font-size:var(--fs-sm);line-height:1.5;color:var(--text-secondary);background:color-mix(in srgb,var(--orange) 9%,var(--surface-card));border:1px solid color-mix(in srgb,var(--orange) 40%,transparent)}
 .selftest-note svg{flex:0 0 auto;width:17px;height:17px;margin-top:1px;color:var(--warning-text)}
 .selftest-note strong{display:block;margin-bottom:1px;color:var(--text-primary);font-weight:650}
 .selftest-verdict{--st:var(--text2);position:relative;display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:center;gap:16px;padding:16px 18px;border:1px solid var(--border);border-radius:var(--r-md);background:var(--surface-inset);overflow:hidden;transition:border-color .3s ease-out}

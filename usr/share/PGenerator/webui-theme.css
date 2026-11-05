@@ -13,13 +13,13 @@ button,input,select,textarea{font-family:inherit}
 --chart-bg:#0e0e10;--chart-grid:#1f1f22;--chart-axis:#3b3b40;--chart-label:#a0a0a7;--chart-tooltip:#1b1b1e;--chart-empty:#94949b;--chart-annotation:#aaa;--chart-eotf-measured:#e3cf6a;--chart-target:#ffb74d;--chart-measured:#7ecbff;--chart-rgb-r:#ff6666;--chart-rgb-g:#66cc77;--chart-rgb-b:#65aaff;--chart-gamut-line:rgba(220,228,245,.9);--meter-bar-track:#111113;--meter-bar-zero:rgba(255,255,255,.28);
 --scroll-track:#18181a;--scroll-thumb:#55555a;--scroll-thumb-border:#6c6c72;--scroll-thumb-hover:#68686e;
 --status-success:#5fb878;--status-warning:#e8a55b;--status-error:#ee7570;--status-hdmi:#d9534f;--status-dv:#b9a3f5;--status-calibration:#7f99f2;--badge-neutral:#a0a0a7;
---on-dv:#000;--accent-fill:#4d66d4;--accent-fill2:#6a55cf;--on-accent:#fff;--success-fill:#2e7d32;--on-success:#fff;--danger-fill:#c23a36;--on-danger:#fff;--warning-text:#e8a55b;--neutral-fill:var(--border);
+--warn-base:var(--surface-inset);--on-dv:#000;--accent-fill:#4d66d4;--accent-fill2:#6a55cf;--on-accent:#fff;--success-fill:#2e7d32;--on-success:#fff;--danger-fill:#c23a36;--on-danger:#fff;--warning-text:#e8a55b;--neutral-fill:var(--border);
 --field-border:color-mix(in srgb,var(--text-primary) 42%,var(--surface-card));--field-border-hover:color-mix(in srgb,var(--text-primary) 62%,var(--surface-card));
 --control-disabled-bg:color-mix(in srgb,var(--text-primary) 7%,var(--surface-card));--control-disabled-text:color-mix(in srgb,var(--text-primary) 50%,var(--surface-card));
 --tile-bg:color-mix(in srgb,var(--text-primary) 3.5%,var(--surface-card));--tile-border:color-mix(in srgb,var(--text-primary) 11%,transparent);--tile-pad:10px 12px;
 --tile-gap:4px;--read-w:78ch;--fs-3xl:1.5rem;--fs-2xs:.6875rem;--fs-xs:.75rem;--fs-sm:.8125rem;--fs-md:.875rem;--fs-lg:1rem;--fs-xl:1.125rem;--fs-2xl:1.25rem;
 --r-xs:4px;--r-sm:6px;--r-md:8px;--r-lg:12px;--control-h:30px;--shadow-soft:rgba(0,0,0,.34)}
-[data-theme="light"]{color-scheme:light;--bg:#f3f5f8;--card:#fff;--panel:#fff;--border:#c7ced9;--accent:#315dd8;--accent2:#6445d5;
+[data-theme="light"]{color-scheme:light;--warn-base:var(--surface-card);--bg:#f3f5f8;--card:#fff;--panel:#fff;--border:#c7ced9;--accent:#315dd8;--accent2:#6445d5;
 --text:#18202b;--text2:#465466;--green:#217a36;--red:#c62828;--orange:#a55300;--dv:#7044bd;
 --surface-page:#f3f5f8;--surface-header:#fff;--surface-sidebar:#f7f8fb;--surface-card:#fff;--surface-drawer:#fff;--surface-modal:#fff;--surface-popover:#f7f8fb;--surface-inset:#eceff4;--surface-field:#fff;
 --text-primary:#18202b;--text-secondary:#465466;--text-muted:#596676;--text-inverse:#fff;--text-disabled:#687586;
@@ -42,7 +42,7 @@ button,input,select,textarea{font-family:inherit}
 --scroll-track:#1a1a1a;--scroll-thumb:#4e4e4e;--scroll-thumb-border:#626262;--scroll-thumb-hover:#666;--status-calibration:#6f86a3}
 [data-palette="nord"]{--bg:#2e3440;--card:#3b4252;--panel:#3b4252;--border:#4c566a;--divider:#4c566a;--accent:#9ab6d6;--accent2:#81a1c1;--accent-fill:#4f709a;--accent-fill2:#4c6a91;
 --text:#eceff4;--text2:#bcc5d3;--text-primary:#eceff4;--text-secondary:#bcc5d3;--text-muted:#bcc5d3;--text-disabled:#7b8597;
---green:#a3be8c;--red:#e6a0a6;--orange:#ebcb8b;--status-success:#a3be8c;--status-warning:#ebcb8b;--status-error:#e6a0a6;--dv:#cdbdf8;--status-dv:#cdbdf8;--status-calibration:#5e81ac;--success-fill:#a3be8c;--switch-off:#a7b1c2;--on-success:#2e3440;--danger-fill:#a9444e;--warning-text:#ebcb8b;
+--green:#a3be8c;--red:#e6a0a6;--orange:#ebcb8b;--status-success:#a3be8c;--status-warning:#ebcb8b;--status-error:#e6a0a6;--dv:#cdbdf8;--status-dv:#cdbdf8;--status-calibration:#5e81ac;--success-fill:#a3be8c;--on-success:#2e3440;--danger-fill:#a9444e;--warning-text:#ebcb8b;
 --surface-page:#2e3440;--surface-header:#323946;--surface-sidebar:#2b313c;--surface-card:#3b4252;--surface-drawer:#323946;--surface-modal:#3b4252;--surface-popover:#434c5e;--surface-inset:#2b313c;--surface-field:#272c36;
 --shadow:rgba(10,13,18,.45);--selected-bg:rgba(136,192,208,.18);--hover-bg:rgba(236,239,244,.06);
 --chart-bg:#2b313c;--chart-grid:#3b4252;--chart-axis:#4c566a;--chart-label:#a7b1c2;--chart-tooltip:#434c5e;--meter-bar-track:#2b313c;
@@ -405,12 +405,17 @@ body.layout-tablet .card-section-head{min-height:44px}
 .conn-badge::before{content:"";flex:0 0 6px;width:6px;height:6px;border-radius:50%;background:var(--conn)}
 .conn-badge[data-state="on"]{--conn:var(--status-success)}
 .conn-badge[data-state="warn"]{--conn:var(--status-warning)}
+/* Off is an outline, on is filled: the two differ in every theme, not only by the
+   thumb position. Nord needs a lighter fill to stand off its card. */
+:root{--switch-on:var(--accent-fill)}
+[data-palette="nord"]{--switch-on:#7b96bb}
 .pg-switch{position:relative;display:inline-flex;align-items:center;cursor:pointer;flex:0 0 auto;user-select:none}
 .pg-switch input{position:absolute;opacity:0;width:0;height:0;margin:0}
-.pg-switch-track{display:inline-block;position:relative;width:34px;height:18px;border-radius:var(--r-md);background:var(--switch-off,var(--text2));transition:background .2s}
-.pg-switch-thumb{position:absolute;top:2px;left:2px;width:14px;height:14px;border-radius:50%;background:#fff;transition:transform .15s var(--ease-out)}
-.pg-switch input:checked + .pg-switch-track{background:var(--accent)}
-.pg-switch input:checked + .pg-switch-track .pg-switch-thumb{transform:translateX(16px)}
+.pg-switch-track{display:inline-block;position:relative;width:34px;height:18px;border-radius:var(--r-md);background:transparent;box-shadow:inset 0 0 0 1.5px var(--text2);transition:background .2s,box-shadow .2s}
+.pg-switch-thumb{position:absolute;top:2px;left:2px;width:14px;height:14px;border-radius:50%;background:var(--text2);transition:transform .15s var(--ease-out),background .2s}
+.pg-switch input:checked + .pg-switch-track{background:var(--switch-on);box-shadow:none}
+.pg-switch input:checked + .pg-switch-track .pg-switch-thumb{transform:translateX(16px);background:var(--on-accent)}
+.pg-switch input:focus-visible + .pg-switch-track{outline:2px solid var(--focus-ring);outline-offset:2px}
 .pg-switch input:disabled + .pg-switch-track{opacity:.5;cursor:default}
 #meterCard > h2{align-items:center;gap:10px 12px}
 #meterCard > h2::after{display:none}

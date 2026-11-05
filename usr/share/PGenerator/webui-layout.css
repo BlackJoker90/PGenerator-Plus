@@ -96,16 +96,16 @@ body.layout-desktop.desktop-utility-open .desktop-utility-drawer{transform:trans
 .desktop-utility-section{padding:13px 0;border-bottom:1px solid var(--border)}
 .desktop-utility-section:last-child{border-bottom:0}
 .desktop-utility-section h3{margin:0 0 9px;color:var(--text-secondary);font-size:var(--fs-sm);font-weight:600}
-.desktop-utility-alert{margin:0 0 10px;padding:9px 11px;border:1px solid color-mix(in srgb,var(--orange) 45%,var(--border));border-radius:var(--r-sm);background:color-mix(in srgb,var(--orange) 8%,var(--surface-inset));color:var(--text-primary);font-size:var(--fs-xs);line-height:1.45}
+.desktop-utility-alert{margin:0 0 10px;padding:9px 11px;border:1px solid color-mix(in srgb,var(--orange) 45%,var(--border));border-radius:var(--r-sm);background:color-mix(in srgb,var(--orange) 8%,var(--warn-base));color:var(--text-primary);font-size:var(--fs-xs);line-height:1.45}
 .desktop-utility-alert strong{color:var(--orange)}
 /* Refused settings and HDMI link interruptions (Display Settings), and what
    is on the cable. */
-.signal-alert{margin:0 0 10px;padding:9px 11px;border:1px solid color-mix(in srgb,var(--orange) 45%,var(--border));border-radius:var(--r-sm);background:color-mix(in srgb,var(--orange) 7%,var(--surface-inset));color:var(--text-primary);font-size:var(--fs-sm);line-height:1.45}
-.signal-alert[data-tone="refused"]{border-color:color-mix(in srgb,var(--status-error) 50%,var(--border));background:color-mix(in srgb,var(--status-error) 8%,var(--surface-inset))}
+.signal-alert{margin:0 0 10px;padding:9px 11px;border:1px solid color-mix(in srgb,var(--orange) 45%,var(--border));border-radius:var(--r-sm);background:color-mix(in srgb,var(--orange) 7%,var(--warn-base));color:var(--text-primary);font-size:var(--fs-sm);line-height:1.45}
+.signal-alert[data-tone="refused"]{border-color:color-mix(in srgb,var(--status-error) 50%,var(--border));background:color-mix(in srgb,var(--status-error) 8%,var(--warn-base))}
 .signal-alert strong{color:var(--orange)}
 .signal-alert[data-tone="refused"] strong{color:var(--status-error)}
 .signal-alert-dismiss{display:block;margin:8px 0 0 auto}
-.signal-alert[data-tone="owner"]{border-color:color-mix(in srgb,var(--status-calibration) 45%,var(--border));background:color-mix(in srgb,var(--status-calibration) 8%,var(--surface-inset))}
+.signal-alert[data-tone="owner"]{border-color:color-mix(in srgb,var(--status-calibration) 45%,var(--border));background:color-mix(in srgb,var(--status-calibration) 8%,var(--warn-base))}
 .signal-alert[data-tone="owner"] strong{color:var(--status-calibration)}
 /* Signal field groups (Display Settings, HDR, DV): a fieldset, so the lock
    while calibration software owns the signal overrides each field's own
@@ -146,7 +146,7 @@ fieldset.signal-fields:disabled select,fieldset.signal-fields:disabled input{cur
 .signal-port-note{flex-basis:100%;margin:4px 0 0;font-size:var(--fs-sm);line-height:1.45;color:var(--text-secondary)}
 .signal-port-note[hidden]{display:none}
 .signal-port[data-tone="limited"] .signal-port-note{color:var(--warning-text)}
-.signal-port[data-tone="elsewhere"] .signal-port-box{border-color:color-mix(in srgb,var(--orange) 45%,var(--border));background:color-mix(in srgb,var(--orange) 7%,var(--surface-inset))}
+.signal-port[data-tone="elsewhere"] .signal-port-box{border-color:color-mix(in srgb,var(--orange) 45%,var(--border));background:color-mix(in srgb,var(--orange) 7%,var(--warn-base))}
 .signal-port[data-tone="elsewhere"] .signal-port-note{color:var(--text-primary)}
 .signal-port-restart{margin:8px 0 0}
 .signal-port-restart[hidden]{display:none}
@@ -345,7 +345,7 @@ body.layout-tablet .dashboard > [data-widget="info"]{order:-300}
 body.layout-tablet .ui-settings-sections{grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
 body.layout-tablet .ui-choice-list{gap:5px}
 body.layout-tablet .ui-choice{position:relative;display:grid;grid-template-columns:minmax(0,1fr) 36px;align-items:center;min-height:42px;padding:8px 10px;overflow:visible}
-body.layout-tablet .ui-choice::before{content:'';grid-column:2;grid-row:1;width:34px;height:18px;margin:0;border:0;border-radius:999px;background:var(--switch-off,var(--text-muted));transition:background-color .15s ease-out}
+body.layout-tablet .ui-choice::before{content:'';grid-column:2;grid-row:1;width:34px;height:18px;margin:0;border:0;border-radius:999px;background:var(--text-muted);transition:background-color .15s ease-out}
 body.layout-tablet .ui-choice::after{content:'';position:absolute;right:27px;top:50%;width:14px;height:14px;border-radius:50%;background:var(--text-inverse);box-shadow:0 1px 3px var(--shadow);transform:translateY(-50%);transition:transform .15s var(--ease-out)}
 body.layout-tablet .ui-choice[aria-pressed="true"]::before{background:var(--accent)}
 body.layout-tablet .ui-choice[aria-pressed="true"]::after{transform:translate(16px,-50%)}

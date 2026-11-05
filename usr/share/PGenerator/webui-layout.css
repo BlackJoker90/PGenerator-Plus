@@ -64,7 +64,7 @@ body.layout-desktop #meterGreyLiveRail #meterLiveReading>div:last-child{padding:
 body.layout-desktop #meterGreyLiveRail .meter-live-primary-values{display:grid!important;grid-template-columns:1fr;gap:6px!important;margin:0!important;font-size:var(--fs-xs)!important}
 body.layout-desktop #meterGreyLiveRail .meter-live-primary-values>span{display:block;min-width:0;line-height:1.35;overflow-wrap:anywhere}
 body.layout-desktop #meterGreyLiveRail .meter-live-tgt{display:block;white-space:normal;margin-top:2px}
-body.layout-desktop #meterGreyLiveRail .meter-live-desktop-details{display:grid;grid-template-columns:auto minmax(0,1fr);gap:4px 8px;margin-top:8px;padding-top:8px;border-top:1px solid var(--border);font-size:var(--fs-2xs);line-height:1.35;font-variant-numeric:tabular-nums}
+body.layout-desktop #meterGreyLiveRail .meter-live-desktop-details{display:grid;grid-template-columns:minmax(0,1fr);gap:1px 8px;margin-top:8px;padding-top:8px;border-top:1px solid var(--border);font-size:var(--fs-2xs);line-height:1.35;font-variant-numeric:tabular-nums}
 body.layout-desktop #meterExportRow{margin-top:22px!important}
 body.layout-desktop #meterCard.meter-two-point-active #meterThumbsWrap{width:min(360px,100%);margin-left:auto;margin-right:auto}
 body.layout-desktop #meterCard.meter-two-point-active #meterThumbsRow{flex:0 1 360px;width:100%}
@@ -158,7 +158,7 @@ fieldset.signal-fields:disabled select,fieldset.signal-fields:disabled input{cur
 .sw-tile{display:flex;flex-direction:column;justify-content:center;gap:3px;min-width:0;margin:0;padding:var(--tile-pad);border-radius:var(--r-md);background:var(--tile-bg);border:1px solid var(--tile-border)}
 .sw-tile[hidden]{display:none}
 .sw-tile dt{font-size:var(--fs-sm);color:var(--text2)}
-.sw-tile dd{margin:0;font-size:var(--fs-md);font-weight:650;line-height:1.25;color:var(--text-primary);font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
+.sw-tile dd{margin:0;font-size:var(--fs-md);font-weight:600;line-height:1.25;color:var(--text-primary);font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
 /* Link right of Resolution, Bit depth right of Format; a missing reading
    lets its neighbour take the space. */
 .sw-mode:has(+.sw-link[hidden]),.sw-format:has(+.sw-depth[hidden]){grid-column:span 2}
@@ -335,8 +335,8 @@ body.layout-desktop #uiSettingsCard .ui-settings-zoom{display:block}
    buttons retain their higher-emphasis gradient. */
 .pat-btn.active,#meterSeriesTabRow [data-series-tab].btn-primary,#meterSeriesBtnRow [data-series].btn-primary,
 #meterSeriesGroupAutoCal [data-autocal-series].btn-primary,#meterCustomSeriesBtn3dLut.btn-primary{
- border:1px solid var(--accent);background:var(--selected-bg);color:var(--text-primary);
- box-shadow:inset 0 0 0 1px var(--accent)
+ border:1px solid transparent;background:var(--selected-bg);color:var(--text-primary);
+ box-shadow:none
 }
 /* Tablet cards favour compact switches. The complete explanatory copy stays
    available as a keyboard/hover tooltip and remains part of the button's
@@ -414,7 +414,7 @@ body.layout-tablet .btn,body.layout-tablet .btn-sm{min-height:44px}
 /* Phone: dialog/form footers stack full-width in DOM order (Cancel above the primary). */
 @media(max-width:600px){body.layout-tablet .btn-row-end{flex-direction:column;align-items:stretch}body.layout-tablet .btn-row-end>.btn{justify-content:center}}
 body.layout-tablet .dashboard h2 .btn{position:relative;min-height:32px}
-body.layout-tablet .dashboard h2 .btn.card-h2-action{min-height:44px;padding:0 14px}
+body.layout-tablet .dashboard h2 .btn.card-h2-action{min-height:34px;padding:0 12px}
 body.layout-tablet .dashboard h2 .btn::after{content:'';position:absolute;left:0;right:0;top:-6px;bottom:-6px}
 body.layout-tablet .dashboard select,body.layout-tablet .dashboard input:not([type=checkbox]):not([type=radio]):not([type=range]):not([type=color]):not([type=file]),body.layout-tablet .dashboard textarea{min-height:44px;box-sizing:border-box}
 /* Read-only values styled as fields (LG current input) match the field height. */
@@ -466,7 +466,8 @@ body.layout-tablet .tablet-jump-nav:not([hidden]){display:flex;position:fixed;le
 body.layout-tablet .tablet-jump-nav::-webkit-scrollbar{display:none}
 .tablet-nav-btn{flex:0 0 auto;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;min-width:64px;min-height:52px;padding:4px 10px;border:0;border-radius:var(--r-md);background:transparent;color:var(--text2);font:inherit;font-size:var(--fs-xs);font-weight:600;line-height:1.1;white-space:nowrap;cursor:pointer;transition:background .16s,color .16s}
 .tablet-nav-btn .desktop-nav-icon{flex:0 0 20px}
-.tablet-nav-btn[aria-current="page"]{background:color-mix(in srgb,var(--text-primary) 10%,transparent);color:var(--text-primary);box-shadow:none}
+.tablet-nav-btn[aria-current="page"]{background:var(--selected-bg);color:var(--text-primary);box-shadow:none}
+.tablet-nav-btn[aria-current="page"] .desktop-nav-icon{color:var(--accent)}
 [data-theme="light"] .tablet-nav-btn[aria-current="page"]{color:var(--text-primary)}
 .tablet-nav-btn:focus-visible{outline:2px solid var(--focus-ring);outline-offset:-2px}
 @media(hover:hover) and (pointer:fine){.tablet-nav-btn:hover{background:var(--hover-bg);color:var(--text-primary)}}
@@ -540,12 +541,22 @@ body.layout-tablet .mode-select-value{font-size:16px}
 body.layout-tablet :is(#customCcssEditorModal,#meterIccProfileModal) input[type=checkbox]{width:22px;height:22px;min-width:22px}
 body.layout-tablet .btn-icon-sq{min-width:44px}
 body.layout-tablet #meterLutToolsBtn{margin-left:0;flex:1 1 auto}
-#meterSettingsGrid .meter-target-measure-btn{min-height:24px;padding:3px 8px;font-size:var(--fs-xs)}
+#meterSettingsGrid .meter-target-measure-btn{min-height:var(--control-h);padding:3px 10px;font-size:var(--fs-xs)}
 #meterSettingsGrid .meter-target-use-measured{font-size:var(--fs-xs)}
 body.layout-desktop #meterCard:not(.meter-patterns-only) #meterSettingsGrid :is(.field-gamut,.field-gamma,.field-chromaticity,.field-patch){flex:1 1 150px;max-width:320px}
 body.layout-desktop :is(.ccss-editor-panel,.meter-icc-panel){background:var(--surface-card)}
 #statusDot:not([style*="background"]){background:var(--accent);animation:pg-status-pulse 1.2s ease-in-out infinite}
 #statusWrap:has(#statusDot:not([style*="background"])){border-radius:999px;color:var(--text-primary);background:color-mix(in srgb,var(--accent) 14%,transparent);box-shadow:0 0 0 4px color-mix(in srgb,var(--accent) 14%,transparent)}
-body:has(#statusDot:not([style*="background"])) .dashboard{opacity:.7}
+html body:has(#statusDot:not([style*="background"])) .dashboard :is(select,input:not([type=checkbox],[type=radio],[type=range],[type=file],[type=color])){background-color:var(--control-disabled-bg)!important}
+#meterGreyRgbLegacyWrap,#meterGreyTvWrap{box-sizing:border-box;border:1px solid var(--border);border-radius:var(--r-md)}
+html #meterGreyProfileBar{background:transparent!important;border:0!important;padding-left:0!important}
+.meter-scroll-sync>canvas{display:block}
+body.layout-desktop #meterGreyLiveRail .meter-live-desktop-details>*{white-space:nowrap}
+body.layout-desktop #meterGreyLiveRail .meter-live-detail-label:not(:first-child){margin-top:5px}
+body.layout-desktop .status-bar .status-stack .status-label{max-width:360px}
+#uiSettingsCard .update-hint{max-width:78ch}
+body.layout-tablet .toast{top:auto;bottom:calc(84px + env(safe-area-inset-bottom,0px));transform:translate(-50%,8px) scale(.97)}
+body.layout-tablet .toast.show{transform:translate(-50%,0) scale(1)}
+body.layout-tablet .card h2{gap:12px}
 @keyframes pg-status-pulse{50%{opacity:.35}}
 @media(prefers-reduced-motion:reduce){#statusDot{animation:none!important}}

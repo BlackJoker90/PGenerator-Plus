@@ -674,7 +674,7 @@ function meterLutCubeDraw(){
  const edges=[[0,1],[0,2],[0,4],[1,3],[1,5],[2,3],[2,6],[3,7],[4,5],[4,6],[5,7],[6,7]];
  ctx.strokeStyle=pgThemeColor('--chart-axis','#3a3a4a');ctx.lineWidth=1;
  edges.forEach(e=>{ ctx.beginPath();ctx.moveTo(corners[e[0]].sx,corners[e[0]].sy);ctx.lineTo(corners[e[1]].sx,corners[e[1]].sy);ctx.stroke(); });
- ctx.font='10px sans-serif';ctx.textAlign='center';
+ ctx.font=pgChartFont(10);ctx.textAlign='center';
  ctx.fillStyle='#ff7a7a';ctx.fillText('R',corners[1].sx+8,corners[1].sy+4);
  ctx.fillStyle='#7aff9b';ctx.fillText('G',corners[2].sx-8,corners[2].sy-6);
  ctx.fillStyle='#8fb2ff';ctx.fillText('B',corners[4].sx-8,corners[4].sy+10);
@@ -735,7 +735,7 @@ function meterLutCubeDraw(){
    ctx.beginPath();ctx.arc(d.pout.sx,d.pout.sy,mr,0,Math.PI*2);ctx.stroke();
   }
  });
- ctx.fillStyle=pgThemeColor('--chart-label','#8b97ad');ctx.font='9px sans-serif';ctx.textAlign='left';
+ ctx.fillStyle=pgThemeColor('--chart-label','#8b97ad');ctx.font=pgChartFont(9);ctx.textAlign='left';
  const shown=axis.length;
  ctx.fillText(N+'³ LUT'+(shown<N?(' · showing '+shown+'³ subset'):'')+' · hollow = input node, filled = LUT output',8,ctx.h-8);
 }
@@ -13622,7 +13622,7 @@ function drawGammaLegend(ctx,chart,targetLabel,avgText){
  const targetText='Target: '+targetLabel;
  const measuredText='Measured';
  ctx.save();
- ctx.font='11px sans-serif';
+ ctx.font=pgChartFont(11);
  ctx.textAlign='left';
  const avgWidth=avgText?ctx.measureText(avgText).width:0;
  const targetWidth=ctx.measureText(targetText).width;
@@ -14404,7 +14404,7 @@ function meterDrawChartYZoomHelp(ctx,pad){
  ctx.strokeStyle=pgThemeColor('--chart-axis','rgba(136,144,168,0.85)');
  ctx.stroke();
  ctx.fillStyle=pgThemeColor('--text-primary','#cfd6e6');
- ctx.font='bold 10px sans-serif';
+ ctx.font=pgChartFont(10,'bold');
  ctx.textAlign='center';
  ctx.textBaseline='middle';
  ctx.fillText('?',rect.cx,rect.cy+0.5);
@@ -14499,7 +14499,7 @@ function meterDrawStickyYAxis(ctx,opts,pad,h){
  ac.lineTo((pad.l||45)-0.5,pad.t+h);
  ac.stroke();
  ac.fillStyle=pgThemeColor('--chart-label','#888898');
- ac.font='11px sans-serif';
+ ac.font=pgChartFont(11);
  ac.textAlign='right';
  ac.textBaseline='alphabetic';
  const ySteps=opts.ySteps||5;
@@ -14576,10 +14576,10 @@ function drawChartGrid(ctx,opts){
  ctx.beginPath();ctx.moveTo(pad.l,pad.t);ctx.lineTo(pad.l,pad.t+h);ctx.lineTo(pad.l+w,pad.t+h);ctx.stroke();
  // X labels. When opts.rotateX is set, draw them angled so long names
  // (e.g. "Magenta 100%") don't overlap on dense series.
- ctx.fillStyle=pgThemeColor('--chart-label','#888898');ctx.font='11px sans-serif';
+ ctx.fillStyle=pgThemeColor('--chart-label','#888898');ctx.font=pgChartFont(11);
  if(opts.rotateX){
   if(densePatchAxis){
-   ctx.font='11px sans-serif';
+   ctx.font=pgChartFont(11);
    for(let i=0;i<=xSteps;i+=xRotStride){
     const lbl=String(opts.xLabel(i,xSteps)||'').replace(/^Patch\s+/i,'');
     if(!lbl) continue;
@@ -14763,7 +14763,7 @@ function drawRGBChart(gs,allSteps,readingMap){
   const last=rPts.length-1;
   const lastX=rPts[last][0];
   if(lastX>=chart.view.x0&&lastX<=chart.view.x1){
-   ctx.font='11px sans-serif';ctx.textAlign='left';
+   ctx.font=pgChartFont(11);ctx.textAlign='left';
    const xOff=chart.toX(lastX)+6;
    // The traces end close together: spread the labels, not the traces.
    const ends=[['R','--chart-rgb-r','#f44',rPts],['G','--chart-rgb-g','#4caf50',gPts],['B','--chart-rgb-b','#42a5f5',bPts]]
@@ -14915,8 +14915,10 @@ function meterDrawDeltaSummary(ctx,chart,values){
  const avg=vals.reduce((s,v)=>s+v,0)/vals.length;
  const min=Math.min(...vals);
  const max=Math.max(...vals);
- ctx.fillStyle=pgThemeColor('--chart-annotation','#888');ctx.font='11px sans-serif';ctx.textAlign='right';
- ctx.fillText('Min: '+min.toFixed(2)+'  Avg: '+avg.toFixed(2)+'  Max: '+max.toFixed(2),chart.pad.l+chart.w,chart.pad.t-4);
+ ctx.fillStyle=pgThemeColor('--chart-annotation','#888');ctx.font=pgChartFont(11);ctx.textAlign='right';
+ const statsText='Min: '+min.toFixed(2)+'  Avg: '+avg.toFixed(2)+'  Max: '+max.toFixed(2);
+ chart.statsW=ctx.measureText(statsText).width;
+ ctx.fillText(statsText,chart.pad.l+chart.w,chart.pad.t-4);
 }
 
 function drawGammaChart(gs,allSteps,readingMap){
@@ -14979,12 +14981,13 @@ function drawGammaChart(gs,allSteps,readingMap){
  // Marker on every actual read so a lone reading is visible before a
  // neighbour exists to draw a line to.
  drawDots(ctx,chart,meterMeasuredEotfLuminanceDotPoints(measureSteps,readingMap,axisMax,scaleMeasuredLuminance,'luminance'),pgThemeColor('--chart-eotf-measured','#ffeb3b'),2.2);
- ctx.fillStyle=pgThemeColor('--chart-annotation','#aaa');ctx.font='11px sans-serif';
+ ctx.fillStyle=pgThemeColor('--chart-annotation','#aaa');ctx.font=pgChartFont(11);
  ctx.textAlign='left';
  ctx.fillText('Min cd/m\u00B2: '+Lb.toFixed(2),chart.pad.l,ctx.h-2);
  const diffuse=meterHdrDiffuseWhiteOverride();
  const targetLabel='100% target: '+targetPeak.toFixed(1)+' cd/m\u00B2'+((diffuse!=null&&meterChartIsPq())?' (DW '+diffuse.toFixed(1)+')':'');
- ctx.fillText(targetLabel,chart.pad.l,chart.pad.t+14);
+ const targetFits=chart.pad.l+ctx.measureText(targetLabel).width+8<=ctx.w-chart.pad.r-(chart.contrastW||0);
+ ctx.fillText(targetLabel,chart.pad.l,chart.pad.t+(targetFits?14:28));
  ctx.textAlign='right';
  ctx.fillText('Max cd/m\u00B2: '+measuredMax.toFixed(2),ctx.w-chart.pad.r,ctx.h-2);
 }
@@ -15110,7 +15113,7 @@ function drawDeltaEChart(gs,allSteps,readingMap,rawGs){
     ctx.fillStyle=color;
     ctx.fillRect(px,y,barW,fullH);
    }
-   ctx.fillStyle=pgThemeColor('--chart-annotation','#ccc');ctx.font='11px sans-serif';
+   ctx.fillStyle=pgThemeColor('--chart-annotation','#ccc');ctx.font=pgChartFont(11);
    ctx.textAlign='center';
    if(deLabels.has(i)) ctx.fillText(dE.toFixed(2),cx,y-4);
   } else {
@@ -15126,9 +15129,11 @@ function drawDeltaEChart(gs,allSteps,readingMap,rawGs){
  if(whiteR&&whiteR.x>0&&whiteR.y>0){
   const wp=meterTargetWhitePoint();
   const dxy=Math.sqrt(Math.pow(whiteR.x-wp.x,2)+Math.pow(whiteR.y-wp.y,2));
-  ctx.fillStyle=pgThemeColor('--chart-annotation','#888');ctx.font='11px sans-serif';ctx.textAlign='left';
+  ctx.fillStyle=pgThemeColor('--chart-annotation','#888');ctx.font=pgChartFont(11);ctx.textAlign='left';
   const wpText=(whiteR.cct?whiteR.cct+'K  ':'')+'\u0394xy '+dxy.toFixed(4);
-  ctx.fillText(wpText,chart.pad.l,chart.pad.t-4);
+  // Below the stats line when both do not fit next to each other.
+  const wpFits=ctx.measureText(wpText).width+8<=chart.w-(chart.statsW||0);
+  ctx.fillText(wpText,chart.pad.l+(wpFits?0:4),wpFits?chart.pad.t-4:chart.pad.t+12);
  }
 }
 
@@ -15201,7 +15206,7 @@ function drawDeltaE2000Chart(gs,allSteps,readingMap){
    const y=chart.pad.t+chart.h-barH*chart.h;
    ctx.fillStyle=dE<1?pgThemeColor('--status-success','#4caf50'):dE<3?pgThemeColor('--status-warning','#ff9800'):pgThemeColor('--status-error','#f44');
    ctx.fillRect(cx-barW/2,y,barW,Math.max(2,barH*chart.h));
-   ctx.fillStyle=pgThemeColor('--chart-annotation','#ccc');ctx.font='11px sans-serif';
+   ctx.fillStyle=pgThemeColor('--chart-annotation','#ccc');ctx.font=pgChartFont(11);
    ctx.textAlign='center';
    if(deLabels.has(i)) ctx.fillText(dE.toFixed(2),cx,y-4);
   } else {
@@ -15865,7 +15870,7 @@ function meterDrawMbFullLocusInset(ctx,geom){
  ctx.strokeStyle='rgba(90,190,255,.95)';ctx.lineWidth=1;
  ctx.strokeRect(tx(geom.xMin),ty(geom.yMax),tx(geom.xMax)-tx(geom.xMin),ty(geom.yMin)-ty(geom.yMax));
  ctx.restore();
- ctx.fillStyle=pgThemeColor('--chart-label','#aab6cb');ctx.font='8px sans-serif';ctx.textAlign='left';
+ ctx.fillStyle=pgThemeColor('--chart-label','#aab6cb');ctx.font=pgChartFont(8);ctx.textAlign='left';
  ctx.fillText('full locus',ix+4,iy+11);
 }
 const CIE2D_SCALE_MIN=1,CIE2D_SCALE_MAX=25;
@@ -16062,7 +16067,7 @@ function meterCieDrawOpponentPolar(ctx,g){
  for(let r=radius/5;r<=radius+.1;r+=radius/5){
   ctx.beginPath();ctx.arc(cx,cy,r,0,Math.PI*2);ctx.stroke();
  }
- ctx.fillStyle=pgThemeColor('--chart-label','#5f6d84');ctx.font='9px sans-serif';ctx.textAlign='center';
+ ctx.fillStyle=pgThemeColor('--chart-label','#5f6d84');ctx.font=pgChartFont(9);ctx.textAlign='center';
  for(let deg=0;deg<360;deg+=30){
   const a=-deg*Math.PI/180;
   ctx.beginPath();ctx.moveTo(cx,cy);ctx.lineTo(cx+Math.cos(a)*radius,cy+Math.sin(a)*radius);ctx.stroke();
@@ -16592,7 +16597,7 @@ function meterDrawCubeViewNow(){
  edges.forEach(e=>{
   ctx.beginPath();ctx.moveTo(corners[e[0]].sx,corners[e[0]].sy);ctx.lineTo(corners[e[1]].sx,corners[e[1]].sy);ctx.stroke();
  });
- ctx.font='10px sans-serif';ctx.textAlign='center';
+ ctx.font=pgChartFont(10);ctx.textAlign='center';
  ctx.fillStyle='#ff7a7a';ctx.fillText('R',corners[1].sx+8,corners[1].sy+4);
  ctx.fillStyle='#7aff9b';ctx.fillText('G',corners[2].sx-8,corners[2].sy-6);
  ctx.fillStyle='#8fb2ff';ctx.fillText('B',corners[4].sx-8,corners[4].sy+10);
@@ -16632,7 +16637,7 @@ function meterDrawCubeViewNow(){
   ctx.strokeStyle='rgba(255,255,255,0.55)';ctx.lineWidth=0.7;
   ctx.beginPath();ctx.arc(n.pt.sx,n.pt.sy,mr,0,Math.PI*2);ctx.stroke();
  });
- ctx.fillStyle=pgThemeColor('--chart-label','#8b97ad');ctx.font='9px sans-serif';ctx.textAlign='left';
+ ctx.fillStyle=pgThemeColor('--chart-label','#8b97ad');ctx.font=pgChartFont(9);ctx.textAlign='left';
  const label=(total>patches.length?('showing '+patches.length+' of '+total+' nodes'):(total+' nodes'))+(isPreset?'':' · '+measuredMap.size+' measured · filled = measured');
  ctx.fillText(label,8,ctx.h-8);
 }
@@ -16793,7 +16798,7 @@ function drawCIEChart3DLegacy(readings,opts){
      cie3dStrokePoly(ctx,mProj,true);
     }
    }catch(e){}
-   ctx.fillStyle=pgThemeColor('--text-primary','#e0e8f6');ctx.font='9px sans-serif';
+   ctx.fillStyle=pgThemeColor('--text-primary','#e0e8f6');ctx.font=pgChartFont(9);
    ctx.textAlign='left';ctx.fillText('R',gPts[0].sx+4,gPts[0].sy-4);
    ctx.fillText('G',gPts[1].sx-12,gPts[1].sy-6);
    ctx.textAlign='right';ctx.fillText('B',gPts[2].sx-4,gPts[2].sy+12);
@@ -16804,7 +16809,7 @@ function drawCIEChart3DLegacy(readings,opts){
  const d65=cie3dProject(d65c.x,d65c.y,0,layout);
  prims.push({z:d65.z, draw:()=>{
   ctx.fillStyle=pgThemeColor('--text-primary','#fff');ctx.beginPath();ctx.arc(d65.sx,d65.sy,3.2*markerScale,0,Math.PI*2);ctx.fill();
-  ctx.fillStyle=pgThemeColor('--chart-label','#d8e2f2');ctx.font='9px sans-serif';ctx.textAlign='left';
+  ctx.fillStyle=pgThemeColor('--chart-label','#d8e2f2');ctx.font=pgChartFont(9);ctx.textAlign='left';
   ctx.fillText('D65',d65.sx+5,d65.sy+3);
  }});
  // Axes: origin at (0,0,0) → x, y(chroma), Y
@@ -16817,7 +16822,7 @@ function drawCIEChart3DLegacy(readings,opts){
   ctx.beginPath();ctx.moveTo(o.sx,o.sy);ctx.lineTo(ax.sx,ax.sy);ctx.stroke();
   ctx.beginPath();ctx.moveTo(o.sx,o.sy);ctx.lineTo(ay.sx,ay.sy);ctx.stroke();
   ctx.beginPath();ctx.moveTo(o.sx,o.sy);ctx.lineTo(aY.sx,aY.sy);ctx.stroke();
-  ctx.fillStyle=pgThemeColor('--chart-label','#c4d0e6');ctx.font='11px sans-serif';
+  ctx.fillStyle=pgThemeColor('--chart-label','#c4d0e6');ctx.font=pgChartFont(11);
   ctx.textAlign='center';
   const axis=meterCieChartAxis();
   ctx.fillText(axis.x,ax.sx,ax.sy+14);
@@ -16826,7 +16831,7 @@ function drawCIEChart3DLegacy(readings,opts){
   const verticalAxis=chartMode.indexOf('ciemb_')===0?'L+M':(chartMode.indexOf('cie2015_')===0?'YF':'Y');
   ctx.fillText(verticalAxis,aY.sx-8,aY.sy-6);
   // Y ticks
-  ctx.font='9px sans-serif';ctx.fillStyle=pgThemeColor('--chart-label','#aab6cb');ctx.textAlign='right';
+  ctx.font=pgChartFont(9);ctx.fillStyle=pgThemeColor('--chart-label','#aab6cb');ctx.textAlign='right';
   const tickN=4;
   for(let i=0;i<=tickN;i++){
    const yy=yMax*(i/tickN);
@@ -16985,20 +16990,20 @@ function drawCIEChart3DLegacy(readings,opts){
  prims.sort((a,b)=>b.z-a.z);
  prims.forEach(p=>{ try{ p.draw(); }catch(e){} });
  // Overlay labels (always on top)
- ctx.fillStyle=pgThemeColor('--chart-label','#d7e1f3');ctx.font='10px sans-serif';ctx.textAlign='right';
+ ctx.fillStyle=pgThemeColor('--chart-label','#d7e1f3');ctx.font=pgChartFont(10);ctx.textAlign='right';
  ctx.fillText(gamut.label,ctx.w-12,14);
- ctx.fillStyle=pgThemeColor('--chart-label','#9fb3d9');ctx.font='9px sans-serif';
+ ctx.fillStyle=pgThemeColor('--chart-label','#9fb3d9');ctx.font=pgChartFont(9);
  const axisTitle=meterCieChartAxis();
  ctx.fillText((axisTitle.threeDXyY||axisTitle.threeD)+'  ·  drag rotate · wheel zoom',ctx.w-12,28);
  if(colorInclLum){
-  ctx.fillStyle='#7ec8ff';ctx.font='9px sans-serif';
+  ctx.fillStyle='#7ec8ff';ctx.font=pgChartFont(9);
   ctx.fillText('\u0394Y on: cyan/orange rings + stems (bright / dim)',ctx.w-12,42);
  } else {
-  ctx.fillStyle=pgThemeColor('--chart-empty','#6a7690');ctx.font='9px sans-serif';
+  ctx.fillStyle=pgThemeColor('--chart-empty','#6a7690');ctx.font=pgChartFont(9);
   ctx.fillText('Chroma only: target Y matched to measured',ctx.w-12,42);
  }
  ctx.textAlign='left';
- ctx.fillStyle=pgThemeColor('--chart-label','#aab6cb');ctx.font='9px sans-serif';
+ ctx.fillStyle=pgThemeColor('--chart-label','#aab6cb');ctx.font=pgChartFont(9);
  ctx.fillText('Y max '+(_cie3d.yMax>=100?_cie3d.yMax.toFixed(0):_cie3d.yMax.toFixed(1))+' cd/m\u00B2',12,ctx.h-10);
  _cie3d.hitZones=hitZones;
  const canvas=document.getElementById('chartCIE');
@@ -17087,7 +17092,7 @@ function drawCIEChart3D(readings,opts){
  prims.push({z:d65.z,draw:()=>{
   ctx.fillStyle=pgThemeColor('--text-primary','#fff');
   ctx.beginPath();ctx.arc(d65.sx,d65.sy,3.2,0,Math.PI*2);ctx.fill();
-  ctx.fillStyle=pgThemeColor('--chart-label','#d8e2f2');ctx.font='9px sans-serif';ctx.textAlign='left';
+  ctx.fillStyle=pgThemeColor('--chart-label','#d8e2f2');ctx.font=pgChartFont(9);ctx.textAlign='left';
   ctx.fillText('D65',d65.sx+5,d65.sy+3);
  }});
 
@@ -17100,9 +17105,9 @@ function drawCIEChart3D(readings,opts){
   [[aa],[ab],[ac]].forEach(pair=>{
    const p=pair[0];ctx.beginPath();ctx.moveTo(o.sx,o.sy);ctx.lineTo(p.sx,p.sy);ctx.stroke();
   });
-  ctx.fillStyle=pgThemeColor('--chart-label','#c4d0e6');ctx.font='11px sans-serif';ctx.textAlign='center';
+  ctx.fillStyle=pgThemeColor('--chart-label','#c4d0e6');ctx.font=pgChartFont(11);ctx.textAlign='center';
   ctx.fillText(axis.a,aa.sx,aa.sy+14);ctx.fillText(axis.b,ab.sx-10,ab.sy+4);ctx.fillText(axis.c,ac.sx-8,ac.sy-6);
-  ctx.font='9px sans-serif';ctx.fillStyle=pgThemeColor('--chart-label','#aab6cb');ctx.textAlign='right';
+  ctx.font=pgChartFont(9);ctx.fillStyle=pgThemeColor('--chart-label','#aab6cb');ctx.textAlign='right';
   for(let i=0;i<=4;i++){
    const cv=bounds.cMin+(bounds.cMax-bounds.cMin)*(i/4);
    const p=cie3dProject(bounds.aMin,bounds.bMin,cv,layout);
@@ -17158,9 +17163,9 @@ function drawCIEChart3D(readings,opts){
  prims.sort((a,b)=>b.z-a.z);
  prims.forEach(p=>{try{p.draw();}catch(e){}});
 
- ctx.fillStyle=pgThemeColor('--chart-label','#d7e1f3');ctx.font='10px sans-serif';ctx.textAlign='right';
+ ctx.fillStyle=pgThemeColor('--chart-label','#d7e1f3');ctx.font=pgChartFont(10);ctx.textAlign='right';
  ctx.fillText(gamut.label,ctx.w-12,14);
- ctx.fillStyle=pgThemeColor('--chart-label','#9fb3d9');ctx.font='9px sans-serif';
+ ctx.fillStyle=pgThemeColor('--chart-label','#9fb3d9');ctx.font=pgChartFont(9);
  ctx.fillText(axis.title+'  \u00B7  left drag rotate \u00B7 right drag pan \u00B7 wheel zoom',ctx.w-12,28);
  if(!meterCieTargetsAvailable()){
   ctx.fillStyle=pgThemeColor('--chart-empty','#79869d');
@@ -17170,7 +17175,7 @@ function drawCIEChart3D(readings,opts){
   ctx.fillText(opponentMode?'Achromatic = Y/reference - 1 \u00B7 ring = |\u0394Y|%':'True tristimulus magnitude \u00B7 ring = |\u0394Y|%',ctx.w-12,42);
  }
  const fmt=v=>Math.abs(v)>=100?v.toFixed(0):v.toFixed(Math.abs(v)>=10?1:2);
- ctx.fillStyle=pgThemeColor('--chart-label','#aab6cb');ctx.font='9px sans-serif';ctx.textAlign='left';
+ ctx.fillStyle=pgThemeColor('--chart-label','#aab6cb');ctx.font=pgChartFont(9);ctx.textAlign='left';
  ctx.fillText(axis.a+' '+fmt(bounds.aMin)+'..'+fmt(bounds.aMax)+'  '+axis.b+' '+fmt(bounds.bMin)+'..'+fmt(bounds.bMax)+'  '+axis.c+' '+fmt(bounds.cMin)+'..'+fmt(bounds.cMax),12,ctx.h-10);
  _cie3d.hitZones=hitZones;
  const canvas=document.getElementById('chartCIE');
@@ -17421,7 +17426,7 @@ function drawCIEChart(readings){
   ctx.strokeStyle=pgThemeColor('--chart-gamut-line','rgba(220,228,245,0.9)');ctx.lineWidth=1.05;ctx.setLineDash([4,4]);
   ctx.beginPath();ctx.moveTo(toX(pR.x),toY(pR.y));ctx.lineTo(toX(pG.x),toY(pG.y));ctx.lineTo(toX(pB.x),toY(pB.y));ctx.closePath();ctx.stroke();
   ctx.setLineDash([]);
-  ctx.fillStyle=pgThemeColor('--text-primary','#e0e8f6');ctx.font='9px sans-serif';
+  ctx.fillStyle=pgThemeColor('--text-primary','#e0e8f6');ctx.font=pgChartFont(9);
   ctx.textAlign='left';ctx.fillText('R',toX(pR.x)+4,toY(pR.y)-4);
   ctx.fillText('G',toX(pG.x)-12,toY(pG.y)-6);
   ctx.textAlign='right';ctx.fillText('B',toX(pB.x)-4,toY(pB.y)+12);
@@ -17430,19 +17435,19 @@ function drawCIEChart(readings){
  // D65 white point
  const d65=meterCieD65Coord();
  ctx.fillStyle=pgThemeColor('--text-primary','#fff');ctx.beginPath();ctx.arc(toX(d65.x),toY(d65.y),3.2,0,Math.PI*2);ctx.fill();
- ctx.fillStyle=pgThemeColor('--chart-label','#d8e2f2');ctx.font='9px sans-serif';ctx.textAlign='left';ctx.fillText('D65',toX(d65.x)+5,toY(d65.y)+3);
+ ctx.fillStyle=pgThemeColor('--chart-label','#d8e2f2');ctx.font=pgChartFont(9);ctx.textAlign='left';ctx.fillText('D65',toX(d65.x)+5,toY(d65.y)+3);
  // Gamut / legend at plot top-right (zoom inset draws below these lines).
- ctx.fillStyle=pgThemeColor('--chart-label','#d7e1f3');ctx.font='10px sans-serif';ctx.textAlign='right';
+ ctx.fillStyle=pgThemeColor('--chart-label','#d7e1f3');ctx.font=pgChartFont(10);ctx.textAlign='right';
  ctx.fillText(targetGamutAvailable?gamut.label:'Native observer measurements',pad.l+w-2,pad.t+10);
  if(!meterCieTargetsAvailable()){
-  ctx.fillStyle=pgThemeColor('--chart-empty','#79869d');ctx.font='9px sans-serif';
+  ctx.fillStyle=pgThemeColor('--chart-empty','#79869d');ctx.font=pgChartFont(9);
   ctx.fillText('Reference targets need spectral data',pad.l+w-2,pad.t+22);
  }
  if(colorInclLum){
-  ctx.fillStyle=pgThemeColor('--chart-label','#9fb3d9');ctx.font='9px sans-serif';ctx.textAlign='right';
+  ctx.fillStyle=pgThemeColor('--chart-label','#9fb3d9');ctx.font=pgChartFont(9);ctx.textAlign='right';
   ctx.fillText('Ring = |\u0394Y|%',pad.l+w-2,pad.t+(meterCieTargetsAvailable()?22:34));
  } else {
-  ctx.fillStyle=pgThemeColor('--chart-empty','#6a7690');ctx.font='9px sans-serif';ctx.textAlign='right';
+  ctx.fillStyle=pgThemeColor('--chart-empty','#6a7690');ctx.font=pgChartFont(9);ctx.textAlign='right';
   ctx.fillText('Chroma only',pad.l+w-2,pad.t+(meterCieTargetsAvailable()?22:34));
  }
  // Unread series targets stay on the chart for the whole read — only the
@@ -17520,18 +17525,18 @@ function drawCIEChart(readings){
  });
  ctx.restore(); // end plot clip
  // Axis labels outside the clip so they stay readable at any zoom.
- ctx.fillStyle=pgThemeColor('--chart-label','#aab6cb');ctx.font='10px sans-serif';ctx.textAlign='center';
+ ctx.fillStyle=pgThemeColor('--chart-label','#aab6cb');ctx.font=pgChartFont(10);ctx.textAlign='center';
  const xLabDec=grid.xDecimals,yLabDec=grid.yDecimals;
  for(let x=x0;x<=xMax+1e-9;x+=xStep) ctx.fillText(x.toFixed(xLabDec),toX(x),pad.t+h+14);
  ctx.textAlign='right';
  for(let y=y0;y<=yMax+1e-9;y+=yStep) ctx.fillText(y.toFixed(yLabDec),pad.l-4,toY(y)+3);
- ctx.fillStyle=pgThemeColor('--chart-label','#c4d0e6');ctx.font='11px sans-serif';ctx.textAlign='center';
+ ctx.fillStyle=pgThemeColor('--chart-label','#c4d0e6');ctx.font=pgChartFont(11);ctx.textAlign='center';
  const axis=meterCieChartAxis();
  ctx.fillText(axis.x,pad.l+w/2,ctx.h-2);
  ctx.save();ctx.translate(10,pad.t+h/2);ctx.rotate(-Math.PI/2);ctx.fillText(axis.y,0,0);ctx.restore();
  meterDrawMbFullLocusInset(ctx,g);
  if(g.scale>1.001){
-  ctx.fillStyle=pgThemeColor('--chart-label','#8b97ad');ctx.font='9px sans-serif';ctx.textAlign='left';
+  ctx.fillStyle=pgThemeColor('--chart-label','#8b97ad');ctx.font=pgChartFont(9);ctx.textAlign='left';
   ctx.fillText(g.scale.toFixed(1)+'× · wheel zoom · drag pan · dbl-click reset',pad.l+4,pad.t+h+28);
  }
  drawCIETargetInset(ctx,readings,g);
@@ -17624,7 +17629,7 @@ function drawCIETargetInset(ctx,readings,geom){
   +(colorInclLum&&focusLumInfo.deltaPct!=null?'  \u0394Y '+(focusLumInfo.deltaPct>=0?'+':'')+focusLumInfo.deltaPct.toFixed(1)+'%':'');
  ctx.save();
  const fontPx=9;
- ctx.font=fontPx+'px sans-serif';
+ ctx.font=pgChartFont(fontPx);
  const textW=Math.ceil(ctx.measureText(labelText).width);
  const labelPadX=6, labelPadY=3;
  let lw=Math.max(1,textW+labelPadX*2);
@@ -17642,7 +17647,7 @@ function drawCIETargetInset(ctx,readings,geom){
  ctx.strokeStyle=pgThemeColor('--chart-label','#888898');ctx.lineWidth=1;
  ctx.strokeRect(lx+0.5,ly+0.5,lw-1,labelH-1);
  ctx.fillStyle=pgThemeColor('--text-primary','#edf3ff');ctx.textAlign='center';ctx.textBaseline='middle';
- ctx.font=fontPx+'px sans-serif';
+ ctx.font=pgChartFont(fontPx);
  ctx.fillText(labelText,lx+lw/2,ly+labelH/2);
  // Zoom frame
  ctx.fillStyle=pgThemeColor('--chart-bg','#0d0d15');
@@ -17784,7 +17789,7 @@ function drawCIEChartPreset(steps){
  if(meterCieViewOpts.gamut&&targetGamutAvailable){
   ctx.strokeStyle=pgThemeColor('--chart-gamut-line','rgba(220,228,245,0.9)');ctx.lineWidth=1.05;ctx.setLineDash([4,4]);
   ctx.beginPath();ctx.moveTo(toX(pR.x),toY(pR.y));ctx.lineTo(toX(pG.x),toY(pG.y));ctx.lineTo(toX(pB.x),toY(pB.y));ctx.closePath();ctx.stroke();ctx.setLineDash([]);
-  ctx.fillStyle=pgThemeColor('--text-primary','#e0e8f6');ctx.font='9px sans-serif';
+  ctx.fillStyle=pgThemeColor('--text-primary','#e0e8f6');ctx.font=pgChartFont(9);
   ctx.textAlign='left';ctx.fillText('R',toX(pR.x)+4,toY(pR.y)-4);ctx.fillText('G',toX(pG.x)-12,toY(pG.y)-6);
   ctx.textAlign='right';ctx.fillText('B',toX(pB.x)-4,toY(pB.y)+12);
   try{ meterStrokeMeasuredGamut(ctx,toX,toY,steps||readings||[]); }catch(e){}
@@ -17792,11 +17797,11 @@ function drawCIEChartPreset(steps){
  // D65
  const d65=meterCieD65Coord();
  ctx.fillStyle=pgThemeColor('--text-primary','#fff');ctx.beginPath();ctx.arc(toX(d65.x),toY(d65.y),3.2,0,Math.PI*2);ctx.fill();
- ctx.fillStyle=pgThemeColor('--chart-label','#d8e2f2');ctx.font='9px sans-serif';ctx.textAlign='left';ctx.fillText('D65',toX(d65.x)+5,toY(d65.y)+3);
- ctx.fillStyle=pgThemeColor('--chart-label','#d7e1f3');ctx.font='10px sans-serif';ctx.textAlign='right';
+ ctx.fillStyle=pgThemeColor('--chart-label','#d8e2f2');ctx.font=pgChartFont(9);ctx.textAlign='left';ctx.fillText('D65',toX(d65.x)+5,toY(d65.y)+3);
+ ctx.fillStyle=pgThemeColor('--chart-label','#d7e1f3');ctx.font=pgChartFont(10);ctx.textAlign='right';
  ctx.fillText(targetGamutAvailable?gamut.label:'Native observer measurements',pad.l+w-2,pad.t+10);
  if(!meterCieTargetsAvailable()){
-  ctx.fillStyle=pgThemeColor('--chart-empty','#79869d');ctx.font='9px sans-serif';
+  ctx.fillStyle=pgThemeColor('--chart-empty','#79869d');ctx.font=pgChartFont(9);
   ctx.fillText('Reference targets need spectral data',pad.l+w-2,pad.t+22);
  }
  // Target placeholders (hollow squares) — hidden when Targets is unchecked.
@@ -17819,17 +17824,17 @@ function drawCIEChartPreset(steps){
  });
  ctx.restore(); // end plot clip
  const xLabDec=grid.xDecimals,yLabDec=grid.yDecimals;
- ctx.fillStyle=pgThemeColor('--chart-label','#aab6cb');ctx.font='10px sans-serif';ctx.textAlign='center';
+ ctx.fillStyle=pgThemeColor('--chart-label','#aab6cb');ctx.font=pgChartFont(10);ctx.textAlign='center';
  for(let x=x0;x<=xMax+1e-9;x+=xStep) ctx.fillText(x.toFixed(xLabDec),toX(x),pad.t+h+14);
  ctx.textAlign='right';
  for(let y=y0;y<=yMax+1e-9;y+=yStep) ctx.fillText(y.toFixed(yLabDec),pad.l-4,toY(y)+3);
- ctx.fillStyle=pgThemeColor('--chart-label','#c4d0e6');ctx.font='11px sans-serif';ctx.textAlign='center';
+ ctx.fillStyle=pgThemeColor('--chart-label','#c4d0e6');ctx.font=pgChartFont(11);ctx.textAlign='center';
  const axis=meterCieChartAxis();
  ctx.fillText(axis.x,pad.l+w/2,ctx.h-2);
  ctx.save();ctx.translate(10,pad.t+h/2);ctx.rotate(-Math.PI/2);ctx.fillText(axis.y,0,0);ctx.restore();
  meterDrawMbFullLocusInset(ctx,g);
  if(g.scale>1.001){
-  ctx.fillStyle=pgThemeColor('--chart-label','#8b97ad');ctx.font='9px sans-serif';ctx.textAlign='left';
+  ctx.fillStyle=pgThemeColor('--chart-label','#8b97ad');ctx.font=pgChartFont(9);ctx.textAlign='left';
   ctx.fillText(g.scale.toFixed(1)+'× · wheel zoom · drag pan · dbl-click reset',pad.l+4,pad.t+h+28);
  }
  try{ cie2dBindHandlers(canvas); }catch(e){}
@@ -17909,7 +17914,7 @@ function drawColorDeltaE2000Chart(readings){
    ctx.fillStyle=totalColor;
    ctx.fillRect(cx-barW/2,y,barW,Math.max(2,barH*chart.h));
   }
-  ctx.fillStyle=pgThemeColor('--chart-annotation','#ccc');ctx.font='11px sans-serif';ctx.textAlign='center';
+  ctx.fillStyle=pgThemeColor('--chart-annotation','#ccc');ctx.font=pgChartFont(11);ctx.textAlign='center';
   ctx.fillText(d.de.toFixed(2),cx,y-4);
  });
  meterDrawDeltaSummary(ctx,chart,deValues);
@@ -19796,7 +19801,7 @@ function ccssPreviewClear(message){
  ctx.fillStyle=pgThemeColor('--chart-bg','#0d0d15');
  ctx.fillRect(0,0,ctx.w,ctx.h);
  ctx.fillStyle=pgThemeColor('--chart-empty','#80808f');
- ctx.font='14px sans-serif';
+ ctx.font=pgChartFont(14);
  ctx.textAlign='center';
  ctx.textBaseline='middle';
  // Wrap the hint so it stays inside narrow (tablet/phone) canvases.
@@ -19985,7 +19990,7 @@ function ccssPreviewRender(payload){
  });
 
  ctx.fillStyle=pgThemeColor('--chart-label','#888898');
- ctx.font='12px sans-serif';
+ ctx.font=pgChartFont(12);
  ctx.textAlign='center';
  ctx.fillText('Wavelength (nm)',plotLeft+(plotWidth/2),ctx.h-8);
  ctx.save();

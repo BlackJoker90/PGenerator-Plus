@@ -4814,6 +4814,11 @@ function pgThemeColor(token,fallback){
   return value||fallback;
  }catch(e){ return fallback; }
 }
+// Canvas cannot read var(): chart text takes the page's font and the 12 px floor.
+function pgChartFont(px,weight){
+ const family=getComputedStyle(document.body).fontFamily||'sans-serif';
+ return (weight?weight+' ':'')+Math.max(12,px)+'px '+family;
+}
 function pgUpdateThemeControls(){
  document.querySelectorAll('.theme-switch-btn[data-theme-mode]').forEach(btn=>{
   btn.setAttribute('aria-pressed',btn.getAttribute('data-theme-mode')===pgThemeId?'true':'false');
@@ -17117,9 +17122,11 @@ function meterLuminanceContrastText(readings){
 function drawGammaContrastLabel(ctx,chart,readings){
  if(!ctx||!chart) return;
  ctx.fillStyle=pgThemeColor('--chart-annotation','#aaa');
- ctx.font='11px sans-serif';
+ ctx.font=pgChartFont(11);
  ctx.textAlign='right';
- ctx.fillText('Contrast Ratio: '+meterLuminanceContrastText(readings||[]),ctx.w-chart.pad.r,chart.pad.t+14);
+ const contrastText='Contrast Ratio: '+meterLuminanceContrastText(readings||[]);
+ chart.contrastW=ctx.measureText(contrastText).width;
+ ctx.fillText(contrastText,ctx.w-chart.pad.r,chart.pad.t+14);
 }
 
 // Convert the meterLiveRgbData() output into a uniform "delta from target"
@@ -17226,7 +17233,7 @@ function drawDeltaBarsVertical(canvasId,spec){
  const W=rect.width,H=rect.height;
  ctx.fillStyle=pgThemeColor('--chart-bg','#0d0d15');ctx.fillRect(0,0,W,H);
  if(!spec||!spec.entries||!spec.entries.length){
-  ctx.fillStyle='#555';ctx.font='10px sans-serif';ctx.textAlign='center';
+  ctx.fillStyle='#555';ctx.font=pgChartFont(10);ctx.textAlign='center';
   ctx.fillText('--',W/2,H/2);
   return;
  }
@@ -17267,7 +17274,7 @@ function drawDeltaBarsVertical(canvasId,spec){
   ctx.beginPath();ctx.moveTo(cxPx,padTop);ctx.lineTo(cxPx,H-padBot);ctx.stroke();
   spec.entries.forEach((e,i)=>{
    const cy=padTop+rowH*i+rowH/2;
-   ctx.fillStyle=labelColor;ctx.font='bold 11px sans-serif';ctx.textAlign='left';ctx.textBaseline='middle';
+   ctx.fillStyle=labelColor;ctx.font=pgChartFont(11,'bold');ctx.textAlign='left';ctx.textBaseline='middle';
    ctx.fillText(e.label,padL,cy);
    if(e.v==null){
     ctx.textAlign='right';
@@ -17285,7 +17292,7 @@ function drawDeltaBarsVertical(canvasId,spec){
    const dec=(e.decimals!=null)?e.decimals:((spec.decimals!=null)?spec.decimals:1);
    const labelVal=(e.labelV!=null)?e.labelV:e.v;
    const prefix=(e.showPlus===false)?'':(labelVal>0?'+':(labelVal<0?'':''));
-   ctx.fillStyle=rgbPercentageBars?'#fff':labelColor;ctx.font=(rgbPercentageBars?'bold 11px':'10px')+' sans-serif';ctx.textAlign='right';
+   ctx.fillStyle=rgbPercentageBars?'#fff':labelColor;ctx.font=pgChartFont(rgbPercentageBars?11:10,rgbPercentageBars?'bold':'');ctx.textAlign='right';
    ctx.fillText(prefix+labelVal.toFixed(dec),W-padR,cy);
   });
   return;
@@ -17315,13 +17322,13 @@ function drawDeltaBarsVertical(canvasId,spec){
    roundedRect(trackLeft,padTop,trackW,plotH,6);ctx.fill();
    ctx.fillStyle=pgThemeColor('--meter-bar-zero','rgba(255,255,255,.28)');
    ctx.fillRect(trackLeft+6,Math.round(cy),trackW-12,1);
-   ctx.fillStyle=e.color;ctx.font='bold 11px sans-serif';ctx.textAlign='center';ctx.textBaseline='alphabetic';
+   ctx.fillStyle=e.color;ctx.font=pgChartFont(11,'bold');ctx.textAlign='center';ctx.textBaseline='alphabetic';
    ctx.fillText(e.label,Math.round(cx),14);
   }
   if(e.v==null){
-   ctx.fillStyle='#555';ctx.font='10px sans-serif';ctx.textAlign='center';
+   ctx.fillStyle='#555';ctx.font=pgChartFont(10);ctx.textAlign='center';
    ctx.fillText('--',Math.round(cx),themedColorBars?H-6:cyPx+4);
-   if(!themedColorBars){ctx.fillStyle=labelColor;ctx.font='bold 11px sans-serif';ctx.fillText(e.label,Math.round(cx),H-padBot+15);}
+   if(!themedColorBars){ctx.fillStyle=labelColor;ctx.font=pgChartFont(11,'bold');ctx.fillText(e.label,Math.round(cx),H-padBot+15);}
    return;
   }
   const yV=valToY(e.v);
@@ -17337,8 +17344,8 @@ function drawDeltaBarsVertical(canvasId,spec){
   ctx.restore();
   // Themed color-series and 2-point RGB values use the same fixed footer row
   // as greyscale RGB balance instead of following the moving bar endpoint.
-  if(!themedColorBars){ctx.fillStyle=labelColor;ctx.font='bold 11px sans-serif';ctx.textAlign='center';ctx.fillText(e.label,Math.round(cx),H-padBot+15);}
-  ctx.fillStyle=rgbPercentageBars?'#fff':labelColor;ctx.font=(rgbPercentageBars?'bold 11px':'10px')+' sans-serif';ctx.textAlign='center';
+  if(!themedColorBars){ctx.fillStyle=labelColor;ctx.font=pgChartFont(11,'bold');ctx.textAlign='center';ctx.fillText(e.label,Math.round(cx),H-padBot+15);}
+  ctx.fillStyle=rgbPercentageBars?'#fff':labelColor;ctx.font=pgChartFont(rgbPercentageBars?11:10,rgbPercentageBars?'bold':'');ctx.textAlign='center';
   const dec=(e.decimals!=null)?e.decimals:((spec.decimals!=null)?spec.decimals:1);
   const labelVal=(e.labelV!=null)?e.labelV:e.v;
   const prefix=(e.showPlus===false)?'':(labelVal>0?'+':(labelVal<0?'':''));
@@ -17369,7 +17376,7 @@ function drawRGBBars(bal){
  const W=rect.width,H=rect.height;
  ctx.fillStyle='#1d1d29';ctx.fillRect(0,0,W,H);
  if(!bal||bal.R==null||bal.G==null||bal.B==null){
-  ctx.fillStyle='#555';ctx.font='10px sans-serif';ctx.textAlign='center';
+  ctx.fillStyle='#555';ctx.font=pgChartFont(10);ctx.textAlign='center';
   ctx.fillText('--',W/2,H/2);
   return;
  }
@@ -17382,7 +17389,7 @@ function drawRGBBars(bal){
  const barW=barR-barL;
  function valToX(v){return barL+(v-lo)/(hi-lo)*barW;}
  // Gridlines at 5-unit intervals
- ctx.font='8px sans-serif';ctx.textAlign='center';ctx.fillStyle='#666';
+ ctx.font=pgChartFont(8);ctx.textAlign='center';ctx.fillStyle='#666';
  for(let g=Math.ceil(lo/5)*5;g<=hi;g+=5){
   const x=valToX(g);
   ctx.strokeStyle=g===center?pgThemeColor('--text-muted','#888'):'#2a2a3a';
@@ -17408,10 +17415,10 @@ function drawRGBBars(bal){
   // Dot at value
   ctx.beginPath();ctx.arc(xVal,cy,3,0,Math.PI*2);ctx.fillStyle=c.color;ctx.fill();
   // Channel label
-  ctx.fillStyle=c.color;ctx.font='bold 9px sans-serif';ctx.textAlign='right';
+  ctx.fillStyle=c.color;ctx.font=pgChartFont(9,'bold');ctx.textAlign='right';
   ctx.fillText(c.ch,labelW,cy+3);
   // Value label at right
-  ctx.fillStyle=pgThemeColor('--chart-annotation','#ccc');ctx.font='9px sans-serif';ctx.textAlign='left';
+  ctx.fillStyle=pgThemeColor('--chart-annotation','#ccc');ctx.font=pgChartFont(9);ctx.textAlign='left';
   const prefix=isDelta&&c.v>0?'+':'';
   ctx.fillText(prefix+c.v.toFixed(2)+'%',barR+4,cy+3);
  });

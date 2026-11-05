@@ -2071,7 +2071,7 @@ async function loadInfo(quiet){
   const ws=document.getElementById('wifiStatus');
   if(ws.dataset.wifiKey!=='off'){
    ws.dataset.wifiKey='off';
-   ws.innerHTML='<div style="font-size:.8rem;color:var(--text2)">Not connected</div>';
+   ws.innerHTML='<div style="font-size:var(--fs-sm);color:var(--text2)">Not connected</div>';
   }
   if(wifiDisconnectBtn) wifiDisconnectBtn.style.display='none';
   const wifiForgetBtn=document.getElementById('wifiForgetBtn');
@@ -2277,7 +2277,7 @@ function pgShowDaemonNotice(notice){
  titleText.id='pgDaemonNoticeTitle';
  title.appendChild(icon);title.appendChild(titleText);
  const body=document.createElement('div');
- body.style.cssText='font-size:.9rem;color:var(--text2,#a8b0c0);line-height:1.55;margin-bottom:18px;white-space:pre-line';
+ body.style.cssText='font-size:var(--fs-md);color:var(--text2,#a8b0c0);line-height:1.55;margin-bottom:18px;white-space:pre-line';
  body.id='pgDaemonNoticeBody';
  body.textContent=String(notice.text||'');
  const actions=document.createElement('div');
@@ -2884,7 +2884,7 @@ function diagPromptVideoRange(){
   label.textContent='Frame range for extracted frames:';
   const sel=document.createElement('select');
   sel.className='inline-select';
-  sel.style.cssText='font-size:.6875rem;max-width:unset';
+  sel.style.cssText='font-size:var(--fs-2xs);max-width:unset';
   sel.innerHTML='<option value="limited">Limited (16-235, recommended)</option><option value="full">Full (0-255)</option>';
   sel.value=pref;
   const btn=document.createElement('button');
@@ -4402,7 +4402,7 @@ async function cecScan(){
    const v=String(vendor||'').toLowerCase().replace(/^0x/,'');
    return v==='00e091'?'LG':'';
   };
-  let html='<table style="width:100%;border-collapse:collapse;font-size:.8rem">';
+  let html='<table style="width:100%;border-collapse:collapse;font-size:var(--fs-sm)">';
   html+='<tr style="border-bottom:1px solid var(--border)"><th style="text-align:left;padding:2px 6px">Device</th><th style="text-align:left;padding:2px 6px">Type</th><th style="text-align:left;padding:2px 6px">Address</th><th style="text-align:left;padding:2px 6px">Vendor</th><th style="text-align:left;padding:2px 6px">Power</th></tr>';
   devs.forEach(d=>{
    const vendor=cecVendorName(d.vendor)||d.vendor||'';
@@ -6864,7 +6864,7 @@ function pgPrompt(opts){
   input.value=String(o.value||'');
   input.style.cssText='width:100%;box-sizing:border-box;margin-bottom:6px';
   const hint=document.createElement('div');
-  hint.style.cssText='font-size:.75rem;color:var(--text2,#a8b0c0);margin-bottom:14px';
+  hint.style.cssText='font-size:var(--fs-xs);color:var(--text2,#a8b0c0);margin-bottom:14px';
   hint.textContent=String(o.hint||'');
   if(o.hint){ hint.id='pgPromptHint'; input.setAttribute('aria-describedby','pgPromptHint'); }
   const row=document.createElement('div');

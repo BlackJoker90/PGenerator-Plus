@@ -80,12 +80,12 @@ body.layout-desktop #settingsCard > h2{display:none}
 body.layout-desktop .site-footer{max-width:none;width:100%;margin:auto 0 0;padding:0 24px 20px;flex:0 0 auto}
 body.layout-desktop .site-footer-inner{background:transparent;border:0;border-radius:0;padding:14px 0}
 .desktop-utility-toggle,.desktop-utility-drawer{display:none}
-body.layout-desktop .desktop-utility-toggle{display:flex;position:fixed;right:4px;top:50%;transform:translateY(-50%);z-index:56;width:22px;height:62px;padding:0;align-items:center;justify-content:center;border:1px solid var(--border);border-right:0;border-radius:6px 0 0 7px;background:var(--surface-popover);color:var(--text2);font-size:22px;line-height:1;cursor:pointer;box-shadow:-4px 0 14px rgba(0,0,0,.3);transition:transform .22s var(--ease-drawer),color .15s ease-out,background-color .15s ease-out}
+body.layout-desktop .desktop-utility-toggle{display:flex;position:fixed;right:0;top:50%;transform:translateY(-50%);z-index:56;width:18px;height:62px;padding:0;align-items:center;justify-content:center;border:1px solid var(--border);border-right:0;border-radius:6px 0 0 7px;background:var(--surface-popover);color:var(--text2);font-size:22px;line-height:1;cursor:pointer;box-shadow:-4px 0 14px rgba(0,0,0,.3);transition:transform .22s var(--ease-drawer),color .15s ease-out,background-color .15s ease-out}
 body.layout-desktop .desktop-utility-toggle:hover{background:color-mix(in srgb,var(--text-primary) 8%,var(--surface-popover));color:var(--text-primary)}
 body.layout-desktop .desktop-utility-toggle:focus-visible{outline:2px solid var(--focus-ring);outline-offset:2px}
 body.layout-desktop .desktop-utility-drawer{display:flex;position:fixed;top:var(--pg-header-height,61px);right:0;bottom:0;z-index:55;width:var(--desktop-utility-width);transform:translateX(100%);flex-direction:column;background:var(--surface-drawer);border-left:1px solid var(--border);transition:transform .22s var(--ease-drawer);overflow:hidden;contain:layout paint style;will-change:transform}
 /* The tab rides on the drawer's edge: moved by transform, like the drawer, so both stay on the compositor. */
-body.layout-desktop.desktop-utility-open .desktop-utility-toggle{transform:translate(calc(4px - var(--desktop-utility-width)),-50%)}
+body.layout-desktop.desktop-utility-open .desktop-utility-toggle{transform:translate(calc(0px - var(--desktop-utility-width)),-50%)}
 @media(prefers-reduced-motion:reduce){body.layout-desktop .desktop-utility-toggle{transition:color .15s ease-out,background-color .15s ease-out}body.layout-desktop .desktop-utility-drawer{transition:none}}
 body.layout-desktop.desktop-utility-open .desktop-utility-drawer{transform:translateX(0)}
 .desktop-utility-header{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:13px 14px;border-bottom:1px solid var(--border);flex:0 0 auto}
@@ -299,7 +299,7 @@ body.meter-stop-active.layout-desktop .desktop-sidebar{filter:grayscale(.25);opa
 [data-theme="light"] .meter-thumbs-nav:disabled{background:var(--surface-inset);color:var(--text-disabled);border-color:var(--border);box-shadow:none}
 [data-theme="light"] body .meter-scroll-sync{background:var(--chart-bg)!important}
 body.layout-desktop .desktop-sidebar{background:var(--surface-sidebar)}
-body.layout-desktop .desktop-utility-toggle{background:var(--surface-popover);box-shadow:-4px 0 14px var(--shadow)}
+body.layout-desktop .desktop-utility-toggle{background:var(--surface-popover);box-shadow:none}
 body.layout-desktop .desktop-utility-toggle:hover,.desktop-utility-close:hover,.desktop-nav-btn:hover,.layout-switch-btn:hover{background:var(--hover-bg);color:var(--text-primary)}
 body.layout-desktop .desktop-utility-drawer{background:var(--surface-drawer)}
 body.layout-desktop.desktop-utility-open .desktop-utility-drawer{box-shadow:-12px 0 32px var(--shadow)}
@@ -439,7 +439,7 @@ body.layout-tablet #meterEotfBlock,body.layout-tablet #meterLuminanceBlock{displ
 body.layout-tablet #meterEotfScroller,body.layout-tablet #meterLuminanceScroller{margin-top:auto}
 @media(max-width:700px){body.layout-tablet #meterEotfLuminanceGrid{grid-template-columns:minmax(0,1fr)!important}}
 body.layout-tablet .field label,body.layout-tablet .meter-header-label,body.layout-tablet .meter-target-inline-label,body.layout-tablet .meter-toggle,body.layout-tablet .meter-toggle-label,body.layout-tablet .meter-note-toggle,body.layout-tablet .meter-inline-unit,body.layout-tablet .stat-label,body.layout-tablet .stat-sub,body.layout-tablet .info-item .label,body.layout-tablet .diag-pattern-title,body.layout-tablet .dv-badge,body.layout-tablet .pat-btn,body.layout-tablet .theme-switch-btn span,body.layout-tablet .btn-sm,body.layout-tablet .ui-choice-note,body.layout-tablet .session-format-note,body.layout-tablet .site-footer-note,body.layout-tablet .desktop-nav-title,body.layout-tablet #meterSettingsGrid .meter-target-inline-label,body.layout-tablet #meterSettingsGrid .meter-target-measure-btn,body.layout-tablet #meterSettingsGrid .meter-target-use-measured{font-size:var(--fs-xs)}
-body.layout-tablet .dashboard [style*="font-size:.5"],body.layout-tablet .dashboard [style*="font-size:.6"],body.layout-tablet .dashboard [style*="font-size:.7"],body.layout-tablet .dashboard [style*="font-size:0.6"],body.layout-tablet .dashboard [style*="font-size:0.7"],body.layout-tablet .dashboard [style*="font-size:11px"],body.layout-tablet .dashboard [style*="font-size:11px"],body.layout-tablet .dashboard [style*="font-size:11px"],body.layout-tablet .dashboard [style*="font-size: 0.6"],body.layout-tablet .dashboard [style*="font-size: 0.7"],body.layout-tablet .dashboard [style*="font-size:11px"],body.layout-tablet .dashboard [style*="font-size:11px"],body.layout-tablet .dashboard [style*="font-size: 11px"]{font-size:var(--fs-xs)!important}
+body.layout-tablet .dashboard [style*="font-size:var(--fs-2xs)"],body.layout-tablet .dashboard [style*="font-size:var(--fs-xs)"],body.layout-tablet .dashboard [style*="font-size:var(--fs-sm)"],body.layout-tablet .dashboard [style*="font-size:.5"],body.layout-tablet .dashboard [style*="font-size:.6"],body.layout-tablet .dashboard [style*="font-size:.7"],body.layout-tablet .dashboard [style*="font-size:0.6"],body.layout-tablet .dashboard [style*="font-size:0.7"],body.layout-tablet .dashboard [style*="font-size:11px"],body.layout-tablet .dashboard [style*="font-size:11px"],body.layout-tablet .dashboard [style*="font-size:11px"],body.layout-tablet .dashboard [style*="font-size: 0.6"],body.layout-tablet .dashboard [style*="font-size: 0.7"],body.layout-tablet .dashboard [style*="font-size:11px"],body.layout-tablet .dashboard [style*="font-size:11px"],body.layout-tablet .dashboard [style*="font-size: 11px"]{font-size:var(--fs-xs)!important}
 @media(pointer:coarse){body.layout-tablet .dashboard select,body.layout-tablet .dashboard input:not([type=checkbox]):not([type=radio]):not([type=range]),body.layout-tablet .dashboard textarea{font-size:16px}}
 /* Phone header: logo + power on one row, then a single status row in
    priority order (connection, warnings, software, signal, pattern, meter,
@@ -568,5 +568,23 @@ body.layout-tablet .toast{top:auto;bottom:calc(84px + env(safe-area-inset-bottom
 body.layout-tablet .toast.show{transform:translate(-50%,0) scale(1)}
 body.layout-tablet .dashboard>.card>h2,body.layout-tablet #meterCard>h2{column-gap:8px}
 body.layout-tablet .dashboard>.card>h2 .drag-handle{margin-right:0}
+body:has(#statusDot:not([style*="background"])) :is(#hdrCard,#dvCard){display:none!important}
+input[type=checkbox]:not(.pg-switch *){-webkit-appearance:none;appearance:none;display:inline-grid;place-content:center;box-sizing:border-box;width:16px;height:16px;min-height:0;margin:0;padding:0;border:1px solid var(--field-border);border-radius:var(--r-xs);background:var(--surface-field);cursor:pointer}
+input[type=checkbox]:not(.pg-switch *):hover:not(:disabled){border-color:var(--field-border-hover)}
+input[type=checkbox]:not(.pg-switch *):checked{border-color:var(--accent-fill);background:var(--accent-fill)}
+input[type=checkbox]:not(.pg-switch *):checked::after{content:"";width:4px;height:8px;margin-top:-2px;border:solid var(--on-accent);border-width:0 2px 2px 0;transform:rotate(45deg)}
+input[type=checkbox]:not(.pg-switch *):focus-visible{outline:2px solid var(--focus-ring);outline-offset:2px}
+input[type=checkbox]:not(.pg-switch *):disabled{border-color:var(--border);background:var(--control-disabled-bg);cursor:not-allowed}
+input[type=checkbox]:not(.pg-switch *):disabled:checked::after{border-color:var(--control-disabled-text)}
+html[data-theme] .layout-switch-btn[aria-pressed="true"],html[data-theme] .layout-switch-btn[aria-pressed="true"]:hover{background:var(--selected-bg);color:var(--text-primary);box-shadow:inset 0 0 0 1px var(--accent)}
+.preset-filter-chip[aria-pressed="true"]:not([data-kind="hdr"],[data-kind="dv"]){--chip:var(--accent)}
+body.layout-desktop #meter3dLutWorkspaceCard #lutCubeViewWrap{background:transparent!important;border:0!important;padding:0!important}
+body.layout-desktop :is(#meterEotfBlock,#meterLuminanceBlock)>div:first-child{flex-wrap:nowrap!important;gap:6px!important}
+body.layout-desktop :is(#meterEotfBlock,#meterLuminanceBlock) label:has(>input[type=checkbox]){font-size:var(--fs-xs)!important;white-space:nowrap}
+body.layout-tablet .devinfo-facts .devinfo-control{padding:0;border:0;background:transparent}
+@media(max-width:600px){
+html body.layout-tablet{--tile-pad:8px 10px}
+body.layout-tablet :is(.info-grid,.btn-grid,.devinfo-facts)>:last-child:nth-child(odd){grid-column:1/-1}
+}
 @keyframes pg-status-pulse{50%{opacity:.35}}
 @media(prefers-reduced-motion:reduce){#statusDot{animation:none!important}}

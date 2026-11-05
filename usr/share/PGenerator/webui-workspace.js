@@ -53,8 +53,8 @@ function meterRenderCustomSeriesManager(){
   return '<tr style="border-bottom:1px solid var(--divider)">'
    +'<td style="padding:6px">'+esc(series.name)+'</td>'
    +'<td style="padding:6px">'+(series.kind==='lattice'?'3D LUT':(series.category==='color'?'Color':'Greyscale'))+'</td>'
-   +'<td style="padding:6px"><span style="font-size:.6875rem;padding:2px 6px;border:1px solid var(--border);border-radius:4px">'+series.mode.toUpperCase()+'</span></td>'
-   +'<td style="padding:6px"><span style="font-size:.6875rem;padding:2px 6px;border:1px solid var(--border);border-radius:4px" title="'+(isLattice?'Lattice codes are re-derived for the current range at read time':'Signal range these patch codes are authored for')+'">'+rangeLbl+'</span></td>'
+   +'<td style="padding:6px"><span style="font-size:var(--fs-2xs);padding:2px 6px;border:1px solid var(--border);border-radius:4px">'+series.mode.toUpperCase()+'</span></td>'
+   +'<td style="padding:6px"><span style="font-size:var(--fs-2xs);padding:2px 6px;border:1px solid var(--border);border-radius:4px" title="'+(isLattice?'Lattice codes are re-derived for the current range at read time':'Signal range these patch codes are authored for')+'">'+rangeLbl+'</span></td>'
    +'<td style="padding:6px">'+patchInfo+'</td>'
    +'<td style="padding:6px"><div style="display:flex;gap:4px;flex-wrap:wrap;justify-content:flex-end">'
     +'<button class="btn btn-sm btn-primary" onclick="meterCustomSeriesLoad('+series.id+')" title="Close this window and load the series into the charts">Load</button>'
@@ -1931,7 +1931,7 @@ function meterImportParseCcfx(text){
 function meterOpenImportWizard(){
  meterImportWizardState=null;
  const body=document.getElementById('meterImportWizardBody');
- if(body) body.innerHTML='<div style="font-size:.78rem;color:var(--text2)">Pick a format above, then choose a file.</div>';
+ if(body) body.innerHTML='<div style="font-size:var(--fs-sm);color:var(--text2)">Pick a format above, then choose a file.</div>';
  const act=document.getElementById('meterImportWizardActions'); if(act) act.style.display='none';
  const fn=document.getElementById('meterImportWizardFileName'); if(fn) fn.textContent='';
  const m=meterEnsureModalOnBody(document.getElementById('meterImportWizardModal')); if(m){ m.style.display='flex'; uiSyncBodyScrollLock(); }
@@ -1943,7 +1943,7 @@ function meterCloseImportWizard(){
 function meterImportWizardFormatChanged(){
  meterImportWizardState=null;
  const body=document.getElementById('meterImportWizardBody');
- if(body) body.innerHTML='<div style="font-size:.78rem;color:var(--text2)">Choose a file to continue.</div>';
+ if(body) body.innerHTML='<div style="font-size:var(--fs-sm);color:var(--text2)">Choose a file to continue.</div>';
  const act=document.getElementById('meterImportWizardActions'); if(act) act.style.display='none';
  const fn=document.getElementById('meterImportWizardFileName'); if(fn) fn.textContent='';
 }
@@ -1976,13 +1976,13 @@ function meterImportWizardRenderCsv(text,filename){
  const rg=meterImportDetectRangeFromCsv(text,filename);
  const inpStyle='background:var(--surface-inset);border:1px solid var(--border);border-radius:4px;color:var(--text-primary);padding:5px;box-sizing:border-box';
  const body=document.getElementById('meterImportWizardBody');
- body.innerHTML='<div style="display:grid;grid-template-columns:auto 1fr;gap:8px 10px;align-items:center;font-size:.8rem;color:var(--text-primary);max-width:560px">'
+ body.innerHTML='<div style="display:grid;grid-template-columns:auto 1fr;gap:8px 10px;align-items:center;font-size:var(--fs-sm);color:var(--text-primary);max-width:560px">'
   +'<label>Series name</label><input type="text" id="meterImpCsvName" maxlength="96" value="'+esc(base)+'" style="'+inpStyle+';width:100%">'
   +'<label>Bit depth</label><select id="meterImpCsvBits" style="'+inpStyle+'">'+meterImportBitOptions(bits)+'</select>'
   +'<label>Mode</label><select id="meterImpCsvMode" style="'+inpStyle+'">'+meterImportModeOptions(md)+'</select>'
   +'<label title="The signal range these codes are in. The series is only offered while the display outputs this range.">Range</label><select id="meterImpCsvRange" style="'+inpStyle+'">'+meterImportRangeOptions(rg)+'</select>'
   +'</div>'
-  +'<div style="font-size:.72rem;color:var(--text2);margin-top:8px">CSV codes are used as-is at the chosen bit depth and range.</div>';
+  +'<div style="font-size:var(--fs-xs);color:var(--text2);margin-top:8px">CSV codes are used as-is at the chosen bit depth and range.</div>';
  const act=document.getElementById('meterImportWizardActions'); act.style.display='';
  document.getElementById('meterImportWizardCommitBtn').textContent='Import series';
 }
@@ -2004,10 +2004,10 @@ function meterImportWizardRenderCcfx(text,filename){
    +'</tr>';
  });
  const body=document.getElementById('meterImportWizardBody');
- body.innerHTML='<div style="font-size:.76rem;color:var(--text2);margin-bottom:6px">'+sets.length+' series found. Check the ones to import; edit name / bit depth / mode / range as needed (auto-set from the set name).</div>'
-  +'<label style="font-size:.76rem;color:var(--text-primary);display:inline-flex;gap:4px;align-items:center;cursor:pointer;margin-bottom:6px"><input type="checkbox" id="meterImpCkAll" checked onchange="meterImportToggleAll(this.checked)"> Select all</label>'
+ body.innerHTML='<div style="font-size:var(--fs-xs);color:var(--text2);margin-bottom:6px">'+sets.length+' series found. Check the ones to import; edit name / bit depth / mode / range as needed (auto-set from the set name).</div>'
+  +'<label style="font-size:var(--fs-xs);color:var(--text-primary);display:inline-flex;gap:4px;align-items:center;cursor:pointer;margin-bottom:6px"><input type="checkbox" id="meterImpCkAll" checked onchange="meterImportToggleAll(this.checked)"> Select all</label>'
   +'<div style="max-height:46vh;overflow:auto;border:1px solid var(--border);border-radius:6px">'
-  +'<table style="width:100%;border-collapse:collapse;font-size:.74rem;color:var(--text-primary)">'
+  +'<table style="width:100%;border-collapse:collapse;font-size:var(--fs-xs);color:var(--text-primary)">'
   +'<thead><tr style="border-bottom:1px solid var(--border);position:sticky;top:0;background:var(--surface-modal)">'
   +'<th style="padding:5px">Import</th><th style="text-align:left;padding:5px">Name</th><th style="padding:5px">Bit depth</th><th style="padding:5px">Mode</th><th style="padding:5px">Range</th><th style="padding:5px">Patches</th>'
   +'</tr></thead><tbody>'+rows+'</tbody></table></div>';
@@ -3667,7 +3667,7 @@ function meterRenderGreyTvControls(reading){
   return;
  }
  if(meterAutoCalLuminanceSetupActive){
-  host.innerHTML='<div style="height:100%;display:flex;align-items:center;justify-content:center;text-align:center;font-size:.6875rem;color:var(--text2);padding:8px">LG controls paused during luminance setup.</div>';
+  host.innerHTML='<div style="height:100%;display:flex;align-items:center;justify-content:center;text-align:center;font-size:var(--fs-2xs);color:var(--text2);padding:8px">LG controls paused during luminance setup.</div>';
   if(meta) meta.textContent='LG paused';
   return;
  }
@@ -3675,7 +3675,7 @@ function meterRenderGreyTvControls(reading){
  const renderStep=seriesReadOnly?(meterCanonicalSeriesStep(reading)||reading):meterCurrentPatchStep;
  const target=meterGreyTvTarget(renderStep,{allow_series_running:seriesReadOnly});
  if(!target){
-  host.innerHTML='<div style="height:100%;display:flex;align-items:center;justify-content:center;text-align:center;font-size:.6875rem;color:var(--text2);padding:8px">No greyscale patch selected.</div>';
+  host.innerHTML='<div style="height:100%;display:flex;align-items:center;justify-content:center;text-align:center;font-size:var(--fs-2xs);color:var(--text2);padding:8px">No greyscale patch selected.</div>';
   if(meta) meta.textContent='LG TV';
   return;
  }
@@ -3690,12 +3690,12 @@ function meterRenderGreyTvControls(reading){
  }
  const state=meterLgGreyState||{status:'idle',picture:null,message:'',needsRepair:false};
  if((state.status==='loading'||state.status==='idle')&&!state.picture&&!seriesReadOnly){
-  host.innerHTML='<div style="height:100%;display:flex;align-items:center;justify-content:center;text-align:center;font-size:.6875rem;color:var(--text2);padding:8px">Loading...</div>';
+  host.innerHTML='<div style="height:100%;display:flex;align-items:center;justify-content:center;text-align:center;font-size:var(--fs-2xs);color:var(--text2);padding:8px">Loading...</div>';
   if(meta) meta.textContent='LG '+target.label;
   return;
  }
  if(state.status==='error'&&!state.picture&&!seriesReadOnly){
-  host.innerHTML='<div style="height:100%;display:flex;align-items:center;justify-content:center;text-align:center;font-size:.6875rem;color:#f7b0b0;padding:8px">'+(state.message||'Unable to read LG white-balance values.')+'</div>';
+  host.innerHTML='<div style="height:100%;display:flex;align-items:center;justify-content:center;text-align:center;font-size:var(--fs-2xs);color:#f7b0b0;padding:8px">'+(state.message||'Unable to read LG white-balance values.')+'</div>';
   if(meta) meta.textContent=state.needsRepair?'LG pairing required':'LG read failed';
   return;
  }
@@ -6454,7 +6454,7 @@ function meterShowChoiceModal(options){
   title.id='meterAutoCalChoiceTitle';
   const body=document.createElement('div');
   body.id='meterAutoCalChoiceBody';
-  body.style.cssText='font-size:.85rem;color:var(--text2,#a8b0c0);line-height:1.5;margin-bottom:14px;white-space:pre-line';
+  body.style.cssText='font-size:var(--fs-md);color:var(--text2,#a8b0c0);line-height:1.5;margin-bottom:14px;white-space:pre-line';
   body.textContent=String(opts.body||'');
   // Optional prebuilt content (e.g. release notes) below the body text.
   if(opts.bodyNode){
@@ -6470,7 +6470,7 @@ function meterShowChoiceModal(options){
   checks.forEach(c=>{
    if(!c||!c.id) return;
    const lab=document.createElement('label');
-   lab.style.cssText='display:flex;align-items:flex-start;gap:8px;font-size:.8rem;color:var(--text,#e3e6ef);cursor:pointer;line-height:1.4';
+   lab.style.cssText='display:flex;align-items:flex-start;gap:8px;font-size:var(--fs-sm);color:var(--text,#e3e6ef);cursor:pointer;line-height:1.4';
    const inp=document.createElement('input');
    inp.type='checkbox';
    inp.checked=c.checked!==false;
@@ -6492,7 +6492,7 @@ function meterShowChoiceModal(options){
    group.style.cssText='display:grid;gap:6px';
    if(g.label){
     const gl=document.createElement('div');
-    gl.style.cssText='font-size:.72rem;color:var(--text2);';
+    gl.style.cssText='font-size:var(--fs-xs);color:var(--text2);';
     gl.textContent=String(g.label);
     group.appendChild(gl);
    }
@@ -6501,7 +6501,7 @@ function meterShowChoiceModal(options){
    g.options.forEach(opt=>{
     if(!opt||opt.value==null) return;
     const lab=document.createElement('label');
-    lab.style.cssText='display:flex;align-items:flex-start;gap:8px;font-size:.8rem;color:var(--text,#e3e6ef);cursor:pointer;line-height:1.4';
+    lab.style.cssText='display:flex;align-items:flex-start;gap:8px;font-size:var(--fs-sm);color:var(--text,#e3e6ef);cursor:pointer;line-height:1.4';
     const inp=document.createElement('input');
     inp.type='radio';
     inp.name=name;
@@ -14987,7 +14987,7 @@ function drawGammaChart(gs,allSteps,readingMap){
  const diffuse=meterHdrDiffuseWhiteOverride();
  const targetLabel='100% target: '+targetPeak.toFixed(1)+' cd/m\u00B2'+((diffuse!=null&&meterChartIsPq())?' (DW '+diffuse.toFixed(1)+')':'');
  const targetFits=chart.pad.l+ctx.measureText(targetLabel).width+8<=ctx.w-chart.pad.r-(chart.contrastW||0);
- ctx.fillText(targetLabel,chart.pad.l,chart.pad.t+(targetFits?14:28));
+ ctx.fillText(targetLabel,chart.pad.l+6,chart.pad.t+(targetFits?14:28));
  ctx.textAlign='right';
  ctx.fillText('Max cd/m\u00B2: '+measuredMax.toFixed(2),ctx.w-chart.pad.r,ctx.h-2);
 }
@@ -18150,7 +18150,7 @@ function meterOpenReportDialog(){
  list.innerHTML=items.map(item=>
   '<label style="display:flex;align-items:center;justify-content:space-between;gap:8px;background:var(--surface-inset);border:1px solid var(--border);border-radius:6px;padding:8px 10px;cursor:pointer">'
   +'<span style="display:flex;align-items:center;gap:8px"><input type="checkbox" value="'+item.key+'" checked> '+item.label+'</span>'
-  +'<span style="font-size:.72rem;color:var(--text2)">'+(item.hasData?(item.count+' readings'):'No data yet')+'</span>'
+  +'<span style="font-size:var(--fs-xs);color:var(--text2)">'+(item.hasData?(item.count+' readings'):'No data yet')+'</span>'
   +'</label>'
  ).join('');
  document.getElementById('meterReportOverlay').style.display='flex';
@@ -19464,7 +19464,7 @@ async function loadCustomCcssList(){
  const r=await fetchJSON('/api/ccss/list',{cache:'no-store',_quiet:true,_timeoutMs:5000});
  meterUpdateCustomCcssPanel(document.getElementById('meterDisplayType').value);
  const el=document.getElementById('customCcssList');
- if(!r||!r.files||r.files.length===0){el.innerHTML='<div style="font-size:.78rem;color:var(--text2)">No custom profiles</div>';return;}
+ if(!r||!r.files||r.files.length===0){el.innerHTML='<div style="font-size:var(--fs-sm);color:var(--text2)">No custom profiles</div>';return;}
  // The compact custom list and the viewer use different API payloads. If a
  // freshly created/uploaded file reaches this list before the full catalog,
  // refresh the catalog now so the viewer option and click target agree.
@@ -19487,7 +19487,7 @@ async function loadCustomCcssList(){
    ? ccssPreviewActiveValue===('custom\t'+f)
    : customCcssFile===f;
   return '<div style="display:flex;align-items:center;gap:6px;margin-bottom:3px">'
-  +'<button class="btn btn-sm '+(active?'btn-success':'btn-secondary')+'" data-ccss-filename="'+ccssPreviewEscapeHtml(f)+'" style="flex:1;font-size:.78rem;padding:2px 6px;text-align:left" onclick="selectCustomCcss(\''+f+'\')"><span data-ccss-selected-mark>'+(active?'\u2713 ':'')+'</span>['+format+'] '+label+'</button>'
+  +'<button class="btn btn-sm '+(active?'btn-success':'btn-secondary')+'" data-ccss-filename="'+ccssPreviewEscapeHtml(f)+'" style="flex:1;font-size:var(--fs-sm);padding:2px 6px;text-align:left" onclick="selectCustomCcss(\''+f+'\')"><span data-ccss-selected-mark>'+(active?'\u2713 ':'')+'</span>['+format+'] '+label+'</button>'
   +'<button class="btn btn-sm btn-danger-quiet btn-icon-sq" onclick="deleteCustomCcss(\''+f+'\')">\u2715</button></div>';
  }).join('');
 }

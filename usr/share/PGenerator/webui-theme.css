@@ -295,7 +295,7 @@ transition:background-color .15s ease-out,box-shadow .15s ease-out,transform .1s
 .hdr-power .power-btn.offline{--pwr:var(--text-disabled)}
 .main-content{position:relative}
 body.ui-offline .dashboard,body.ui-offline .site-footer{filter:grayscale(.35);opacity:.45;pointer-events:none;user-select:none}
-.offline-mask{position:absolute;inset:0;display:none;z-index:20;align-items:flex-start;justify-content:center;padding:64px 20px 20px;background:color-mix(in srgb,var(--surface-page) 72%,transparent)}
+.offline-mask{position:absolute;inset:0;display:none;z-index:20;align-items:flex-start;justify-content:center;padding:64px 20px 20px;background:color-mix(in srgb,var(--surface-page) 88%,transparent)}
 body.ui-offline .offline-mask{display:flex}
 /* The restart dialog already says the Pi is away and that the page reconnects. */
 body.pg-restarting .offline-mask-card{display:none}
@@ -732,11 +732,11 @@ font-weight:600;transition:background-color .15s ease-out,color .15s ease-out,bo
 .btn-success:hover{background:var(--success-fill);filter:brightness(.92)}
 /* Caution role: reboot/restart/reset/install actions. Outline, not a fill, so
    it never competes with the card's primary action. */
-.btn-warning{background:transparent;color:var(--warning-text);box-shadow:inset 0 0 0 1px currentColor}
+.btn-warning{background:transparent;color:var(--warning-text);box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--warning-text) 60%,var(--border))}
 .btn-warning:hover{background:color-mix(in srgb,var(--warning-text) 10%,transparent)}
 /* Secondary destructive action next to neutral buttons: red outline; the filled
    .btn-danger stays reserved for confirm dialogs. */
-.btn-danger-quiet{background:transparent;color:var(--red);box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--status-error) 45%,var(--border))}
+.btn-danger-quiet{background:transparent;color:var(--red);box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--status-error) 60%,var(--border))}
 .btn-icon-sq{display:inline-flex;align-items:center;justify-content:center;min-width:var(--btn-h-sm);aspect-ratio:1;padding:0}
 .btn-danger-quiet:hover{background:color-mix(in srgb,var(--red) 10%,transparent)}
 .btn-push-end{margin-left:auto}
@@ -744,7 +744,7 @@ font-weight:600;transition:background-color .15s ease-out,color .15s ease-out,bo
 .card h2 .card-h2-action{margin-left:auto}
 /* Reset Defaults: tinted in the warning colour like the reboot button, so
    it reads as "puts things back", not as one more neutral control. */
-.card h2 .btn-reset{--rst:var(--status-warning);gap:6px;padding:6px 14px 6px 12px;min-height:30px;color:var(--warning-text);background:transparent;box-shadow:inset 0 0 0 1px currentColor;transition:background-color .15s ease-out,box-shadow .15s ease-out,transform .1s var(--ease-out)}
+.card h2 .btn-reset{--rst:var(--status-warning);gap:6px;padding:6px 14px 6px 12px;min-height:30px;color:var(--warning-text);background:transparent;box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--warning-text) 60%,var(--border));transition:background-color .15s ease-out,box-shadow .15s ease-out,transform .1s var(--ease-out)}
 .card h2 .btn-reset:hover,.card h2 .btn-reset:focus-visible{background:color-mix(in srgb,var(--rst) 24%,transparent);box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--rst) 55%,transparent)}
 .card h2 .btn-reset svg{flex:0 0 auto;width:14px;height:14px}
 .card:not(.collapsed) h2:has(.card-h2-action)::after{margin-left:0}
@@ -1017,7 +1017,7 @@ body.apply-settings-success .apply-settings-actions{display:none}
 :is(.devinfo-card,.facts-host) .devinfo-facts .value{font-size:var(--fs-md);font-weight:600;margin-top:2px;font-variant-numeric:tabular-nums}
 /* Copy on a fact tile: a quiet neutral button; it turns green once copied. */
 :is(.devinfo-card,.facts-host) .devinfo-facts .info-item.has-copy{grid-template-columns:minmax(0,1fr) auto}
-.fact-copy{--cp:var(--text-secondary);grid-column:2;grid-row:2;display:grid;place-items:center;width:34px;height:34px;padding:0;border:0;border-radius:var(--r-sm);cursor:pointer;color:var(--cp);background:color-mix(in srgb,var(--cp) 14%,transparent);box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--cp) 30%,transparent);transition:background-color .15s ease-out,box-shadow .15s ease-out,transform .1s var(--ease-out)}
+.fact-copy{--cp:var(--text-secondary);grid-column:2;grid-row:1/span 2;align-self:center;display:grid;place-items:center;width:34px;height:34px;padding:0;border:0;border-radius:var(--r-sm);cursor:pointer;color:var(--cp);background:color-mix(in srgb,var(--cp) 14%,transparent);box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--cp) 30%,transparent);transition:background-color .15s ease-out,box-shadow .15s ease-out,transform .1s var(--ease-out)}
 .fact-copy svg{width:17px;height:17px}
 .fact-copy:hover,.fact-copy:focus-visible{background:color-mix(in srgb,var(--cp) 24%,transparent);box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--cp) 55%,transparent);outline:none}
 .fact-copy:active{transform:scale(.94)}
@@ -1191,7 +1191,7 @@ cursor:pointer;user-select:none;display:flex;align-items:center;gap:4px}
 .patch-size-bar{display:flex;align-items:center;gap:8px;margin-bottom:12px;padding-bottom:8px;border-bottom:1px solid var(--border)}
 .patch-size-bar .field{flex-direction:row;align-items:center;gap:8px}
 .patch-size-bar .field label{white-space:nowrap}
-.drag-handle{display:inline-flex;cursor:grab;opacity:.45;margin-right:6px;vertical-align:middle;touch-action:none}
+.drag-handle{display:inline-flex;cursor:grab;opacity:.6;margin-right:6px;vertical-align:middle;touch-action:none}
 .drag-handle:hover{opacity:.7}
 .drag-handle:active{cursor:grabbing;opacity:1}
 .custom-series-patch-drag{width:26px;height:30px;padding:0;border:0;background:transparent;color:var(--text-secondary);font-size:18px;line-height:1;cursor:grab;touch-action:none;border-radius:var(--r-sm)}

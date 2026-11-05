@@ -1936,7 +1936,7 @@ async function checkPing(){
   setUiOffline(false);
   pgAnnounceStatus('connection','online','Connection to PGenerator+ restored.');
   if(wasOffline){
-   document.getElementById('statusDot').style.background='#4caf50';
+   document.getElementById('statusDot').style.background='var(--status-success)';
    document.getElementById('statusText').textContent='Connected';
    document.getElementById('statusWrap').title='Connection to PGenerator+ restored';
    setPowerButtonState(true);
@@ -1980,7 +1980,7 @@ async function checkPing(){
  _pingLatencies.push(latency);
  if(_pingLatencies.length>3) _pingLatencies.shift();
  const slow=_pingLatencies.length===3&&Math.min.apply(null,_pingLatencies)>1000;
- document.getElementById('statusDot').style.background=slow?'var(--orange)':'#4caf50';
+ document.getElementById('statusDot').style.background=slow?'var(--orange)':'var(--status-success)';
  document.getElementById('statusText').textContent=slow?'Connected \u00b7 slow':'Connected';
  document.getElementById('statusWrap').title=(slow?'Connected, but PGenerator+ answers slowly':'Connected to PGenerator+')+' \u00b7 response time '+latency+' ms';
  setPowerButtonState(true);
@@ -2071,7 +2071,7 @@ async function loadInfo(quiet){
   const ws=document.getElementById('wifiStatus');
   if(ws.dataset.wifiKey!=='off'){
    ws.dataset.wifiKey='off';
-   ws.innerHTML='<div style="font-size:.8rem;color:var(--text2)">Not connected</div>';
+   ws.innerHTML='<div style="font-size:var(--fs-sm);color:var(--text2)">Not connected</div>';
   }
   if(wifiDisconnectBtn) wifiDisconnectBtn.style.display='none';
   const wifiForgetBtn=document.getElementById('wifiForgetBtn');
@@ -2082,7 +2082,7 @@ async function loadInfo(quiet){
  const calDot=document.getElementById('calDot');
  const calText=document.getElementById('calStatusText');
  if(info.calibration && info.calibration.connected){
-  calDot.style.background='#4caf50';
+  calDot.style.background='var(--status-success)';
   calText.style.color='';
   calText.textContent=(info.calibration.software||'Calibration software')+' connected';
   calWrap.dataset.pgBaseTitle=(info.calibration.software||'Calibration software')+' connected from '+info.calibration.ip+pgCalibrationSessionsText(info.calibration);
@@ -2277,7 +2277,7 @@ function pgShowDaemonNotice(notice){
  titleText.id='pgDaemonNoticeTitle';
  title.appendChild(icon);title.appendChild(titleText);
  const body=document.createElement('div');
- body.style.cssText='font-size:.9rem;color:var(--text2,#a8b0c0);line-height:1.55;margin-bottom:18px;white-space:pre-line';
+ body.style.cssText='font-size:var(--fs-md);color:var(--text2,#a8b0c0);line-height:1.55;margin-bottom:18px;white-space:pre-line';
  body.id='pgDaemonNoticeBody';
  body.textContent=String(notice.text||'');
  const actions=document.createElement('div');
@@ -2890,7 +2890,7 @@ function diagPromptVideoRange(){
   label.textContent='Frame range for extracted frames:';
   const sel=document.createElement('select');
   sel.className='inline-select';
-  sel.style.cssText='font-size:.6875rem;max-width:unset';
+  sel.style.cssText='font-size:var(--fs-2xs);max-width:unset';
   sel.innerHTML='<option value="limited">Limited (16-235, recommended)</option><option value="full">Full (0-255)</option>';
   sel.value=pref;
   const btn=document.createElement('button');
@@ -4409,7 +4409,7 @@ async function cecScan(){
    const v=String(vendor||'').toLowerCase().replace(/^0x/,'');
    return v==='00e091'?'LG':'';
   };
-  let html='<table style="width:100%;border-collapse:collapse;font-size:.8rem">';
+  let html='<table style="width:100%;border-collapse:collapse;font-size:var(--fs-sm)">';
   html+='<tr style="border-bottom:1px solid var(--border)"><th style="text-align:left;padding:2px 6px">Device</th><th style="text-align:left;padding:2px 6px">Type</th><th style="text-align:left;padding:2px 6px">Address</th><th style="text-align:left;padding:2px 6px">Vendor</th><th style="text-align:left;padding:2px 6px">Power</th></tr>';
   devs.forEach(d=>{
    const vendor=cecVendorName(d.vendor)||d.vendor||'';
@@ -4417,7 +4417,7 @@ async function cecScan(){
    const name=(cleanName.length>1)?cleanName:(vendor==='LG'&&d.type===0?'LG TV':('Device '+d.addr));
    const type=typeNames[d.type]||(d.type!==undefined?'Type '+d.type:'');
    const pwr=pwrNames[d.power]||(d.power!==undefined?''+d.power:'?');
-   const pwrColor=d.power===0?'#4caf50':d.power===1?'var(--orange)':'var(--text2)';
+   const pwrColor=d.power===0?'var(--status-success)':d.power===1?'var(--orange)':'var(--text2)';
    html+='<tr style="border-bottom:1px solid var(--border)">';
    // Names and addresses come from the devices on the HDMI bus.
    html+='<td style="padding:2px 6px">'+pgHtmlEsc(name)+'</td>';
@@ -4446,7 +4446,7 @@ function renderCecStatus(tvPower,physAddr){
  if(!el) return;
  if(physAddr) cecLastPhysAddr=physAddr;
  const pwr=tvPower||'unknown';
- const pwrColors={on:'#4caf50',standby:'var(--orange)','powering-on':'var(--orange)','powering-off':'var(--orange)',unknown:'var(--text2)'};
+ const pwrColors={on:pgThemeColor('--status-success','#4caf50'),standby:'var(--orange)','powering-on':'var(--orange)','powering-off':'var(--orange)',unknown:'var(--text2)'};
  const pwrLabels={on:'On',standby:'Standby','powering-on':'Waking Up','powering-off':'Going to Standby',unknown:'Unknown'};
  const c=pwrColors[pwr]||'var(--text2)';
  const lbl=pwrLabels[pwr]||pwr;
@@ -4822,6 +4822,11 @@ function pgThemeColor(token,fallback){
   const value=getComputedStyle(document.documentElement).getPropertyValue(token).trim();
   return value||fallback;
  }catch(e){ return fallback; }
+}
+// Canvas cannot read var(): chart text takes the page's font and the 12 px floor.
+function pgChartFont(px,weight){
+ const family=getComputedStyle(document.body).fontFamily||'sans-serif';
+ return (weight?weight+' ':'')+Math.max(12,px)+'px '+family;
 }
 function pgUpdateThemeControls(){
  document.querySelectorAll('.theme-switch-btn[data-theme-mode]').forEach(btn=>{
@@ -6955,7 +6960,7 @@ function pgPrompt(opts){
   input.value=String(o.value||'');
   input.style.cssText='width:100%;box-sizing:border-box;margin-bottom:6px';
   const hint=document.createElement('div');
-  hint.style.cssText='font-size:.75rem;color:var(--text2,#a8b0c0);margin-bottom:14px';
+  hint.style.cssText='font-size:var(--fs-xs);color:var(--text2,#a8b0c0);margin-bottom:14px';
   hint.textContent=String(o.hint||'');
   if(o.hint){ hint.id='pgPromptHint'; input.setAttribute('aria-describedby','pgPromptHint'); }
   const row=document.createElement('div');
@@ -12278,7 +12283,7 @@ function meterContrastTextColor(css){
  const m=String(css||'').match(/\d+/g)||[];
  if(m.length<3) return '#222';
  const lum=0.299*parseInt(m[0],10)+0.587*parseInt(m[1],10)+0.114*parseInt(m[2],10);
- return lum<145?'#eee':'#222';
+ return lum<120?'#fff':'#111';
 }
 
 // CIE 1931 spectral locus xy coordinates (5nm intervals, 380-700nm)
@@ -17326,9 +17331,11 @@ function meterLuminanceContrastText(readings){
 function drawGammaContrastLabel(ctx,chart,readings){
  if(!ctx||!chart) return;
  ctx.fillStyle=pgThemeColor('--chart-annotation','#aaa');
- ctx.font='11px sans-serif';
+ ctx.font=pgChartFont(11);
  ctx.textAlign='right';
- ctx.fillText('Contrast Ratio: '+meterLuminanceContrastText(readings||[]),ctx.w-chart.pad.r,chart.pad.t+14);
+ const contrastText='Contrast Ratio: '+meterLuminanceContrastText(readings||[]);
+ chart.contrastW=ctx.measureText(contrastText).width;
+ ctx.fillText(contrastText,ctx.w-chart.pad.r,chart.pad.t+14);
 }
 
 // Convert the meterLiveRgbData() output into a uniform "delta from target"
@@ -17340,15 +17347,15 @@ function meterRgbDeltasForLive(reading,bal,includeDeltaE){
  const isDelta=(bal.mode==='delta');
  const center=isDelta?0:100;
  const entries=[
-  {key:'R',label:'R',color:'#f44',v:(bal.R!=null)?bal.R-center:null,labelV:(bal.R!=null)?(isDelta?(bal.R-center):bal.R):null,showPlus:isDelta},
-  {key:'G',label:'G',color:'#4caf50',v:(bal.G!=null)?bal.G-center:null,labelV:(bal.G!=null)?(isDelta?(bal.G-center):bal.G):null,showPlus:isDelta},
-  {key:'B',label:'B',color:'#42a5f5',v:(bal.B!=null)?bal.B-center:null,labelV:(bal.B!=null)?(isDelta?(bal.B-center):bal.B):null,showPlus:isDelta}
+  {key:'R',label:'R',color:pgThemeColor('--chart-rgb-r','#f44'),v:(bal.R!=null)?bal.R-center:null,labelV:(bal.R!=null)?(isDelta?(bal.R-center):bal.R):null,showPlus:isDelta},
+  {key:'G',label:'G',color:pgThemeColor('--chart-rgb-g','#4caf50'),v:(bal.G!=null)?bal.G-center:null,labelV:(bal.G!=null)?(isDelta?(bal.G-center):bal.G):null,showPlus:isDelta},
+  {key:'B',label:'B',color:pgThemeColor('--chart-rgb-b','#42a5f5'),v:(bal.B!=null)?bal.B-center:null,labelV:(bal.B!=null)?(isDelta?(bal.B-center):bal.B):null,showPlus:isDelta}
  ];
  if(includeDeltaE&&reading){
   let de=null;
   try{ de=meterGreyDeltaResult(reading,meterGreyRefMode(),meterDeltaEForm(),meterGrayWorldWeight()).value; }catch(e){}
-  if(Number.isFinite(de)) entries.push({key:'DE',label:'ΔE',color:de<1?'#4caf50':de<3?'#ff9800':'#ff4444',v:de,labelV:de,showPlus:false,unit:'',decimals:2});
-  else entries.push({key:'DE',label:'ΔE',color:'#888',v:null,labelV:null,showPlus:false,unit:'',decimals:2});
+  if(Number.isFinite(de)) entries.push({key:'DE',label:'ΔE',color:de<1?pgThemeColor('--status-success','#4caf50'):de<3?pgThemeColor('--status-warning','#ff9800'):pgThemeColor('--status-error','#f44'),v:de,labelV:de,showPlus:false,unit:'',decimals:2});
+  else entries.push({key:'DE',label:'ΔE',color:pgThemeColor('--text-muted','#888'),v:null,labelV:null,showPlus:false,unit:'',decimals:2});
  }
  return {title:'RGB Δ',unit:'%',entries,decimals:2,minHalfRange:5,scaleHeadroom:1.6};
 }
@@ -17435,7 +17442,7 @@ function drawDeltaBarsVertical(canvasId,spec){
  const W=rect.width,H=rect.height;
  ctx.fillStyle=pgThemeColor('--chart-bg','#0d0d15');ctx.fillRect(0,0,W,H);
  if(!spec||!spec.entries||!spec.entries.length){
-  ctx.fillStyle='#555';ctx.font='10px sans-serif';ctx.textAlign='center';
+  ctx.fillStyle='#555';ctx.font=pgChartFont(10);ctx.textAlign='center';
   ctx.fillText('--',W/2,H/2);
   return;
  }
@@ -17476,7 +17483,7 @@ function drawDeltaBarsVertical(canvasId,spec){
   ctx.beginPath();ctx.moveTo(cxPx,padTop);ctx.lineTo(cxPx,H-padBot);ctx.stroke();
   spec.entries.forEach((e,i)=>{
    const cy=padTop+rowH*i+rowH/2;
-   ctx.fillStyle=labelColor;ctx.font='bold 11px sans-serif';ctx.textAlign='left';ctx.textBaseline='middle';
+   ctx.fillStyle=labelColor;ctx.font=pgChartFont(11,'bold');ctx.textAlign='left';ctx.textBaseline='middle';
    ctx.fillText(e.label,padL,cy);
    if(e.v==null){
     ctx.textAlign='right';
@@ -17494,7 +17501,7 @@ function drawDeltaBarsVertical(canvasId,spec){
    const dec=(e.decimals!=null)?e.decimals:((spec.decimals!=null)?spec.decimals:1);
    const labelVal=(e.labelV!=null)?e.labelV:e.v;
    const prefix=(e.showPlus===false)?'':(labelVal>0?'+':(labelVal<0?'':''));
-   ctx.fillStyle=rgbPercentageBars?'#fff':labelColor;ctx.font=(rgbPercentageBars?'bold 11px':'10px')+' sans-serif';ctx.textAlign='right';
+   ctx.fillStyle=rgbPercentageBars?'#fff':labelColor;ctx.font=pgChartFont(rgbPercentageBars?11:10,rgbPercentageBars?'bold':'');ctx.textAlign='right';
    ctx.fillText(prefix+labelVal.toFixed(dec),W-padR,cy);
   });
   return;
@@ -17524,13 +17531,13 @@ function drawDeltaBarsVertical(canvasId,spec){
    roundedRect(trackLeft,padTop,trackW,plotH,6);ctx.fill();
    ctx.fillStyle=pgThemeColor('--meter-bar-zero','rgba(255,255,255,.28)');
    ctx.fillRect(trackLeft+6,Math.round(cy),trackW-12,1);
-   ctx.fillStyle=e.color;ctx.font='bold 11px sans-serif';ctx.textAlign='center';ctx.textBaseline='alphabetic';
+   ctx.fillStyle=e.color;ctx.font=pgChartFont(11,'bold');ctx.textAlign='center';ctx.textBaseline='alphabetic';
    ctx.fillText(e.label,Math.round(cx),14);
   }
   if(e.v==null){
-   ctx.fillStyle='#555';ctx.font='10px sans-serif';ctx.textAlign='center';
+   ctx.fillStyle='#555';ctx.font=pgChartFont(10);ctx.textAlign='center';
    ctx.fillText('--',Math.round(cx),themedColorBars?H-6:cyPx+4);
-   if(!themedColorBars){ctx.fillStyle=labelColor;ctx.font='bold 11px sans-serif';ctx.fillText(e.label,Math.round(cx),H-padBot+15);}
+   if(!themedColorBars){ctx.fillStyle=labelColor;ctx.font=pgChartFont(11,'bold');ctx.fillText(e.label,Math.round(cx),H-padBot+15);}
    return;
   }
   const yV=valToY(e.v);
@@ -17546,8 +17553,8 @@ function drawDeltaBarsVertical(canvasId,spec){
   ctx.restore();
   // Themed color-series and 2-point RGB values use the same fixed footer row
   // as greyscale RGB balance instead of following the moving bar endpoint.
-  if(!themedColorBars){ctx.fillStyle=labelColor;ctx.font='bold 11px sans-serif';ctx.textAlign='center';ctx.fillText(e.label,Math.round(cx),H-padBot+15);}
-  ctx.fillStyle=rgbPercentageBars?'#fff':labelColor;ctx.font=(rgbPercentageBars?'bold 11px':'10px')+' sans-serif';ctx.textAlign='center';
+  if(!themedColorBars){ctx.fillStyle=labelColor;ctx.font=pgChartFont(11,'bold');ctx.textAlign='center';ctx.fillText(e.label,Math.round(cx),H-padBot+15);}
+  ctx.fillStyle=rgbPercentageBars?'#fff':labelColor;ctx.font=pgChartFont(rgbPercentageBars?11:10,rgbPercentageBars?'bold':'');ctx.textAlign='center';
   const dec=(e.decimals!=null)?e.decimals:((spec.decimals!=null)?spec.decimals:1);
   const labelVal=(e.labelV!=null)?e.labelV:e.v;
   const prefix=(e.showPlus===false)?'':(labelVal>0?'+':(labelVal<0?'':''));
@@ -17578,7 +17585,7 @@ function drawRGBBars(bal){
  const W=rect.width,H=rect.height;
  ctx.fillStyle='#1d1d29';ctx.fillRect(0,0,W,H);
  if(!bal||bal.R==null||bal.G==null||bal.B==null){
-  ctx.fillStyle='#555';ctx.font='10px sans-serif';ctx.textAlign='center';
+  ctx.fillStyle='#555';ctx.font=pgChartFont(10);ctx.textAlign='center';
   ctx.fillText('--',W/2,H/2);
   return;
  }
@@ -17591,17 +17598,17 @@ function drawRGBBars(bal){
  const barW=barR-barL;
  function valToX(v){return barL+(v-lo)/(hi-lo)*barW;}
  // Gridlines at 5-unit intervals
- ctx.font='8px sans-serif';ctx.textAlign='center';ctx.fillStyle='#666';
+ ctx.font=pgChartFont(8);ctx.textAlign='center';ctx.fillStyle='#666';
  for(let g=Math.ceil(lo/5)*5;g<=hi;g+=5){
   const x=valToX(g);
-  ctx.strokeStyle=g===center?'#888':'#2a2a3a';
+  ctx.strokeStyle=g===center?pgThemeColor('--text-muted','#888'):'#2a2a3a';
   ctx.lineWidth=g===center?1.5:0.5;
   ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,H);ctx.stroke();
   ctx.fillStyle=g===center?'#aaa':'#555';
   ctx.fillText(g,x,H-1);
  }
  // Bars
- const channels=[{ch:'R',color:'#f44',v:bal.R},{ch:'G',color:'#4caf50',v:bal.G},{ch:'B',color:'#42a5f5',v:bal.B}];
+ const channels=[{ch:'R',color:pgThemeColor('--chart-rgb-r','#f44'),v:bal.R},{ch:'G',color:pgThemeColor('--chart-rgb-g','#4caf50'),v:bal.G},{ch:'B',color:pgThemeColor('--chart-rgb-b','#42a5f5'),v:bal.B}];
  const barH=Math.min(12,(H-16)/3-2);
  const topPad=2;
  channels.forEach((c,i)=>{
@@ -17617,10 +17624,10 @@ function drawRGBBars(bal){
   // Dot at value
   ctx.beginPath();ctx.arc(xVal,cy,3,0,Math.PI*2);ctx.fillStyle=c.color;ctx.fill();
   // Channel label
-  ctx.fillStyle=c.color;ctx.font='bold 9px sans-serif';ctx.textAlign='right';
+  ctx.fillStyle=c.color;ctx.font=pgChartFont(9,'bold');ctx.textAlign='right';
   ctx.fillText(c.ch,labelW,cy+3);
   // Value label at right
-  ctx.fillStyle=pgThemeColor('--chart-annotation','#ccc');ctx.font='9px sans-serif';ctx.textAlign='left';
+  ctx.fillStyle=pgThemeColor('--chart-annotation','#ccc');ctx.font=pgChartFont(9);ctx.textAlign='left';
   const prefix=isDelta&&c.v>0?'+':'';
   ctx.fillText(prefix+c.v.toFixed(2)+'%',barR+4,cy+3);
  });

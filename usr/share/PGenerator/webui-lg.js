@@ -734,7 +734,7 @@ function lgDismissDetectedPrompt(){
 		  const ip=String(d.ip||'');
 		  const label=String(d.label||((d.name||d.model_name||'LG WebOS TV')+' ('+ip+')'))+(d.saved?' — saved pairing':'');
 		  html+='<option value="'+lgEscapeHtml(ip)+'" '+(idx===0?'selected':'')+'>'+lgEscapeHtml(label)+'</option>';
-		  cardHtml+='<button type="button" data-lg-tv-ip="'+lgEscapeHtml(ip)+'" role="option" aria-selected="'+(idx===0?'true':'false')+'" class="lg-device-item '+(idx===0?'selected':'')+'" onclick="lgCardDeviceClicked(\''+lgEscapeHtml(ip)+'\')" style="display:flex;align-items:center;width:100%;height:30px;min-height:30px;padding:0 10px;text-align:left;background:'+(idx===0?'#10131d':'transparent')+';box-shadow:'+(idx===0?'inset 3px 0 0 var(--green)':'none')+';border:0;border-bottom:1px solid var(--border);color:var(--text);font-size:.82rem;line-height:1.15;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer">'+lgEscapeHtml(label)+'</button>';
+		  cardHtml+='<button type="button" data-lg-tv-ip="'+lgEscapeHtml(ip)+'" role="option" aria-selected="'+(idx===0?'true':'false')+'" class="lg-device-item '+(idx===0?'selected':'')+'" onclick="lgCardDeviceClicked(\''+lgEscapeHtml(ip)+'\')" style="display:flex;align-items:center;width:100%;height:30px;min-height:30px;padding:0 10px;text-align:left;background:'+(idx===0?'#10131d':'transparent')+';box-shadow:'+(idx===0?'inset 3px 0 0 var(--green)':'none')+';border:0;border-bottom:1px solid var(--border);color:var(--text);font-size:var(--fs-sm);line-height:1.15;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer">'+lgEscapeHtml(label)+'</button>';
 			 });
 			 if(promptSelect) promptSelect.innerHTML=html;
 			 if(cardSelect) cardSelect.innerHTML=cardHtml;
@@ -2011,7 +2011,7 @@ function lgRenderCalHistoryInto(el){
     +(it.picture_mode?(' · '+it.picture_mode):'')
     +de+'</small>'+note+'</div>'
     +'<div class="lg-cal-hist-actions">'
-    +(canUp?('<button type="button" class="btn btn-sm btn-primary" onclick="lgCalHistoryReupload(\''+String(it.id).replace(/'/g,"\\'")+'\')">Reupload</button>'):'')
+    +(canUp?('<button type="button" class="btn btn-sm btn-secondary" onclick="lgCalHistoryReupload(\''+String(it.id).replace(/'/g,"\\'")+'\')">Reupload</button>'):'')
     +((it.download||it.type==='1d'||(it.type==='3d'&&it.has_cube))?('<button type="button" class="btn btn-sm btn-secondary" onclick="lgCalHistoryDownload(\''+String(it.id).replace(/'/g,"\\'")+'\')">Download</button>'):'')
     +'</div></div>';
   });

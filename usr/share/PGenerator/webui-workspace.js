@@ -451,7 +451,7 @@ async function meterLoadSolvedLutList(){
     +'<span class="meter-solved-lut-name-main">'+esc(name)+'</span><span class="meter-solved-lut-name-date">'+esc(when)+'</span></button>'
     +'<button class="btn btn-sm btn-secondary" title="Download the .cube file" onclick="meterDownloadSolvedLut(\''+escJs(name)+'\')">.cube</button>'
     +'<button class="btn btn-sm btn-secondary" title="Convert and download as Autodesk/Kodak .3dl (Lustre, Flame)" onclick="meterDownloadSolvedLutAs3dl(\''+escJs(name)+'\')">.3dl</button>'
-    +'<button class="btn btn-sm btn-danger-quiet" title="Delete this LUT (and its .bin/.json companions) from the history" onclick="meterDeleteSolvedLut(\''+escJs(name)+'\')">&#10005;</button>'
+    +'<button class="btn btn-sm btn-danger-quiet btn-icon-sq" title="Delete this LUT (and its .bin/.json companions) from the history" onclick="meterDeleteSolvedLut(\''+escJs(name)+'\')">&#10005;</button>'
    +'</div>';
   }).join('');
   return luts;
@@ -1578,7 +1578,7 @@ function meterRenderCustomSeriesEditor(){
    cells+='<td style="padding:6px"><input type="number" min="0" max="1" step="0.0001" placeholder="auto" title="Explicit target chromaticity y. Blank = derive from the patch codes." data-cs-row="'+i+'" data-cs-field="target_y" value="'+(p.target_y!=null?p.target_y:'')+'" oninput="meterCustomSeriesEditorSync(this)" style="'+inputStyle+'"></td>';
   }
   if(isHdr) cells+='<td style="padding:6px"><input type="number" min="0" max="10000" step="0.1" placeholder="auto" data-cs-row="'+i+'" data-cs-field="target_nits" value="'+(p.target_nits!=null?p.target_nits:'')+'" oninput="meterCustomSeriesEditorSync(this)" style="'+inputStyle+'"></td>';
-  cells+='<td style="padding:6px"><button class="btn btn-sm btn-danger-quiet" onclick="meterCustomSeriesEditorRemoveRow('+i+')" title="Remove patch">&#10005;</button></td>';
+  cells+='<td style="padding:6px"><button class="btn btn-sm btn-danger-quiet btn-icon-sq" onclick="meterCustomSeriesEditorRemoveRow('+i+')" title="Remove patch">&#10005;</button></td>';
   return '<tr data-cs-row-index="'+i+'" class="'+(meterCustomSeriesPatchDrag&&meterCustomSeriesPatchDrag.index===i?'is-patch-dragging':'')+'" style="border-bottom:1px solid var(--border)">'+cells+'</tr>';
  }).join('');
 }
@@ -14765,11 +14765,34 @@ function drawRGBChart(gs,allSteps,readingMap){
   if(lastX>=chart.view.x0&&lastX<=chart.view.x1){
    ctx.font='11px sans-serif';ctx.textAlign='left';
    const xOff=chart.toX(lastX)+6;
-   ctx.fillStyle=pgThemeColor('--chart-rgb-r','#f44');ctx.fillText('R',xOff,chart.toY(rPts[last][1])+3);
-   ctx.fillStyle=pgThemeColor('--chart-rgb-g','#4caf50');ctx.fillText('G',xOff,chart.toY(gPts[last][1])+3);
-   ctx.fillStyle=pgThemeColor('--chart-rgb-b','#42a5f5');ctx.fillText('B',xOff,chart.toY(bPts[last][1])+3);
+   // The traces end close together: spread the labels, not the traces.
+   const ends=[['R','--chart-rgb-r','#f44',rPts],['G','--chart-rgb-g','#4caf50',gPts],['B','--chart-rgb-b','#42a5f5',bPts]]
+    .map(e=>({t:e[0],c:pgThemeColor(e[1],e[2]),y:chart.toY(e[3][last][1])+3})).sort((a,b)=>a.y-b.y);
+   const rawMid=(ends[0].y+ends[1].y+ends[2].y)/3;
+   for(let i=1;i<ends.length;i++) ends[i].y=Math.max(ends[i].y,ends[i-1].y+10);
+   const shift=rawMid-(ends[0].y+ends[1].y+ends[2].y)/3;
+   ends.forEach(e=>{ctx.fillStyle=e.c;ctx.fillText(e.t,xOff,e.y+shift);});
   }
  }
+}
+
+// Which bars keep a value label. With room for all of them every bar does; on a
+// narrow chart the tallest win, and a label never sits on a taller neighbour,
+// runs off the plot or touches another label.
+function meterDeltaBarLabels(xSteps,deMap,pitch){
+ const keep=new Set(),n=xSteps.length;
+ const val=(i)=>deMap[xSteps[i].ire];
+ const bars=[];
+ for(let i=0;i<n;i++) if(val(i)!=null) bars.push(i);
+ if(pitch>=26){bars.forEach(i=>keep.add(i));return keep;}
+ const half=Math.ceil(13/pitch),gap=Math.ceil(28/pitch);
+ bars.sort((a,b)=>val(b)-val(a)).forEach(i=>{
+  if(i<half||i>=n-half) return;
+  for(let j=i-half;j<=i+half;j++) if(val(j)>val(i)) return;
+  for(const k of keep) if(Math.abs(k-i)<gap) return;
+  keep.add(i);
+ });
+ return keep;
 }
 
 function drawEOTFChart(gs,allSteps,readingMap){
@@ -15045,6 +15068,7 @@ function drawDeltaEChart(gs,allSteps,readingMap,rawGs){
  const barW=Math.max(8,Math.min(30,(chart.dw||chart.w)/(n*1.5)));
  ctx.save();
  ctx.beginPath();ctx.rect(chart.pad.l,chart.pad.t,chart.w,chart.h);ctx.clip();
+ const deLabels=meterDeltaBarLabels(xSteps,deMap,Math.max(1,(chart.dw||chart.w)/n));
  xSteps.forEach((step,i)=>{
   const cx=chart.toX(meterGreyCategoryChartX(xSteps,i));
   const dE=deMap[step.ire];
@@ -15088,7 +15112,7 @@ function drawDeltaEChart(gs,allSteps,readingMap,rawGs){
    }
    ctx.fillStyle=pgThemeColor('--chart-annotation','#ccc');ctx.font='11px sans-serif';
    ctx.textAlign='center';
-   if(i%Math.ceil(26/Math.max(1,(chart.dw||chart.w)/n))===0) ctx.fillText(dE.toFixed(2),cx,y-4);
+   if(deLabels.has(i)) ctx.fillText(dE.toFixed(2),cx,y-4);
   } else {
    // Placeholder: thin grey line
    ctx.fillStyle='#33333380';
@@ -15168,6 +15192,7 @@ function drawDeltaE2000Chart(gs,allSteps,readingMap){
  if(1/yMax<=1) drawDashedLine(ctx,chart,[[0,1/yMax],[1,1/yMax]],pgThemeColor('--status-success','#4caf50')+'80');
  if(3/yMax<=1) drawDashedLine(ctx,chart,[[0,3/yMax],[1,3/yMax]],pgThemeColor('--status-warning','#ff9800')+'80');
  const barW=Math.max(8,Math.min(30,(chart.dw||chart.w)/(n*1.5)));
+ const deLabels=meterDeltaBarLabels(xSteps,deMap,Math.max(1,(chart.dw||chart.w)/n));
  xSteps.forEach((step,i)=>{
   const cx=chart.toX(meterGreyCategoryChartX(xSteps,i));
   const dE=deMap[step.ire];
@@ -15178,7 +15203,7 @@ function drawDeltaE2000Chart(gs,allSteps,readingMap){
    ctx.fillRect(cx-barW/2,y,barW,Math.max(2,barH*chart.h));
    ctx.fillStyle=pgThemeColor('--chart-annotation','#ccc');ctx.font='11px sans-serif';
    ctx.textAlign='center';
-   if(i%Math.ceil(26/Math.max(1,(chart.dw||chart.w)/n))===0) ctx.fillText(dE.toFixed(2),cx,y-4);
+   if(deLabels.has(i)) ctx.fillText(dE.toFixed(2),cx,y-4);
   } else {
    ctx.fillStyle='#33333380';
    ctx.fillRect(cx-1,chart.pad.t+chart.h-2,2,2);
@@ -19458,7 +19483,7 @@ async function loadCustomCcssList(){
    : customCcssFile===f;
   return '<div style="display:flex;align-items:center;gap:6px;margin-bottom:3px">'
   +'<button class="btn btn-sm '+(active?'btn-success':'btn-secondary')+'" data-ccss-filename="'+ccssPreviewEscapeHtml(f)+'" style="flex:1;font-size:.78rem;padding:2px 6px;text-align:left" onclick="selectCustomCcss(\''+f+'\')"><span data-ccss-selected-mark>'+(active?'\u2713 ':'')+'</span>['+format+'] '+label+'</button>'
-  +'<button class="btn btn-sm btn-danger-quiet" style="font-size:.78rem;padding:2px 6px" onclick="deleteCustomCcss(\''+f+'\')">\u2715</button></div>';
+  +'<button class="btn btn-sm btn-danger-quiet btn-icon-sq" onclick="deleteCustomCcss(\''+f+'\')">\u2715</button></div>';
  }).join('');
 }
 

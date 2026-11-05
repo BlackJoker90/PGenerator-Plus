@@ -17,7 +17,7 @@ body.layout-desktop #meterIccWorkspaceCard .meter-icc-dialog-title{display:none}
 .meter-icc-avg-deviation-field{grid-column:1}
 .meter-icc-calibration-field{grid-column:2}
 .meter-icc-profile-panel>#meterIccFormatAdvanced{grid-column:1/-1}
-.meter-icc-help{display:inline-flex;align-items:center;justify-content:center;width:15px;height:15px;margin-left:5px;border-radius:50%;border:1px solid var(--border);background:rgba(91,127,255,.12);color:var(--text2);font-size:.6875rem;font-weight:700;line-height:1;cursor:help;vertical-align:middle;position:relative;flex:0 0 auto;user-select:none}
+.meter-icc-help{display:inline-flex;align-items:center;justify-content:center;width:15px;height:15px;margin-left:5px;border-radius:50%;border:1px solid var(--border);color:var(--text2);font-size:var(--fs-2xs);line-height:1;cursor:help;vertical-align:middle;position:relative;flex:0 0 auto;user-select:none}
 .meter-icc-help:hover,.meter-icc-help:focus{color:var(--text);border-color:var(--accent);outline:none}
 .meter-icc-help[data-tip]:not([data-tip=""]):hover::after,.meter-icc-help[data-tip]:not([data-tip=""]):focus::after{content:attr(data-tip);position:absolute;left:50%;bottom:calc(100% + 8px);transform:translateX(-50%);z-index:10030;width:max-content;max-width:min(360px,80vw);box-sizing:border-box;padding:8px 10px;border:1px solid var(--border);border-radius:6px;background:var(--panel);color:var(--text);font-size:.7rem;font-weight:400;line-height:1.4;white-space:normal;text-transform:none;letter-spacing:0;box-shadow:0 5px 18px rgba(0,0,0,.35);pointer-events:none}
 .meter-icc-review-panel{grid-column:1/-1}

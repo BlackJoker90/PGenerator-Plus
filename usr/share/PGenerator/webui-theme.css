@@ -29,7 +29,8 @@ button,input,select,textarea{font-family:inherit}
 --status-success:#217a36;--status-warning:#a55300;--status-error:#c62828;--status-hdmi:#b51d1d;--status-dv:#7044bd;--status-calibration:#315dd8;--badge-neutral:#d5dce7;
 --accent-fill:#315dd8;--accent-fill2:#6445d5;--success-fill:#217a36;--danger-fill:#c62828;--warning-text:#8f4700;
 --shadow-soft:rgba(18,29,45,.1);--field-border:color-mix(in srgb,var(--text-primary) 54%,var(--surface-card));--field-border-hover:color-mix(in srgb,var(--text-primary) 72%,var(--surface-card));
---control-disabled-bg:color-mix(in srgb,var(--text-primary) 8%,var(--surface-card));--control-disabled-text:color-mix(in srgb,var(--text-primary) 58%,var(--surface-card))}
+--control-disabled-bg:color-mix(in srgb,var(--text-primary) 8%,var(--surface-card));--control-disabled-text:color-mix(in srgb,var(--text-primary) 58%,var(--surface-card));
+--tile-bg:color-mix(in srgb,var(--surface-inset) 60%,var(--surface-card));--tile-border:color-mix(in srgb,var(--divider) 75%,transparent)}
 /* Palettes: colour overrides over the dark or light base theme (data-palette). */
 [data-palette="oled"]{--bg:#000;--card:#0b0b0b;--panel:#0b0b0b;--border:#242424;--divider:#242424;
 --surface-page:#000;--surface-header:#050505;--surface-sidebar:#000;--surface-card:#0b0b0b;--surface-drawer:#050505;--surface-modal:#0b0b0b;--surface-popover:#121212;--surface-inset:#050505;--surface-field:#000;
@@ -735,7 +736,8 @@ font-weight:600;transition:background-color .15s ease-out,color .15s ease-out,bo
 .btn-warning:hover{background:color-mix(in srgb,var(--warning-text) 10%,transparent)}
 /* Secondary destructive action next to neutral buttons: red outline; the filled
    .btn-danger stays reserved for confirm dialogs. */
-.btn-danger-quiet{background:transparent;color:var(--red);box-shadow:inset 0 0 0 1px currentColor}
+.btn-danger-quiet{background:transparent;color:var(--red);box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--status-error) 45%,var(--border))}
+.btn-icon-sq{display:inline-flex;align-items:center;justify-content:center;min-width:var(--btn-h-sm);aspect-ratio:1;padding:0}
 .btn-danger-quiet:hover{background:color-mix(in srgb,var(--red) 10%,transparent)}
 .btn-push-end{margin-left:auto}
 /* Action button inside a card heading, pushed to the end before the collapse chevron. */
@@ -750,7 +752,8 @@ font-weight:600;transition:background-color .15s ease-out,color .15s ease-out,bo
 .btn:focus-visible,.icon-btn:focus-visible{outline:2px solid var(--focus-ring);outline-offset:2px}
 .btn.btn:disabled,.btn.btn:disabled:hover{cursor:not-allowed;opacity:1;background:var(--control-disabled-bg);color:var(--control-disabled-text);box-shadow:none;filter:none;transform:none}
 /* Press feedback: the button gives a little under the pointer. */
-.btn:active:not(:disabled){transform:scale(.97);filter:brightness(.78)}
+.btn:active:not(:disabled){transform:scale(.97);filter:brightness(.86)}
+.btn-secondary:active:not(:disabled){filter:none;background:color-mix(in srgb,var(--text-primary) 16%,var(--neutral-fill))}
 .btn-custom-series{border:1px dashed var(--accent)}
 .chart-expand-btn{position:absolute;right:6px;bottom:6px;width:24px;height:24px;padding:0;display:flex;align-items:center;justify-content:center;font-size:14px;line-height:1;background:rgba(20,24,34,.82);border:1px solid var(--border);border-radius:var(--r-xs);color:var(--text2);cursor:pointer;z-index:4}
 .chart-expand-btn:hover{color:var(--text);border-color:var(--accent)}
@@ -1307,7 +1310,7 @@ body.layout-tablet .site-footer-links{margin-right:-12px}
 /* Desktop workspace layout. Tablet remains the baseline; these rules only
    apply when the layout controller has confirmed there is room for a sidebar. */
 .layout-switch{display:inline-flex;align-items:center;padding:2px;background:var(--surface-inset);border:1px solid var(--border);border-radius:var(--r-sm)}
-.layout-switch-btn{border:0;background:transparent;color:var(--text2);padding:4px 8px;border-radius:var(--r-sm);font-size:var(--fs-2xs);font-weight:600;cursor:pointer;line-height:1.2}
+.layout-switch-btn{border:0;background:transparent;color:var(--text2);min-height:calc(var(--control-h) - 6px);padding:4px 10px;border-radius:var(--r-sm);font-size:var(--fs-xs);font-weight:600;cursor:pointer;line-height:1.2}
 .layout-switch-btn:hover{color:var(--text);background:rgba(255,255,255,.05)}
 .layout-switch-btn[aria-pressed="true"],.layout-switch-btn[aria-pressed="true"]:hover{background:var(--accent-fill);color:var(--on-accent)}
 .layout-switch-btn:focus-visible,.desktop-nav-btn:focus-visible{outline:2px solid #fff;outline-offset:2px}
@@ -1491,8 +1494,8 @@ background:linear-gradient(135deg,var(--sw-bg) 0 50%,var(--sw-card) 50% 100%)}
 .selftest-mode[data-status="running"] .selftest-mode-head{background:var(--selected-bg)}
 .selftest-mode-head:focus-visible{outline:2px solid var(--focus-ring);outline-offset:-2px}
 .selftest-mode-id{display:flex;align-items:baseline;gap:8px;min-width:0}
-.selftest-group{--grp:var(--text2);justify-self:start;flex:0 0 auto;padding:4px 10px;border-radius:999px;font-size:var(--fs-2xs);line-height:1.2;font-weight:700;color:var(--grp);background:color-mix(in srgb,var(--grp) 14%,transparent)}
-.selftest-mode[data-group="hdr"] .selftest-group{--grp:var(--status-warning)}
+.selftest-group{--grp:var(--text2);justify-self:start;flex:0 0 auto;padding:4px 10px;border-radius:999px;font-size:var(--fs-2xs);line-height:1.2;font-weight:700;color:var(--grp-text,var(--grp));background:color-mix(in srgb,var(--grp) 14%,transparent)}
+.selftest-mode[data-group="hdr"] .selftest-group{--grp:var(--status-warning);--grp-text:var(--warning-text)}
 .selftest-mode[data-group="dv"] .selftest-group{--grp:var(--status-dv)}
 .selftest-group-short{display:none}
 @container (max-width:380px){.selftest-group-long{position:absolute;width:1px;height:1px;margin:-1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}.selftest-group-short{display:inline}}

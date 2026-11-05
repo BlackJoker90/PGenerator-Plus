@@ -41,8 +41,8 @@ button,input,select,textarea{font-family:inherit}
 --selected-bg:rgba(111,134,163,.2);--chart-bg:#161616;--chart-grid:#262626;--chart-axis:#444;--chart-label:#9a9a9a;--chart-tooltip:#242424;--meter-bar-track:#181818;
 --scroll-track:#1a1a1a;--scroll-thumb:#4e4e4e;--scroll-thumb-border:#626262;--scroll-thumb-hover:#666;--status-calibration:#6f86a3}
 [data-palette="nord"]{--bg:#2e3440;--card:#3b4252;--panel:#3b4252;--border:#4c566a;--divider:#4c566a;--accent:#9ab6d6;--accent2:#81a1c1;--accent-fill:#4f709a;--accent-fill2:#4c6a91;
---text:#eceff4;--text2:#a7b1c2;--text-primary:#eceff4;--text-secondary:#a7b1c2;--text-muted:#aab3c3;--text-disabled:#7b8597;
---green:#a3be8c;--red:#e6a0a6;--orange:#ebcb8b;--status-success:#a3be8c;--status-warning:#ebcb8b;--status-error:#e6a0a6;--status-calibration:#5e81ac;--success-fill:#a3be8c;--on-success:#2e3440;--danger-fill:#a9444e;--warning-text:#ebcb8b;
+--text:#eceff4;--text2:#bcc5d3;--text-primary:#eceff4;--text-secondary:#bcc5d3;--text-muted:#bcc5d3;--text-disabled:#7b8597;
+--green:#a3be8c;--red:#e6a0a6;--orange:#ebcb8b;--status-success:#a3be8c;--status-warning:#ebcb8b;--status-error:#e6a0a6;--dv:#cdbdf8;--status-dv:#cdbdf8;--status-calibration:#5e81ac;--success-fill:#a3be8c;--switch-off:#a7b1c2;--on-success:#2e3440;--danger-fill:#a9444e;--warning-text:#ebcb8b;
 --surface-page:#2e3440;--surface-header:#323946;--surface-sidebar:#2b313c;--surface-card:#3b4252;--surface-drawer:#323946;--surface-modal:#3b4252;--surface-popover:#434c5e;--surface-inset:#2b313c;--surface-field:#272c36;
 --shadow:rgba(10,13,18,.45);--selected-bg:rgba(136,192,208,.18);--hover-bg:rgba(236,239,244,.06);
 --chart-bg:#2b313c;--chart-grid:#3b4252;--chart-axis:#4c566a;--chart-label:#a7b1c2;--chart-tooltip:#434c5e;--meter-bar-track:#2b313c;
@@ -407,7 +407,7 @@ body.layout-tablet .card-section-head{min-height:44px}
 .conn-badge[data-state="warn"]{--conn:var(--status-warning)}
 .pg-switch{position:relative;display:inline-flex;align-items:center;cursor:pointer;flex:0 0 auto;user-select:none}
 .pg-switch input{position:absolute;opacity:0;width:0;height:0;margin:0}
-.pg-switch-track{display:inline-block;position:relative;width:34px;height:18px;border-radius:var(--r-md);background:var(--text2);transition:background .2s}
+.pg-switch-track{display:inline-block;position:relative;width:34px;height:18px;border-radius:var(--r-md);background:var(--switch-off,var(--text2));transition:background .2s}
 .pg-switch-thumb{position:absolute;top:2px;left:2px;width:14px;height:14px;border-radius:50%;background:#fff;transition:transform .15s var(--ease-out)}
 .pg-switch input:checked + .pg-switch-track{background:var(--accent)}
 .pg-switch input:checked + .pg-switch-track .pg-switch-thumb{transform:translateX(16px)}
@@ -1204,7 +1204,7 @@ body.is-custom-series-patch-dragging{cursor:grabbing!important;user-select:none!
    tall as the layout switch next to it. */
 .update-btn{--upd:var(--status-success);display:inline-flex;align-items:center;gap:5px;min-height:0;padding:7px 10px;border:0;border-radius:var(--r-sm);
 background:color-mix(in srgb,var(--upd) 14%,transparent);box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--upd) 45%,transparent);
-color:var(--upd);font-size:var(--fs-2xs);font-weight:600;line-height:1.2}
+color:color-mix(in oklab,var(--upd) 60%,var(--text-primary));font-size:var(--fs-2xs);font-weight:600;line-height:1.2}
 .update-btn:hover{background:color-mix(in srgb,var(--upd) 24%,transparent)}
 /* Current tile after a check: a chip (up to date / update available) and a
    short accent flash instead of a status line */
@@ -1493,6 +1493,9 @@ background:linear-gradient(135deg,var(--sw-bg) 0 50%,var(--sw-card) 50% 100%)}
 .selftest-mode-head:hover:not(:disabled){background:var(--hover-bg)}
 .selftest-mode-head:disabled{cursor:default}
 .selftest-mode[data-status="running"] .selftest-mode-head{background:var(--selected-bg)}
+/* Nord's selection tint is too light for its secondary text and chip hues. */
+[data-palette="nord"] .selftest-mode[data-status="running"] .selftest-mode-head{--text2:var(--text-primary);--text-muted:var(--text-primary)}
+[data-palette="nord"] .selftest-mode[data-status="running"] :is(.selftest-bits,.selftest-group){color:var(--text-primary)}
 .selftest-mode-head:focus-visible{outline:2px solid var(--focus-ring);outline-offset:-2px}
 .selftest-mode-id{display:flex;align-items:baseline;gap:8px;min-width:0}
 .selftest-group{--grp:var(--text2);justify-self:start;flex:0 0 auto;padding:4px 10px;border-radius:999px;font-size:var(--fs-2xs);line-height:1.2;font-weight:700;color:var(--grp-text,var(--grp));background:color-mix(in srgb,var(--grp) 14%,transparent)}
@@ -1504,8 +1507,13 @@ background:linear-gradient(135deg,var(--sw-bg) 0 50%,var(--sw-card) 50% 100%)}
 /* Link depth chip: one hue per depth, kept apart from the group chips (grey,
    HDR orange, DV violet) and the result colours; the text mixes towards the
    theme's text colour so it stays legible on light and dark themes. The
-   hues are shared with the signal preset chips. */
-:root{--bits-8:var(--text-secondary);--bits-10:var(--text-secondary);--bits-12:var(--text-secondary)}
+   hues are shared with the signal preset chips. Light themes take darker
+   hues to hold 4.5:1 on hover and running rows. Nord's pale hues and
+   Ultraviolet's blue DV sit closer together: there the chip text tells them
+   apart. */
+:root{--bits-8:#3aa99f;--bits-10:#4f8ff0;--bits-12:#d062b8}
+[data-theme="light"]{--bits-8:#17716a;--bits-10:#2a62c4;--bits-12:#a33589}
+[data-palette="nord"]{--bits-8:#8fe0d6;--bits-10:#a9c8fb;--bits-12:#efb0e0}
 .selftest-bits{--bits:var(--bits-8);justify-self:start;flex:0 0 auto;padding:4px 10px;border-radius:999px;font-size:var(--fs-xs);line-height:1.2;font-weight:700;font-variant-numeric:tabular-nums;white-space:nowrap;color:color-mix(in oklab,var(--bits) 58%,var(--text-primary));background:color-mix(in srgb,var(--bits) 16%,transparent);box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--bits) 38%,transparent)}
 .selftest-bits[data-bits="10"]{--bits:var(--bits-10)}
 .selftest-bits[data-bits="12"]{--bits:var(--bits-12)}
@@ -1733,8 +1741,8 @@ select:focus-visible,input:focus-visible,textarea:focus-visible,
 .pg-palette-shortcut{display:grid;grid-template-columns:132px minmax(0,1fr);gap:12px;align-items:center;padding:7px 10px;font-size:var(--fs-md)}
 .pg-palette-empty{padding:18px 12px;font-size:var(--fs-sm);color:var(--text2)}
 .pg-palette-foot{display:flex;gap:16px;flex-wrap:wrap;padding:8px 14px;border-top:1px solid var(--divider,var(--border));font-size:var(--fs-xs);color:var(--text2)}
-/* Nord's --text2 and --text-muted reach 3.9-4.1:1 on its lighter popover surface; its Snow
-   tone keeps hints and the footer above 4.5:1, also on the selected row. */
+/* Nord's --text2 and --text-muted fall under 4.5:1 on the selected row of its lighter
+   popover surface; its Snow tone keeps hints and the footer above that. */
 [data-palette="nord"] .pg-palette-panel{--text2:#d8dee9;--text-muted:#d8dee9}
 /* The selection tint lowers hint contrast below 4.5:1 in the dark themes. */
 .pg-palette-item.is-active .pg-palette-hint{color:var(--text-primary)}

@@ -15158,9 +15158,11 @@ function drawDeltaEChart(gs,allSteps,readingMap,rawGs){
   const dxy=Math.sqrt(Math.pow(whiteR.x-wp.x,2)+Math.pow(whiteR.y-wp.y,2));
   ctx.fillStyle=pgThemeColor('--chart-annotation','#888');ctx.font=pgChartFont(11);ctx.textAlign='left';
   const wpText=(whiteR.cct?whiteR.cct+'K  ':'')+'\u0394xy '+dxy.toFixed(4);
-  // Below the stats line when both do not fit next to each other.
+  // Below the stats line when both do not fit next to each other, on its
+  // right so it stays off the value of the 0% bar, often the tallest.
   const wpFits=ctx.measureText(wpText).width+8<=chart.w-(chart.statsW||0);
-  ctx.fillText(wpText,chart.pad.l+(wpFits?0:4),wpFits?chart.pad.t-4:chart.pad.t+12);
+  ctx.textAlign=wpFits?'left':'right';
+  ctx.fillText(wpText,wpFits?chart.pad.l:chart.pad.l+chart.w,wpFits?chart.pad.t-4:chart.pad.t+12);
  }
 }
 

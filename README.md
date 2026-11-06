@@ -396,6 +396,7 @@ The header shows the connection, HDMI display, calibration software, meter and t
 - **Read Once** and **Continuous** modes.
 - **Series:** Greyscale 21pt / 11pt, Colors 30, Saturation Sweep 24.
 - **Patch controls:** settle delay, patch size, APL windows, refresh-rate override, OLED pattern insertion, i1D3 AIO disable.
+- **Low Light Averaging:** in series, Read Once and AutoCal, a patch below a chosen target Y is read 2 to 5 times and the reads are averaged in linear XYZ. The chart tooltip shows the number of reads and their spread. Continuous and ICC profiling read once.
 - **Charts:** luminance, CCT, chromaticity, RGB balance, luminance tracking, CIELUV and CIEDE2000 ΔE. The greyscale ΔE average and maximum leave out the 0% step, as HCFR does; its bar and report row stay.
 - **Supported meters:** Calibrite/X-Rite i1Display Pro Plus, i1 Pro, i1 Display Pro / ColorMunki Display, Datacolor Spyder 5 / SpyderX, ColorVision Spyder, Sequel Chroma 5.
 - **Runtime:** bundled ArgyllCMS `spotread` 3.5.0 (armhf) at `/usr/bin/spotread`, with `spotread_wrapper.sh`, `spotread_measure.py`, `meter_session.sh` and `meter_series.sh`. Plain Linux USB/HID plus bundled udev rules; no proprietary drivers.

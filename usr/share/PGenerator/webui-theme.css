@@ -657,6 +657,7 @@ body.layout-tablet .meter-live-primary-values{flex-wrap:nowrap!important;overflo
 	#meterProfileGearPopover .meter-profile-section label.meter-toggle{font-size:var(--fs-xs);color:var(--text);display:flex;align-items:center;gap:6px}
 	#meterProfileGearPopover .meter-profile-section .meter-toggle-label{font-size:var(--fs-xs);color:var(--text2);user-select:none;cursor:pointer}
 	#meterProfileGearPopover .meter-profile-section .meter-inline-value{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+	#meterProfileGearPopover #meterLowLightTrigger{width:92px}
 	#meterProfileGearPopover .meter-profile-section input[type=number].meter-input-disabled{opacity:.45;background:var(--bg2,#1b1b26);cursor:not-allowed}
 	.meter-xyz-toggle-row{display:flex;align-items:center;gap:6px;flex-wrap:nowrap;white-space:nowrap}
 	.meter-xyz-toggle-row .meter-toggle{flex:0 0 auto;min-width:0}

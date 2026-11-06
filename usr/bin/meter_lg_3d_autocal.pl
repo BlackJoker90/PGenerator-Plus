@@ -3176,12 +3176,12 @@ sub autocal3d_low_light_mode_for_step {
  my ($config,$step)=@_;
  return "off" if(ref($config) ne "HASH" || ref($config->{"low_light"}) ne "HASH" || !$config->{"low_light"}{"enabled"});
  my $mode=lc($config->{"low_light"}{"mode"}||"off");
- return "off" if($mode ne "a" && $mode ne "aa" && $mode ne "aaa");
+ return "off" if($mode!~/^(?:avg|a|aa|aaa)$/);
  my $trigger=bounded_number($config->{"low_light"}{"trigger"},0,10_000_000);
  return "off" if(!defined($trigger) || $trigger <= 0);
  my $expected_y=autocal3d_expected_target_y_for_low_light($config,$step);
  return "off" if(!defined($expected_y) || $expected_y < 0);
- return ($expected_y < $trigger) ? $mode : "off";
+ return ($expected_y < $trigger) ? "avg" : "off";
 }
 
 sub autocal3d_requested_sample_count {
@@ -3189,7 +3189,7 @@ sub autocal3d_requested_sample_count {
  return 1 if(($active_mode||"off") eq "off");
  return 1 if(ref($config) ne "HASH");
  my $count=$config->{"low_light_requested_sample_count"};
- return 1 if(!defined($count) || $count!~/^(?:1|2|3|5)$/);
+ return 1 if(!defined($count) || $count!~/^[1-5]$/);
  return int($count);
 }
 

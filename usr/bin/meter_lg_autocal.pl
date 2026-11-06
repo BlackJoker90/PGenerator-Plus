@@ -1890,12 +1890,12 @@ sub autocal_low_light_mode_for_step {
  my ($config,$step)=@_;
  return "off" if(ref($config) ne "HASH" || ref($config->{"low_light"}) ne "HASH" || !$config->{"low_light"}{"enabled"});
  my $mode=lc($config->{"low_light"}{"mode"}||"off");
- return "off" if($mode ne "a" && $mode ne "aa" && $mode ne "aaa");
+ return "off" if($mode!~/^(?:avg|a|aa|aaa)$/);
  my $trigger=bounded_number($config->{"low_light"}{"trigger"},0,10_000_000);
  return "off" if(!defined($trigger) || $trigger <= 0);
  my $expected_y=autocal_expected_target_y_for_low_light($config,$step);
  return "off" if(!defined($expected_y) || $expected_y < 0);
- return ($expected_y < $trigger) ? $mode : "off";
+ return ($expected_y < $trigger) ? "avg" : "off";
 }
 
 sub autocal_requested_sample_count {
@@ -1903,7 +1903,7 @@ sub autocal_requested_sample_count {
  return 1 if(($active_mode||"off") eq "off");
  return 1 if(ref($config) ne "HASH");
  my $count=$config->{"low_light_requested_sample_count"};
- return 1 if(!defined($count) || $count!~/^(?:1|2|3|5)$/);
+ return 1 if(!defined($count) || $count!~/^[1-5]$/);
  return int($count);
 }
 
@@ -21331,7 +21331,7 @@ sub read_step {
  $attempts=5 if($attempts > 5);
  my $last_error="";
 	 # When the operator's low-light handler already repeats this patch
-	 # (2/3/5 samples reduced in linear XYZ), the low-shadow median ladder is
+	 # (2 to 5 samples reduced in linear XYZ), the low-shadow median ladder is
 	 # deliberately stood down: stacking both would read the patch up to 15
 	 # times, and the mean of a full averaging set is the operator's chosen
 	 # estimator. The median ladder remains the default outlier guard whenever
@@ -21375,6 +21375,11 @@ sub read_step {
 	 for(my $attempt=1;$attempt<=$attempts;$attempt++) {
 	  my ($reading,$error)=read_step_once($config,$step,$attempt);
 	  if(!$error) {
+	   # The ladder stood down for an averaged set, so its guard applies here.
+	   if($application_average_mode ne "off" && $attempt < $attempts && invalid_low_shadow_reading($reading,$step)) {
+	    log_line("Discarding invalid averaged low-shadow reading for ".($step->{"name"}||format_percent($step->{"ire"}||0)."%"));
+	    next;
+	   }
 	   # An all-zero reading the meter session already re-measured and could not
 	   # clear. Inside the shadow ladder that can be a genuinely crushed output,
 	   # and the sampling path above handles it by discarding samples rather than

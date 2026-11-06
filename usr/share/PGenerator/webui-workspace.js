@@ -11564,6 +11564,11 @@ async function meterRunSeries(options){
  if(!meterSeriesSteps||!meterActiveSeriesType){toast('Select a series first',true);return false;}
  if(!meterEnsureAppliedGeneratorSettings()) return false;
  meterHdrAutoCalChartContextHeld=false;
+	 // Selection indices count the tiles on screen. The preview below can differ
+	 // from them (the daemon cleans custom names and moves real White/Black to the
+	 // front), so the selection crosses the rebuild through meterMatchSteps.
+	 const tileSteps=meterVisibleSeriesSteps();
+	 const stripSteps=meterSeriesSteps;
 	 // Rebuild the local preview steps from the current UI state before starting.
 	 // Without this, rerunning the same series key can keep stale step codes from
 	 // a previous mode/range selection and then stamp them back onto fresh reads.
@@ -11580,15 +11585,28 @@ async function meterRunSeries(options){
 	  if(requestedDvMapModeOverride) meterActiveSeriesDvMapMode=requestedDvMapModeOverride;
 	  meterSeriesSteps=meterBuildPreviewStepsJS(meterActiveSeriesType,meterActiveSeriesPoints);
 	 }
- const rebuiltVisibleSteps=meterVisibleSeriesSteps();
- meterSelectionRunStepKeys=requestedSelection.length
-  ?requestedSelection.map(index=>rebuiltVisibleSteps[index]).filter(Boolean).map(step=>meterStepNameKey(step))
-  :[];
+ const rebuiltTiles=requestedSelection.length?meterMatchSteps(tileSteps,meterVisibleSeriesSteps()):[];
+ // The White or Black added to a run is on the strip but not in the preview. Its
+ // tile keeps its own codes while they are the codes of that level on the link now:
+ // in another range or depth they are stale, and the run stops below. The rest of
+ // the series proves nothing here, custom patches keep their codes in any range.
+ const addedEndpoint=index=>{
+  const step=tileSteps[index];
+  const name=String(step&&step.name||'');
+  const percent=/^(?:White|100% White)$/.test(name)?100:(/^(?:Black|0% Black)$/.test(name)?0:null);
+  if(percent==null||Number(step.input_max)!==meterPatchInputMax()) return false;
+  const code=meterCodeFromSignalPercent(percent);
+  return ['r','g','b'].every(ch=>Number(step[ch])===code);
+ };
  let selectedRunSteps=requestedSelection.length
-  ? requestedSelection.map(index=>rebuiltVisibleSteps[index]).filter(Boolean)
+  ? requestedSelection.map(index=>rebuiltTiles[index]||(addedEndpoint(index)?tileSteps[index]:null)).filter(Boolean)
   : null;
- if(requestedSelection.length&&(!selectedRunSteps||selectedRunSteps.length<2)){
-  meterSelectionRunStepKeys=[];
+ meterSelectionRunTiles=requestedSelection.length?{steps:tileSteps,indices:requestedSelection}:null;
+ // Every clicked tile or none: a run must not lose a patch without a word. The
+ // strip stays as drawn, so the steps behind it go back with it.
+ if(requestedSelection.length&&selectedRunSteps.length<Math.max(2,requestedSelection.length)){
+  meterSelectionRunTiles=null;
+  meterSeriesSteps=stripSteps;
   toast('The selected patches are no longer available in this series',true);
   return false;
  }
@@ -11864,6 +11882,7 @@ async function meterPollSeries(){
  try{
  const r=await fetchJSON('/api/meter/series/status',{_quiet:true,_timeoutMs:5000});
  if(!r) return;
+ meterStampSeriesPanel(r);
  // Ignore the previous run's terminal snapshot during the short POST/start
  // handoff, and never let a delayed/orphan poll consume another series id.
  if(meterSharedSeriesId&&r.series_id&&String(r.series_id)!==String(meterSharedSeriesId)) return;
@@ -12615,7 +12634,9 @@ function meterStepOverDisplayPeak(step){
 function meterBuildPatchThumbs(sortedSteps,completedIres,currentIre){
  const container=document.getElementById('meterPatchThumbs');
  if(!container) return;
- const visibleSteps=meterFilterLgAutoCalChartItems(sortedSteps);
+ // The same list as meterVisibleSeriesSteps, by which a click finds its step:
+ // the White Ref / Black Ref a run reads first are no patches of the series.
+ const visibleSteps=meterFilterLgAutoCalChartItems(sortedSteps).filter(step=>!meterIsWhiteReferenceReading(step));
  const row=meterGreyscaleScrollSource();
  let scrollMode=meterSeriesThumbsUseScroll(visibleSteps.length);
  // Tablet keeps the established fixed-width colour strip. In the wider
@@ -13437,7 +13458,7 @@ function meterTwoPointMetaHtml(role,step,reading){
  const parts=['<strong>'+label+'</strong>'];
  if(role==='high'){
   const lum=meterReadingLuminanceNits(reading);
-  parts.push('Luminance: <strong>'+(lum!=null?lum.toFixed(2):'--')+'</strong> cd/m&sup2;');
+  parts.push('Luminance: <strong>'+(lum!=null?meterLowLuminanceText(lum,2):'--')+'</strong> cd/m&sup2;');
  }
  if(reading.cct) parts.push('CCT: <strong>'+reading.cct+'K</strong>');
  if(reading.x!=null&&reading.y!=null) parts.push('x / y: <strong>'+reading.x.toFixed(4)+'</strong> / <strong>'+reading.y.toFixed(4)+'</strong>');
@@ -13479,7 +13500,7 @@ function drawTwoPointCharts(gs,allSteps){
  if(highMeta) highMeta.innerHTML=meterTwoPointMetaHtml('high',state.highStep,state.highReading);
  if(highLum){
   const lum=state.highReading?meterReadingLuminanceNits(state.highReading):null;
-  highLum.textContent=lum!=null?lum.toFixed(2):'--';
+  highLum.textContent=lum!=null?meterLowLuminanceText(lum,2):'--';
  }
 }
 
@@ -14984,7 +15005,7 @@ function drawGammaChart(gs,allSteps,readingMap){
  drawDots(ctx,chart,meterMeasuredEotfLuminanceDotPoints(measureSteps,readingMap,axisMax,scaleMeasuredLuminance,'luminance'),pgThemeColor('--chart-eotf-measured','#ffeb3b'),2.2);
  ctx.fillStyle=pgThemeColor('--chart-annotation','#aaa');ctx.font=pgChartFont(11);
  ctx.textAlign='left';
- ctx.fillText('Min cd/m\u00B2: '+Lb.toFixed(2),chart.pad.l,ctx.h-2);
+ ctx.fillText('Min cd/m\u00B2: '+meterLowLuminanceText(Lb,2),chart.pad.l,ctx.h-2);
  const diffuse=meterHdrDiffuseWhiteOverride();
  const targetLabel='100% target: '+targetPeak.toFixed(1)+' cd/m\u00B2'+((diffuse!=null&&meterChartIsPq())?' (DW '+diffuse.toFixed(1)+')':'');
  const targetFits=chart.pad.l+ctx.measureText(targetLabel).width+8<=ctx.w-chart.pad.r-(chart.contrastW||0);
@@ -18042,7 +18063,7 @@ function chartHandleHover(e,canvasId){
  const rd=hit.reading;
  const bal=hit.rgbBalance||{R:100,G:100,B:100};
  const lumInfo=meterColorLuminanceInfo(rd);
- const readY=(rd.luminance!=null&&Number.isFinite(Number(rd.luminance)))?Number(rd.luminance).toFixed(3):'--';
+ const readY=(rd.luminance!=null&&Number.isFinite(Number(rd.luminance)))?meterLowLuminanceText(rd.luminance,3):'--';
  const targetY=(lumInfo.targetY!=null&&Number.isFinite(Number(lumInfo.targetY)))?Number(lumInfo.targetY).toFixed(3):'--';
  let gammaReferenceReadings=meterGreyscaleReadings(meterReadings);
  if(canvasId==='chartGammaValue') gammaReferenceReadings=meterFilterLgAutoCalChartItems(gammaReferenceReadings);
@@ -18228,7 +18249,7 @@ function meterBuildReportSummaryCards(){
   cards=[
    {label:'Average '+meterDeltaEFormLabel(),value:isFinite(avgDe)?avgDe.toFixed(2):'--'},
    {label:'Peak Luminance',value:isFinite(peak)?peak.toFixed(1)+' cd/m²':'--'},
-   {label:'Black Level',value:isFinite(black)?black.toFixed(3)+' cd/m²':'--'},
+   {label:'Black Level',value:isFinite(black)?meterLowLuminanceText(black,3)+' cd/m²':'--'},
     {label:'Contrast Ratio',value:meterFormatContrastRatio(meterMeasuredContrastRatio(rawGs))},
    {label:'Average CCT',value:avgCct?Math.round(avgCct)+'K':'--'}
   ];
@@ -18299,7 +18320,7 @@ function meterBuildGreyscaleReportTable(){
   }
   rows+='<tr>'
     +'<td>'+(rd.name||((rd.ire!=null)?(Math.round(rd.ire*100)/100)+'%':'--'))+'</td>'
-   +'<td>'+((rd.Y!=null?rd.Y:(rd.luminance||0)).toFixed(2))+'</td>'
+   +'<td>'+meterLowLuminanceText(rd.Y!=null?rd.Y:(rd.luminance||0),2)+'</td>'
    +'<td>'+(rd.x!=null?rd.x.toFixed(4):'--')+'</td>'
    +'<td>'+(rd.y!=null?rd.y.toFixed(4):'--')+'</td>'
    +'<td>'+(rd.cct?rd.cct+'K':'--')+'</td>'
@@ -18992,8 +19013,8 @@ async function meterExportCSV(){
   // patches export the same 100-centered greyscale balance as the chart.
   const bal=whiteR?(colorSeries?meterLiveRgbData(rd):rgbBalance(rd,whiteR,greyMode,Lb)):{R:100,G:100,B:100};
   csv+=[i+1,rd.name||'',ire==null?'':ire,rd.r_code||0,rd.g_code||0,rd.b_code||0,
-   (rd.X||0).toFixed(4),(rd.Y||0).toFixed(4),(rd.Z||0).toFixed(4),
-   (rd.x||0).toFixed(4),(rd.y||0).toFixed(4),(rd.luminance||0).toFixed(4),
+   meterLowLuminanceText(rd.X,4),meterLowLuminanceText(rd.Y,4),meterLowLuminanceText(rd.Z,4),
+   (rd.x||0).toFixed(4),(rd.y||0).toFixed(4),meterLowLuminanceText(rd.luminance,4),
    rd.cct||'',g!==null?g.toFixed(2):'',fmtBal(bal.R),fmtBal(bal.G),fmtBal(bal.B),
    fmtDe(dEuvNoY),fmtDe(dEuvWY),fmtDe(dE2kNoY),fmtDe(dE2kWY),fmtDe(dEitpNoY),fmtDe(dEitpWY)
   ].join(',')+'\n';
@@ -20816,6 +20837,7 @@ async function loadMeterSettings(attempt){
  }
  // Refresh the "Auto" label now that the technology dropdown is populated.
  meterRefreshCcssAutoLabel();
+ meterDisplaySelectionLoaded=true;
  if(s.target_gamut!=null){
   const savedTargetGamut=String(s.target_gamut||'auto').toLowerCase();
   document.getElementById('meterTargetGamut').value=(savedTargetGamut==='customd65')?'bt709':savedTargetGamut;
@@ -21158,10 +21180,10 @@ function meterRefreshActiveSeriesCharts(options){
 	 // change; presentation-only refreshes must leave completed steps untouched.
 	 let colorStepsRebuilt=false;
 	 if(!importedWorkspace&&(!hasSavedReadings||(refreshOptions.rebuildColorSteps&&isColor))){
-	  const previousSteps=Array.isArray(meterSeriesSteps)?meterSeriesSteps:[];
-	  const selectedKeys=(meterSelectedThumbIndices instanceof Set)
-	   ?Array.from(meterSelectedThumbIndices).map(index=>previousSteps[index]).filter(Boolean).map(meterStepNameKey)
-	   :[];
+	  // Selection indices count tiles, so they resolve in the visible list: the
+	  // steps of a finished run still hold its White Ref / Black Ref.
+	  const previousSteps=meterVisibleSeriesSteps();
+	  const selectedIndices=(meterSelectedThumbIndices instanceof Set)?Array.from(meterSelectedThumbIndices):[];
 	  const currentKey=meterCurrentPatchStep?meterStepNameKey(meterCurrentPatchStep):'';
 	  const currentName=String((meterCurrentPatchStep&&meterCurrentPatchStep.name)||'');
 	  const freshSteps=meterBuildStepsJS(meterActiveSeriesType,meterActiveSeriesPoints);
@@ -21172,9 +21194,9 @@ function meterRefreshActiveSeriesCharts(options){
 	   meterSeriesSteps=freshSteps;
 	   if(refreshOptions.rebuildColorSteps&&isColor){
 	    colorStepsRebuilt=true;
-	    const selectedKeySet=new Set(selectedKeys);
-	    meterSelectedThumbIndices=new Set();
-	    meterSeriesSteps.forEach((step,index)=>{ if(selectedKeySet.has(meterStepNameKey(step))) meterSelectedThumbIndices.add(index); });
+	    const visibleSteps=meterVisibleSeriesSteps();
+	    const rebuiltTiles=selectedIndices.length?meterMatchSteps(previousSteps,visibleSteps):[];
+	    meterSelectedThumbIndices=new Set(selectedIndices.map(index=>rebuiltTiles[index]).filter(Boolean).map(step=>visibleSteps.indexOf(step)));
 	    const refreshedCurrent=meterSeriesSteps.find(step=>(currentKey&&meterStepNameKey(step)===currentKey)||(currentName&&String(step.name||'')===currentName))||null;
 	    meterCurrentPatchStep=refreshedCurrent;
 	    meterSelectedThumbIre=refreshedCurrent?meterStepNameKey(refreshedCurrent):null;

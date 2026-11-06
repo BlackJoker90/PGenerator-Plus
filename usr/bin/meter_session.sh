@@ -10,7 +10,7 @@
 #   meter_session.sh <display_type> <ccss_file> <refresh_rate> <disable_aio> [signal_mode] [max_luma] [meter_port] [idle_timeout] [require_device_ready] [averaging] [meter_usb_id] [observer] [pattern_provider]
 #
 # Commands (one per line, written to /tmp/meter_session.cmd):
-#   READ <r> <g> <b> <patch_size> <ire> <name> [settle_ms] [signal_mode] [max_luma] [pattern_signal_range] [transport_signal_range] [request_id] [input_max] [read_timeout] [low_light_mode] [continuous] [requested_sample_count]
+#   READ <r> <g> <b> <patch_size> <ire> <name> [settle_ms] [signal_mode] [max_luma] [pattern_signal_range] [transport_signal_range] [request_id] [input_max] [read_timeout] [low_light_mode] [continuous] [requested_sample_count] [zero_black]
 #   STOP
 #
 # settle_ms (optional, default 0) is the post-display settle wait applied
@@ -100,6 +100,8 @@ CMD_FIFO="/tmp/meter_session.cmd"
 STATE_FILE="/tmp/meter_read.json"
 PID_FILE="/tmp/meter_session.pid"
 CONFIG_FILE="/tmp/meter_session.config"
+# READ line version, see $_meter_session_read_protocol in webui.pm.
+READ_PROTOCOL=2
 LOCK_FILE="/tmp/meter_session.lock"
 LOG_FILE="/tmp/meter_session.log"
 READY_FILE="/tmp/meter_session_ready.signal"
@@ -477,7 +479,7 @@ if ! flock -n 9; then
  exit 0
 fi
 echo $$ > "$PID_FILE"
-printf '%s|%s|%s|%s|%s|%s|%s|%s|%s|%s\n' "$DISPLAY_TYPE" "$CCSS_FILE" "$REFRESH_RATE" "$DISABLE_AIO" "$METER_PORT" "$REQUIRE_DEVICE_READY" "${METER_AVERAGING:-off}" "$METER_USB_ID" "$OBSERVER" "$PATTERN_PROVIDER" > "$CONFIG_FILE"
+printf '%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s\n' "$DISPLAY_TYPE" "$CCSS_FILE" "$REFRESH_RATE" "$DISABLE_AIO" "$METER_PORT" "$REQUIRE_DEVICE_READY" "${METER_AVERAGING:-off}" "$METER_USB_ID" "$OBSERVER" "$PATTERN_PROVIDER" "$READ_PROTOCOL" > "$CONFIG_FILE"
 log "session $$ starting (display=$DISPLAY_TYPE ccss=$CCSS_FILE refresh=$REFRESH_RATE aio_off=$DISABLE_AIO port=$METER_PORT usb_id=$METER_USB_ID observer=$OBSERVER provider=$PATTERN_PROVIDER ready_gate=$REQUIRE_DEVICE_READY averaging=${METER_AVERAGING:-off} idle=${IDLE_TIMEOUT}s)"
 startup_marker "pid/config written"
 
@@ -620,6 +622,13 @@ patch_drives_light() {
    if (b + 0 > hi) hi = b + 0
    exit !(hi > black_floor)
   }'
+}
+
+# Is this READ a true-black panel's black, answered with 0 without measuring?
+# HCFR's Red 0% is neutral and has ire 0 too, but it is a mid grey.
+reports_zero_black() {
+ [[ "$1" == "1" && "$2" == "c" && "$3" == "$4" && "$4" == "$5" ]] && ire_le "$6" 0 \
+  && ! patch_drives_light "$3" "$4" "$5" "$6" "$7"
 }
 
 # Returns 0 (shell true) when a reading the meter reported as successful is in
@@ -1172,10 +1181,11 @@ while read -t "$IDLE_TIMEOUT" -u 4 line; do
    ;;
   READ\ *)
 	    STARTUP_CALIBRATION_COMPLETED=0
-	    # Parse: READ R G B PSIZE IRE NAME [SETTLE_MS] [SIGNAL_MODE] [MAX_LUMA] [PATTERN_SIGNAL_RANGE] [TRANSPORT_SIGNAL_RANGE] [REQUEST_ID] [INPUT_MAX] [READ_TIMEOUT] [LOW_LIGHT_MODE] [CONTINUOUS] [REQUESTED_SAMPLE_COUNT]
-	    # The final integer is the execution contract. LOW_LIGHT_MODE is retained
+	    # Parse: READ R G B PSIZE IRE NAME [SETTLE_MS] [SIGNAL_MODE] [MAX_LUMA] [PATTERN_SIGNAL_RANGE] [TRANSPORT_SIGNAL_RANGE] [REQUEST_ID] [INPUT_MAX] [READ_TIMEOUT] [LOW_LIGHT_MODE] [CONTINUOUS] [REQUESTED_SAMPLE_COUNT] [ZERO_BLACK]
+	    # REQUESTED_SAMPLE_COUNT is the execution contract. LOW_LIGHT_MODE is retained
 	    # only for result telemetry and never changes or respawns spotread.
-	    read -r _ R G B PSIZE IRE NAME SETTLE_MS SIGNAL_MODE MAX_LUMA SIGNAL_RANGE TRANSPORT_SIGNAL_RANGE REQUEST_ID INPUT_MAX CMD_READ_TIMEOUT CMD_LOW_LIGHT_MODE CMD_CONTINUOUS CMD_REQUESTED_SAMPLE_COUNT <<< "$line"
+	    # ZERO_BLACK=1: the panel is true-black (OLED class, webui.pm decides).
+	    read -r _ R G B PSIZE IRE NAME SETTLE_MS SIGNAL_MODE MAX_LUMA SIGNAL_RANGE TRANSPORT_SIGNAL_RANGE REQUEST_ID INPUT_MAX CMD_READ_TIMEOUT CMD_LOW_LIGHT_MODE CMD_CONTINUOUS CMD_REQUESTED_SAMPLE_COUNT CMD_ZERO_BLACK <<< "$line"
    [[ -z "$PSIZE" ]] && PSIZE=10
    [[ -z "$IRE" ]] && IRE=0
    [[ -z "$NAME" ]] && NAME="manual"
@@ -1249,7 +1259,9 @@ while read -t "$IDLE_TIMEOUT" -u 4 line; do
 
    # Absolute black on emissive displays (OLED/QD-OLED/CRT/plasma) often
    # returns no measurable response. Report a valid 0.0 reading immediately.
-	   if [[ "$DISPLAY_TYPE" == "c" && "$R" == "$G" && "$G" == "$B" ]] && ire_le "$IRE" 0; then
+   # -y c alone is not enough: a DLP projector on Refresh runs as "c" too, and
+   # its black is real light that must be measured.
+	   if reports_zero_black "$CMD_ZERO_BLACK" "$DISPLAY_TYPE" "$R" "$G" "$B" "$IRE" "$INPUT_MAX"; then
     TS=$(date +%s)
 	    write_state "{\"status\":\"complete\",\"request_id\":\"$REQUEST_ID\",\"readings\":[{\"X\":0,\"Y\":0,\"Z\":0,\"x\":0,\"y\":0,\"luminance\":0.0,\"cct\":0,\"timestamp\":$TS,\"ire\":$IRE,\"name\":\"$NAME\",\"r_code\":$R,\"g_code\":$G,\"b_code\":$B,\"request_id\":\"$REQUEST_ID\",\"sample_count\":0,\"requested_sample_count\":$REQUESTED_SAMPLE_COUNT,\"average_mode\":\"$CMD_LOW_LIGHT_MODE\",\"synthetic_black\":true}],\"count\":1}"
     continue

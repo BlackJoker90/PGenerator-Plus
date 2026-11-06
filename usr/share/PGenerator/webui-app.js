@@ -8199,12 +8199,66 @@ function meterAdaptReferenceXyzToTargetWhite(X,Y,Z){
  return meterBradfordAdaptXyz(X,Y,Z,D65,wp);
 }
 
-// Black-floor epsilon (cd/m²): a black (0%) read at or below this luminance is
-// treated as true zero (normalized to {0,0,0}) instead of reporting the small
-// ambient-leakage value a spectro picks up on a true-black OLED. Set just above
-// the observed i1 Pro 2 ambient (~0.004) and well under the lowest real
+// Black-floor epsilon (cd/m²): on a true-black panel, a black (0%) read at or
+// below this luminance is treated as true zero (normalized to {0,0,0}) instead
+// of reporting the small ambient-leakage value a spectro picks up. Set just
+// above the observed i1 Pro 2 ambient (~0.004) and well under the lowest real
 // greyscale step, so only the 0% patch is affected (gate is meterReadingTargetsBlack).
 const METER_BLACK_FLOOR_NITS=0.02;
+
+// Only a panel that can emit no light at black gets the floor. On an LCD or a
+// projector a value under the epsilon is the real black: zeroing it showed
+// 0.000 and an infinite contrast, and BT.1886 lost its black. The technology
+// counts, and so does an OLED, plasma or CRT Meter Profile on a generic one.
+// CRT counts by the file name only: the profile maker gives Refresh and CRT the
+// same ccxxmake -t c, so a CRT technology may be a DLP (webui.pm decides the same).
+// The first decision is stamped on the reading (raw_* survive, so every redraw
+// would decide again): a run keeps the panel it was measured on, whatever is
+// selected when it is viewed. A run from before the stamp takes the selection
+// of its first view. Nothing is stamped while the selection is not settled: the
+// selects hold the page default until loadMeterSettings has filled them, and a
+// saved profile can still wait for its option.
+let meterDisplaySelectionLoaded=false;
+
+function meterBlackFloorApplies(reading){
+ if(reading&&typeof reading.true_black_panel==='boolean') return reading.true_black_panel;
+ if(typeof document==='undefined') return false;
+ const sel=document.getElementById('meterCcssProfile')||{};
+ const pending=String((sel.dataset&&sel.dataset.pendingValue)||'');
+ const selected=String(sel.value||'');
+ // What the meter really runs with: a spectro ignores the profile, as does a
+ // SpyderX without a CCMX, and the server decides on the same token.
+ const profile=pending||((typeof getCcssOverride==='function')?getCcssOverride():selected);
+ let applies=meterDisplayTypeIsOledClass();
+ if(!applies&&/^(?:ccss|custom)_/i.test(profile)){
+  const meta=(typeof meterDisplayTypeMetaText==='function')?meterDisplayTypeMetaText(profile):profile;
+  applies=meterDisplayTypeIsOledClass(profile)||/plasma/i.test(meta)
+   ||/(?:^|[^a-z])crt(?:[^a-z]|$)/i.test(profile);
+ }
+ if(reading&&meterDisplaySelectionLoaded&&!pending&&selected!=='custom_editor') reading.true_black_panel=applies;
+ return applies;
+}
+
+// A real black stays readable: below 1 the text keeps two significant digits, so
+// 0.015 does not print as 0.01 and 0.0004 not as 0.000 beside a finite contrast.
+function meterLowLuminanceText(value,digits){
+ const n=Number(value)||0;
+ if(!(n>0&&n<1)) return n.toFixed(digits);
+ return n.toFixed(Math.max(digits,Math.min(6,1-Math.floor(Math.log10(n)))));
+}
+
+// The server decides the panel when a series starts, so a run read back from it
+// keeps that panel in every browser. A status from before the field stays
+// unstamped and takes the selection, as an old run does.
+function meterStampSeriesPanel(status){
+ if(!status||typeof status.true_black_panel!=='boolean') return status;
+ const stamp=reading=>{
+  if(reading&&typeof reading==='object') reading.true_black_panel=status.true_black_panel;
+ };
+ if(Array.isArray(status.readings)) status.readings.forEach(stamp);
+ stamp(status.white_reading);
+ return status;
+}
 
 function meterNormalizeMeasuredReading(reading){
  if(!reading||typeof reading!=='object'||reading.synthetic_target) return reading;
@@ -8239,13 +8293,15 @@ function meterNormalizeMeasuredReading(reading){
   // colorimeter but a small POSITIVE ambient-leakage value with a spectro
   // (observed ~0.004 cd/m² on the i1 Pro 2). Route that through the same
   // zero path used for the exact-0 case: when this is a black-targeted read
-  // (meterReadingTargetsBlack) and the measured luminance is at/below the
-  // black-floor epsilon (just above the observed ambient, well under the
-  // lowest real greyscale step), snap X/Y/Z to 0. raw_* above are preserved
-  // for diagnostics, and a genuinely elevated black (>epsilon) is left
-  // untouched. Applies to single/continuous/series reads (all flow here).
+  // (meterReadingTargetsBlack) on a true-black panel (meterBlackFloorApplies)
+  // and the measured luminance is at/below the black-floor epsilon (just
+  // above the observed ambient, well under the lowest real greyscale step),
+  // snap X/Y/Z to 0. raw_* above are preserved for diagnostics, and a
+  // genuinely elevated black (>epsilon) is left untouched. Applies to
+  // single/continuous/series reads (all flow here).
   if(meterReadingTargetsBlack(reading)
-     && Number.isFinite(corrected.Y) && corrected.Y>=0 && corrected.Y<=METER_BLACK_FLOOR_NITS){
+     && Number.isFinite(corrected.Y) && corrected.Y>=0 && corrected.Y<=METER_BLACK_FLOOR_NITS
+     && meterBlackFloorApplies(reading)){
    reading.X=0; reading.Y=0; reading.Z=0;
    corrected.X=0; corrected.Y=0; corrected.Z=0;
   }
@@ -10054,6 +10110,8 @@ function meterChartBlackLevel(readings){
  // last measured black from the same live calibration context until its
  // reference pre-read replaces it.
  if(meterSeriesBaselineBlack){
+  // Restored before the selects are: normalise it now, as every other reader does.
+  meterNormalizeOledBlackReading(meterSeriesBaselineBlack);
   const baseline=Number(meterSeriesBaselineBlack.luminance!=null
    ?meterSeriesBaselineBlack.luminance:meterSeriesBaselineBlack.Y);
   if(Number.isFinite(baseline)&&baseline>=0) return baseline;
@@ -13785,7 +13843,7 @@ function meterGreyMeasuredEotfChartValue(luminance,refWhite,blackLevel){
  // is the plain log-ratio exponent ln(Y/Yw)/ln(V), which is defined for any
  // Y>0, so a panel with blacker-than-target black still plots there.
  const Lb=Math.max(0,Number(blackLevel)||0);
- if(Lb>0.001 && y<Lb && meterBt1886BlackAwareMetricsActive()) return null;
+ if(Lb>0 && y<Lb && meterBt1886BlackAwareMetricsActive()) return null;
  return meterGreyMeasuredEotfValue(y,ref,blackLevel);
 }
 
@@ -13885,7 +13943,7 @@ function meterGreyTargetGamma(ire,Lw,Lb,code,prevIre,prevCode){
  //
  // Lb=0 collapses BT.1886 to Lw*V^g and is mathematically identical to the
  // nominal exponent, so keep returning the constant there.
- if(black>0.001){
+ if(black>0){
   const tgtLum=meterGreyTargetLuminance(ire,peak,black,code);
   if(!(tgtLum>0)) return null;
   const analysisIre=signal*100;
@@ -16187,6 +16245,7 @@ function meterRecoverSeries(s){
  // It is not a chart-series selection and must not replace the calibration
  // workspace's active preset if another recovery caller sees the same status.
  if(meterSeriesStatusIsIccWorkflow(s)) return false;
+ meterStampSeriesPanel(s);
  const recoveredChartRevision=++meterSeriesChartRevision;
  const previousSeriesKey=String(meterActiveSeriesKey||'');
  const previousScrollRatio=Number(meterGreyscaleScrollRatio)||0;
@@ -17144,7 +17203,7 @@ function meterLiveXyzRgbCodes(xyz,step){
   // prefers a manual override over the measured peak.
   const Lb=(typeof meterChartBlackLevel==='function')
    ?Math.max(0,Number(meterChartBlackLevel(Array.isArray(meterReadings)?meterReadings:[]))||0):0;
-  const blackAware=!dvGamma22 && Lb>0.001
+  const blackAware=!dvGamma22 && Lb>0
    && (typeof meterBt1886BlackAwareMetricsActive==='function') && meterBt1886BlackAwareMetricsActive();
   signal=linear.map(channel=>{
    if(blackAware) return meterGreyInverseEotfSignalFromLuminance(Math.max(0,channel),reference,Lb);
@@ -17251,7 +17310,7 @@ function updateLiveReading(reading){
  document.getElementById('meterLiveReading').style.display='';
  const liveLabel=document.getElementById('meterLiveReadingLabel');
  if(liveLabel) liveLabel.textContent=meterLiveReadingLabel(reading);
- document.getElementById('meterLum').textContent=measured&&measured.Y!=null?measured.Y.toFixed(2):'--';
+ document.getElementById('meterLum').textContent=measured&&measured.Y!=null?meterLowLuminanceText(measured.Y,2):'--';
  // CCT (correlated colour temperature) is only meaningful for near-neutral
  // (greyscale/white) patches. For a saturated colour patch the "temperature"
  // is a nonsense number, so suppress it rather than mislead the operator.
@@ -17726,7 +17785,7 @@ function meterApplySingleReadResult(result,requestedStep){
     meterBuildPatchThumbs(sortedSteps,completedIres,null);
    }
     updateLiveReading(rd);
-   toast('Reading: '+rd.luminance.toFixed(2)+' cd/m\\u00B2');
+   toast('Reading: '+meterLowLuminanceText(rd.luminance,2)+' cd/m\\u00B2');
   }
  } else {
   toast(pgFailMsg('Measurement failed',result,'Check that the meter is connected and placed on the screen, then read again.'),true);
@@ -18123,14 +18182,16 @@ function meterSetTargetLevelsStateOnly(){
 // CRT, plus any display-specific CCSS whose technology resolves to OLED.
 function meterDisplayTypeIsOledClass(value){
  const v=String(value||((document.getElementById('meterDisplayType')||{}).value)||'').toLowerCase();
- if(v.indexOf('oled')!==-1||v==='qdoled'||v==='plasma'||v==='crt') return true;
  if(v.startsWith('ccss_')||v.startsWith('custom_')){
+  // A word, not a substring: "Cooled_DLP" and "PicoLED" are no OLED. Same rule
+  // as webui_display_type_is_oled_class.
+  let meta=v;
   try{
-   const meta=(typeof meterDisplayTypeMetaText==='function')?meterDisplayTypeMetaText(v):'';
-   if(/\b(?:qd[-\s]*oled|wrgb[-\s]*oled|rgb[-\s]*oled|woled|amoled|oled)\b/i.test(meta)) return true;
+   if(typeof meterDisplayTypeMetaText==='function') meta=meterDisplayTypeMetaText(v);
   }catch(e){}
+  return /(?:^|[^a-z])(?:am|j|w|qd|rgb|wrgb)?oled(?:[^a-z]|$)/i.test(meta);
  }
- return false;
+ return v.indexOf('oled')!==-1||v==='plasma'||v==='crt';
 }
 // Apply display-type-based defaults. when forceAll is true both white and
 // black are reset to defaults (first selection / no saved state); otherwise
@@ -19474,7 +19535,7 @@ let meterSeriesSelectionRunActive=false;
 // Step identities selected by Read Selection. The run temporarily clears the
 // interactive state while the meter owns the patch, then restores these exact
 // patches at completion so the same subset can be read again.
-let meterSelectionRunStepKeys=[];
+let meterSelectionRunTiles=null;
 // Snapshot of chart readings when Read Selection starts so partial re-reads
 // merge into the existing series instead of wiping the charts first.
 let meterSelectionBaselineReadings=null;
@@ -19594,14 +19655,79 @@ function meterClearMultiPatchSelection(){
  meterThumbSelectionAnchor=null;
 }
 
-function meterRestoreSelectionRunPatches(){
- const wanted=new Set(Array.isArray(meterSelectionRunStepKeys)?meterSelectionRunStepKeys:[]);
- meterSelectionRunStepKeys=[];
- if(!wanted.size) return;
- const next=new Set();
- meterVisibleSeriesSteps().forEach((step,index)=>{
-  if(wanted.has(meterStepNameKey(step))) next.add(index);
+// Finds steps again in a rebuilt list, each candidate once, in three passes:
+// name and codes (a custom series can repeat a name, and the daemon moves real
+// White/Black to the front), then the name alone (a new range or depth changes
+// the codes, and an old code can equal the code of another patch, so the name
+// outranks it), then the codes alone. A name counts as the daemon cleans it
+// (webui_custom_series_steps_from_body: "MB Hue 30\u00B0" comes back as "MB Hue 30").
+// A name with nothing left comes back as "Patch <place in the request>", and the
+// tiles are sorted: while a list holds such a step, "Patch N" alone proves nothing.
+// Nor does a name a list holds with other codes, or without codes: the order of such
+// twins is open, the daemon and the sort move them. A step the old list holds twice
+// with its codes is no twin but one patch visited twice (LG 26 repeats 25/50/75%):
+// both lead to the same step. Codes alone count only while the codes stayed: in a new range the
+// same code is another level (LG 26: 109% on 255 Limited, 100% on 255 Full).
+// Pass the whole old list, twins show only there. A step with no match stays null:
+// the caller must not drop it silently.
+function meterMatchSteps(wanted,candidates){
+ const codesOf=step=>[step.r,step.g,step.b].some(code=>code==null||code==='')
+  ?null:[step.r,step.g,step.b].map(Number).join(',');
+ const cleaned=step=>String(step.name||'').replace(/[^A-Za-z0-9 ._%#()+\-\/]/g,'').slice(0,48);
+ const nameOf=step=>cleaned(step)||meterStepNameKey(step);
+ const generated=candidates.some(step=>step&&!cleaned(step));
+ const nameAndCodes=step=>{ const codes=codesOf(step); return codes==null?null:nameOf(step)+'|'+codes; };
+ const twinNames=new Set();
+ [wanted,candidates].forEach(list=>{
+  const seen=new Map();
+  list.forEach(step=>{
+   if(!step) return;
+   const name=nameOf(step);
+   if(seen.has(name)&&(codesOf(step)==null||seen.get(name)!==codesOf(step))) twinNames.add(name);
+   seen.set(name,codesOf(step));
+  });
  });
+ const provenName=step=>twinNames.has(nameOf(step))||(generated&&/^Patch \d+$/.test(nameOf(step)))?null:nameOf(step);
+ const fits=(a,b)=>a.input_max==null||b.input_max==null||Number(a.input_max)===Number(b.input_max);
+ const matched=wanted.map(()=>null);
+ const taken=candidates.map(step=>!step);
+ const pass=(label,accepts)=>{
+  const buckets=new Map();
+  candidates.forEach((step,index)=>{
+   if(taken[index]) return;
+   const name=label(step);
+   if(name==null) return;
+   if(!buckets.has(name)) buckets.set(name,[]);
+   buckets.get(name).push(index);
+  });
+  wanted.forEach((step,index)=>{
+   if(matched[index]||!step) return;
+   const bucket=buckets.get(label(step));
+   if(!bucket) return;
+   const place=bucket.findIndex(found=>accepts(step,candidates[found]));
+   if(place<0) return;
+   const found=bucket.splice(place,1)[0];
+   taken[found]=true;
+   matched[index]=candidates[found];
+  });
+ };
+ pass(nameAndCodes,fits);
+ pass(provenName,()=>true);
+ const samePatch=new Map();
+ const keyOf=step=>step?nameAndCodes(step):null;
+ wanted.forEach((step,index)=>{ if(keyOf(step)!=null&&matched[index]) samePatch.set(keyOf(step),matched[index]); });
+ wanted.forEach((step,index)=>{ if(!matched[index]) matched[index]=samePatch.get(keyOf(step))||null; });
+ if(matched.every((step,index)=>!step||codesOf(step)===codesOf(wanted[index]))) pass(codesOf,fits);
+ return matched;
+}
+
+function meterRestoreSelectionRunPatches(){
+ const run=meterSelectionRunTiles;
+ meterSelectionRunTiles=null;
+ if(!run) return;
+ const visible=meterVisibleSeriesSteps();
+ const tiles=meterMatchSteps(run.steps,visible);
+ const next=new Set(run.indices.map(index=>tiles[index]).filter(Boolean).map(step=>visible.indexOf(step)));
  meterSelectedThumbIndices=next;
  meterThumbSelectionAnchor=next.size?Math.min(...Array.from(next)):null;
 }

@@ -188,7 +188,7 @@ meta = {"type": stype, "points": points}
 # these top-level fields made a live series depend on whichever reading or
 # reconstructed step happened to be available during that poll, then caused a
 # second target/Delta-E calculation when the completed snapshot was restored.
-for key in ("signal_mode", "target_gamma", "max_luma", "dv_map_mode", "dv_interface"):
+for key in ("signal_mode", "target_gamma", "max_luma", "dv_map_mode", "dv_interface", "true_black_panel"):
     if key in state and state[key] is not None:
         meta[key] = state[key]
 sys.stdout.write(",".join(json.dumps(key) + ":" + json.dumps(value, separators=(",", ":"))
@@ -1958,7 +1958,7 @@ PY
 normalize_oled_zero_black_reading() {
  local reading="$1"
  READING_JSON="$reading" DISPLAY_TYPE_VALUE="$DISPLAY_TYPE" CCSS_FILE_VALUE="${CCSS_FILE:-}" "${PYTHON_BIN:-python}" - <<'PY'
-import json, os, sys
+import json, os, re, sys
 
 def finite(value):
     return value == value and value not in (float("inf"), float("-inf"))
@@ -1970,7 +1970,21 @@ except Exception:
 
 display_type = str(os.environ.get("DISPLAY_TYPE_VALUE", "") or rd.get("display_type", "")).lower()
 ccss_file = str(os.environ.get("CCSS_FILE_VALUE", "") or rd.get("ccss_file", "")).lower()
-is_oled = "oled" in display_type or "oled" in ccss_file
+# A word in the file name or its DISPLAY/TECHNOLOGY lines, as in
+# webui_display_type_is_oled_class: a directory or a "Cooled_DLP" profile says
+# nothing about the panel, the shipped OLEDFamily says it in its lines.
+oled_word = re.compile(r"(?:^|[^a-z])(?:am|j|w|qd|rgb|wrgb)?oled(?:[^a-z]|$)", re.I)
+ccss_name = ccss_file.rsplit("/", 1)[-1]
+is_oled = "oled" in display_type or oled_word.search(ccss_name) is not None
+if not is_oled and ccss_file:
+    try:
+        with open(os.environ.get("CCSS_FILE_VALUE", ""), "rb") as profile:
+            ccss_text = profile.read().decode("latin-1")
+    except Exception:
+        ccss_text = ""
+    for value in re.findall(r'^(?:DISPLAY|TECHNOLOGY)\s+"([^"]*)"', ccss_text, re.M | re.I):
+        if oled_word.search(value):
+            is_oled = True
 if not is_oled:
     sys.exit(1)
 if str(rd.get("series_type", "")).lower() not in ("", "greyscale"):

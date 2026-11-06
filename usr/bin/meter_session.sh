@@ -1382,9 +1382,8 @@ while read -t "$IDLE_TIMEOUT" -u 4 line; do
 	      capture_additional_average_sample "$READ_TIMEOUT"
 	      SAMPLE_RC=$?
 	      # A zero that survived its re-reads ends the set. It never enters the
-	      # mean: on a lit patch it means the meter failed, and 4, 0, 4 would pass
-	      # as 2.67 with no flag. The reads so far stand; the next first read
-	      # meets the null guards if the meter is gone.
+	      # mean: 4, 0, 4 would pass as 2.67 with no flag. The reads so far stand;
+	      # the next first read meets the null guards if the meter is gone.
 	      if (( SAMPLE_RC == 2 )); then
 	       SET_ENDED_EARLY=1
 	       break

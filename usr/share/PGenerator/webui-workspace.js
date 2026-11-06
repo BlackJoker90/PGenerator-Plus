@@ -18187,8 +18187,9 @@ function meterAveragedReadText(reading){
  const requested=Number(reading&&reading.requested_sample_count)||0;
  const min=Number(reading&&reading.sample_y_min),max=Number(reading&&reading.sample_y_max);
  if(!(Math.max(reads,requested)>1)||reading.sample_y_min==null||reading.sample_y_max==null||!Number.isFinite(min+max)) return '';
- // A black set to 0 no longer shows what the reads saw.
- if(reading.normalized_black) return '';
+ // A black set to 0, here or by the page's black floor, no longer shows what
+ // the reads saw.
+ if(reading.normalized_black||(reading.luminance!=null&&Number(reading.luminance)===0&&max>0)) return '';
  // Near black three decimals would round a real spread away.
  const text=y=>meterLowLuminanceText(y,y<1?4:3);
  const count=requested>reads?reads+' of '+requested:String(reads);

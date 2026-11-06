@@ -1696,7 +1696,7 @@ capture_series_average_sample() {
   if (( cur_count > prev_count )); then
    parsed=$(parse_latest_result)
    if [[ -n "$parsed" ]]; then
-    if nonblack_zero_reading "$parsed" "$IRE" "$R" "$G" "$B"; then
+    if nonblack_zero_reading "$parsed" "$IRE" "$R" "$G" "$B" "$INPUT_MAX"; then
      if (( zero_discards < ZERO_READ_RETRIES )); then
       zero_discards=$((zero_discards + 1))
       echo "[$(date '+%H:%M:%S.%3N')] null averaging sample; re-reading $zero_discards/$ZERO_READ_RETRIES step=$STEP_NUM name=$NAME" >> /tmp/meter_series_debug.log
@@ -1743,8 +1743,24 @@ capture_series_average_sample() {
  return 1
 }
 
+# Do the codes sit above the black code of this depth? A patch can carry ire 0
+# and still be lit: HCFR's Red 0% is a mid grey. The scale is the number of
+# representable values, as in patch_drives_light in meter_session.sh.
+patch_codes_above_black() {
+ awk -v r="$1" -v g="$2" -v b="$3" -v m="${4:-255}" '
+  BEGIN {
+   m = m + 0
+   if (m <= 0) m = 255
+   black_floor = int(16.0 * (m + 1.0) / 256.0 + 0.5)
+   hi = r + 0
+   if (g + 0 > hi) hi = g + 0
+   if (b + 0 > hi) hi = b + 0
+   exit !(hi > black_floor)
+  }'
+}
+
 nonblack_zero_reading() {
- local reading="$1" ire="$2" r="$3" g="$4" b="$5"
+ local reading="$1" ire="$2" r="$3" g="$4" b="$5" input_max="${6:-255}"
  # A black target is expected to read ~0; do not treat its zero reading as a
  # meter failure. Check IRE (the 0% greyscale step sends the limited-range
  # black code, e.g. 64, not r=g=b=0, so the r=g=b=0 test below alone misses it).
@@ -1753,7 +1769,8 @@ nonblack_zero_reading() {
  # disabled this guard for it. The series loop validates IRE before it gets
  # here, so this is belt-and-braces, but the helper must not be the weak link.
  if [[ "$ire" =~ ^[+-]?([0-9]+\.?[0-9]*|\.[0-9]+)([eE][+-]?[0-9]+)?$ ]]; then
-  awk -v ire="$ire" 'BEGIN { exit !(ire+0 <= 0) }' && return 1
+  awk -v ire="$ire" 'BEGIN { exit !(ire+0 <= 0) }' \
+   && ! patch_codes_above_black "$r" "$g" "$b" "$input_max" && return 1
  fi
  awk -v r="$r" -v g="$g" -v b="$b" 'BEGIN { exit !((r+0)==0 && (g+0)==0 && (b+0)==0) }' && return 1
  local X Y Z lum
@@ -2367,7 +2384,7 @@ EOJSON
   done
  fi
 
- if [[ -n "$READING" ]] && nonblack_zero_reading "$READING" "$IRE" "$R" "$G" "$B"; then
+ if [[ -n "$READING" ]] && nonblack_zero_reading "$READING" "$IRE" "$R" "$G" "$B" "$INPUT_MAX"; then
   ZERO_RESULT_LINE=$(sed 's/\x1b\[[0-9;]*[a-zA-Z]//g' "$OUTFILE" 2>/dev/null | tr -d '\r' | grep "Result is XYZ:" | tail -1 | cut -c1-200)
   echo "[$(date '+%H:%M:%S.%3N')] zero read guard: step=$STEP_NUM ire=$IRE name=$NAME parsed all-zero XYZ/luminance result=$(printf '%s' "$ZERO_RESULT_LINE" | tr '"' "'")" >> /tmp/meter_series_debug.log
   ZERO_RETRY_READING=""
@@ -2438,14 +2455,14 @@ EOJSON
    if [[ -z "$ZERO_RETRY_READING" ]]; then
     series_meter_read_failure_exit "Meter zero-confirmation read returned an unparseable result for $NAME; series stopped"
    fi
-   if [[ -n "$ZERO_RETRY_READING" ]] && ! nonblack_zero_reading "$ZERO_RETRY_READING" "$IRE" "$R" "$G" "$B"; then
+   if [[ -n "$ZERO_RETRY_READING" ]] && ! nonblack_zero_reading "$ZERO_RETRY_READING" "$IRE" "$R" "$G" "$B" "$INPUT_MAX"; then
     echo "[$(date '+%H:%M:%S.%3N')] zero read guard recovered: step=$STEP_NUM ire=$IRE retry=$zero_retry name=$NAME" >> /tmp/meter_series_debug.log
     READING="$ZERO_RETRY_READING"
     break
    fi
    ZERO_RETRY_READING=""
   done
-  if nonblack_zero_reading "$READING" "$IRE" "$R" "$G" "$B"; then
+  if nonblack_zero_reading "$READING" "$IRE" "$R" "$G" "$B" "$INPUT_MAX"; then
    # Keep the measurement. Discarding it removed the node from every chart and
    # report, which hid exactly the defect being measured: a panel whose low end
    # is crushed to black genuinely emits no light at these stimuli, and that
@@ -2477,9 +2494,8 @@ EOJSON
    capture_series_average_sample "$(read_timeout_seconds "$IRE")"
    SAMPLE_RC=$?
    # A zero that survived its re-reads ends the set. It never enters the mean:
-   # on a lit patch it means the meter failed, and 4, 0, 4 would pass as 2.67
-   # with no flag. The reads so far stand; the next first read meets the zero
-   # guards if the meter is gone.
+   # 4, 0, 4 would pass as 2.67 with no flag. The reads so far stand; the next
+   # first read meets the zero guards if the meter is gone.
    if (( SAMPLE_RC == 2 )); then
     echo "[$(date '+%H:%M:%S.%3N')] null averaging sample ends the set: step=$STEP_NUM sample=$average_index/$AVERAGE_SAMPLE_COUNT name=$NAME" >> /tmp/meter_series_debug.log
     SET_ENDED_EARLY=1

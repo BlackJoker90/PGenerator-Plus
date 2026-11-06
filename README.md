@@ -328,7 +328,8 @@ PGenerator+ is a free, open-source display calibration suite for the Raspberry P
 
 - **Protocol:** SpectraCal Unified Pattern Generator Control Interface (port `2100`)
 - **Connect:** **Find Source** → Manufacturer `SpectraCal` (or `Portrait Displays`) → Model `SpectraCal - Unified Pattern Generator Control Interface`. Enter the Pi's IP and connect.
-  - *Calman control:* Calman switches SDR / HDR10 / HLG / Dolby Vision, EOTF, colorimetry, format and mastering metadata directly; PGenerator+ applies them in real time. In HDR10, HLG and Dolby Vision the colorimetry stays BT.2020, the container these signals are defined in; a BT.709 gamut target is drawn inside it.
+  - *Calman control:* Calman switches SDR / HDR10 / HLG, EOTF, colorimetry, format and mastering metadata directly; PGenerator+ applies them in real time. In HDR10, HLG and Dolby Vision the colorimetry stays BT.2020, the container these signals are defined in; a BT.709 gamut target is drawn inside it.
+  - *Dolby Vision needs the G1 source:* the UPGCI source does not send Calman's Dolby Vision command (`CONF_DV`). In a Calman 5.14 log, "Dolby Vision RGB Tunneling" sent the same commands as HDR10, so the output is HDR10. Connect as **Portrait Displays G1** instead, which sends it. Whether Calman Home offers the G1 source is not confirmed.
   - *Bit depth:* the Calman thread follows the configured bit depth. 10-bit codes stay exact, and codes are rounded to the output depth with a notice when one is not exact.
   - *Modes:* `CONF_FORMAT` requests resolve to the EDID copy of a mode rather than the userdef boot mode. G1 sessions start at Calman's RGB 8-bit default.
   - *Windows and APL:* fixed, custom and gray-surround APL windows (`RGB_S`, `RGB_A`, `CommandRGB`, `10_SIZE`, `11_APL`). With limited range, window backgrounds are drawn at black.

@@ -117,6 +117,9 @@ sub mode_idx_follow_timing (@) {
 }
 
 sub webui_preferred_rgb_quant_range (@) {
+ # A YCbCr link has no Full (the WebUI refuses it, nothing compresses the codes
+ # on the way out): Default, and a 2 left in the conf, are Limited there.
+ return 1 if(($pgenerator_conf{"color_format"} || "0") ne "0");
  my $quant_range=$webui_rgb_quant_range_preferred;
  $quant_range=$pgenerator_conf{"rgb_quant_range"} if($quant_range eq "");
  $quant_range=2 if($quant_range !~/^[12]$/);
@@ -143,7 +146,15 @@ sub apply_source_rgb_quant_range (@) {
  my $quant_range=shift;
  my $owner_changed=0;
  if($source eq "webui") {
-  $quant_range=&webui_preferred_rgb_quant_range() if($quant_range !~/^[12]$/);
+  my $ycbcr=(($pgenerator_conf{"color_format"} || "0") ne "0");
+  # Default on YCbCr already is Limited on the wire: a pattern request has nothing
+  # to apply and must not rewrite the configured range.
+  if($ycbcr && ($pgenerator_conf{"rgb_quant_range"} || "0") !~/^[12]$/) {
+   $external_rgb_quant_range_active=0;
+   $rgb_quant_range_source=$source;
+   return 0;
+  }
+  $quant_range=&webui_preferred_rgb_quant_range() if($ycbcr || $quant_range !~/^[12]$/);
   $webui_rgb_quant_range_preferred=$quant_range;
   $external_rgb_quant_range_active=0;
  } else {

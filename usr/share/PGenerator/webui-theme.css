@@ -548,9 +548,9 @@ padding:4px 24px 4px 8px;border-radius:var(--r-sm);font-size:var(--fs-xs);outlin
 #meterSettingsGrid .field-display .field-whitepoint.visible{display:block}
 #meterSettingsGrid .field-gamma{width:150px}
 #meterSettingsGrid .field-chromaticity{width:150px}
-#meterSettingsGrid .meter-target-white-row,#meterSettingsGrid .meter-target-black-row{display:flex;align-items:center;gap:8px;flex-wrap:nowrap;margin-top:4px;width:min(420px,calc(100vw - 70px));max-width:none}
+#meterSettingsGrid .meter-target-white-row,#meterSettingsGrid .meter-target-black-row{display:flex;align-items:center;gap:8px;flex-wrap:nowrap;margin-top:4px;width:max-content;max-width:calc(100vw - 70px)}
 #meterSettingsGrid .meter-target-inline-label{font-size:var(--fs-xs);color:var(--text2);flex:0 0 112px;min-width:112px;margin-right:2px;white-space:nowrap}
-#meterSettingsGrid .meter-target-white-row input[type=number],#meterSettingsGrid .meter-target-black-row input[type=number]{width:62px;min-width:62px;padding-left:7px;padding-right:7px}
+#meterSettingsGrid .meter-target-white-row input[type=number],#meterSettingsGrid .meter-target-black-row input[type=number]{width:calc(8ch + 32px);min-width:calc(8ch + 32px);padding-left:7px;padding-right:7px}
 #meterSettingsGrid .meter-target-white-row input[type=number].meter-input-disabled,#meterSettingsGrid .meter-target-black-row input[type=number].meter-input-disabled{opacity:.45;background:var(--bg2,#1b1b26);cursor:not-allowed}
 #meterSettingsGrid .meter-target-measure-btn{padding:3px 6px;line-height:1.15;font-size:var(--fs-2xs);white-space:nowrap}
 #meterSettingsGrid .meter-target-use-measured{display:inline-flex;align-items:center;gap:7px;white-space:nowrap;font-size:var(--fs-2xs)}

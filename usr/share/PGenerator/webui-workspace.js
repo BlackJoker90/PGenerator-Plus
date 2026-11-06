@@ -4414,7 +4414,7 @@ function meterAutoCalSummaryRows(status){
  return meterAutoCalResultRows(status).filter(row=>{
   const ire=Number(row.ire);
   const rd=row.reading||{};
-  return !(rd.autocal_white_reference||rd.autocal_reference_only||(Number.isFinite(ire)&&Math.abs(ire-100)<0.001));
+  return !(rd.autocal_white_reference||rd.autocal_reference_only||(Number.isFinite(ire)&&Math.abs(ire-100)<0.001)||meterReadingIsBlackStep(rd));
  });
 }
 
@@ -14931,16 +14931,21 @@ function drawEOTFChart(gs,allSteps,readingMap){
  ctx.fillText('Measured max: '+measuredMax.toFixed(1)+' cd/m\u00B2',ctx.w-chart.pad.r,chart.pad.t-8);
 }
 
-function meterDrawDeltaSummary(ctx,chart,values){
+function meterDrawDeltaSummary(ctx,chart,values,note){
  const vals=(values||[]).filter(v=>Number.isFinite(v));
  if(!vals.length) return;
  const avg=vals.reduce((s,v)=>s+v,0)/vals.length;
  const min=Math.min(...vals);
  const max=Math.max(...vals);
  ctx.fillStyle=pgThemeColor('--chart-annotation','#888');ctx.font=pgChartFont(11);ctx.textAlign='right';
- const statsText='Min: '+min.toFixed(2)+'  Avg: '+avg.toFixed(2)+'  Max: '+max.toFixed(2);
+ const statsText='Min: '+min.toFixed(2)+'  Avg: '+avg.toFixed(2)+'  Max: '+max.toFixed(2)+(note?'  '+note:'');
  chart.statsW=ctx.measureText(statsText).width;
  ctx.fillText(statsText,chart.pad.l+chart.w,chart.pad.t-4);
+}
+
+function meterDrawGreyDeltaSummary(ctx,chart,deMap){
+ const counted=meterGreySummaryDeltas(deMap);
+ meterDrawDeltaSummary(ctx,chart,counted,counted.length<Object.keys(deMap).length?'excl. 0%':'');
 }
 
 function drawGammaChart(gs,allSteps,readingMap){
@@ -15146,7 +15151,7 @@ function drawDeltaEChart(gs,allSteps,readingMap,rawGs){
  });
  ctx.restore();
  // Average dE line
- meterDrawDeltaSummary(ctx,chart,deValues);
+ meterDrawGreyDeltaSummary(ctx,chart,deMap);
  // White point info (CCT, Δxy from D65)
  if(whiteR&&whiteR.x>0&&whiteR.y>0){
   const wp=meterTargetWhitePoint();
@@ -15236,7 +15241,7 @@ function drawDeltaE2000Chart(gs,allSteps,readingMap){
    ctx.fillRect(cx-1,chart.pad.t+chart.h-2,2,2);
   }
  });
- meterDrawDeltaSummary(ctx,chart,deValues);
+ meterDrawGreyDeltaSummary(ctx,chart,deMap);
 }
 
 function drawDeltaE2000Preset(gsSteps){
@@ -18241,13 +18246,14 @@ function meterBuildReportSummaryCards(){
   const peak=white?(white.luminance||white.Y||0):0;
   const black=meterChartBlackLevel(rawGs);
   let deVals=[];
+  const counted=gs.filter(rd=>!meterReadingIsBlackStep(rd));
   if(white&&(white.Y||white.luminance)>0){
-    deVals=gs.map(rd=>meterColorDeltaE2000(rd,meterGreyRefMode(),meterDeltaEForm(),meterGrayWorldWeight())).filter(v=>isFinite(v));
+    deVals=counted.map(rd=>meterColorDeltaE2000(rd,meterGreyRefMode(),meterDeltaEForm(),meterGrayWorldWeight())).filter(v=>isFinite(v));
   }
-  const avgDe=deVals.length?(deVals.reduce((s,v)=>s+v,0)/deVals.length):0;
+  const avgDe=deVals.length?(deVals.reduce((s,v)=>s+v,0)/deVals.length):NaN;
   const avgCct=gs.filter(r=>r.cct).length?(gs.filter(r=>r.cct).reduce((s,r)=>s+(r.cct||0),0)/gs.filter(r=>r.cct).length):null;
   cards=[
-   {label:'Average '+meterDeltaEFormLabel(),value:isFinite(avgDe)?avgDe.toFixed(2):'--'},
+   {label:'Average '+meterDeltaEFormLabel()+(counted.length<gs.length?' (excl. 0%)':''),value:isFinite(avgDe)?avgDe.toFixed(2):'--'},
    {label:'Peak Luminance',value:isFinite(peak)?peak.toFixed(1)+' cd/m²':'--'},
    {label:'Black Level',value:isFinite(black)?meterLowLuminanceText(black,3)+' cd/m²':'--'},
     {label:'Contrast Ratio',value:meterFormatContrastRatio(meterMeasuredContrastRatio(rawGs))},

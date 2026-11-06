@@ -7761,10 +7761,17 @@ function meterReadingMatchesStepList(reading,type,steps){
 
 function meterReadingIsBlackStep(reading){
  if(!reading||meterReadingIsSaturationStep(reading)) return false;
- const ire=Number(reading.ire);
+ const ire=Number([reading.ire,reading.plot_ire,reading.stimulus].find(level=>level!=null&&level!==''));
  if(Number.isFinite(ire)) return Math.abs(ire)<=0.05;
  const name=String(reading.name||'').trim().toLowerCase();
  return name==='0%'||name==='black';
+}
+
+// A greyscale ΔE average or maximum leaves out the 0% step, as HCFR does: its
+// first greyscale column gets no dE (Views/MainView.cpp GetItemText). At black
+// the ΔE is meter noise, not grey balance. deMap is a chart's ΔE by level.
+function meterGreySummaryDeltas(deMap){
+ return Object.keys(deMap).filter(ire=>!meterReadingIsBlackStep({ire:ire})).map(ire=>deMap[ire]);
 }
 
 function meterReadingsWouldRecoverAsBlackOnly(readings,type,steps){

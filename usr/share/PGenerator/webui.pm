@@ -423,6 +423,10 @@ our $_meter_read_file="/tmp/meter_read.json";
 my $_meter_session_pid_file="/tmp/meter_session.pid";
 my $_meter_session_fifo="/tmp/meter_session.cmd";
 my $_meter_session_config_file="/tmp/meter_session.config";
+# READ line version, field 11 of the session config. A session that outlived an
+# update reads a longer READ line wrong, so it must not match: bump it with the
+# line, here and in meter_session.sh.
+my $_meter_session_read_protocol="2";
 my $_meter_session_ready_file="/tmp/meter_session_ready.signal";
 my $_meter_session_start_ready_file="/tmp/meter_session_start_ready.signal";
 my $_meter_session_ack_file="/tmp/meter_session.ack";
@@ -679,6 +683,41 @@ sub _webui_ccss_repair_file (@) {
   print $fh $fixed;
   close($fh);
   return 1;
+ }
+ return 0;
+}
+
+# True-black emissive technology: OLED family, plasma, CRT. The spotread -y flag
+# cannot tell it: refresh (a DLP projector, say) and OLED both run as "c". A
+# CCSS or CCMX counts by its file name, a CCSS also by its DISPLAY/TECHNOLOGY
+# lines, but not for CRT: the profile maker gives Refresh and CRT the same
+# ccxxmake -t c, so a CRT line may well describe a DLP. In doubt: measure.
+sub webui_display_type_is_oled_class (@) {
+ my ($key,$ccss_file)=@_;
+ $key=lc(defined($key) ? $key : "");
+ # A word, not a substring: "Cooled_DLP" and "PicoLED" are no OLED. A profile
+ # from the maker carries TECHNOLOGY "CRT" on any Refresh display, so CRT counts
+ # in a name only. meterDisplayTypeIsOledClass applies the same rule on the page.
+ my $oled=qr/(?:^|[^a-z])(?:am|j|w|qd|rgb|wrgb)?oled(?:[^a-z]|$)/i;
+ my $name=qr/plasma|$oled|(?:^|[^a-z])crt(?:[^a-z]|$)/i;
+ if($key=~/^(?:ccss|custom)_/) {
+  return 1 if($key=~$name);
+ } else {
+  return 1 if($key=~/oled/ || $key eq "plasma" || $key eq "crt");
+ }
+ $ccss_file="" if(!defined($ccss_file));
+ return 0 if($ccss_file eq "");
+ my ($base)=$ccss_file=~m{([^/]*)$};
+ return 1 if($base=~$name);
+ my $txt="";
+ if(open(my $fh,"<",$ccss_file)) {
+  local $/;
+  $txt=<$fh>;
+  close($fh);
+ }
+ $txt="" if(!defined($txt));
+ foreach my $value ($txt=~/^(?:DISPLAY|TECHNOLOGY)\s+"([^"]*)"/mgi) {
+  return 1 if($value=~/plasma|$oled/i);
  }
  return 0;
 }
@@ -3872,7 +3911,7 @@ sub webui_meter_read (@) {
  # or the daemon isn't running.
  my $aio_flag=$disable_aio ? "1" : "0";
  # The legacy 7th session field stays off: sample count is per READ command.
- my $want_config="$display_type|$ccss_file|$refresh_rate|$aio_flag|$measurement_meter_port|$require_device_ready|$session_avg_mode|$measurement_meter_usb_id|$observer|$pattern_provider";
+ my $want_config="$display_type|$ccss_file|$refresh_rate|$aio_flag|$measurement_meter_port|$require_device_ready|$session_avg_mode|$measurement_meter_usb_id|$observer|$pattern_provider|$_meter_session_read_protocol";
  my $alive=&webui_meter_session_alive();
  my $needs_restart= !$alive || !&webui_meter_session_config_matches($want_config);
  if($needs_restart) {
@@ -3942,7 +3981,8 @@ sub webui_meter_read (@) {
 			 my $cmd_read_timeout=($read_timeout > 0) ? $read_timeout : "-";
 			 my $cmd_low_light_mode=$avg_mode;
 			 my $cmd_continuous=$is_continuous ? "1" : "0";
-			 $read_command.=" $cmd_signal_range $cmd_transport_signal_range $cmd_request_id $patch_input_max $cmd_read_timeout $cmd_low_light_mode $cmd_continuous $average_sample_count" if(!$calibrate_only);
+			 my $cmd_zero_black=&webui_display_type_is_oled_class($display_type_key,$ccss_file) ? "1" : "0";
+			 $read_command.=" $cmd_signal_range $cmd_transport_signal_range $cmd_request_id $patch_input_max $cmd_read_timeout $cmd_low_light_mode $cmd_continuous $average_sample_count $cmd_zero_black" if(!$calibrate_only);
 		 $read_command.="\n";
  if(!&webui_meter_session_send_command($read_command)) {
   &log("WebUI: meter session command send failed, restarting daemon");
@@ -6146,7 +6186,10 @@ my $dv_interface=($signal_mode eq "dv") ? &pg_dv_transport_interface($request_dv
 	  if(!$series_target_context);
 	 require JSON::PP;
 	 my $series_target_context_json=JSON::PP->new->canonical(1)->encode({%{$series_target_context}});
-	 my $series_meta_json="\"type\":\"$series_type_json\",\"points\":".($points+0).",\"selection_run\":".($selection_run?"true":"false").",\"signal_mode\":\"$series_signal_mode_json\",\"target_gamma\":\"$series_target_gamma_json\",\"max_luma\":$series_max_luma_num,\"dv_map_mode\":\"$series_dv_map_mode_json\",\"dv_interface\":\"$series_dv_interface_json\",\"calibration_target_context\":$series_target_context_json";
+	 # The panel this run is measured on travels with the run: the page cannot
+	 # tell it from the selection once that has changed.
+	 my $series_true_black=&webui_display_type_is_oled_class($display_type_key,$ccss_file) ? "true" : "false";
+	 my $series_meta_json="\"type\":\"$series_type_json\",\"points\":".($points+0).",\"true_black_panel\":$series_true_black,\"selection_run\":".($selection_run?"true":"false").",\"signal_mode\":\"$series_signal_mode_json\",\"target_gamma\":\"$series_target_gamma_json\",\"max_luma\":$series_max_luma_num,\"dv_map_mode\":\"$series_dv_map_mode_json\",\"dv_interface\":\"$series_dv_interface_json\",\"calibration_target_context\":$series_target_context_json";
 	 my $series_step_meta=",\"selection_run\":".($selection_run?"true":"false").",\"signal_mode\":\"$series_signal_mode_json\",\"target_gamma\":\"$series_target_gamma_json\",\"max_luma\":$series_max_luma_num,\"dv_map_mode\":\"$series_dv_map_mode_json\",\"dv_interface\":\"$series_dv_interface_json\"";
 	 @steps=map {
 	  my $step=$_;

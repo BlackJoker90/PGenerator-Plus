@@ -893,6 +893,10 @@ sub webui_route_is_concurrent_safe (@) {
  # /api/stats reads /proc/sysfs plus a 2s response cache; its cross-call CPU
  # delta baseline is :shared, so the pool does not corrupt the percentage.
  return 1 if($path eq "/api/stats" || $path eq "/api/info");
+ # The steps of a built-in series, computed and answered: writes no file, asks
+ # no device, keeps no state.
+ # A click on a tile waits for them, so they must not queue behind a meter read.
+ return 1 if($method eq "POST" && $path eq "/api/meter/series/preview");
  # A meter read is performed by the external session daemon, which publishes
  # its state in an atomic JSON file. Polling that file does not compete for
  # the meter, so it must not queue behind slow display commands on the single
@@ -2320,6 +2324,11 @@ sub webui_handle_request (@) {
 	  }
 	   elsif($path eq "/api/meter/series" && $method eq "POST") {
 	    my $result=&webui_meter_series_start($body);
+	    my $len=length($result);
+	    print $client "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: $len\r\n$cors\r\n$result";
+	   }
+	   elsif($path eq "/api/meter/series/preview" && $method eq "POST") {
+	    my $result=&webui_meter_series_start($body,1);
 	    my $len=length($result);
 	    print $client "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: $len\r\n$cors\r\n$result";
 	   }
@@ -4409,20 +4418,29 @@ sub webui_custom_series_steps_from_body (@) {
  return @out;
 }
 
+# $preview builds the steps of this run and answers them: nothing is stopped,
+# written or started. Read Selection takes its codes from here, so a selection
+# sends what the full series sends.
 sub webui_meter_series_start (@) {
- my ($body)=@_;
+ my ($body,$preview)=@_;
+ # Custom series are authored by the page, and a lattice can run to many
+ # thousands of steps: neither belongs on the lane that answers /api/ping.
+ return '{"status":"error","message":"A preview is for built-in series"}'
+  if($preview && $body=~/"custom_series"\s*:\s*true|"lattice_params"\s*:|"custom_steps"\s*:/i);
  # A cooperatively-cancelled series may still be finishing its current USB
  # transaction after the Stop API has returned. Never start a second owner of
  # the meter during that short drain window.
- if(&webui_meter_series_alive()) {
+ if(!$preview && &webui_meter_series_alive()) {
   return '{"status":"error","message":"Previous meter series is still stopping"}';
  }
  # A series run owns its own persistent spotread process. Read Once /
  # Continuous keeps a reusable meter_session daemon alive, so shut that down
  # before launching the series helper or two spotread instances can fight over
  # the same USB meter and produce intermittent bad/stale reads.
- &webui_meter_session_stop_only() if(&webui_meter_session_alive());
- &webui_pattern_stop_guard_clear();
+ if(!$preview) {
+  &webui_meter_session_stop_only() if(&webui_meter_session_alive());
+  &webui_pattern_stop_guard_clear();
+ }
  # Parse request
  my $type="greyscale";
  $type=$1 if($body=~/"type"\s*:\s*"(\w+)"/);
@@ -4431,14 +4449,15 @@ sub webui_meter_series_start (@) {
  $points=100 if($type eq "greyscale" && $points==256);
  my $display_type_key="lcd";
  $display_type_key=$1 if($body=~/"display_type"\s*:\s*"([^"\\]{1,160})"/);
- my ($display_type,$ccss_file)=&resolve_display_type($display_type_key);
+ # A preview has no meter to set up, and resolving a profile can repair its file.
+ my ($display_type,$ccss_file)=$preview ? ($display_type_key,"") : &resolve_display_type($display_type_key);
  # ccss_override: same parsing rule as webui_meter_read. The single-read and
  # series paths now share the same override-token contract so the worker can
  # always derive y_flag from display_type and the correction matrix from the
  # (override or technology default) CCSS path.
  my $ccss_override_token="";
  $ccss_override_token=$1 if($body=~/"ccss_override"\s*:\s*"([^"\\]{0,160})"/);
- if($ccss_override_token ne "") {
+ if(!$preview && $ccss_override_token ne "") {
   if(lc($ccss_override_token) eq "none") {
    $ccss_file="";
   } else {
@@ -4516,7 +4535,7 @@ $patch_insert_time_level=100 if($patch_insert_time_level > 100);
  $low_light_trigger="" if($low_light_trigger ne "" && $low_light_trigger<=0);
  my $measurement_meter_usb_id="";
  $measurement_meter_usb_id=lc($1) if($body=~/"measurement_meter_usb_id"\s*:\s*"([0-9a-fA-F]{4}:[0-9a-fA-F]{4})"/);
- if($measurement_meter_usb_id eq "" && $measurement_meter_port ne "") {
+ if(!$preview && $measurement_meter_usb_id eq "" && $measurement_meter_port ne "") {
   $measurement_meter_usb_id=&webui_meter_usb_id_for_port($measurement_meter_port);
  }
  my $observer="1931_2";
@@ -4526,7 +4545,7 @@ $patch_insert_time_level=100 if($patch_insert_time_level > 100);
  # state so tristimulus meters never receive an unsupported spectral mode.
  $observer="1931_2" if($points==990001);
  my $pattern_provider=($body=~/"pattern_provider"\s*:\s*"companion"/i)?"companion":"local";
- if(&webui_meter_is_spyderx($measurement_meter_usb_id,$measurement_meter_port)) {
+ if(!$preview && &webui_meter_is_spyderx($measurement_meter_usb_id,$measurement_meter_port)) {
   $display_type=&webui_spyderx_native_display_type($display_type_key);
   $ccss_file="" if($ccss_file!~/\.ccmx$/i);
   $refresh_rate="";
@@ -4535,10 +4554,13 @@ $patch_insert_time_level=100 if($patch_insert_time_level > 100);
   $observer="1931_2";
  }
  # Series requests use the same capability rule as single/continuous reads.
- $observer="1931_2" if(!&webui_meter_port_is_spectro($measurement_meter_port));
+ # The meter checks here and above ask the meter itself (spotread --detect,
+ # which can claim an i1Display3). The steps do not depend on them, and a
+ # preview runs on every click on a tile.
+ $observer="1931_2" if(!$preview && !&webui_meter_port_is_spectro($measurement_meter_port));
  my $require_device_ready=0;
  $require_device_ready=1 if($body=~/"require_device_ready"\s*:\s*true/i);
- $require_device_ready=1 if(!$require_device_ready && &webui_meter_port_is_spectro($measurement_meter_port));
+ $require_device_ready=1 if(!$preview && !$require_device_ready && &webui_meter_port_is_spectro($measurement_meter_port));
  my $target_gamut="";
  $target_gamut=lc($1) if($body=~/"target_gamut"\s*:\s*"([A-Za-z0-9_]+)"/);
 $target_gamut="" unless($target_gamut eq "bt709" || $target_gamut eq "bt2020" || $target_gamut eq "p3d65" || $target_gamut eq "p3dci" || $target_gamut eq "customd65");
@@ -4810,12 +4832,14 @@ my $dv_interface=($signal_mode eq "dv") ? &pg_dv_transport_interface($request_dv
   return $signal**$gamma;
  };
  # Cancel any running series and clean up
- &webui_meter_stop();
- &webui_pattern_stop_guard_clear();
- # Brief pause to let killed processes release USB device
- select(undef,undef,undef,0.5);
- if(&webui_meter_series_alive()) {
-  return '{"status":"error","message":"Previous meter series is still stopping"}';
+ if(!$preview) {
+  &webui_meter_stop();
+  &webui_pattern_stop_guard_clear();
+  # Brief pause to let killed processes release USB device
+  select(undef,undef,undef,0.5);
+  if(&webui_meter_series_alive()) {
+   return '{"status":"error","message":"Previous meter series is still stopping"}';
+  }
  }
 
  my $series_colorimetry=2;
@@ -4825,7 +4849,11 @@ my $dv_interface=($signal_mode eq "dv") ? &pg_dv_transport_interface($request_dv
  $series_primaries=$1 if($body=~/"primaries"\s*:\s*"?(\d+)"?/);
  $series_primaries=int($pgenerator_conf{"primaries"} || 0) if($series_primaries eq "");
  $series_color_format=int($pgenerator_conf{"color_format"} || 0) if($series_color_format eq "");
- my $patch_limited=(int($signal_range)==1) ? 1 : 0;
+ # Range Default on a YCbCr link is Limited (effective_rgb_quant_range, the page's
+ # meterIsLimitedRange): nothing compresses these codes on the way to the wire,
+ # so Full codes here would put Y=0 below black.
+ my $default_range_limited=($signal_range!~/^[12]$/ && int($series_color_format)!=0) ? 1 : 0;
+ my $patch_limited=(int($signal_range)==1 || $default_range_limited) ? 1 : 0;
  my $greyscale_patch_limited=$patch_limited;
  if($type eq "greyscale" && $signal_mode eq "sdr" && $pattern_signal_range=~/^[12]$/) {
   $greyscale_patch_limited=(int($pattern_signal_range)==1) ? 1 : 0;
@@ -5034,7 +5062,9 @@ my $dv_interface=($signal_mode eq "dv") ? &pg_dv_transport_interface($request_dv
 				    # what the panel actually decoded.
 				    my $inv;
 				    if($_ac26_bits == 10 && $greyscale_patch_limited) {
-				     $inv=($code-64)*100/876;
+				     # Above 940 the ladder is piecewise (100 + (code-940)*9/83), the
+				     # inverse of autocal_26_codes: 984 must come back as 984, not 986.
+				     $inv=$code>940 ? 100+($code-940)*9/83 : ($code-64)*100/876;
 				    } elsif($_ac26_bits == 10 && !$greyscale_patch_limited) {
 				     $inv=($code/1023)*100;
 				    } elsif($_ac26_bits == 8 && $greyscale_patch_limited) {
@@ -5055,6 +5085,9 @@ my $dv_interface=($signal_mode eq "dv") ? &pg_dv_transport_interface($request_dv
 				   # server-built series read stay in sync.
 				   my $_hdr20_bits=(defined $pgenerator_conf{"max_bpc"} && $pgenerator_conf{"max_bpc"} ne "") ? int($pgenerator_conf{"max_bpc"}) : 10;
 				   $_hdr20_bits=10 if($_hdr20_bits != 8 && $_hdr20_bits != 10);
+				   # Same override as max_bpc in %_opts_for_grey below: the Companion
+				   # runs HDR10 at 10 bit whatever the local bit depth says.
+				   $_hdr20_bits=10 if($pattern_provider eq "companion" && $signal_mode eq "hdr10");
 				   my %lg_hdr20_code=(
 				    "1.4"=>19,"2"=>20,"2.7"=>22,"4"=>25,"5"=>27,"7"=>31,"10"=>38,"15"=>49,"20"=>60,"25"=>71,
 				    "30"=>82,"35"=>93,"40"=>104,"45"=>115,"50"=>126,"60"=>147,"70"=>169,"80"=>191,"90"=>213,"100"=>235
@@ -5088,14 +5121,6 @@ my $dv_interface=($signal_mode eq "dv") ? &pg_dv_transport_interface($request_dv
 				    # full table (0..255).
 				    $lg_hdr20_active_table=\%lg_hdr20_code_8bit_full if(!$greyscale_patch_limited);
 				   }
-				   my $lg_hdr20_min_code=(!$lg_hdr20_codes) ? 64
-				    : ($_hdr20_bits == 10 && !$greyscale_patch_limited) ? 0
-				    : ($_hdr20_bits == 8) ? 0
-				    : 64;
-				   my $lg_hdr20_span_code=(!$lg_hdr20_codes) ? 876
-				    : ($_hdr20_bits == 10 && !$greyscale_patch_limited) ? 1023
-				    : ($_hdr20_bits == 10) ? 876
-				    : 255;
 			   if($points==26 && $lg_autocal_26 && $signal_mode eq "sdr") {
 			    foreach my $slot (@ire_vals) {
 			     my $key=$slot;
@@ -5268,7 +5293,6 @@ my $dv_interface=($signal_mode eq "dv") ? &pg_dv_transport_interface($request_dv
 	    $extra.=",\"series_type\":\"greyscale\",\"signal_r_pct\":$r_stim,\"signal_g_pct\":$g_stim,\"signal_b_pct\":$b_stim";
 	    $extra.=",\"final_white_refresh\":true" if($points==21 && !$lg_greyscale_21 && !$lg_autocal_26 && abs($v-100)<0.001);
 	    $extra.=",\"analysis_ire\":$analysis_ire,\"target_ire\":$analysis_ire,\"transport_stimulus\":$stim" if($points==21 && $lg_greyscale_21);
-		    $extra.=",\"input_max\":1023" if($lg_autocal_26_codes);
 		    $extra.=",\"input_max\":4095" if($dv_series && $dv_series_code_bits == 12);
 		    # HDR10 26pt: input_max follows max_bpc. 10 → input_max=1023 (10-bit codes);
 		    # 8 → input_max=255 (8-bit codes; matches the 1.6 WORKING
@@ -5276,15 +5300,17 @@ my $dv_interface=($signal_mode eq "dv") ? &pg_dv_transport_interface($request_dv
 		    # read input_max to decide the scale-on-the-wire conversion.
 		    $extra.=",\"input_max\":1023" if($lg_hdr20_codes && $_hdr20_bits == 10);
 		    $extra.=",\"input_max\":255" if($lg_hdr20_codes && $_hdr20_bits == 8);
-		    # Standard SDR / HDR10 / HLG / extended-SDR / legal-SDR-DDC greyscale:
-		    # stamp the bit-depth-aware input_max ($series_input_max, sampled
-		    # from the helper above) so meter_series.sh + pattern_request_body
-		    # dispatch a bit-perfect pattern. Mutually exclusive with the
-		    # autocal-26 / DV / HDR20 stamps above; this branch only fires
-		    # when none of those are active. Two-point steps need the same
+		    # Standard SDR / HDR10 / HLG / extended-SDR / legal-SDR-DDC / LG 26
+		    # greyscale: stamp the bit-depth-aware input_max ($series_input_max,
+		    # sampled from the helper above) so meter_series.sh +
+		    # pattern_request_body dispatch a bit-perfect pattern. LG 26 codes
+		    # are 8-bit on an 8-bit link: 1023 there made the pattern handler
+		    # shift 235 down to 58. Mutually exclusive with the DV / HDR20
+		    # stamps above; this branch only fires when none of those are
+		    # active. Two-point steps need the same
 		    # explicit input_max: without it the Companion path treated HDR
 		    # codes such as 307 as 8-bit and clamped the low patch to white.
-		    if(!$lg_autocal_26_codes && !$dv_series && !$lg_hdr20_codes) {
+		    if(!$dv_series && !$lg_hdr20_codes) {
 		     $extra.=",\"input_max\":$series_input_max";
 		    }
 		    if($lg_autocal_26_codes) {
@@ -6172,8 +6198,8 @@ my $dv_interface=($signal_mode eq "dv") ? &pg_dv_transport_interface($request_dv
 	  signal_peak_nits=>$series_max_luma_num,
 	  white_nits=>($series_target_white_y_num>0 ? $series_target_white_y_num : 0),
 	  black_nits=>($series_target_black_y_num ne "" ? $series_target_black_y_num+0 : 0),
-	  pattern_range=>(int($pattern_signal_range||0)==1 ? "limited" : "full"),
-	  transport_range=>(int($transport_signal_range||0)==1 ? "limited" : "full"),
+	  pattern_range=>((int($pattern_signal_range||0)==1 || ($default_range_limited && $pattern_signal_range!~/^[12]$/)) ? "limited" : "full"),
+	  transport_range=>((int($transport_signal_range||0)==1 || ($default_range_limited && $transport_signal_range!~/^[12]$/)) ? "limited" : "full"),
 	  pattern_bits=>$series_pattern_bits,
 	  transport_bits=>$series_transport_bits,
 	  headroom_strategy=>$series_headroom_strategy,
@@ -6199,6 +6225,8 @@ my $dv_interface=($signal_mode eq "dv") ? &pg_dv_transport_interface($request_dv
 	  }
 	  $step;
 	 } @steps;
+
+	 return "{\"status\":\"preview\",\"total_steps\":$total,$series_meta_json,\"steps\":[".join(",",@steps)."]}" if($preview);
 
 	 # Write steps to temp file for helper script
 	 my $steps_file="/tmp/meter_series_steps_${series_id}.json";

@@ -260,8 +260,8 @@ function signalPercentToCode(policy,stimulus){
   const value=clamp(stimulus,0,100);
   let slot='';
   for(const key of Object.keys(PGEN_HDR20_8_LIMITED)) if(Math.abs(Number(key)-value)<0.01){slot=key;break;}
-  const minimum=bits===10&&policy.hdr20_use_limited&&policy.hdr20_full?0:(bits===8?0:64);
-  const span=bits===10?(policy.hdr20_use_limited&&policy.hdr20_full?1023:876):255;
+  const minimum=limited?(bits===10?64:16):0;
+  const span=limited?(bits===10?876:219):inputMax;
   code=Object.prototype.hasOwnProperty.call(policy.active_table,slot)
    ?policy.active_table[slot]:Math.round(minimum+value/100*span);
   code=clamp(code,minimum,minimum+span);

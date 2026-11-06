@@ -1380,6 +1380,8 @@ function meterGreyscaleRunStepsWithMeasuredEndpoints(steps,opts){
  const takeEndpoint=(ire)=>{
   const index=remaining.findIndex(step=>meterStepIsNeutralEndpoint(step,ire));
   if(index>=0) return remaining.splice(index,1)[0];
+  const pooled=(opts.pool||[]).find(step=>meterStepIsNeutralEndpoint(step,ire));
+  if(pooled) return {...pooled};
   const code=meterCodeFromSignalPercent(ire);
   return {
    ire:ire,stimulus:ire,
@@ -2365,7 +2367,7 @@ function meterBuildLgAutoCalSteps(steps,includeWhiteReference){
 	   autocal_slot_locked:true
 	  };
 	 };
-			 const zeroCode=mode==='sdr'?(isFullRange?0:64):meterCodeFromSignalPercentWithOptions(0,null);
+			 const zeroCode=mode==='sdr'?(isFullRange?0:(stepInputMax>255?64:16)):meterCodeFromSignalPercentWithOptions(0,null);
 			 const zeroMeta=meterLgAutoCalTargetMetaForCode(zeroCode);
 			 // 0% SDR step input_max MUST match the body's stepInputMax
 			 // (8-bit -> 255, 10-bit -> 1023) so the renderer/worker see
@@ -3248,9 +3250,22 @@ function meterMeasurementPatchSignalRange(){
 async function meterDisplayPatch(step,options){
 	 const displayToken=++meterPatternDisplayToken;
 	 if(!meterEnsureAppliedGeneratorSettings()) return;
-	 const freshStep=(options&&options.fresh===false)?step:(meterFreshSeriesStep(step)||step);
+	 let freshStep=(options&&options.fresh===false)?step:(meterFreshSeriesStep(step)||step);
 	 if(!freshStep) return;
+	 const lockedBeforeCodes=meterPatchDisplayLockedForRead();
+	 if(options&&options.daemonCodes) freshStep=await meterStepWithDaemonCodes(freshStep);
 	 if(displayToken!==meterPatternDisplayToken) return;
+	 if(!freshStep){
+	  if(meterCurrentPatchStep===step) meterCurrentPatchStep=null;
+	  toast(METER_NO_DAEMON_CODES_MESSAGE,true);
+	  return;
+	 }
+	 // A read that began while the codes were on their way owns the patch now. A
+	 // click during Continuous was locked before, and still changes the patch.
+	 if(options&&options.daemonCodes&&!lockedBeforeCodes&&meterPatchDisplayLockedForRead()){
+	  if(meterCurrentPatchStep===step) meterCurrentPatchStep=freshStep;
+	  return;
+	 }
 	 // A calibration patch supersedes any diagnostic pattern on the wire, so
 	 // clear the highlighted Diagnostic Patterns button -- otherwise it stays
 	 // lit as if it were still displayed after switching to Calibration.
@@ -4414,7 +4429,7 @@ function meterAutoCalSummaryRows(status){
  return meterAutoCalResultRows(status).filter(row=>{
   const ire=Number(row.ire);
   const rd=row.reading||{};
-  return !(rd.autocal_white_reference||rd.autocal_reference_only||(Number.isFinite(ire)&&Math.abs(ire-100)<0.001)||meterReadingIsBlackStep(rd));
+  return !(rd.autocal_white_reference||rd.autocal_reference_only||(Number.isFinite(ire)&&Math.abs(ire-100)<0.001)||meterReadingHasBlackSignal(rd));
  });
 }
 
@@ -11549,6 +11564,56 @@ async function meterRunSelectedPatches(){
 }
 
 // Run a full automated series, or a thumbnail subset from Read Selection.
+// What the daemon needs to build this series. A run and its preview take the same
+// body, so the preview answers the steps the run will send.
+function meterSeriesRequestBody(hasSavedWhite,hasSavedBlack){
+ return meterMeasurementSignalContext({type:meterActiveSeriesType,points:meterActiveSeriesPoints,display_type:getEffectiveDisplayType(),target_gamut:(document.getElementById('meterTargetGamut')||{}).value||'auto',target_gamma:meterAutoCalTargetGammaValue(),picture_mode:meterLgPictureModeValue(),delay_ms:meterDelayMs(),patch_size:getMeterPatchSize(),signal_range:getVal('rgb_quant_range'),pattern_signal_range:meterMeasurementPatchSignalRange()||undefined,pattern_provider:meterCalibrationReadPatternProvider(),ccss_override:(typeof getCcssOverride==='function')?getCcssOverride():undefined,...meterPatternInsertionPayload(),refresh_rate:getMeterRefreshRate()||undefined,series_has_saved_white_reference:hasSavedWhite,series_has_saved_black_reference:hasSavedBlack,series_reference_white_code:meterCodeFromSignalPercent(100),series_reference_black_code:meterCodeFromSignalPercent(0),series_reference_input_max:meterPatchInputMax(),series_target_white_y:((()=>{try{const tw=(typeof meterTargetWhiteLevel==='function')?meterTargetWhiteLevel():null;if(tw&&!tw.useMeasured&&tw.value!=null&&Number(tw.value)>0)return Number(tw.value);}catch(e){}const lg=meterColorSeriesTargetWhiteForRun(meterActiveSeriesType,meterActiveSeriesPoints);return (lg!=null&&Number(lg)>0)?Number(lg):undefined;})()),grey_custom_enabled:meterGreyCustomEnabled(),lg_greyscale_21:meterUseLgGreyscale21(meterActiveSeriesPoints),lg_autocal_26:meterUseLgAutoCal26(meterActiveSeriesPoints),lg_extended_sdr_16_255:meterLgGreyscaleUsesExtendedSdr(meterActiveSeriesPoints),grey_steps_11:meterGreyStimulusCsv(11),grey_steps_21:meterGreyStimulusCsv(21),grey_steps_30:meterGreyStimulusCsv(30),grey_steps_100:meterGreyStimulusCsv(100),grey_steps_11_r:meterGreyChannelCsv(11,'r'),grey_steps_11_g:meterGreyChannelCsv(11,'g'),grey_steps_11_b:meterGreyChannelCsv(11,'b'),grey_steps_21_r:meterGreyChannelCsv(21,'r'),grey_steps_21_g:meterGreyChannelCsv(21,'g'),grey_steps_21_b:meterGreyChannelCsv(21,'b'),grey_steps_30_r:meterGreyChannelCsv(30,'r'),grey_steps_30_g:meterGreyChannelCsv(30,'g'),grey_steps_30_b:meterGreyChannelCsv(30,'b'),grey_steps_100_r:meterGreyChannelCsv(100,'r'),grey_steps_100_g:meterGreyChannelCsv(100,'g'),grey_steps_100_b:meterGreyChannelCsv(100,'b'),grey_two_point_low:meterTwoPointValues().low,grey_two_point_high:meterTwoPointValues().high,require_device_ready:meterSelectedMeasurementRequiresReady()});
+}
+
+// Custom, HCFR and matrix series carry steps authored here; the daemon builds all
+// others, and only its codes are the ones a full run sends.
+function meterSeriesBuiltByDaemon(){
+ return !(meterActiveSeriesIsCustom()
+  ||(meterActiveSeriesType==='colors'&&Number(meterActiveSeriesPoints)===29)
+  ||(meterActiveSeriesType==='saturations'&&Number(meterActiveSeriesPoints)===25)
+  ||(typeof meterActiveMatrixProfileSeries==='function'&&meterActiveMatrixProfileSeries()));
+}
+
+async function meterDaemonSeriesSteps(body){
+ try{
+  const r=await fetchJSON('/api/meter/series/preview',{method:'POST',headers:{'Content-Type':'application/json'},
+   body:JSON.stringify(body),_timeoutMs:10000,_quiet:true});
+  return r&&r.status==='preview'&&Array.isArray(r.steps)&&r.steps.length?r.steps:null;
+ }catch(e){
+  return null;
+ }
+}
+
+const METER_NO_DAEMON_CODES_MESSAGE='Couldn\u2019t get the patch codes from PGenerator+. Nothing was sent.';
+
+// The codes a run of the active series would send for this one patch. Asked
+// each time, never cached: the daemon's codes follow the applied bit depth and
+// range, and a code kept across such a change is the wrong code on the cable.
+// Null when the daemon cannot answer. A patch the run does not contain has no
+// daemon code to follow, so it stays as it is. Unapplied settings are not asked
+// about: the request carries the live fields, the link runs the applied ones.
+async function meterStepWithDaemonCodes(step){
+ if(!step||meterSeriesRunning||!meterActiveSeriesType||!meterSeriesBuiltByDaemon()||hasUnsavedSettings()) return step;
+ const pool=await meterDaemonSeriesSteps(meterSeriesRequestBody(false,false));
+ if(!pool) return null;
+ const match=meterMatchSteps([{...step,input_max:null}],pool)[0];
+ return match?{...step,r:match.r,g:match.g,b:match.b,input_max:match.input_max}:step;
+}
+
+// The chosen patch takes the daemon's codes, or none: a later read must not
+// carry a code no run would send.
+async function meterAdoptDaemonCodes(step){
+ const resolved=await meterStepWithDaemonCodes(step);
+ if(meterCurrentPatchStep!==step) return;
+ meterCurrentPatchStep=resolved;
+ if(!resolved) toast(METER_NO_DAEMON_CODES_MESSAGE,true);
+}
+
 async function meterRunSeries(options){
  options=options||{};
  if(meterSeriesCacheDirtyKeys&&meterSeriesCacheDirtyKeys.size) meterFlushScheduledSeriesCache();
@@ -11585,7 +11650,26 @@ async function meterRunSeries(options){
 	  if(requestedDvMapModeOverride) meterActiveSeriesDvMapMode=requestedDvMapModeOverride;
 	  meterSeriesSteps=meterBuildPreviewStepsJS(meterActiveSeriesType,meterActiveSeriesPoints);
 	 }
- const rebuiltTiles=requestedSelection.length?meterMatchSteps(tileSteps,meterVisibleSeriesSteps()):[];
+ // Capture Use-measured white/black availability BEFORE clearing chart state.
+ // Read Selection must prepend those endpoints when the operator has no
+ // saved measurement, otherwise target Y has no white/black reference.
+ const selectionHasSavedWhite=meterHasSavedMeasuredWhite();
+ const selectionHasSavedBlack=meterHasSavedMeasuredBlack();
+ // A selection of a daemon series sends the daemon's codes: the page's own build
+ // is a preview and can differ from the run. Without them nothing is sent.
+ let daemonSteps=null;
+ if(requestedSelection.length&&meterSeriesBuiltByDaemon()){
+  meterActionPending=true;
+  daemonSteps=await meterDaemonSeriesSteps(meterSeriesRequestBody(selectionHasSavedWhite,selectionHasSavedBlack));
+  meterActionPending=false;
+  if(!daemonSteps){
+   meterSeriesSteps=stripSteps;
+   toast(METER_NO_DAEMON_CODES_MESSAGE,true);
+   return false;
+  }
+  meterSeriesSteps=daemonSteps;
+ }
+ const rebuiltTiles=requestedSelection.length?meterMatchSteps(tileSteps,daemonSteps||meterVisibleSeriesSteps()):[];
  // The White or Black added to a run is on the strip but not in the preview. Its
  // tile keeps its own codes while they are the codes of that level on the link now:
  // in another range or depth they are stale, and the run stops below. The rest of
@@ -11610,11 +11694,6 @@ async function meterRunSeries(options){
   toast('The selected patches are no longer available in this series',true);
   return false;
  }
- // Capture Use-measured white/black availability BEFORE clearing chart state.
- // Read Selection must prepend those endpoints when the operator has no
- // saved measurement, otherwise target Y has no white/black reference.
- const selectionHasSavedWhite=meterHasSavedMeasuredWhite();
- const selectionHasSavedBlack=meterHasSavedMeasuredBlack();
  const savedWhiteSnapshot=selectionHasSavedWhite
   ?meterCloneReadingSnapshot(
     (meterWhiteReading&&meterReadingHasLuminance(meterWhiteReading)&&!meterWhiteReading.synthetic_target)
@@ -11628,7 +11707,8 @@ async function meterRunSeries(options){
  if(selectedRunSteps&&selectedRunSteps.length){
   selectedRunSteps=meterSelectionRunStepsWithMeasuredEndpoints(selectedRunSteps,{
    hasSavedWhite:selectionHasSavedWhite,
-   hasSavedBlack:selectionHasSavedBlack
+   hasSavedBlack:selectionHasSavedBlack,
+   pool:daemonSteps
   });
  }
  meterSeriesSelectionRunActive=!!(selectedRunSteps&&selectedRunSteps.length);
@@ -11753,11 +11833,6 @@ async function meterRunSeries(options){
  showColorReadingDetail(null,{pin:false});
  meterActionPending=true;
  meterUpdateReadButtons();
- const dtype=getEffectiveDisplayType();
- const delay=meterDelayMs();
- const psize=getMeterPatchSize();
- const patternSignalRange=meterMeasurementPatchSignalRange();
- const requireDeviceReady=meterSelectedMeasurementRequiresReady();
  const recoverStartedSeries=async()=>{
   try{
    const s=await fetchJSON('/api/meter/series/status',{_quiet:true,_timeoutMs:8000});
@@ -11774,7 +11849,7 @@ async function meterRunSeries(options){
   return false;
  };
  try{
-	  const _seriesBody=meterMeasurementSignalContext({type:meterActiveSeriesType,points:meterActiveSeriesPoints,display_type:dtype,target_gamut:(document.getElementById('meterTargetGamut')||{}).value||'auto',target_gamma:meterAutoCalTargetGammaValue(),picture_mode:meterLgPictureModeValue(),delay_ms:delay,patch_size:psize,signal_range:getVal('rgb_quant_range'),pattern_signal_range:patternSignalRange||undefined,pattern_provider:meterCalibrationReadPatternProvider(),ccss_override:(typeof getCcssOverride==='function')?getCcssOverride():undefined,...meterPatternInsertionPayload(),refresh_rate:getMeterRefreshRate()||undefined,series_has_saved_white_reference:selectionHasSavedWhite,series_has_saved_black_reference:selectionHasSavedBlack,series_reference_white_code:meterCodeFromSignalPercent(100),series_reference_black_code:meterCodeFromSignalPercent(0),series_reference_input_max:meterPatchInputMax(),series_target_white_y:((()=>{try{const tw=(typeof meterTargetWhiteLevel==='function')?meterTargetWhiteLevel():null;if(tw&&!tw.useMeasured&&tw.value!=null&&Number(tw.value)>0)return Number(tw.value);}catch(e){}const lg=meterColorSeriesTargetWhiteForRun(meterActiveSeriesType,meterActiveSeriesPoints);return (lg!=null&&Number(lg)>0)?Number(lg):undefined;})()),grey_custom_enabled:meterGreyCustomEnabled(),lg_greyscale_21:meterUseLgGreyscale21(meterActiveSeriesPoints),lg_autocal_26:meterUseLgAutoCal26(meterActiveSeriesPoints),lg_extended_sdr_16_255:meterLgGreyscaleUsesExtendedSdr(meterActiveSeriesPoints),grey_steps_11:meterGreyStimulusCsv(11),grey_steps_21:meterGreyStimulusCsv(21),grey_steps_30:meterGreyStimulusCsv(30),grey_steps_100:meterGreyStimulusCsv(100),grey_steps_11_r:meterGreyChannelCsv(11,'r'),grey_steps_11_g:meterGreyChannelCsv(11,'g'),grey_steps_11_b:meterGreyChannelCsv(11,'b'),grey_steps_21_r:meterGreyChannelCsv(21,'r'),grey_steps_21_g:meterGreyChannelCsv(21,'g'),grey_steps_21_b:meterGreyChannelCsv(21,'b'),grey_steps_30_r:meterGreyChannelCsv(30,'r'),grey_steps_30_g:meterGreyChannelCsv(30,'g'),grey_steps_30_b:meterGreyChannelCsv(30,'b'),grey_steps_100_r:meterGreyChannelCsv(100,'r'),grey_steps_100_g:meterGreyChannelCsv(100,'g'),grey_steps_100_b:meterGreyChannelCsv(100,'b'),grey_two_point_low:meterTwoPointValues().low,grey_two_point_high:meterTwoPointValues().high,require_device_ready:requireDeviceReady});
+	  const _seriesBody=meterSeriesRequestBody(selectionHasSavedWhite,selectionHasSavedBlack);
 	  if(requestedDvMapModeOverride&&_seriesBody.signal_mode==='dv'){
 	   _seriesBody.dv_map_mode=requestedDvMapModeOverride;
 	   _seriesBody.target_gamma=requestedDvMapModeOverride==='1'?'st2084':'2.2';
@@ -11805,11 +11880,7 @@ async function meterRunSeries(options){
 		   _seriesBody.selection_run=true;
 		   _seriesBody.custom_series=true;
 		   _seriesBody.custom_steps=selectedRunSteps.map(_serializeStep);
-		  } else if((meterActiveSeriesIsCustom()
-		   ||(meterActiveSeriesType==='colors'&&Number(meterActiveSeriesPoints)===29)
-		   ||(meterActiveSeriesType==='saturations'&&Number(meterActiveSeriesPoints)===25)
-		   ||(typeof meterActiveMatrixProfileSeries==='function'&&meterActiveMatrixProfileSeries()))
-		   &&Array.isArray(meterSeriesSteps)){
+		  } else if(!meterSeriesBuiltByDaemon()&&Array.isArray(meterSeriesSteps)){
 		   _seriesBody.custom_series=true;
 		   const _activeCustom=meterCustomSeriesById(meterActiveSeriesPoints);
 			  if(_activeCustom&&_activeCustom.kind==='lattice'){
@@ -14943,8 +15014,8 @@ function meterDrawDeltaSummary(ctx,chart,values,note){
  ctx.fillText(statsText,chart.pad.l+chart.w,chart.pad.t-4);
 }
 
-function meterDrawGreyDeltaSummary(ctx,chart,deMap){
- const counted=meterGreySummaryDeltas(deMap);
+function meterDrawGreyDeltaSummary(ctx,chart,deMap,readings){
+ const counted=meterGreySummaryDeltas(deMap,readings);
  meterDrawDeltaSummary(ctx,chart,counted,counted.length<Object.keys(deMap).length?'excl. 0%':'');
 }
 
@@ -15151,7 +15222,7 @@ function drawDeltaEChart(gs,allSteps,readingMap,rawGs){
  });
  ctx.restore();
  // Average dE line
- meterDrawGreyDeltaSummary(ctx,chart,deMap);
+ meterDrawGreyDeltaSummary(ctx,chart,deMap,gs);
  // White point info (CCT, Δxy from D65)
  if(whiteR&&whiteR.x>0&&whiteR.y>0){
   const wp=meterTargetWhitePoint();
@@ -15243,7 +15314,7 @@ function drawDeltaE2000Chart(gs,allSteps,readingMap){
    ctx.fillRect(cx-1,chart.pad.t+chart.h-2,2,2);
   }
  });
- meterDrawGreyDeltaSummary(ctx,chart,deMap);
+ meterDrawGreyDeltaSummary(ctx,chart,deMap,gs);
 }
 
 function drawDeltaE2000Preset(gsSteps){
@@ -18248,7 +18319,7 @@ function meterBuildReportSummaryCards(){
   const peak=white?(white.luminance||white.Y||0):0;
   const black=meterChartBlackLevel(rawGs);
   let deVals=[];
-  const counted=gs.filter(rd=>!meterReadingIsBlackStep(rd));
+  const counted=gs.filter(rd=>!meterReadingHasBlackSignal(rd));
   if(white&&(white.Y||white.luminance)>0){
     deVals=counted.map(rd=>meterColorDeltaE2000(rd,meterGreyRefMode(),meterDeltaEForm(),meterGrayWorldWeight())).filter(v=>isFinite(v));
   }
@@ -18830,7 +18901,9 @@ async function meterImportHcfrChcFile(input){
   meterSetActiveSeriesChartContext({signal_mode:mode,target_gamma:importContext.target_gamma,max_luma:importContext.max_luma});
   importContext.calibration_target_context=meterActiveCalibrationTargetContext?{...meterActiveCalibrationTargetContext}:null;
   const stamp=Date.now(),keys=[];importContext.session_id=stamp;meterActiveHcfrSessionId=stamp;
-  const gs=parsed.groups.grayscale.validItems.map((c,i,a)=>meterHcfrImportedReading(c,(a.length>1?Math.round(i*100/(a.length-1)):0)+'%',a.length>1?i*100/(a.length-1):0));
+  // A step keeps its place in the file: a missing reading must not move the next one onto 0%.
+  const grey=parsed.groups.grayscale,greyLast=grey.items.length-1;
+  const gs=grey.validItems.map(c=>{const ire=greyLast>0?grey.items.indexOf(c)*100/greyLast:0;return meterHcfrImportedReading(c,Math.round(ire)+'%',ire);});
   const gkey=meterHcfrImportSnapshot('greyscale',gs,file.name,stamp,mode,sourceRange,importContext,'grayscale');if(gkey)keys.push(gkey);
   const nearBlackGroup=parsed.groups.nearBlack,nearWhiteGroup=parsed.groups.nearWhite;
   const nearBlack=nearBlackGroup?nearBlackGroup.items.map((c,i)=>c.valid?meterHcfrImportedReading(c,'Near black '+(i+1)+'%',i+1):null).filter(Boolean):[];

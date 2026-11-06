@@ -315,11 +315,10 @@ sub signal_percent_to_code {
   foreach my $slot (keys %HDR20_8_LIMITED) {
    if(abs(($slot+0)-$value)<0.01) { $slot_key=$slot; last; }
   }
-  my $minimum=($bits==10 && $policy->{hdr20_use_limited}
-   && $policy->{hdr20_full}) ? 0 : ($bits==8 ? 0 : 64);
-  my $span=$bits==10
-   ? (($policy->{hdr20_use_limited} && $policy->{hdr20_full}) ? 1023 : 876)
-   : 255;
+  # The active range decides, as for the table itself: the greyscale ladder
+  # passes its table in active_table, without the hdr20_* flags.
+  my $minimum=$limited ? ($bits==10 ? 64 : 16) : 0;
+  my $span=$limited ? ($bits==10 ? 876 : 219) : $input_max;
   $code=exists($table->{$slot_key}) ? $table->{$slot_key}
    : _positive_half_up($minimum+$value/100*$span);
   $code=_clamp($code,$minimum,$minimum+$span);

@@ -3898,7 +3898,7 @@ sub webui_meter_read (@) {
 	  my $code_scale=($patch_input_max+1)/256;
 	  my $limited_black=int(16*$code_scale+0.5);
 	  my $limited_white=int(235*$code_scale+0.5);
-	  if(int($signal_range)==1 && $limited_white>$limited_black) {
+	  if(&webui_range_is_limited($signal_range,$pgenerator_conf{"color_format"}) && $limited_white>$limited_black) {
 	   $patch_ire=int((($patch_r-$limited_black)/($limited_white-$limited_black))*100+0.5);
 	  } else {
 	   $patch_ire=int(($patch_r/$patch_input_max)*100+0.5);
@@ -3954,7 +3954,7 @@ sub webui_meter_read (@) {
   # during initialization. Pre-show it here so the background session helper
   # does not need to call back into the active HTTP request path.
   if($display_type eq "c") {
-   my $startup_level=int($signal_range)==1 ? int(16 + 0.8 * 219 + .5) : int(0.8 * 255 + .5);
+   my $startup_level=&webui_range_is_limited($signal_range,$pgenerator_conf{"color_format"}) ? int(16 + 0.8 * 219 + .5) : int(0.8 * 255 + .5);
    my $startup_patch='{"name":"patch","r":'.$startup_level.',"g":'.$startup_level.',"b":'.$startup_level.',"size":100,"input_max":255,"signal_mode":"'.$signal_mode.'","max_luma":'.$max_luma.',"signal_range":"'.$signal_range.'","transport_signal_range":"'.$transport_signal_range.'"}';
    if($pattern_provider eq "companion") { &webui_icc_companion_pattern($startup_patch); }
    else { &webui_pattern($startup_patch); }
@@ -4849,14 +4849,10 @@ my $dv_interface=($signal_mode eq "dv") ? &pg_dv_transport_interface($request_dv
  $series_primaries=$1 if($body=~/"primaries"\s*:\s*"?(\d+)"?/);
  $series_primaries=int($pgenerator_conf{"primaries"} || 0) if($series_primaries eq "");
  $series_color_format=int($pgenerator_conf{"color_format"} || 0) if($series_color_format eq "");
- # Range Default on a YCbCr link is Limited (effective_rgb_quant_range, the page's
- # meterIsLimitedRange): nothing compresses these codes on the way to the wire,
- # so Full codes here would put Y=0 below black.
- my $default_range_limited=($signal_range!~/^[12]$/ && int($series_color_format)!=0) ? 1 : 0;
- my $patch_limited=(int($signal_range)==1 || $default_range_limited) ? 1 : 0;
+ my $patch_limited=&webui_range_is_limited($signal_range,$series_color_format);
  my $greyscale_patch_limited=$patch_limited;
  if($type eq "greyscale" && $signal_mode eq "sdr" && $pattern_signal_range=~/^[12]$/) {
-  $greyscale_patch_limited=(int($pattern_signal_range)==1) ? 1 : 0;
+  $greyscale_patch_limited=&webui_range_is_limited($pattern_signal_range,$series_color_format);
  }
  my $chroma_patch_limited=$patch_limited;
  # Color / saturation patches must honor the active max_bpc the same way
@@ -6198,8 +6194,8 @@ my $dv_interface=($signal_mode eq "dv") ? &pg_dv_transport_interface($request_dv
 	  signal_peak_nits=>$series_max_luma_num,
 	  white_nits=>($series_target_white_y_num>0 ? $series_target_white_y_num : 0),
 	  black_nits=>($series_target_black_y_num ne "" ? $series_target_black_y_num+0 : 0),
-	  pattern_range=>((int($pattern_signal_range||0)==1 || ($default_range_limited && $pattern_signal_range!~/^[12]$/)) ? "limited" : "full"),
-	  transport_range=>((int($transport_signal_range||0)==1 || ($default_range_limited && $transport_signal_range!~/^[12]$/)) ? "limited" : "full"),
+	  pattern_range=>(&webui_range_is_limited($pattern_signal_range,$series_color_format) ? "limited" : "full"),
+	  transport_range=>(&webui_range_is_limited($transport_signal_range,$series_color_format) ? "limited" : "full"),
 	  pattern_bits=>$series_pattern_bits,
 	  transport_bits=>$series_transport_bits,
 	  headroom_strategy=>$series_headroom_strategy,
@@ -13669,6 +13665,15 @@ sub webui_pattern_target_max (@) {
  return 255;
 }
 
+# A range as requests carry it: 1 Limited, 2 Full, anything else Default. A YCbCr
+# link is always Limited here (webui_preferred_rgb_quant_range, the page's
+# meterIsLimitedRange): nothing compresses these codes on the way to the wire, so
+# Full codes put Y=0 below black.
+sub webui_range_is_limited (@) {
+ my ($range,$color_format)=@_;
+ return (int($color_format || 0) != 0 || int($range || 0) == 1) ? 1 : 0;
+}
+
 sub webui_pattern_apl_levels (@) {
  my $target_bits=int(shift);
  my $signal_range=int(shift);
@@ -14591,6 +14596,10 @@ sub webui_pattern (@) {
  &apply_source_rgb_quant_range("webui",$transport_signal_range);
  my ($color_format_body)=$body=~/"color_format"\s*:\s*"?(\d+)"?/;
  my $pattern_color_format=defined($color_format_body) ? int($color_format_body) : int($pgenerator_conf{"color_format"} || 0);
+ # Backgrounds, named colours, APL and the stabilization code follow the range of
+ # the link, so the format here is the conf's, not the request's.
+ $pattern_signal_range=1 if(&webui_range_is_limited($pattern_signal_range,$pgenerator_conf{"color_format"}));
+ $signal_range=1 if(defined($signal_range) && &webui_range_is_limited($signal_range,$pgenerator_conf{"color_format"}));
 	 # Standard DV's outer HDMI tunnel is RGB Full, but its inner source
 	 # components are legal-range. SOURCE_RANGE describes those authored
 	 # components; transport_signal_range remains the wire setting.

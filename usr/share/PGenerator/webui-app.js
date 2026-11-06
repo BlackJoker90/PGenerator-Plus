@@ -8635,15 +8635,12 @@ function linRgbToXyz(R,G,B,matrix){
 }
 
 function meterIsLimitedRange(){
+ // YCbCr transports are Limited on the wire (Full range is an RGB-only
+ // concept): Default, and a 2 left in the conf, are Limited there. RGB
+ // Default keeps the historical full-range interpretation.
+ if(!meterOutputIsRgb()) return true;
  const rangeEl=document.getElementById('rgb_quant_range');
- const v=String((rangeEl&&rangeEl.value)||'0');
- if(v==='1') return true;
- if(v==='2') return false;
- // Default: YCbCr transports are Limited on the wire (Full range is an
- // RGB-only concept), so Default resolves to Limited whenever a YCbCr
- // colour format is selected. RGB Default keeps the historical
- // full-range interpretation.
- return !meterOutputIsRgb();
+ return String((rangeEl&&rangeEl.value)||'0')==='1';
 }
 
 // Marks a select option unavailable without hiding it: greyed out in the

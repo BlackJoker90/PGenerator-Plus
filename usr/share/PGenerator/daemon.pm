@@ -66,6 +66,8 @@ sub calman_apl_levels (@) {
  my $bits=$bit_depth_for_max{$full_max} || int($bits_default || 8);
  my $shift=$bits - 8;
  my $range_mode=int($pgenerator_conf{"rgb_quant_range"} || 0);
+ # Default on YCbCr is Limited (effective_rgb_quant_range).
+ $range_mode=1 if($range_mode == 0 && ($pgenerator_conf{"color_format"} || "0") ne "0");
  my $limited_min=16 << $shift;
  my $limited_span=219 << $shift;
  return ($limited_min,$limited_span,$limited_min + $limited_span,"limited") if($range_mode == 1);

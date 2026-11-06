@@ -18149,6 +18149,8 @@ function chartHandleHover(e,canvasId){
  let html='<b>'+rd.ire+'%</b><br>';
  html+='<span>Read Y: '+readY+' cd/m\u00B2</span>';
  if(targetY!=='--') html+=' &nbsp; <span>Target Y: '+targetY+' cd/m\u00B2</span>';
+ const averagedText=meterAveragedReadText(rd);
+ if(averagedText) html+='<br>'+averagedText;
  if(rd.cct) html+='<br>CCT: '+rd.cct+'K';
  html+='<br>x: '+(rd.x!=null?rd.x.toFixed(4):'--')+' &nbsp;y: '+(rd.y!=null?rd.y.toFixed(4):'--');
  html+='<br>R: '+bal.R.toFixed(3)+' &nbsp;G: '+bal.G.toFixed(3)+' &nbsp;B: '+bal.B.toFixed(3);
@@ -18177,6 +18179,21 @@ function chartHandleHover(e,canvasId){
  const tx=e.clientX+14, ty=e.clientY-10;
  tip.style.left=Math.min(tx,window.innerWidth-tip.offsetWidth-10)+'px';
  tip.style.top=Math.min(ty,window.innerHeight-tip.offsetHeight-10)+'px';
+}
+
+// How an averaged reading came about: the spread shows an outlier the mean hides.
+function meterAveragedReadText(reading){
+ const reads=Number(reading&&reading.sample_count)||0;
+ const requested=Number(reading&&reading.requested_sample_count)||0;
+ const min=Number(reading&&reading.sample_y_min),max=Number(reading&&reading.sample_y_max);
+ if(!(Math.max(reads,requested)>1)||reading.sample_y_min==null||reading.sample_y_max==null||!Number.isFinite(min+max)) return '';
+ // A black set to 0, here or by the page's black floor, no longer shows what
+ // the reads saw.
+ if(reading.normalized_black||(reading.luminance!=null&&Number(reading.luminance)===0&&max>0)) return '';
+ // Near black three decimals would round a real spread away.
+ const text=y=>meterLowLuminanceText(y,y<1?4:3);
+ const count=requested>reads?reads+' of '+requested:String(reads);
+ return 'Averaged: '+count+' reads, Y '+text(min)+' to '+text(max)+' cd/m\u00B2';
 }
 
 function chartHandleClick(e,canvasId){
@@ -20702,7 +20719,7 @@ function saveMeterSettings(){
   pattern_provider:meterCalibrationPatternProvider(),
   ccss_create_display_type:meterCcssCreateDisplayTypeValue(),
   low_light_enabled:(()=>{ try{ const e=document.getElementById('meterLowLightEnabled'); return !!(e&&e.checked); }catch(e){ return false; } })(),
-  low_light_mode:(()=>{ try{ const e=document.getElementById('meterLowLightMode'); return String((e&&e.value)||'off'); }catch(e){ return 'off'; } })(),
+  low_light_mode:(()=>{ try{ const e=document.getElementById('meterLowLightMode'); return String((e&&e.value)||'1'); }catch(e){ return '1'; } })(),
   low_light_trigger:(()=>{ try{ const e=document.getElementById('meterLowLightTrigger'); const n=Number(e&&e.value); return Number.isFinite(n)?n:5.0; }catch(e){ return 5.0; } })(),
   measurement_meter_port:meterMeasurementPort,
   profiling_meter_port:meterProfilingPort,
@@ -20999,10 +21016,8 @@ async function loadMeterSettings(attempt){
    const trigger=document.getElementById('meterLowLightTrigger');
    if(en&&s.low_light_enabled!=null) en.checked=!!(s.low_light_enabled===true||s.low_light_enabled==='1'||s.low_light_enabled===1);
    if(mode&&s.low_light_mode!=null){
-    let base=String(s.low_light_mode||'off');
-    if(base==='x') base='off';
-    else if(base.indexOf('x_')===0) base=base.slice(2);
-    if(Array.from(mode.options).some(o=>o.value===base)) mode.value=base;
+    const reads=meterLowLightSavedReads(s.low_light_mode);
+    if(Array.from(mode.options).some(o=>o.value===reads)) mode.value=reads;
    }
    if(trigger&&s.low_light_trigger!=null){
     const n=Number(s.low_light_trigger);

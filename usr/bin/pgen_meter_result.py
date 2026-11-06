@@ -55,20 +55,22 @@ def parse_spotread_result(text, timestamp=None):
 
 
 def average_record(readings, mode=None, requested_sample_count=None,
-                   timestamp=None):
+                   timestamp=None, ended_early=False):
     """Average readings in XYZ, then derive nonlinear fields once."""
     averaged = average_xyz_measurements(readings)
     requested = (len(readings) if requested_sample_count is None
                  else int(requested_sample_count))
     if requested < 1 or requested > 100:
         raise ValueError("requested sample count is outside its domain")
-    if requested != len(readings):
+    # A set may end early on a zero reading, never run over.
+    if requested < len(readings) or (requested > len(readings)
+                                     and not ended_early):
         raise ValueError("requested sample count does not match actual readings")
     result = dict(readings[0])
     result.update(averaged)
     result["timestamp"] = int(time.time() if timestamp is None else timestamp)
     if mode is not None:
-        if mode not in ("off", "a", "aa", "aaa"):
+        if mode not in ("off", "avg"):
             raise ValueError("unsupported average mode")
         result["average_mode"] = mode
     else:
@@ -76,6 +78,12 @@ def average_record(readings, mode=None, requested_sample_count=None,
         # average_mode stamp from the first sample it was seeded with.
         result.pop("average_mode", None)
     result["requested_sample_count"] = requested
+    # The spread keeps an outlier inside the mean visible: repeated short reads
+    # gave them on an i1Display near black. Plain numbers, because the status
+    # summary cuts the readings array at its first closing bracket.
+    sample_y = [reading["Y"] for reading in readings]
+    result["sample_y_min"] = min(sample_y)
+    result["sample_y_max"] = max(sample_y)
     return result
 
 
@@ -97,7 +105,9 @@ def average_main(legacy_environment=False):
     else:
         mode = os.environ.get("PGEN_AVERAGE_MODE")
         requested = os.environ.get("PGEN_REQUESTED_SAMPLE_COUNT")
-    emit_record(average_record(readings, mode, requested))
+    ended_early = os.environ.get("PGEN_SET_ENDED_EARLY") == "1"
+    emit_record(average_record(readings, mode, requested,
+                               ended_early=ended_early))
 
 
 def main(argv=None):

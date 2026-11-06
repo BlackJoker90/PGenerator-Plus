@@ -125,7 +125,7 @@ def expected_luminance(step):
 
 
 def effective_low_light_mode(step, selected_mode, trigger):
-    if selected_mode not in ("a", "aa", "aaa"):
+    if selected_mode != "avg":
         return "off"
     trigger = number(trigger)
     if trigger is None or trigger <= 0:
@@ -163,7 +163,7 @@ def normalize(path, generation, selected_mode, requested_count, trigger,
         requested_count = int(requested_count)
     except (TypeError, ValueError):
         raise ValueError("requested_sample_count is not an integer")
-    if requested_count not in (1, 2, 3, 5):
+    if requested_count not in (1, 2, 3, 4, 5):
         raise ValueError("requested_sample_count is outside its domain")
     with open(path) as handle:
         steps = json.load(handle)

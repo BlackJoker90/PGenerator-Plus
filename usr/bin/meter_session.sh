@@ -42,11 +42,9 @@ MAX_LUMA_DEFAULT="${6:-1000}"
 METER_PORT="${7:-}"
 IDLE_TIMEOUT="${8:-300}"
 REQUIRE_DEVICE_READY="${9:-0}"
-# Session-level averaging default. Per-READ low_light modes override it by
-# respawning spotread with the matching -Y flags; this is only the mode the
-# first child starts in and the config-file 7th field.
-METER_AVERAGING="${10:-${METER_AVERAGING:-off}}"
-case "$METER_AVERAGING" in a|aa|aaa|off) ;; *) METER_AVERAGING="off" ;; esac
+# The config file's 7th field. Averaging is per READ (requested_sample_count):
+# spotread always runs without -Y a, which only the specbos driver honours.
+METER_AVERAGING="off"
 # USB vid:pid of the operator-selected meter. When set, find_port resolves the
 # spotread -c index from THIS device instead of trusting the requested index,
 # which goes stale whenever meters are plugged/unplugged (enumeration order).
@@ -781,31 +779,9 @@ cleanup() {
  rm -f "$OUTFILE" "$CMDPIPE" "$CMD_FIFO" "$PID_FILE" "$CONFIG_FILE" "$READY_FILE" "$STARTUP_READY_FILE"
 }
 
-# Track the spotread averaging/low_light mode of the currently-running
-# child process. Initialized from METER_AVERAGING (the session-level
-# averaging) because at startup the per-read channel is empty until the
-# first READ with a low_light field arrives.
-CURRENT_LOW_LIGHT_MODE="${METER_AVERAGING:-off}"
-
 # Rebuild SR_CMD using the current DISPLAY_TYPE, CCSS and REFRESH_RATE/AIO
-# settings, applying $1 as the new low_light mode
-# (-Y a / -Y aa / -Y aaa / -x / -x -Y a / -x -Y aa / -x -Y aaa / "").
+# settings.
 build_sr_cmd () {
- local new_mode="${1:-off}"
- local new_ll_flags=""
- case "$new_mode" in
-  a)     new_ll_flags="-Y a" ;;
-  aa)    new_ll_flags="-Y aa" ;;
-  aaa)   new_ll_flags="-Y aaa" ;;
-  x)     new_ll_flags="-x" ;;
-  x_a)   new_ll_flags="-x -Y a" ;;
-  x_aa)  new_ll_flags="-x -Y aa" ;;
-  x_aaa) new_ll_flags="-x -Y aaa" ;;
-  off|*) new_ll_flags="" ;;
- esac
- # new_ll_flags is the authoritative -Y source: never inject a second
- # averaging flag, stacking e.g. "-Y a -Y aa" passes conflicting
- # integration modes to spotread.
   # Spectrophotometers (REQUIRE_DEVICE_READY=1) get neither -X (CCSS is a
   # colorimeter correction) nor -y (display type selection is a colorimeter
   # concept; spotread emits "Display/calibration type ignored" for a spectro).
@@ -816,11 +792,11 @@ build_sr_cmd () {
     # series launches reuse that checked calibration with -N.
     local spectro_noinit=""
     [[ -f "$SPECTRO_STARTUP_MARKER" ]] && spectro_noinit="-N"
-    cmd="$SPOTREAD_BIN $spectro_noinit -e -c $PORT_NUM -Q $OBSERVER -x $new_ll_flags"
+    cmd="$SPOTREAD_BIN $spectro_noinit -e -c $PORT_NUM -Q $OBSERVER -x"
    elif [[ -n "$CCSS_FILE" && -f "$CCSS_FILE" ]]; then
-   cmd="$SPOTREAD_BIN $NOINITCAL_FLAG -e -y $DISPLAY_TYPE -X '$CCSS_FILE' -c $PORT_NUM -Q $OBSERVER -x $new_ll_flags"
+   cmd="$SPOTREAD_BIN $NOINITCAL_FLAG -e -y $DISPLAY_TYPE -X '$CCSS_FILE' -c $PORT_NUM -Q $OBSERVER -x"
   else
-   cmd="$SPOTREAD_BIN $NOINITCAL_FLAG -e -y $DISPLAY_TYPE -c $PORT_NUM -Q $OBSERVER -x $new_ll_flags"
+   cmd="$SPOTREAD_BIN $NOINITCAL_FLAG -e -y $DISPLAY_TYPE -c $PORT_NUM -Q $OBSERVER -x"
   fi
   # -Y R:rate overrides spotread's measured refresh rate. Passing it makes
   # spotread SKIP its mandatory "read an 80% white patch to calibrate refresh
@@ -832,17 +808,13 @@ build_sr_cmd () {
   printf '%s' "$cmd"
 }
 
-# Respawn ONLY the spotread pipeline (NOT the wrapper) with a new
-# low_light mode, or to recover a wedged continuous-read child. The wrapper
-# keeps its command FIFO, PID file, config file, and state file intact so
-# the WebUI does not see a session restart and does not pay the 35-90s OLED
-# bring-up. The new mode applies to this and every subsequent read until it
-# changes again.
+# Respawn ONLY the spotread pipeline (NOT the wrapper) to recover a wedged
+# continuous-read child. The wrapper keeps its command FIFO, PID file, config
+# file, and state file intact so the WebUI does not see a session restart and
+# does not pay the 35-90s OLED bring-up.
 respawn_spotread () {
- local new_mode="${1:-off}"
- case "$new_mode" in a|aa|aaa|x|x_a|x_aa|x_aaa|off) ;; *) new_mode="off" ;; esac
- local respawn_reason="${2:-low-light mode change}"
- log "respawn: restarting spotread for $respawn_reason with low_light mode=$new_mode (was $CURRENT_LOW_LIGHT_MODE)"
+ local respawn_reason="$1"
+ log "respawn: restarting spotread for $respawn_reason"
  # Close the current spotread cleanly. SIGKILLing it mid-read wedges the
  # Pi's dwc2 USB controller, so ask politely first and escalate only if
  # it ignores the quit.
@@ -883,11 +855,11 @@ respawn_spotread () {
   # the previous session's stale "to take a reading:" line. `script`
   # would create a new inode if we unlinked, desyncing the read-side cat.
   : > "$OUTFILE"
-  SR_CMD=$(build_sr_cmd "$new_mode")
+  SR_CMD=$(build_sr_cmd)
   cat "$CMDPIPE" | script -qfc "$SR_CMD" /dev/null > "$OUTFILE" 2>&1 &
   BG_PID=$!
   exec 3>"$CMDPIPE"
-  log "respawn: spotread respawned (bg_pid=$BG_PID mode=$new_mode reason=$respawn_reason attempt=$_retry)"
+  log "respawn: spotread respawned (bg_pid=$BG_PID reason=$respawn_reason attempt=$_retry)"
   # Wait for "to take a reading:" — colorimeters re-ready in <2s; allow
   # up to 15s for the i1d3 AIO to re-init after a mode change. The
   # second iteration of the outer retry loop gives a second 15s window
@@ -912,14 +884,12 @@ respawn_spotread () {
      write_state '{"status":"error","message":"Meter dark calibration did not complete"}'
      return 1
     fi
-    CURRENT_LOW_LIGHT_MODE="$new_mode"
     return 0
    fi
    sleep 0.1
    _rt=$(( _rt + 1 ))
   done
   if sed 's/\x1b\[[0-9;]*[a-zA-Z]//g' "$OUTFILE" 2>/dev/null | tr -d '\r' | grep -q "to take a reading:"; then
-   CURRENT_LOW_LIGHT_MODE="$new_mode"
    return 0
   fi
   log "respawn: spotread failed to ready within 15s on attempt $_retry, will retry with clean re-exec"
@@ -1009,10 +979,7 @@ if [[ -n "$CCSS_FILE" && -f "$CCSS_FILE" && "${CCSS_FILE,,}" =~ \.ccss$ && "$REQ
   fi
  fi
 fi
-# Start spotread in the session-level averaging mode. The initial mode is the
-# operator's METER_AVERAGING so it matches CURRENT_LOW_LIGHT_MODE -- a
-# mismatch would mean the first low-light READ skips its required respawn.
-SR_CMD=$(build_sr_cmd "${METER_AVERAGING:-off}")
+SR_CMD=$(build_sr_cmd)
 [[ "$DISABLE_AIO" == "1" ]] && export I1D3_DISABLE_AIO=1
 
 cat "$CMDPIPE" | script -qfc "$SR_CMD" /dev/null > "$OUTFILE" 2>&1 &
@@ -1204,13 +1171,9 @@ while read -t "$IDLE_TIMEOUT" -u 4 line; do
 		     [[ "$TRANSPORT_SIGNAL_RANGE" == "-" ]] && TRANSPORT_SIGNAL_RANGE=""
 		     [[ "$INPUT_MAX" == "-" ]] && INPUT_MAX=255
 		     [[ "$CMD_READ_TIMEOUT" == "-" ]] && CMD_READ_TIMEOUT=""
-		     [[ "$CMD_LOW_LIGHT_MODE" == "-" ]] && CMD_LOW_LIGHT_MODE="$CURRENT_LOW_LIGHT_MODE"
-		     case "$CMD_LOW_LIGHT_MODE" in a|aa|aaa) ;; *) CMD_LOW_LIGHT_MODE="off" ;; esac
-		     # The virtual meter ignores integration/averaging controls; keep the
-		     # running child and never respawn it for a mode change.
-		     (( METER_SIMULATED )) && CMD_LOW_LIGHT_MODE="$CURRENT_LOW_LIGHT_MODE"
+		     case "$CMD_LOW_LIGHT_MODE" in avg) ;; *) CMD_LOW_LIGHT_MODE="off" ;; esac
 		     case "$CMD_REQUESTED_SAMPLE_COUNT" in
-		      1|2|3|5) REQUESTED_SAMPLE_COUNT="$CMD_REQUESTED_SAMPLE_COUNT" ;;
+		      1|2|3|4|5) REQUESTED_SAMPLE_COUNT="$CMD_REQUESTED_SAMPLE_COUNT" ;;
 		      *)
 		       write_state "{\"status\":\"error\",\"request_id\":\"$REQUEST_ID\",\"message\":\"Invalid requested_sample_count\"}"
 		       continue
@@ -1226,18 +1189,6 @@ while read -t "$IDLE_TIMEOUT" -u 4 line; do
 		     # simulated trigger immediate without changing the numeric sample
 		     # contract used by physical and simulated paths.
 		     (( METER_SIMULATED )) && SETTLE_MS=0
-
-	   # If the per-read low_light mode differs from the currently-running
-	   # spotread's, respawn ONLY spotread (1-3s) instead of the wrapper
-	   # (35-90s on OLED). The wrapper's command FIFO, PID, config, and
-	   # state files are untouched, so the WebUI does not see a session
-	   # restart and the session config stays stable across reads.
-	   if [[ "$CMD_LOW_LIGHT_MODE" != "$CURRENT_LOW_LIGHT_MODE" ]]; then
-	    if ! respawn_spotread "$CMD_LOW_LIGHT_MODE" "low-light mode change"; then
-	     # Respawn surfaced an error to the state file; skip this read.
-	     continue
-	    fi
-	   fi
 
 	   # Mark measuring so the polling endpoint knows a read is in flight.
 	   write_state "{\"status\":\"measuring\",\"request_id\":\"$REQUEST_ID\",\"timeout_sec\":$STATE_TIMEOUT}"
@@ -1283,7 +1234,7 @@ while read -t "$IDLE_TIMEOUT" -u 4 line; do
 	  # spotread has wedged rather than merely selected a long integration.
 	  # Do not wait the generic spectro-oriented 120/140s watchdog and then
 	  # keep feeding commands to the same dead interactive process.
-	  if [[ "$CMD_CONTINUOUS" == "1" && "${METER_USB_ID,,}" == "0765:5020" && "$CURRENT_LOW_LIGHT_MODE" == "off" ]]; then
+	  if [[ "$CMD_CONTINUOUS" == "1" && "${METER_USB_ID,,}" == "0765:5020" ]]; then
 	   READ_TIMEOUT=45
 	  fi
 	  if [[ "$CMD_READ_TIMEOUT" =~ ^[0-9]+$ ]] && (( CMD_READ_TIMEOUT >= 10 )); then
@@ -1425,24 +1376,28 @@ while read -t "$IDLE_TIMEOUT" -u 4 line; do
 	    READ_FAILURE_MESSAGE=""
 	    if (( NULL_READ_FLAGGED == 0 && REQUESTED_SAMPLE_COUNT > 1 )); then
 	     SAMPLES_JSON="$PARSED_RESULT"
+	     SET_ENDED_EARLY=0
 	     for (( SAMPLE_INDEX=2; SAMPLE_INDEX<=REQUESTED_SAMPLE_COUNT; SAMPLE_INDEX++ )); do
 	      write_state "{\"status\":\"measuring\",\"request_id\":\"$REQUEST_ID\",\"sample\":$SAMPLE_INDEX,\"sample_count\":$REQUESTED_SAMPLE_COUNT,\"timeout_sec\":$STATE_TIMEOUT}"
 	      capture_additional_average_sample "$READ_TIMEOUT"
 	      SAMPLE_RC=$?
+	      # A zero that survived its re-reads ends the set. It never enters the
+	      # mean: 4, 0, 4 would pass as 2.67 with no flag. The reads so far stand;
+	      # the next first read meets the null guards if the meter is gone.
+	      if (( SAMPLE_RC == 2 )); then
+	       SET_ENDED_EARLY=1
+	       break
+	      fi
 	      if (( SAMPLE_RC != 0 )); then
 	       GOT_RESULT=false
 	       READ_SESSION_FATAL=1
-	       if (( SAMPLE_RC == 2 )); then
-	        READ_FAILURE_MESSAGE="Meter averaging sample $SAMPLE_INDEX of $REQUESTED_SAMPLE_COUNT read persistent zeros at a light-driving patch; meter session closed for clean retry"
-	       else
-	        READ_FAILURE_MESSAGE="Meter averaging sample $SAMPLE_INDEX of $REQUESTED_SAMPLE_COUNT timed out or failed; meter session closed for clean retry"
-	       fi
+	       READ_FAILURE_MESSAGE="Meter averaging sample $SAMPLE_INDEX of $REQUESTED_SAMPLE_COUNT timed out or failed; meter session closed for clean retry"
 	       break
 	      fi
 	      SAMPLES_JSON="$SAMPLES_JSON,$ADDITIONAL_PARSED"
 	     done
 	     if $GOT_RESULT; then
-	      PARSED_RESULT=$(printf '[%s]' "$SAMPLES_JSON" | PGEN_AVERAGE_MODE="$CMD_LOW_LIGHT_MODE" PGEN_REQUESTED_SAMPLE_COUNT="$REQUESTED_SAMPLE_COUNT" "$PGEN_PYTHON3" "$PGEN_METER_RESULT_HELPER" average 2>"$OUTFILE.avgerr") || PARSED_RESULT=""
+	      PARSED_RESULT=$(printf '[%s]' "$SAMPLES_JSON" | PGEN_AVERAGE_MODE="$CMD_LOW_LIGHT_MODE" PGEN_REQUESTED_SAMPLE_COUNT="$REQUESTED_SAMPLE_COUNT" PGEN_SET_ENDED_EARLY="$SET_ENDED_EARLY" "$PGEN_PYTHON3" "$PGEN_METER_RESULT_HELPER" average 2>"$OUTFILE.avgerr") || PARSED_RESULT=""
 	      if [[ -z "$PARSED_RESULT" ]]; then
 	       GOT_RESULT=false
 	       READ_FAILURE_MESSAGE="Meter averaging calculation failed"
@@ -1526,7 +1481,7 @@ print(json.dumps(out))
 	    # error and retire the child below so a late result can never be consumed
 	    # by a retry for another logical patch.
 	    if [[ "$CMD_CONTINUOUS" == "1" ]] && (( READ_SESSION_FATAL == 0 )); then
-	     if ! respawn_spotread "$CURRENT_LOW_LIGHT_MODE" "continuous read timeout"; then
+	     if ! respawn_spotread "continuous read timeout"; then
 	      log "continuous read-timeout recovery failed"
 	      exit 1
 	     fi

@@ -644,6 +644,7 @@ body.layout-tablet .meter-live-primary-values{flex-wrap:nowrap!important;overflo
 	.meter-xyz-gear-popover{display:none;position:absolute;top:calc(100% + 6px);left:0;z-index:50;padding:10px;background:#11131b;border:1px solid var(--border);border-radius:var(--r-md);box-shadow:0 8px 24px rgba(0,0,0,.45);min-width:260px}
 	.meter-xyz-gear-popover.open{display:block}
 	#meterProfileGearPopover{width:280px;max-height:72vh;overflow-y:auto;left:0;right:auto}
+	@media (max-width:700px){#meterProfileGearPopover{left:auto;right:0}}
 	#meterCompanionGearPopover{width:320px;max-width:min(320px,calc(100vw - 32px));max-height:72vh;overflow-y:auto;left:auto;right:0}
 	#meterCompanionGearPopover .field{margin-bottom:9px;display:flex;flex-direction:column;align-items:stretch;gap:4px}
 	#meterCompanionGearPopover .field label{font-size:var(--fs-xs);color:var(--text2);}
@@ -657,6 +658,7 @@ body.layout-tablet .meter-live-primary-values{flex-wrap:nowrap!important;overflo
 	#meterProfileGearPopover .meter-profile-section label.meter-toggle{font-size:var(--fs-xs);color:var(--text);display:flex;align-items:center;gap:6px}
 	#meterProfileGearPopover .meter-profile-section .meter-toggle-label{font-size:var(--fs-xs);color:var(--text2);user-select:none;cursor:pointer}
 	#meterProfileGearPopover .meter-profile-section .meter-inline-value{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+	#meterProfileGearPopover #meterLowLightTrigger{width:92px}
 	#meterProfileGearPopover .meter-profile-section input[type=number].meter-input-disabled{opacity:.45;background:var(--bg2,#1b1b26);cursor:not-allowed}
 	.meter-xyz-toggle-row{display:flex;align-items:center;gap:6px;flex-wrap:nowrap;white-space:nowrap}
 	.meter-xyz-toggle-row .meter-toggle{flex:0 0 auto;min-width:0}

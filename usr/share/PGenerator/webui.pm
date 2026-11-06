@@ -3622,46 +3622,38 @@ sub webui_meter_session_start (@) {
  return 0;
 }
 
-sub webui_low_light_sample_count {
- my ($mode)=@_;
- # Low-light a/aa/aaa select Argyll's -Y integration modes inside the meter
- # helpers; they are NOT application-level repeat counts. Live comparison on
- # an i1Display Pro Plus against an OLED near-black patch showed repeated
- # short reads averaging in software produce multi-x outliers where a single
- # -Y aa read is stable, so every mode maps to exactly one physical read.
- # The averaging plumbing stays for callers that request extra samples
- # explicitly through pgen_meter_average.py.
- my %counts=(off=>1,a=>1,aa=>1,aaa=>1);
- $mode=lc($mode||"off");
- return exists($counts{$mode}) ? $counts{$mode} : 1;
-}
-
-# Resolve the transitional presentation mode and numeric execution contract at
-# the common server ingress. Mode-only payloads remain compatible for one
-# release; every downstream worker receives only the resolved integer.
+# Resolve the operator's averaging into the numeric contract once, at the common
+# ingress; every worker receives only "avg" or "off" and this count. Each sample
+# is a physical read on the same meter child, averaged in linear XYZ. spotread's
+# own -Y a is not used: only the specbos driver honours it. a, aa and aaa are
+# what a page from 2.13.40 or older still sends.
 sub webui_low_light_request_contract {
  my ($body,$force_off)=@_;
  $body="" if(!defined($body));
- my $mode="off";
+ my %legacy=(a=>2,aa=>3,aaa=>5);
+ my $selected="";
  my $enabled=($body=~/"low_light"\s*:\s*\{[\s\S]{0,700}?"enabled"\s*:\s*true/i) ? 1 : 0;
- if($enabled && $body=~/"low_light"\s*:\s*\{[\s\S]{0,700}?"mode"\s*:\s*"(a|aa|aaa)"/i) {
-  $mode=lc($1);
+ if($enabled && $body=~/"low_light"\s*:\s*\{[\s\S]{0,700}?"mode"\s*:\s*"(avg|a|aa|aaa)"/i) {
+  $selected=lc($1);
  }
- $mode="off" if(!$enabled || $force_off);
- my $expected=&webui_low_light_sample_count($mode);
+ $selected="" if($force_off);
  my $has_count=($body=~/"(?:low_light_requested_sample_count|requested_sample_count)"\s*:/i) ? 1 : 0;
  my $provided;
  if($body=~/"(?:low_light_requested_sample_count|requested_sample_count)"\s*:\s*"?([0-9]+)"?\s*(?=[,}])/i) {
   $provided=int($1);
  }
+ my $expected=exists($legacy{$selected}) ? $legacy{$selected} : 1;
  my $error="";
  if($has_count && !defined($provided)) {
   $error="requested_sample_count must be an integer";
+ } elsif($selected eq "avg") {
+  if(defined($provided) && $provided >= 1 && $provided <= 5) { $expected=$provided; }
+  else { $error="requested_sample_count must be 1 to 5"; }
  } elsif(!$force_off && defined($provided) && $provided != $expected) {
   $error="requested_sample_count does not match low-light mode";
  }
  return {
-  mode=>$mode,
+  mode=>($expected > 1) ? "avg" : "off",
   requested_sample_count=>$expected,
   legacy_mode_only=>$has_count ? 0 : 1,
   error=>$error,

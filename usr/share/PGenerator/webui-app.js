@@ -823,7 +823,7 @@ function applyConfigState(nextConfig){
  try{ if(typeof meterSyncTargetGammaOptionsForSignal==='function') meterSyncTargetGammaOptionsForSignal(); }catch(e){}
  if(!meterSettingsLoaded) applyMeterTargetGammaDefault(true);
  // Restore the calibration-card low-light handler from localStorage so
- // the operator's last selection (e.g. 3-read averaging for 1.4% IRE)
+ // the operator's last selection (e.g. 3 reads below 5 cd/m²)
  // persists across page loads.
  try{ meterRestoreLowLightHandler(); }catch(e){}
  try{ meterRestoreSeriesBeepPref(); }catch(e){}
@@ -17745,7 +17745,9 @@ async function meterStartSingleReadWithTimeout(readPayload,timeoutMs,shouldCance
 }
 
 async function meterStartSingleRead(readPayload,shouldCancel){
- return meterStartSingleReadWithTimeout(readPayload,180000,shouldCancel);
+ // Each averaged read gets the time of a single one, as the meter session does.
+ const reads=Number(readPayload&&readPayload.low_light&&readPayload.low_light.requested_sample_count)||1;
+ return meterStartSingleReadWithTimeout(readPayload,Math.min(180000*reads,1800000),shouldCancel);
 }
 
 function meterApplyReadStepPayload(readPayload,step){
@@ -17897,17 +17899,17 @@ function meterExpectedTargetYForReadStep(step){
  }catch(e){ return null; }
 }
 
-// Return an explicit per-read mode. The selected a/aa/aaa mode is used only
-// when expected target Y is valid and strictly below the configured trigger.
+// Return an explicit per-read state. The selected reads are used only when
+// expected target Y is valid and strictly below the configured threshold.
 function meterEffectiveLowLightReadState(step){
  const selected=meterLowLightReadState();
  const trigger=Number(selected&&selected.trigger);
  const mode=String((selected&&selected.mode)||'off');
  const off={enabled:false,mode:'off',trigger:Number.isFinite(trigger)?trigger:0};
- if(!selected||!selected.enabled||!['a','aa','aaa'].includes(mode)||!(Number.isFinite(trigger)&&trigger>0)) return off;
+ if(!selected||!selected.enabled||mode!=='avg'||!(Number.isFinite(trigger)&&trigger>0)) return off;
  const expectedY=meterExpectedTargetYForReadStep(step);
  if(!(Number.isFinite(expectedY)&&expectedY>=0)) return off;
- return expectedY<trigger?{enabled:true,mode:mode,trigger:trigger}:off;
+ return expectedY<trigger?{enabled:true,mode:mode,requested_sample_count:selected.requested_sample_count,trigger:trigger}:off;
 }
 
 function meterBuildManualReadPayload(step,ctx){
@@ -17930,9 +17932,10 @@ function meterBuildManualReadPayload(step,ctx){
   if(opts.patternSignalRange!=null) readPayload.signal_range=opts.patternSignalRange;
  }
  readPayload.require_device_ready=!!opts.requireDeviceReady;
- // Manual, single, and continuous reads always carry an explicit effective
- // mode selected from the current step's chart target. AutoCal and series
- // persist the raw card configuration separately and resolve their own steps.
+ // Manual and single reads carry an explicit effective mode selected from the
+ // current step's chart target. AutoCal and series persist the raw card
+ // configuration separately and resolve their own steps. Continuous is a live
+ // view and reads once.
  readPayload.low_light=meterEffectiveLowLightReadState(step);
  return readPayload;
 }
@@ -17983,8 +17986,7 @@ function meterUpdateProfileFieldVisibility(){
 // card has not been rendered yet), or {enabled,mode,trigger} for the
 // current gear state. Used by every meter read path (single read,
 // autocal, series read) so the server gets a consistent payload.
-// The mode is the Mode dropdown value (off/a/aa/aaa), consumed by
-// meterLowLightFlags() and the server-side parser.
+// One read is no averaging, so it goes out as off.
 function meterLowLightReadState(){
  try{
   const enabled=document.getElementById('meterLowLightEnabled');
@@ -17992,9 +17994,18 @@ function meterLowLightReadState(){
   const trigger=document.getElementById('meterLowLightTrigger');
   if(!enabled||!mode||!trigger) return null;
   if(!enabled.checked) return {enabled:false,mode:'off',trigger:0};
-  const base=String(mode.value||'off');
-  return {enabled:true,mode:base,trigger:Number(trigger.value)||5.0};
+  const reads=Number(mode.value)||1;
+  if(reads<2) return {enabled:false,mode:'off',trigger:0};
+  return {enabled:true,mode:'avg',requested_sample_count:reads,trigger:Number(trigger.value)||5.0};
  }catch(e){ return null; }
+}
+
+// The Reads value of a saved setting. 2.13.40 and older stored off, a, aa or
+// aaa, older ones also x and x_a, x_aa, x_aaa (x was a no-op).
+function meterLowLightSavedReads(saved){
+ const legacy={off:'1',x:'1',a:'2',aa:'3',aaa:'5',x_a:'2',x_aa:'3',x_aaa:'5'};
+ const text=String(saved==null?'':saved);
+ return Object.prototype.hasOwnProperty.call(legacy,text)?legacy[text]:text;
 }
 
 // Completion beep for manually started series reads. Armed only by the
@@ -18076,7 +18087,7 @@ function meterSetLowLightHandler(){
  try{
   localStorage.setItem(METER_LOW_LIGHT_KEY,JSON.stringify({
    enabled:!!enabled.checked,
-   mode:String(mode.value||'off'),
+   mode:String(mode.value||'1'),
    trigger:Number(trigger.value)||5.0
   }));
  }catch(e){}
@@ -18091,14 +18102,8 @@ function meterRestoreLowLightHandler(){
  try{ saved=JSON.parse(localStorage.getItem(METER_LOW_LIGHT_KEY)||'null'); }catch(e){ saved=null; }
  if(!saved||typeof saved!=='object') return;
  if(typeof saved.enabled==='boolean') sel.checked=saved.enabled;
- // Backward compat: older saves stored high-precision variants
- // (x, x_a, x_aa, x_aaa) in mode; the high-precision option has been
- // removed (it mapped to spotread -x = Yxy output, already always on,
- // a no-op for precision), so collapse those back to the base mode.
- let base=(typeof saved.mode==='string')?saved.mode:'off';
- if(base==='x'){ base='off'; }
- else if(base.indexOf('x_')===0){ base=base.slice(2); }
- if(Array.from(mode.options).some(o=>o.value===base)) mode.value=base;
+ const reads=meterLowLightSavedReads(saved.mode);
+ if(Array.from(mode.options).some(o=>o.value===reads)) mode.value=reads;
  if(typeof saved.trigger==='number'&&saved.trigger>0) trigger.value=saved.trigger;
 }
 

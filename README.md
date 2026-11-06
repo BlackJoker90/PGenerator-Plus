@@ -581,6 +581,7 @@ All endpoints are on port 80 and return JSON.
 | POST | `/api/meter/read` | Start a manual read |
 | GET | `/api/meter/read/result` | Poll the latest read |
 | POST | `/api/meter/series` | Start a greyscale, colour or saturation series |
+| POST | `/api/meter/series/preview` | The steps that series would send, with nothing started or stopped |
 | GET | `/api/meter/series/status` | Series progress and readings |
 | POST | `/api/meter/stop` · `/clear` · `/reset` | Stop, clear results, force a meter reset |
 | GET / POST | `/api/meter/settings` | Load / save meter settings (POST replaces them; send the full object) |

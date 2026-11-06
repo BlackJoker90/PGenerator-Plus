@@ -7767,11 +7767,21 @@ function meterReadingIsBlackStep(reading){
  return name==='0%'||name==='black';
 }
 
-// A greyscale ΔE average or maximum leaves out the 0% step, as HCFR does: its
-// first greyscale column gets no dE (Views/MainView.cpp GetItemText). At black
-// the ΔE is meter noise, not grey balance. deMap is a chart's ΔE by level.
-function meterGreySummaryDeltas(deMap){
- return Object.keys(deMap).filter(ire=>!meterReadingIsBlackStep({ire:ire})).map(ire=>deMap[ire]);
+// The patch itself is black: the stamped stimulus decides, because a Custom
+// Greyscale slot carries any level. Readings without one go by their slot.
+function meterReadingHasBlackSignal(reading){
+ if(!reading||meterReadingIsSaturationStep(reading)) return false;
+ const signal=Number([reading.patch_stimulus,reading.stimulus].find(level=>level!=null&&level!==''));
+ return Number.isFinite(signal)?Math.abs(signal)<=0.05:meterReadingIsBlackStep(reading);
+}
+
+// A greyscale ΔE average or maximum leaves out the black patch, as HCFR does:
+// its first greyscale column gets no dE (Views/MainView.cpp GetItemText). At
+// black the ΔE is meter noise, not grey balance. deMap is a chart's ΔE by level,
+// readings what it was drawn from.
+function meterGreySummaryDeltas(deMap,readings){
+ const reading=new Map((readings||[]).map(rd=>[String(Number(rd.ire!=null?rd.ire:(rd.plot_ire!=null?rd.plot_ire:rd.stimulus))),rd]));
+ return Object.keys(deMap).filter(ire=>!meterReadingHasBlackSignal(reading.get(ire)||{ire:ire})).map(ire=>deMap[ire]);
 }
 
 function meterReadingsWouldRecoverAsBlackOnly(readings,type,steps){
@@ -8524,12 +8534,14 @@ function meterSignalColorimetryGamutKey(){
 }
 
 function meterAutoTargetGamutKey(){
+ // Same rule as the daemon's $auto_target_key: PQ HDR10 is P3-D65 unless the
+ // primaries say DCI, HLG follows the primaries and stays BT.2020 otherwise.
  if(meterChartIsDv()) return 'p3d65';
  if(meterChartIsPq() || meterChartSignalMode()==='hlg'){
   const primEl=document.getElementById('primaries');
   const prim=parseInt((primEl&&primEl.value) || (config&&config.primaries) || '0',10);
-  if(prim===2) return 'p3d65';
   if(prim===3) return 'p3dci';
+  if(prim===2||meterChartIsPq()) return 'p3d65';
   return 'bt2020';
  }
  return meterSignalColorimetryGamutKey();
@@ -9041,16 +9053,19 @@ function meterGreySdr26HeadroomCodeRange(){
   ? {min:64,span:959}    // 64..1023, top = 109%
   : {min:16,span:239};   // 16..255,  top = 109%
 }
-function meterGreySignalFractionFromCode(code){
+function meterGreySignalFractionFromCode(code,source){
  let numeric=Number(code);
  const context=(typeof meterActiveCalibrationTargetContext!=='undefined')?meterActiveCalibrationTargetContext:null;
  // Bit-depth reconciliation: the manual greyscale series read can emit 8-bit
  // codes (white=235) while max_bpc=10 makes meterGreyCodeRange 10-bit; scale
  // the 8-bit code to 10-bit so (code-min)/span is correct. No-op for genuinely
- // 10-bit series (white>255) and for 8-bit transports (max_bpc=8).
+ // 10-bit series (white>255) and for 8-bit transports (max_bpc=8). A code just
+ // built for the applied bit depth (currentDepth) is left alone: after an
+ // 8-bit run and a change to 10 bit the readings still say 255, and scaling
+ // the fresh code as well moved the 75 % saturation level to 100 %.
  const targetBits=context&&context.caller_policy==='browser_chart'
   ?Number(context.pattern_bits):meterPatchBitDepth();
- if(targetBits===10
+ if(targetBits===10&&!(source&&source.currentDepth)
   && Number.isFinite(numeric) && meterActiveSeriesCodesAre8Bit()){
   numeric=numeric*4;
  }
@@ -9352,6 +9367,13 @@ function meterSdr26ChartPeakIre(){
 //   - YCbCr Limited (4:2:2 or 4:4:4) has codes 16..255 with 235 at 100%
 //     and 255 at 109% via the legal super-white ramp.
 function meterLgAutoCalCodeForSlot(slot){
+ // 10-bit Limited SDR is LG's own ladder, the table the daemon and the Auto Cal
+ // worker use. Slots off the ladder (Dark Detail fillers) follow the formula.
+ const mode=String(meterActiveSeriesSignalMode||meterChartSignalMode()||'sdr').toLowerCase();
+ if(mode==='sdr'&&meterPatchBitDepth()===10&&meterPatchUsesVideoRange()){
+  const index=METER_LG_GREY_AUTOCAL_26_SLOTS.findIndex(value=>Math.abs(value-Number(slot))<0.001);
+  if(index>=0) return METER_LG_GREY_AUTOCAL_26_CODES[index];
+ }
  return meterPreviewSignalCode(slot,{lgAutocal26:true});
 }
 
@@ -9367,11 +9389,12 @@ function meterCodeFromSignalPercentWithOptions(percent,opts){
 }
 
 function meterActualSignalPercent(percent){
- return meterGreySignalFractionFromCode(meterCodeFromSignalPercent(percent))*100;
+ return meterGreySignalFractionFromCode(meterCodeFromSignalPercent(percent),{currentDepth:true})*100;
 }
 
 function meterColorLevelPercent(){
- if(meterChartIsDv() && meterDvMapModeValue()==='1') return 75;
+ // The daemon's saturation level (webui.pm $level_pct): HLG shares SDR's 75 %.
+ if(meterChartIsHlg()) return 75;
  return meterChartIsHdr()?50:75;
 }
 
@@ -10566,8 +10589,7 @@ function meterBuildHcfrSaturationStep(colorName,satPercent){
 function meterBuildSaturationStimulusLinearRgb(colorName,satPercent){
  const solveGamut=meterSaturationSolveGamut();
  const axisGamut=meterSaturationAxisGamut();
- let sat=Math.max(0,Math.min(100,satPercent||0))/100;
- if(meterChartIsDv()&&meterDvMapModeValue()!=='1') sat=meterDvRelativeSaturationFraction(sat);
+ const sat=Math.max(0,Math.min(100,satPercent||0))/100;
  const endpoint=meterGamutColorEndpointXY(colorName,axisGamut);
  const wp=meterTargetWhitePoint();
  const x=wp.x+sat*(endpoint.x-wp.x);
@@ -13257,7 +13279,7 @@ function meterGreyStimulusFraction(ire){
  const allowsHeadroom=(typeof meterGreyAllowsHeadroomTargets==='function') && meterGreyAllowsHeadroomTargets();
  const pct=Math.max(0,Math.min(allowsHeadroom?110:100,ire||0));
  const dvMode=meterChartIsDv();
- if(dvMode || meterDvRelativeSt2084UsesLegalRange()) return meterGreySignalFractionFromCode(meterCodeFromSignalPercent(pct));
+ if(dvMode || meterDvRelativeSt2084UsesLegalRange()) return meterGreySignalFractionFromCode(meterCodeFromSignalPercent(pct),{currentDepth:true});
  const isLimited=meterPatchUsesVideoRange();
  const code=isLimited?Math.round(16+pct/100*(235-16)):Math.round(pct*255/100);
  return meterSignalFractionFromCode(code);
@@ -18436,8 +18458,10 @@ function meterRefreshTargetCurves(){
  }catch(e){}
 }
 
-async function meterRunManualReadStep(step,ctx){
+async function meterRunManualReadStep(requested,ctx){
  const opts=ctx||{};
+ const step=await meterStepWithDaemonCodes(requested);
+ if(requested&&!step){ toast(METER_NO_DAEMON_CODES_MESSAGE,true); return null; }
  if(step&&opts.displayFirst) await meterDisplayPatch(step,{fresh:false,allowAfterStop:true});
  const label=document.getElementById('meterProgressLabel');
  if(label&&step) label.textContent=(step.name||step.ire+'%')+' (reading)';
@@ -19943,8 +19967,10 @@ function meterSelectPatchFromInteraction(step,reading,opts){
 	  // the configured stabilization pattern owns the idle display.
 	  if(typeof activePattern!=='undefined'&&activePattern!=null) clearActive();
 	  if(!meterPatchDisplayLockedForRead()) meterRestoreStabilizationAfterMeasurement();
+	  // Nothing is displayed now, but the next read carries this step's codes.
+	  meterAdoptDaemonCodes(resolvedStep);
 	 }else{
-	  meterDisplayPatch(resolvedStep,{fresh:false,allowAfterStop:true});
+	  meterDisplayPatch(resolvedStep,{fresh:false,allowAfterStop:true,daemonCodes:true});
 	 }
  document.getElementById('meterLiveReading').style.display='';
  meterHideProgressIfIdle();

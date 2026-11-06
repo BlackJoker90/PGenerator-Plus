@@ -15081,7 +15081,7 @@ function drawGammaChart(gs,allSteps,readingMap){
  drawDots(ctx,chart,meterMeasuredEotfLuminanceDotPoints(measureSteps,readingMap,axisMax,scaleMeasuredLuminance,'luminance'),pgThemeColor('--chart-eotf-measured','#ffeb3b'),2.2);
  ctx.fillStyle=pgThemeColor('--chart-annotation','#aaa');ctx.font=pgChartFont(11);
  ctx.textAlign='left';
- ctx.fillText('Min cd/m\u00B2: '+meterLowLuminanceText(Lb,2),chart.pad.l,ctx.h-2);
+ ctx.fillText('Min cd/m\u00B2: '+meterNearBlackLuminanceText(Lb,2),chart.pad.l,ctx.h-2);
  const diffuse=meterHdrDiffuseWhiteOverride();
  const targetLabel='100% target: '+targetPeak.toFixed(1)+' cd/m\u00B2'+((diffuse!=null&&meterChartIsPq())?' (DW '+diffuse.toFixed(1)+')':'');
  const targetFits=chart.pad.l+ctx.measureText(targetLabel).width+8<=ctx.w-chart.pad.r-(chart.contrastW||0);
@@ -18141,8 +18141,8 @@ function chartHandleHover(e,canvasId){
  const rd=hit.reading;
  const bal=hit.rgbBalance||{R:100,G:100,B:100};
  const lumInfo=meterColorLuminanceInfo(rd);
- const readY=(rd.luminance!=null&&Number.isFinite(Number(rd.luminance)))?meterLowLuminanceText(rd.luminance,3):'--';
- const targetY=(lumInfo.targetY!=null&&Number.isFinite(Number(lumInfo.targetY)))?Number(lumInfo.targetY).toFixed(3):'--';
+ const readY=(rd.luminance!=null&&Number.isFinite(Number(rd.luminance)))?meterNearBlackLuminanceText(rd.luminance):'--';
+ const targetY=(lumInfo.targetY!=null&&Number.isFinite(Number(lumInfo.targetY)))?meterNearBlackLuminanceText(lumInfo.targetY):'--';
  let gammaReferenceReadings=meterGreyscaleReadings(meterReadings);
  if(canvasId==='chartGammaValue') gammaReferenceReadings=meterFilterLgAutoCalChartItems(gammaReferenceReadings);
  const gamma=meterGreyscaleGammaValue(rd,meterGammaValueReferenceY(gammaReferenceReadings));
@@ -18191,7 +18191,7 @@ function meterAveragedReadText(reading){
  // the reads saw.
  if(reading.normalized_black||(reading.luminance!=null&&Number(reading.luminance)===0&&max>0)) return '';
  // Near black three decimals would round a real spread away.
- const text=y=>meterLowLuminanceText(y,y<1?4:3);
+ const text=y=>meterNearBlackLuminanceText(y,y<1?4:3);
  const count=requested>reads?reads+' of '+requested:String(reads);
  return 'Averaged: '+count+' reads, Y '+text(min)+' to '+text(max)+' cd/m\u00B2';
 }
@@ -18345,7 +18345,7 @@ function meterBuildReportSummaryCards(){
   cards=[
    {label:'Average '+meterDeltaEFormLabel()+(counted.length<gs.length?' (excl. 0%)':''),value:isFinite(avgDe)?avgDe.toFixed(2):'--'},
    {label:'Peak Luminance',value:isFinite(peak)?peak.toFixed(1)+' cd/m²':'--'},
-   {label:'Black Level',value:isFinite(black)?meterLowLuminanceText(black,3)+' cd/m²':'--'},
+   {label:'Black Level',value:isFinite(black)?meterNearBlackLuminanceText(black)+' cd/m²':'--'},
     {label:'Contrast Ratio',value:meterFormatContrastRatio(meterMeasuredContrastRatio(rawGs))},
    {label:'Average CCT',value:avgCct?Math.round(avgCct)+'K':'--'}
   ];
@@ -18416,7 +18416,7 @@ function meterBuildGreyscaleReportTable(){
   }
   rows+='<tr>'
     +'<td>'+(rd.name||((rd.ire!=null)?(Math.round(rd.ire*100)/100)+'%':'--'))+'</td>'
-   +'<td>'+meterLowLuminanceText(rd.Y!=null?rd.Y:(rd.luminance||0),2)+'</td>'
+   +'<td>'+meterNearBlackLuminanceText(rd.Y!=null?rd.Y:(rd.luminance||0),2)+'</td>'
    +'<td>'+(rd.x!=null?rd.x.toFixed(4):'--')+'</td>'
    +'<td>'+(rd.y!=null?rd.y.toFixed(4):'--')+'</td>'
    +'<td>'+(rd.cct?rd.cct+'K':'--')+'</td>'

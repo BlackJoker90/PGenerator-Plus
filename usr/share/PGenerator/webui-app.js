@@ -8264,6 +8264,15 @@ function meterLowLuminanceText(value,digits){
  return n.toFixed(Math.max(digits,Math.min(6,1-Math.floor(Math.log10(n)))));
 }
 
+// Near black three decimals round a real value away: a Target Black of 0.0188
+// must not read 0.019 beside the field that holds it. The breakpoints are
+// meterTargetLevelFormat's, so a value reads as that field holds it.
+function meterNearBlackLuminanceText(value,digits=3){
+ const n=Number(value)||0,size=Math.abs(n);
+ if(!(size>0&&size<1)) return n.toFixed(digits);
+ return n.toFixed(size<0.001?6:4).replace(/0+$/,'').replace(/\.$/,'');
+}
+
 // The server decides the panel when a series starts, so a run read back from it
 // keeps that panel in every browser. A status from before the field stays
 // unstamped and takes the selection, as an old run does.
@@ -17033,7 +17042,7 @@ function meterUpdateLiveReadingTargets(src){
   }catch(e){}
   if(tXY&&isGrey) tCct=meterCctFromXy(tXY.x,tXY.y);
  }
- set('meterLumTgt', tY!=null?('Target: '+tY.toFixed(2)):'');
+ set('meterLumTgt', tY!=null?('Target: '+meterNearBlackLuminanceText(tY,2)):'');
  set('meterCCTTgt', tCct!=null?('Target: '+Math.round(tCct)+'K'):'');
  set('meterCIExTgt', tXY?('Target: '+tXY.x.toFixed(4)):'');
  set('meterCIEyTgt', tXY?('Target: '+tXY.y.toFixed(4)):'');
@@ -17336,7 +17345,7 @@ function updateLiveReading(reading){
  document.getElementById('meterLiveReading').style.display='';
  const liveLabel=document.getElementById('meterLiveReadingLabel');
  if(liveLabel) liveLabel.textContent=meterLiveReadingLabel(reading);
- document.getElementById('meterLum').textContent=measured&&measured.Y!=null?meterLowLuminanceText(measured.Y,2):'--';
+ document.getElementById('meterLum').textContent=measured&&measured.Y!=null?meterNearBlackLuminanceText(measured.Y,2):'--';
  // CCT (correlated colour temperature) is only meaningful for near-neutral
  // (greyscale/white) patches. For a saturated colour patch the "temperature"
  // is a nonsense number, so suppress it rather than mislead the operator.
@@ -17813,7 +17822,7 @@ function meterApplySingleReadResult(result,requestedStep){
     meterBuildPatchThumbs(sortedSteps,completedIres,null);
    }
     updateLiveReading(rd);
-   toast('Reading: '+meterLowLuminanceText(rd.luminance,2)+' cd/m\\u00B2');
+   toast('Reading: '+meterNearBlackLuminanceText(rd.luminance,2)+' cd/m\\u00B2');
   }
  } else {
   toast(pgFailMsg('Measurement failed',result,'Check that the meter is connected and placed on the screen, then read again.'),true);

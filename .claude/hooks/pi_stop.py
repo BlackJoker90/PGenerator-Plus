@@ -6,7 +6,9 @@ what to do; a second stop in the same turn (stop_hook_active) goes through,
 so a hand-over in the middle of a test (the user looks at the TV) stays
 possible: say so in the reply.
 
-Fails open: an error is reported on stderr (exit 1, non-blocking).
+Fails open: an error is reported on stderr (exit 1, non-blocking);
+settings.json maps a missing hook file (python3 exits 2, which on Stop
+would block every turn's end) to exit 1 as well.
 """
 import json, os, sys, time
 

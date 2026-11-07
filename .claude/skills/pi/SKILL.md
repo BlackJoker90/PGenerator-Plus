@@ -16,7 +16,7 @@ into `cat > file` is data. Anything that changes the picture, signal, daemon
 or device (init script, `service`, pkill, probes, POSTs, port 85/2100/2101,
 writes to `running/`, `/sys`, `/proc`, pgsethdr, pgenerator-update,
 `vcgencmd display_power`) needs a fresh FREE from `$P busy` for that host;
-system writes without a backup of that file into `/root/pgen-backups`, edits
+system writes by hand (use `$P deploy`), edits
 under `/etc/PGenerator` and `{}`/empty bodies are refused. It is a net for
 slips, not a sandbox.
 `pi.exp` types the password once; a refused one ends with exit 5, a killed

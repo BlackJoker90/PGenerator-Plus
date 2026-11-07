@@ -123,7 +123,7 @@ reviewed / confirmed on the Pi. The release refuses to run without `t/` or
 Everything goes through `.claude/skills/pi/scripts/pgen-pi` (the `pi`
 skill). The hooks in `.claude/settings.json` enforce the rules below:
 `pi_guard.py` refuses raw ssh, a written-out password, dummy bodies,
-unbacked system writes and unchecked probes; `pi_stop.py` stops the end of
+system writes outside `pgen-pi deploy` and unchecked probes; `pi_stop.py` stops the end of
 a turn while a snapshot is open.
 
 - Before probes or restarts: `pgen-pi busy`, as its own step (runs

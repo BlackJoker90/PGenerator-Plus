@@ -27,12 +27,19 @@ timeout).
 "this turn" starts at the first transcript entry of the hook's prompt_id.
 Without a readable transcript nothing is checked. Python under usr/ and
 pi_state.py (pgen-pi runs it on the Pi) are checked as Python 3.5:
-ast.parse(feature_version=(3,5)) plus a token scan for f-/t-strings, which
-ast on a new Python accepts. ast on a new Python also accepts some other
-post-3.5 syntax (async generators, await in comprehensions, parenthesised
-context managers, relaxed decorators, a trailing comma after **kwargs,
-`return 1, *a`, `a[*b]`, `continue` in finally) and no stdlib use is checked: py_compile on the Pi stays
-the binding check.
+ast.parse(feature_version=(3,5)), plus what ast on a new Python accepts
+there and the Pi's Python 3.5.3 refuses (f-/t-strings, async generators,
+await in comprehensions, parenthesised context managers with `as`, relaxed
+decorators, a trailing comma after *args/**kwargs/keyword-only parameters,
+`return 1, *a`, `a[*b]`, `continue` in finally, `from __future__ import
+annotations`) and stdlib modules it lacks (PY35_MISSING_MODULES); each
+case was checked against the Pi's python3.5 (t/data/py35_fixtures.json).
+`async` as a name is refused although 3.5 takes it. py_compile on the Pi
+stays the binding check.
+
+Test reminders skip files that hold no code a test runs (NO_TEST_SUFFIXES:
+CSS, HTML, Markdown, images); the release gate still runs every test,
+t/webui_called_functions.t on the HTML handlers included.
 
 An error of the hook itself goes to stderr (exit 1, non-blocking), so a
 broken hook never holds a turn; settings.json maps a missing hook file
@@ -44,6 +51,10 @@ WALK = ("usr", "src", "etc", ".claude/hooks", ".claude/skills/pi/scripts")
 CODE_PREFIXES = ("usr/", "src/", "etc/", ".claude/hooks/", ".claude/skills/pi/scripts/")
 SYNTAX_PREFIXES = ("usr/", "etc/", ".claude/hooks/", ".claude/skills/pi/scripts/")
 PI_PYTHON = (".claude/skills/pi/scripts/pi_state.py",)  # pgen-pi runs it on the Pi
+# Changed alone, these ask for no test run (review 2026-11-07: 5 of 13
+# reminders were for such files only).
+NO_TEST_SUFFIXES = (".css", ".html", ".htm", ".md", ".png", ".svg", ".jpg", ".jpeg", ".gif", ".ico",
+                    ".woff", ".woff2")
 SKIP_DIRS = {".git", "__pycache__", "node_modules"}
 TIMEOUT = 20
 SEGMENT_SPLIT = re.compile(r"&&|\|\||[;|&\n()`]|\$\(")
@@ -67,15 +78,25 @@ def strip_text(command):
         if m:
             end = m.group(2)
         out.append(line)
-    return QUOTED.sub("''", "\n".join(out))
+    # A quoted single word stays a word ('prove' -r t runs prove); quoted
+    # text with spaces (a message, an echo) is text.
+    return QUOTED.sub(lambda q: q.group(0)[1:-1] if re.match(r"^['\"][\w./-]+['\"]$", q.group(0)) else "''",
+                      "\n".join(out))
 
 
 def runs_tests(command):
     """True if a segment of a shell command starts `prove` or the repro script."""
     for seg in SEGMENT_SPLIT.split(strip_text(command or "")):
         words = seg.split()
-        while words and (ASSIGNMENT.match(words[0]) or words[0] in ("env", "time", "nice", "exec")):
-            words.pop(0)
+        while words and (ASSIGNMENT.match(words[0]) or words[0] in ("env", "time", "nice", "exec", "command", "nohup")):
+            w = words.pop(0)
+            # env -u NAME / env -i / env --: options before the command
+            while w == "env" and words and words[0].startswith("-"):
+                o = words.pop(0)
+                if o in ("-u", "--unset", "-C", "--chdir", "-S", "--split-string") and words:
+                    words.pop(0)
+            if w == "nice" and words and words[0] == "-n" and len(words) > 1:
+                words[:2] = []
         if not words:
             continue
         first = os.path.basename(words[0])
@@ -180,6 +201,159 @@ def check_py35(path):
                     return ("error", "line %d: f-/t-string, not Python 3.5" % t.start[0])
     except (tokenize.TokenError, SyntaxError) as e:
         return ("error", "tokenize: %s" % e)
+    try:
+        tree = ast.parse(src, filename=path)
+        found = py35_tree(tree, src.decode("utf-8", "replace")) or py35_tokens(src)
+    except (SyntaxError, ValueError, tokenize.TokenError) as e:
+        return ("error", "%s" % e)
+    if found:
+        return ("error", "line %d: %s, not Python 3.5" % found)
+    return None
+
+
+# What the Pi's Python 3.5.3 refuses but ast.parse(feature_version=(3,5)) on
+# a new Python accepts. Each case was compiled with the Pi's own python3.5
+# (tools/image-targets/pi4-biasi/rootfs/usr/bin/python3.5 under qemu,
+# 2026-11-07; t/python35_syntax.t holds the cases); the modules failed to
+# import there.
+PY35_MISSING_MODULES = ("secrets", "contextvars", "dataclasses", "graphlib", "zoneinfo", "tomllib",
+                        "importlib.metadata", "importlib.resources")
+
+
+def _own_nodes(node):
+    """node's descendants, not entering nested functions, lambdas or classes."""
+    for child in ast.iter_child_nodes(node):
+        if isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda, ast.ClassDef)):
+            continue
+        yield child
+        for x in _own_nodes(child):
+            yield x
+
+
+def _bare_starred_tuple(node, text):
+    """A tuple with *x and no parentheses of its own (return 1, *a; also
+    return (1), *a). The tuple's source is taken by ast.get_source_segment,
+    which counts offsets in UTF-8 bytes as ast does (a slice of the decoded
+    line was off after a non-ASCII character, review 2026-11-07); its own
+    parentheses are a ( at the start whose ) is the last token."""
+    if not isinstance(node, ast.Tuple) or not any(isinstance(e, ast.Starred) for e in node.elts):
+        return False
+    seg = ast.get_source_segment(text, node) or ""
+    if not seg.startswith("("):
+        return True
+    depth = 0
+    try:
+        toks = [t for t in tokenize.generate_tokens(io.StringIO(seg).readline)
+                if t.type == tokenize.OP]
+    except (tokenize.TokenError, SyntaxError):
+        return True
+    for i, t in enumerate(toks):
+        if t.string in "([{":
+            depth += 1
+        elif t.string in ")]}":
+            depth -= 1
+            if depth == 0:
+                return i != len(toks) - 1
+    return True
+
+
+def _dotted(node):
+    while isinstance(node, ast.Attribute):
+        node = node.value
+    return isinstance(node, ast.Name)
+
+
+def py35_tree(tree, text):
+    """(line, what) of the first construct the AST shows Python 3.5 lacks."""
+    for node in ast.walk(tree):
+        if isinstance(node, ast.AsyncFunctionDef):
+            for x in _own_nodes(node):
+                if isinstance(x, (ast.Yield, ast.YieldFrom)):
+                    return (x.lineno, "yield inside async def (async generator, 3.6)")
+        if isinstance(node, (ast.ListComp, ast.SetComp, ast.DictComp, ast.GeneratorExp)):
+            for x in _own_nodes(node):
+                if isinstance(x, ast.Await):
+                    return (x.lineno, "await in a comprehension (3.6)")
+        if isinstance(node, ast.Try) or type(node).__name__ == "TryStar":
+            todo = list(node.finalbody)
+            while todo:
+                x = todo.pop()
+                if isinstance(x, ast.Continue):
+                    return (x.lineno, "continue in finally (3.8)")
+                if isinstance(x, (ast.For, ast.AsyncFor, ast.While, ast.FunctionDef, ast.AsyncFunctionDef,
+                                  ast.ClassDef, ast.Lambda)):
+                    continue
+                todo.extend(ast.iter_child_nodes(x))
+        if isinstance(node, (ast.Return, ast.Yield)) and _bare_starred_tuple(node.value, text):
+            return (node.lineno, "unparenthesised *x in return/yield (3.8)")
+        # for x in 1, *a: / x += 1, *a: same 3.5 testlist as return
+        # (Python 3.5.3 refuses both, t/data/py35_fixtures.json)
+        if isinstance(node, (ast.For, ast.AsyncFor)) and _bare_starred_tuple(node.iter, text):
+            return (node.lineno, "unparenthesised *x after for ... in (3.9)")
+        if isinstance(node, ast.AugAssign) and _bare_starred_tuple(node.value, text):
+            return (node.lineno, "unparenthesised *x in augmented assignment (3.9)")
+        if isinstance(node, ast.Subscript):
+            sl = node.slice.value if type(node.slice).__name__ == "Index" else node.slice
+            if _bare_starred_tuple(sl, text) or isinstance(sl, ast.Starred):
+                return (node.lineno, "*x in a subscript (3.11)")
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+            for d in node.decorator_list:
+                if not _dotted(d.func if isinstance(d, ast.Call) else d):
+                    return (d.lineno, "decorator that is not a dotted name or call (3.9)")
+        if isinstance(node, ast.ImportFrom) and node.module == "__future__" and \
+                any(a.name == "annotations" for a in node.names):
+            return (node.lineno, "from __future__ import annotations (3.7)")
+        names = [a.name for a in node.names] if isinstance(node, ast.Import) else \
+            [node.module or ""] + ["%s.%s" % (node.module, a.name) for a in node.names] \
+            if isinstance(node, ast.ImportFrom) and not node.level else []
+        for n in names:
+            if any(n == m or n.startswith(m + ".") for m in PY35_MISSING_MODULES):
+                return (node.lineno, "module %s (not in the Pi's Python 3.5 stdlib)" % n)
+    return None
+
+
+def py35_tokens(src):
+    """(line, what) of a trailing comma after *args/**kwargs/keyword-only
+    parameters in a def or lambda, or `with (a as b)`."""
+    toks = [t for t in tokenize.tokenize(io.BytesIO(src).readline)
+            if t.type not in (tokenize.NL, tokenize.COMMENT, tokenize.ENCODING)]
+    for i, t in enumerate(toks):
+        if t.type != tokenize.NAME or t.string not in ("def", "lambda", "with"):
+            continue
+        j = i + 1
+        if t.string == "def":
+            j += 1  # the name
+            if j >= len(toks) or toks[j].string != "(":
+                continue
+            j += 1
+            close, depth = ")", 1
+        elif t.string == "lambda":
+            close, depth = ":", 1
+        else:
+            if j >= len(toks) or toks[j].string != "(":
+                continue
+            j += 1
+            close, depth = ")", 1
+        star = False
+        prev = None
+        while j < len(toks):
+            s = toks[j].string
+            if toks[j].type == tokenize.OP and s in "([{" and s:
+                depth += 1
+            elif toks[j].type == tokenize.OP and s in ")]}" and s:
+                depth -= 1
+            if (depth == 0 and s == close) or (close == ":" and depth == 1 and s == ":"):
+                break
+            if depth == 1:
+                if t.string == "with" and toks[j].type == tokenize.NAME and s == "as":
+                    return (t.start[0], "parenthesised context managers with `as` (3.9)")
+                # a parameter that starts with * or ** (not a product in a default)
+                if s in ("*", "**") and (prev is None or prev.string in ("(", ",")):
+                    star = True
+            prev = toks[j]
+            j += 1
+        if t.string != "with" and star and prev is not None and prev.string == ",":
+            return (t.start[0], "trailing comma after *args, **kwargs or keyword-only parameters (3.6)")
     return None
 
 
@@ -305,7 +479,8 @@ def main():
 
     def stale_now():
         since = max(turn or start, last_run or 0)
-        return [f for f in files if f.startswith(CODE_PREFIXES) and os.path.getmtime(os.path.join(root, f)) > since]
+        return [f for f in files if f.startswith(CODE_PREFIXES) and not f.lower().endswith(NO_TEST_SUFFIXES)
+                and os.path.getmtime(os.path.join(root, f)) > since]
     stale = stale_now()
     if stale and not errors:
         time.sleep(1)  # the transcript is written asynchronously

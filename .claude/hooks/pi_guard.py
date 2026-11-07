@@ -19,9 +19,11 @@ Deny (the reason goes back to Claude):
   - a Pi command that changes the picture, signal, daemon or device while
     the last `pgen-pi busy` (for that host) is not FREE or older than 10 min;
   - `{}`, empty or missing bodies to the API, any POST to /api/meter/settings;
-  - writes to /usr, /etc, /lib, /boot, /bin, /sbin on the Pi without a
-    backup of that same file into /root/pgen-backups in the command (use
-    `pgen-pi deploy`), and any edit of /etc/PGenerator behind the daemon;
+  - writes to /usr, /etc, /lib, /boot, /bin, /sbin on the Pi by hand (use
+    `pgen-pi deploy`, which backs up, guards empty files, compares md5 and
+    writes a restore.sh; a backup copied in the same command no longer
+    counts, review 2026-11-07), and any edit of /etc/PGenerator behind the
+    daemon;
   - an init-script stop/restart in a command that names a path the init
     script pkills (it would kill its own shell);
   - writing pgen-pi's busy state by hand;
@@ -38,7 +40,10 @@ A net for slips, not a sandbox: a command built to hide what it does (a
 copied script, a host read from a file) can get past it.
 
 Fails open: an error inside the guard is reported on stderr (exit 1, a
-non-blocking hook error) and the command goes on.
+non-blocking hook error) and the command goes on. A missing guard file
+does not: python3 exits 2 and every Bash call is refused, on purpose
+(settings.json maps it to exit 1 for the Stop hooks only), so a lost
+guard shows at once instead of switching the checks off unseen.
 """
 import json, os, posixpath, re, sys, time
 
@@ -156,7 +161,7 @@ RAW = ("reach the Pi through .claude/skills/pi/scripts/pgen-pi (ssh, scp, busy, 
        "restart, reboot): it handles the password, the busy state and the backups.")
 CONF_WRITE = ("writing %s behind the daemon: change settings with partial /api/config bodies, give them back "
               "with `pgen-pi restore`.")
-SYS_WRITE = ("writes to %s on the Pi without a backup of that file into /root/pgen-backups in this command: use "
+SYS_WRITE = ("writes to %s on the Pi by hand: use "
              "`pgen-pi deploy` (it backs up, guards empty files, compares md5 and writes a restore.sh).")
 DUMMY = ("empty or `{}` body to the API: never POST dummy bodies to settings endpoints (CLAUDE.md). "
          "Send a partial body with exactly the keys to change.")
@@ -530,9 +535,9 @@ class St(object):
 
 
 class Loc(object):
-    """Where a command list runs: the Mac or the Pi, its cwd, its backups."""
+    """Where a command list runs: the Mac or the Pi, and its cwd."""
     def __init__(self, ctx):
-        self.ctx, self.saved = ctx, set()
+        self.ctx = ctx
         self.cwd = "/root" if ctx == "pi" else MAC_CWD[0]
 
 
@@ -639,9 +644,13 @@ def http(a):
     p = prog(a)
     if p == "curl":
         opts = parse_opts(a[1:], CURL_SHORT, CURL_LONG)
+        # -G/--get sends the -d/--data* values as a GET query, not a body
+        # (curl(1)); --json, -F and -T stay writes, so does an explicit -X.
+        get = any(k in ("-G", "--get") for k, v in opts)
+        data = [k for k, v in opts if k in CURL_BODY and not (get and k != "--json")]
         post = any(k in ("-X", "--request") and (v or "").upper() in POST_METHODS for k, v in opts) or \
-            any(k in CURL_BODY or k in ("-F", "--form", "--form-string", "-T", "--upload-file") for k, v in opts)
-        bodies = [v or "" for k, v in opts if k in CURL_BODY]
+            bool(data) or any(k in ("-F", "--form", "--form-string", "-T", "--upload-file") for k, v in opts)
+        bodies = [v or "" for k, v in opts if k in CURL_BODY and not (get and k != "--json")]
         outs = [v for k, v in opts if k in ("-o", "--output") and v and v != "-"]
         return post, bodies, outs
     if p == "wget":
@@ -856,17 +865,11 @@ def judge_one(a, redir, heredocs, loc, st, depth):
         return
     p, ctx = prog(a), loc.ctx
     writes = write_targets(a, redir, loc)
-    if ctx == "pi" and p in ("cp", "mv", "install") and writes:
-        # cp FILE DIR/ writes DIR/FILE: the backup of that file counts.
-        srcs = [norm(x, loc) for x in a[1:] if not x.startswith("-")][:-1]
-        joined = [norm(writes[-1] + "/" + posixpath.basename(x), loc) for x in srcs]
-        if joined and all(j in loc.saved for j in joined):
-            writes = writes[:-1] + joined
     for w in writes:
         if ctx == "pi":
             if w == CONF_DIR or w.startswith(CONF_DIR + "/"):
                 st.deny(P_CONF, CONF_WRITE % w)
-            elif SYSTEM.match(w) and w not in loc.saved:
+            elif SYSTEM.match(w):
                 st.deny(P_SYS, SYS_WRITE % w)
             if w.startswith(("/var/lib/PGenerator/running", "/sys/", "/proc/")) or SYSTEM.match(w) \
                     or (w.startswith("/dev/") and w not in DEV_OK):
@@ -877,10 +880,6 @@ def judge_one(a, redir, heredocs, loc, st, depth):
             st.deny(P_STATE, STATE_WRITE)
         elif w.startswith(("/dev/tcp/", "/dev/udp/")) and st.mentions_host(w):
             st.mutating = True
-    if ctx == "pi" and p == "cp":
-        plain = [norm(x, loc) for x in a[1:] if not x.startswith("-")]
-        if len(plain) >= 2 and (plain[-1] == BACKUPS or plain[-1].startswith(BACKUPS + "/")):
-            loc.saved.update(plain[:-1])
     if not a:
         return
     # What runs something else: a shell, eval, an interpreter.

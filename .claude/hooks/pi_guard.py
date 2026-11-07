@@ -131,7 +131,14 @@ CODE_CMDLINE = re.compile(r"pgen-pi\s+[a-z$]|pi\.exp\s+(?:ssh|scp)|(?:^|[\s;&|])
 # gh and git inside code: judged only where the code runs commands, a string
 # that merely says `git push origin main` is text.
 CODE_GIT = re.compile(r"(?:^|[\s;&|])(?:gh|git)\s")
-CODE_EXEC = re.compile(r"\bsubprocess\b|\bpopen\b|\bsystem\b|\bexec\s*\(|\bexecSync\b|\bspawn\w*\b|\bqx\b|child_process", re.I)
+# Code that runs commands. gh/git strings are judged only where it matches;
+# pgen-pi/ssh/curl command lines in any code but Python are judged always
+# (perl, ruby, php, tcl have too many ways to run one: exec "..", readpipe,
+# shell_exec, ...), in Python unless the code is text only (no match here).
+CODE_EXEC = re.compile(r"\bsubprocess\b|\bpopen\b|\bsystem\b|\bexec(?:[lv]p?e?)?\s*\(|\bexecSync\b|(?:\b|_)spawn\w*|\bqx\b|child_process|"
+                       r"\bopen[23]\b|\bOpen3\b|\bIPC::|"
+                       # perl pipe open: open(H, "-|", ...), open(H, "cmd |"), open(H, "| cmd")
+                       r"\bopen\s*(?:\(\s*)?[^()\n;]*?['\"](?:\s*\||-\||[^'\"\n]*\|\s*['\"])", re.I)
 CODE_ARGV = re.compile(r"(?:[\[(]|\bsystem\s)\s*['\"](?:[^'\"]*/)?(?:gh|git)['\"]\s*,[^\])\n;]*")
 # Writes to a URL in code; a variable named `data` is none.
 CODE_REST_WRITE = re.compile(r"\.(?:post|put|patch|delete)\s*\(|method\s*=\s*['\"]?(?:POST|PUT|PATCH|DELETE)|"
@@ -153,6 +160,17 @@ SYS_WRITE = ("writes to %s on the Pi without a backup of that file into /root/pg
              "`pgen-pi deploy` (it backs up, guards empty files, compares md5 and writes a restore.sh).")
 DUMMY = ("empty or `{}` body to the API: never POST dummy bodies to settings endpoints (CLAUDE.md). "
          "Send a partial body with exactly the keys to change.")
+# Actions whose handler reads no body (webui.pm: webui_playlist_action
+# "stop", webui_tvmenu_action "open"/"close"; the WebUI posts `{}` there).
+# Every other endpoint keeps the ban, new settings endpoints included.
+BODYLESS_API = re.compile(r"^/api/(?:playlists?/stop|tvmenu/(?:open|close))$")
+
+
+def bodyless_only(text):
+    """Every /api/ path in text is an action that reads no body."""
+    # every "/api" counts, also one whose path is built ('/api' + '/config')
+    paths = re.findall(r"/api\b[\w./-]*", text)
+    return bool(paths) and all(BODYLESS_API.match(p.rstrip("/")) for p in paths)
 METER = ("POST to /api/meter/settings: an earlier body wiped the meter settings. Read the handler (webui.pm) "
          "and ask the maintainer before writing them.")
 STATE_WRITE = "pgen-pi's busy state is written by `pgen-pi busy` only, after it checked the Pi."
@@ -649,7 +667,7 @@ def check_api(a, st):
         if not bodies and "/api/config" in args:
             st.deny(P_DUMMY, "POST to /api/config without a body: never POST dummy bodies (CLAUDE.md); send "
                     "exactly the keys to change.")
-        if any(empty_body(b) for b in bodies):
+        if any(empty_body(b) for b in bodies) and not bodyless_only(args):
             st.deny(P_DUMMY, DUMMY)
     if post:
         st.mutating = True
@@ -758,7 +776,7 @@ def code_of(a):
     return None, None
 
 
-def scan_code(code, loc, st, depth, backticks=False):
+def scan_code(code, loc, st, depth, backticks=False, python=False):
     """Interpreter code: what it would do, read from its text."""
     if loc.ctx == "mac":
         if st.mentions_host(code):
@@ -776,16 +794,21 @@ def scan_code(code, loc, st, depth, backticks=False):
                 if argv:
                     judge_mac(argv, [], st, depth + 1)
         # In perl, ruby and php backticks run a command; elsewhere they are text.
-        for s in re.findall(r"`([^`]*)`", code) if backticks else []:
-            if CODE_GIT.search(s):
+        for s in re.findall(r"`([^`]*)`|%x\(([^)]*)\)|%x\{([^}]*)\}|%x\[([^\]]*)\]", code) if backticks else []:
+            s = next((g for g in s if g), "")
+            if CODE_GIT.search(s) or CODE_CMDLINE.search(s):
                 judge(s, "mac", st, depth + 1)
         if CODE_REST_WRITE.search(code):
             for s in lits:
                 check_rest_url(s, "this code", st)
+        # Python that runs nothing (a patch to pgen-pi, a SKILL.md, TASKS.md
+        # holding `pgen-pi ssh ...` as text) has its command lines left as
+        # text; any other code may run them (CODE_EXEC above).
+        may_run = runs or not python
         for k, s in enumerate(lits):
-            if CODE_CMDLINE.search(s) or (runs and CODE_GIT.search(s)):
+            if (may_run and CODE_CMDLINE.search(s)) or (runs and CODE_GIT.search(s)):
                 judge(s, "mac", st, depth + 1)
-            elif os.path.basename(s) == "pgen-pi" and k + 1 < len(lits):
+            elif may_run and os.path.basename(s) == "pgen-pi" and k + 1 < len(lits):
                 # an argv list: pgen-pi, then its arguments as separate strings
                 judge_mac([s] + lits[k + 1:k + 3], [], st, depth + 1)
         if "state.json" in code and "pgen-pi" in code and CODE_WRITE.search(code):
@@ -805,7 +828,7 @@ def scan_code(code, loc, st, depth, backticks=False):
             st.power = st.mutating = True
     if "/api/meter/settings" in code and CODE_POST.search(code):
         st.deny(P_METER, METER)
-    if "/api/" in code and CODE_DUMMY.search(code):
+    if "/api/" in code and CODE_DUMMY.search(code) and not bodyless_only(code):
         st.deny(P_DUMMY, DUMMY)
 
 
@@ -885,12 +908,12 @@ def judge_one(a, redir, heredocs, loc, st, depth):
             st.deny(P_RAW, RAW)
             return
         if code is not None:
-            scan_code(code, loc, st, depth, p in BACKTICK_RUNS)
+            scan_code(code, loc, st, depth, p in BACKTICK_RUNS, p.startswith("python"))
         elif script is None:
             for body in heredocs:
-                scan_code(body, loc, st, depth, p in BACKTICK_RUNS)
+                scan_code(body, loc, st, depth, p in BACKTICK_RUNS, p.startswith("python"))
         if ctx == "pi":
-            if any(re.match(r"^post:\s*(?:\{\s*\})?\s*$", x) for x in a):
+            if any(re.match(r"^post:\s*(?:\{\s*\})?\s*$", x) for x in a) and not bodyless_only(" ".join(a)):
                 st.deny(P_DUMMY, "pgprobe `post:{}`: never POST dummy bodies (CLAUDE.md); give the keys to change.")
             if any(PROBE_ARG.match(x) for x in a[1:]):
                 st.mutating = True
@@ -1238,7 +1261,7 @@ def judge_pi(a, loc, st):
         if not (p == "pi_state.py" and args[:1] in (["show"], ["diff"])) and \
                 not (args and all(x in ("-h", "--help") for x in args)):
             st.mutating = True
-        if any(re.match(r"^post:\s*(?:\{\s*\})?\s*$", x) for x in args):
+        if any(re.match(r"^post:\s*(?:\{\s*\})?\s*$", x) for x in args) and not bodyless_only(" ".join(args)):
             st.deny(P_DUMMY, "pgprobe `post:{}`: never POST dummy bodies (CLAUDE.md); give the keys to change.")
     elif p in NET and "-z" not in args and any(x in NET_PORTS or x.endswith(tuple(":" + q for q in NET_PORTS)) for x in args):
         st.mutating = True

@@ -757,8 +757,12 @@ static int normalize_dovi_metadata(uint8_t *metadata, uint32_t length,
         metadata[5] = iface;
         changed = 1;
     }
-    if (dv_map_mode >= 0 && metadata[8] != (uint8_t)(dv_map_mode & 0xff)) {
-        metadata[8] = (uint8_t)(dv_map_mode & 0xff);
+    /* aux_runmode: standard DV carries the map mode (the kernel turns it
+     * into the H14b mode byte). Low latency sends no aux fields: PB6 and up
+     * stay zero, as PiTPG 2.0.3 sends them (pitpgd dv_vsif_build@0x4040f0). */
+    int want_aux = is_dovi_ll_transport() ? 0 : dv_map_mode;
+    if (want_aux >= 0 && metadata[8] != (uint8_t)(want_aux & 0xff)) {
+        metadata[8] = (uint8_t)(want_aux & 0xff);
         changed = 1;
     }
 

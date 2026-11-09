@@ -21,11 +21,13 @@
 #include "ofApp.h"
 #include <algorithm>
 #include <unistd.h>
+#include <sys/stat.h>
 
 /* Start Patch RPI P4 */
 #include "rgb2ycbcr.h"
 #include "pattern_parse.h"
 #include "dovi_tunnel.h"
+#include "dovi_metadata.h"
 /* End Patch RPI P4 */
 
 namespace {
@@ -80,9 +82,6 @@ inline void ofClear10bit(int red, int green, int blue, int alpha = 1023) {
 
 inline bool usesPackedTransportEncoding() {
  return ofxRPI4Window::is_std_DoVi ||
-	 (ofxRPI4Window::isDoVi && !ofxRPI4Window::is_std_DoVi &&
-	  ofxRPI4Window::avi_info.output_format == 0 &&
-	  ofxRPI4Window::avi_info.rgb_quant_range == 2) ||
 	 (!ofxRPI4Window::isHDR && !ofxRPI4Window::isDoVi && !ofxRPI4Window::is_std_DoVi &&
 	  ofxRPI4Window::avi_info.output_format != 0);
 }
@@ -132,13 +131,10 @@ const bool log_enabled = false;
 // while the pattern itself is unchanged.
 const uint64_t save_check_interval_ms = 100;
 
-// YCbCr output, or full-range RGB tunnelled through the Dolby Vision path:
-// both need the RGB->YCbCr conversion shader.
+// YCbCr output needs the RGB->YCbCr conversion shader. Low-latency Dolby
+// Vision in RGB is plain RGB (PiTPG 2.0.3): its codes are drawn as they are.
 inline bool usesYCbCrConversionShader() {
- return ofxRPI4Window::avi_info.output_format != 0 ||
-	 (ofxRPI4Window::isDoVi && !ofxRPI4Window::is_std_DoVi &&
-	  ofxRPI4Window::avi_info.output_format == 0 &&
-	  ofxRPI4Window::avi_info.rgb_quant_range == 2);
+ return ofxRPI4Window::avi_info.output_format != 0;
 }
 
 // Any draw that has to go through ofxRPI4Window::shader (YCbCr conversion
@@ -814,6 +810,7 @@ void ofApp::setColor(int red, int green, int blue) {
   dv_source_max=cur_op().source_max;
   if(dv_source_max != 255 && dv_source_max != 1023 && dv_source_max != 4095)
    dv_source_max=255;
+  dv_source_range=cur_op().source_range;
   dv_source_red=ofClamp(red,0,dv_source_max);
   dv_source_green=ofClamp(green,0,dv_source_max);
   dv_source_blue=ofClamp(blue,0,dv_source_max);
@@ -1080,14 +1077,25 @@ void ofApp::shader_begin(int is_image) {
   if (ofxRPI4Window::is_std_DoVi && ofxRPI4Window::bit_depth == 8) fbo8.begin();  
   ofxRPI4Window::shader.begin();
   if (ofxRPI4Window::is_std_DoVi) {
-	ofxRPI4Window::shader.setUniform2f("resolution", ofGetWindowWidth(), ofGetWindowHeight());
-	ofxRPI4Window::shader.setUniform3f("source_rgb",
-		static_cast<float>(dv_source_red),
-		static_cast<float>(dv_source_green),
-		static_cast<float>(dv_source_blue));
-	ofxRPI4Window::shader.setUniform1i("source_max",dv_source_max);
- 	if (ofxRPI4Window::dv_profile == 2) setShaderYCbCrCoeffs(2); //Profile 8.2: BT709
-	if (ofxRPI4Window::dv_profile == 1) setShaderYCbCrCoeffs(9); //Profile 8.1: BT2020
+	/* The window loads dovi_image_shader for IMAGE draws (colorspace_on 0),
+	   else dovi_pattern_shader. */
+	if (!ofxRPI4Window::colorspace_on) {
+		/* dovi_image_shader: 8-bit texels in float32 (one code off PiTPG
+		   near the rounding edge, see t/renderer_dovi_metadata.t). */
+		ofxRPI4Window::shader.setUniform2f("resolution", ofGetWindowWidth(), ofGetWindowHeight());
+		ofxRPI4Window::shader.setUniform1i("dv_full",dv_full);
+		ofxRPI4Window::shader.setUniform1i("dv_src_full",doviSourceFull(cur_op().source_range));
+		if (ofxRPI4Window::dv_profile == 2) setShaderYCbCrCoeffs(2); //Profile 8.2: BT709
+		if (ofxRPI4Window::dv_profile == 1) setShaderYCbCrCoeffs(9); //Profile 8.1: BT2020
+	} else {
+		/* dovi_pattern_shader: one colour per draw, its tunnel codes in
+		   PiTPG's double arithmetic. */
+		int bits = dv_source_max == 4095 ? 12 : (dv_source_max == 1023 ? 10 : 8);
+		int ycc[3];
+		dovi::tunnelCodes(ofxRPI4Window::dv_profile == 1, bits, doviSourceFull(dv_source_range), dv_full,
+		                  dv_source_red, dv_source_green, dv_source_blue, ycc);
+		ofxRPI4Window::shader.setUniform3i("tunnel_ycc", ycc[0], ycc[1], ycc[2]);
+	}
 
   }	else {
 	int scalar1;
@@ -1183,115 +1191,52 @@ int ofApp::dv_map_mode=2;
 int ofApp::dv_minpq=62;
 int ofApp::dv_maxpq=3696;
 int ofApp::dv_diagonal=42;
-int ofApp::dv_color_space=1;
+int ofApp::dv_full=0;
+
+/* How standard-DV source codes are normalised (pitpgd keeps this apart from
+   the signal range: dv_ycc12's patch flag is set for patch scale Legal only,
+   proto_handle@0x408990). SOURCE_RANGE=FULL (a PiTPG scale other than
+   Legal): full-range codes; LIMITED: studio codes; unset (Calman, WebUI,
+   port 85): as the signal range, as before. */
+int ofApp::doviSourceFull(int source_range) {
+ if(source_range == 2) return 1;
+ if(source_range == 1) return 0;
+ return dv_full ? 1 : 0;
+}
 
 /*
  ##########################################################
- #                   Update DoVi Metadata                 #
+ #                   DoVi Metadata Packet                 #
  ##########################################################
 */
-//struct ofApp::dv_metadata ofApp::dovi_metadata_update() {
-void ofApp::dovi_metadata_update() {
-
-	int crc;
-	// Classic clients such as HCFR do not select a Dolby Vision mapping mode.
-	// Preserve the mode loaded from PGenerator.conf instead of silently
-	// converting the user's Absolute selection to Relative on the wire.
-	int dv_metadata_map_mode = dv_map_mode;
-	if (dv_metadata_map_mode < 0 || dv_metadata_map_mode > 2) dv_metadata_map_mode = 2;
-	
-	if (dv_map_mode != dv_metadata.dv_map_mode || 
-	    dv_minpq != dv_metadata.dv_minpq || 
-		dv_maxpq != dv_metadata.dv_maxpq ||
-		dv_diagonal != dv_metadata.dv_diagonal ||
-		dv_color_space != dv_metadata.dv_color_space) dv_meta_update = 1; 
-		
-	/* DV Profile 8.1 */	
-	if (ofxRPI4Window::dv_profile == 1) {
-
-		if (dv_meta_update) {	
-			/* Source signal color space, 0=YCbCr, 1=RGB, 2=IPT, 3=Reserved */
-			dv_metadata.dv_meta8_1[66] = dv_color_space & 0xff;
-			/* Source display minPQ, maxPQ(in 12-bit PQ encoding) and diagonal */
-			/* The value shall be in the range of 0 to 4095, inclusive. If source_min_PQ is not present, it shall be inferred to be 62 */
-			dv_metadata.dv_meta8_1[69] = (dv_minpq  >> 8) & 0xff;
-			dv_metadata.dv_meta8_1[70] = dv_minpq & 0xff;
-			/* The value shall be in the range of 0 to 4095, inclusive. If source_max_PQ is not present, it shall be inferred to be 3696 */			
-			dv_metadata.dv_meta8_1[71] = (dv_maxpq >> 8) & 0xff;
-			dv_metadata.dv_meta8_1[72] = dv_maxpq & 0xff;	
-			/* source_diagonal indicates the diagonal size of source display in inch. The value shall be in the range of 0 to 1023, inclusive. If source_diagonal is not present, it shall be inferred to be 42 */
-			dv_metadata.dv_meta8_1[73] = (dv_diagonal >> 8) & 0xff;
-			dv_metadata.dv_meta8_1[74]	= dv_diagonal & 0xff;
-			
-			/* DV Mapping mode (Perceptual = 0,Absolute(Verify) = 1, Relative(Calibrate) = 2, Unknown=3, None = 256, // 0x00000100) */
-			dv_metadata.dv_meta8_1[92] = dv_metadata_map_mode & 0xff;
-			
-			/* Level 1 ext metadata block -- Current Scene minPQ, maxPQ, avgPQ(in 12-bit PQ encoding) */
-			/* The value shall be in the range of 0 to 4095, inclusive. If min_PQ is not present, it shall be inferred to be equal to the value of source_min_PQ */
-			dv_metadata.dv_meta8_1[81] = (dv_minpq  >> 8) & 0xff;
-			dv_metadata.dv_meta8_1[82] = dv_minpq & 0xff;
-			/* The value shall be in the range of 0 to 4095, inclusive. If max_PQ is not present, it shall be inferred to be equal to the value of source_max_PQ */
-			dv_metadata.dv_meta8_1[83] = (dv_maxpq >> 8) & 0xff;
-			dv_metadata.dv_meta8_1[84] = dv_maxpq & 0xff;
-			/* The value shall be in the range of 0 to 4095, inclusive. If avg_PQ is not present, it shall be inferred to be equal to the value of (source_min_PQ + source_max_PQ)/2 */
-			dv_metadata.dv_meta8_1[85] = (((dv_minpq + dv_maxpq)/2) >> 8) & 0xff;
-			dv_metadata.dv_meta8_1[86] = ((dv_minpq + dv_maxpq)/2) & 0xff;
-	
-			crc = ofApp::crc32mpeg(dv_metadata.dv_meta8_1,124);
- 
-			dv_metadata.dv_meta8_1[124] = crc>>24;
-			dv_metadata.dv_meta8_1[125] = (crc>>16)&0xff;
-			dv_metadata.dv_meta8_1[126] = (crc>>8)&0xff;
-			dv_metadata.dv_meta8_1[127] =crc&0xff;
-			dv_meta_update = 0;
-		}	
+/* The display-management packet as PiTPG 2.0.3 sends it, with ETSI's L1
+   average and a metadata id that steps on each change (dovi_metadata.h):
+   container from dv_profile (main.cpp), signal range, source min/max PQ and
+   diagonal, and the run mode in an L255 block when it is 1 or 2. */
+void ofApp::dovi_packet_set(int run_mode) {
+	dovi::Params p;
+	p.container_2020 = (ofxRPI4Window::dv_profile == 1) ? 1 : 0;
+	p.full = dv_full ? 1 : 0;
+	p.min_pq = dv_minpq;
+	p.max_pq = dv_maxpq;
+	p.diagonal = dv_diagonal;
+	unsigned char packet[dovi::packet_bytes];
+	dovi::buildPacket(p, run_mode, packet);
+	if (!dv_metadata_id.have) {
+		// Gone after a daemon restart; if this fails, the save below logs it.
+		mkdir(dovi::metadata_id_dir, 0770);
+		dv_metadata_id.load(dovi::metadata_id_file);
 	}
-	/* DV Profile 8.2 */
-	if (ofxRPI4Window::dv_profile == 2) { 
-
-		if (dv_meta_update) {
-			/* Source signal color space, 0=YCbCr, 1=RGB, 2=IPT, 3=Reserved */
-			dv_metadata.dv_meta8_2[66] = dv_color_space & 0xff;
-			/* Source display minPQ, maxPQ(in 12-bit PQ encoding) and diagonal */
-			/* The value shall be in the range of 0 to 4095, inclusive. If source_min_PQ is not present, it shall be inferred to be 62 */
-			dv_metadata.dv_meta8_2[69] = (dv_minpq  >> 8) & 0xff;
-			dv_metadata.dv_meta8_2[70] = dv_minpq & 0xff;
-			/* The value shall be in the range of 0 to 4095, inclusive. If source_max_PQ is not present, it shall be inferred to be 3696 */			
-			dv_metadata.dv_meta8_2[71] = (dv_maxpq >> 8) & 0xff;
-			dv_metadata.dv_meta8_2[72] = dv_maxpq & 0xff;
-			/* source_diagonal indicates the diagonal size of source display in inch. The value shall be in the range of 0 to 1023, inclusive. If source_diagonal is not present, it shall be inferred to be 42 */			
-			dv_metadata.dv_meta8_2[73] = (dv_diagonal >> 8) & 0xff;
-			dv_metadata.dv_meta8_2[74]	= dv_diagonal & 0xff;	
-
-			/* DV Mapping mode (Perceptual = 0,Absolute(Verify) = 1, Relative(Calibrate) = 2, Unknown=3, None = 256, // 0x00000100) */
-			dv_metadata.dv_meta8_2[92] = dv_metadata_map_mode & 0xff;
-			
-			/* Level 1 ext metadata block -- Current Scene minPQ, maxPQ, avgPQ(in 12-bit PQ encoding) */
-			/* The value shall be in the range of 0 to 4095, inclusive. If min_PQ is not present, it shall be inferred to be equal to the value of source_min_PQ */
-			dv_metadata.dv_meta8_2[81] = (dv_minpq  >> 8) & 0xff;
-			dv_metadata.dv_meta8_2[82] = dv_minpq & 0xff;
-			/* The value shall be in the range of 0 to 4095, inclusive. If max_PQ is not present, it shall be inferred to be equal to the value of source_max_PQ */
-			dv_metadata.dv_meta8_2[83] = (dv_maxpq >> 8) & 0xff;
-			dv_metadata.dv_meta8_2[84] = dv_maxpq & 0xff;
-			/* The value shall be in the range of 0 to 4095, inclusive. If avg_PQ is not present, it shall be inferred to be equal to the value of (source_min_PQ + source_max_PQ)/2 */
-			dv_metadata.dv_meta8_2[85] = (((dv_minpq + dv_maxpq)/2) >> 8) & 0xff;
-			dv_metadata.dv_meta8_2[86] = ((dv_minpq + dv_maxpq)/2) & 0xff;
-	
-			crc = ofApp::crc32mpeg(dv_metadata.dv_meta8_2,124);
- 
-			dv_metadata.dv_meta8_2[124] = crc>>24;
-			dv_metadata.dv_meta8_2[125] = (crc>>16)&0xff;
-			dv_metadata.dv_meta8_2[126] = (crc>>8)&0xff;
-			dv_metadata.dv_meta8_2[127] =crc&0xff;
-			dv_meta_update = 0;
-		}	
-	}								 
-	dv_metadata.dv_map_mode = dv_map_mode;
-	dv_metadata.dv_minpq = dv_minpq;
-	dv_metadata.dv_maxpq = dv_maxpq;
-	dv_metadata.dv_diagonal = dv_diagonal;
-	dv_metadata.dv_color_space = dv_color_space;
-
+	int id = dv_metadata_id.next(packet);
+	if (!dv_metadata_id.save(dovi::metadata_id_file))
+		ofLogError() << "DoVi: cannot save the metadata id to " << dovi::metadata_id_file << ": " << strerror(errno)
+		             << " (the next renderer start steps on from the last saved id, or starts at 0)";
+	dovi::buildPacket(p, run_mode, packet, id);
+	dovi::packetWords(packet, dv_packet_words);
+	ofLog() << "DoVi: metadata " << (p.container_2020 ? "BT.2020" : "P3-D65") << " "
+	        << (p.full ? "full" : "limited") << " range, PQ " << dovi::normalized(p).min_pq << "/"
+	        << dovi::normalized(p).max_pq << ", diagonal " << dovi::normalized(p).diagonal
+	        << ", run mode " << dovi::runModeFor(run_mode) << ", payload " << (int)packet[4] << " bytes, metadata id " << id;
 }
 
 /*
@@ -1300,98 +1245,119 @@ void ofApp::dovi_metadata_update() {
  ##########################################################
 */
 void ofApp::dovi_metadata_create() {
-	int num_bits=0;
-	ofShortPixels short_pix;
-	ofPixels pix;
-	ofShortImage short_img;
-	ofImage img;
-
-
-	const int meta_lines = doviWindowMetadataLines();
 	if (ofxRPI4Window::bit_depth == 10) {
+		/* The 10-bit buffer carries no metadata bits, as before: its
+		   metadata lines stay white. */
+		const int meta_lines = doviWindowMetadataLines();
+		ofShortPixels short_pix;
+		ofShortImage short_img;
 		short_pix.allocate(ofGetWindowWidth(), meta_lines, OF_IMAGE_COLOR_ALPHA);
 		short_pix.setColor(1023);
-	} else {
-		pix.allocate(ofGetWindowWidth(), meta_lines, OF_IMAGE_COLOR_ALPHA);
-		pix.setColor(255);
-	}
-
-
-	ofApp::dovi_metadata_update();
-	unsigned char mask = 1; // Bit mask
-	unsigned char bits[8];
-	unsigned char total_bits[1024] = {0};
-	int i, j = CHAR_BIT-1;
-
-	int n = sizeof(dv_metadata_active)/sizeof(dv_metadata_active[0]);
-
-	if (ofxRPI4Window::dv_profile == 1) memcpy(dv_metadata_active, dv_metadata.dv_meta8_1, sizeof(dv_metadata_active)); //DoVi Profile 8.1
-	if (ofxRPI4Window::dv_profile == 2) memcpy(dv_metadata_active, dv_metadata.dv_meta8_2, sizeof(dv_metadata_active)); //DoVi Profile 8.2
-
-
-	// Extract the bits
-	for (int k=0; k < n; k++) {
-//		printf("byte 0x%02x : ",dv_metadata[k]);
-		for ( i = 0; i < 8; i++,j--,mask = 1) {
-			// Mask each bit in the byte and store it
-			bits[i] =(dv_metadata_active[k] & (mask<<=j))  !=0;
-
-//			printf("%d", bits[i]);
-			total_bits[num_bits] = bits[i];
-			num_bits++;
-		}
-
-		//		puts("");
-		j = CHAR_BIT-1;
-
-	}
-	//    printf("Total number of Cal bits %d\n",num_bits);
-
-	/* Create DoVi RPU Display Management Data (dovi_tunnel.h): pixels
-	 * 0..3071 carry the packet three times. 1.6 wrote one pixel more (3073,
-	 * the start of a fourth copy) on two lines whatever the width, which left
-	 * white pixels after the metadata at 3840 and cut the third copy below
-	 * 1536. Only the 8-bit buffer gets the bits; the 10-bit branch gets none,
-	 * as before (the old loop iterated the 8-bit buffer, which is not
-	 * allocated there). */
-	if (ofxRPI4Window::bit_depth != 10)
-		doviFillTunnel8(pix.getData(), ofGetWindowWidth(), meta_lines, total_bits);
-
-	if (ofxRPI4Window::bit_depth == 10) {
-
 		short_img.setFromPixels(short_pix);
-		ofSet10bitColor(1023,1023,1023,1023); 
+		ofSet10bitColor(1023,1023,1023,1023);
 		fbo_dovi.begin();
 		short_img.getTexture().setTextureMinMagFilter(GL_NEAREST, GL_NEAREST);
 		drawDoviMetadataPixels(short_img, ofGetWindowWidth());
 		fbo_dovi.end();
-	} else {
-		img.setFromPixels(pix);
-		ofSetColor(255,255,255,255); 
-		fbo_dovi.begin();
-		img.getTexture().setTextureMinMagFilter(GL_NEAREST, GL_NEAREST);
-		drawDoviMetadataPixels(img, ofGetWindowWidth());
-		fbo_dovi.end();	
-	}	
-}	
-	
+		return;
+	}
+
+	/* pitpgd dv_embed@0x404870 on the GPU: the frame (fbo8, already the
+	   12-bit tunnel packing) is copied pixel for pixel, and in pixels
+	   0..3071 in raster order only C[0] (bit 4 of B) changes, so that the
+	   XOR of the pixel's 24 tunnel bits equals packet bit (index & 1023),
+	   MSB first. The pattern stays visible under the metadata. Mirrored by
+	   dovi::embedBit, t/data/dovi_metadata_check.cpp. */
+	ofShaderSettings settings;
+	settings.shaderSources[GL_VERTEX_SHADER] = R"(
+		#version 310 es
+		uniform mat4 modelViewProjectionMatrix;
+		in vec4 position;
+		in vec2 texcoord;
+		out vec2 texCoordVarying;
+		out vec2 pixelPos;
+		void main(){
+			texCoordVarying = texcoord;
+			pixelPos = position.xy;
+			gl_Position = modelViewProjectionMatrix * position;
+		}
+	)";
+	settings.shaderSources[GL_FRAGMENT_SHADER] = R"(
+		#version 310 es
+		precision highp float;
+		precision highp int;
+		uniform sampler2D tex0;
+		uniform int meta[32];
+		uniform int width;
+		in vec2 texCoordVarying;
+		in vec2 pixelPos;
+		out vec4 outputColor;
+		void main()
+		{
+			vec4 c = texture(tex0, texCoordVarying);
+			int R = int(round(c.r * 255.0));
+			int G = int(round(c.g * 255.0));
+			int B = int(round(c.b * 255.0));
+			int p = int(floor(pixelPos.y)) * width + int(floor(pixelPos.x));
+			if (p >= 0 && p < 3072) {
+				int k = p & 1023;
+				int bit = (meta[k >> 5] >> (31 - (k & 31))) & 1;
+				int y12 = (B & 15) | (G << 4);
+				int c12 = (B >> 4) | (R << 4);
+				int parity = bitCount(y12 ^ (c12 >> 1)) & 1;
+				int c0 = bit ^ parity;
+				B = ((c0 | ((B >> 4) & 14)) << 4) | (B & 15);
+			}
+			outputColor = vec4(float(R) / 255.0, float(G) / 255.0, float(B) / 255.0, 1.0);
+		}
+	)";
+	settings.bindDefaults = true;
+	dovi_embed.unload();
+	if (!dovi_embed.setup(settings))
+		ofLogError() << "DoVi: metadata embedding shader failed to build";
+
+	/* Start sequence (pitpgd dv_show@0x40d2c0): after every mode set with a
+	   run mode, the packet goes out without it (no L255 block) for four
+	   frames plus 1 ms (67 ms when the refresh rate is unknown), then with
+	   it. */
+	int run_mode = dovi::runModeFor(dv_map_mode);
+	dovi_packet_set(0);
+	dv_start_pending = run_mode;
+	dv_start_t0 = 0;
+	double hz = 0.0;
+	ofxRPI4Window *win = dynamic_cast<ofxRPI4Window*>(ofGetWindowPtr());
+	if (win && win->mode.htotal && win->mode.vtotal)
+		hz = win->mode.clock * 1000.0 / ((double)win->mode.htotal * win->mode.vtotal);
+	dv_start_wait_ms = (hz > 1.0) ? (int)(4000.0 / hz) + 1 : 67;
+}
+
 /*
  ##########################################################
  #                   Draw DoVi Pattern/Image              #
  ##########################################################
 */
 void ofApp::dovi_metadata_mux() {
-
-
 	if (ofxRPI4Window::bit_depth == 10) {
 		ofSetColor(1023,1023,1023,1023); 
 		fbo10.draw(0,0,ofGetWindowWidth(),ofGetWindowHeight());
 		fbo_dovi.draw(0,0,ofGetWindowWidth(),doviWindowMetadataLines());
-	} else {
-		ofSetColor(255,255,255,255); 
-		fbo8.draw(0,0,ofGetWindowWidth(),ofGetWindowHeight());		
-		fbo_dovi.draw(0,0,ofGetWindowWidth(),doviWindowMetadataLines());
+		return;
+	}
+	if (dv_start_pending) {
+		uint64_t now = ofGetElapsedTimeMillis();
+		if (!dv_start_t0) {
+			dv_start_t0 = now ? now : 1;
+		} else if (now - dv_start_t0 >= (uint64_t)dv_start_wait_ms) {
+			dovi_packet_set(dv_start_pending);
+			dv_start_pending = 0;
 		}
+	}
+	ofSetColor(255,255,255,255); 
+	dovi_embed.begin();
+	dovi_embed.setUniform1iv("meta", dv_packet_words, 32);
+	dovi_embed.setUniform1i("width", ofGetWindowWidth());
+	fbo8.draw(0,0,ofGetWindowWidth(),ofGetWindowHeight());
+	dovi_embed.end();
 }
 
 
@@ -1455,177 +1421,12 @@ void ofApp::fbo_allocate() {
 
 /*
  ##########################################################
- #                       DoVi CRC32                       #
- ##########################################################
-*/
-unsigned int ofApp::crc32mpeg(unsigned char *message, size_t l)
-{
-   size_t i, j;
-   unsigned int crc, msb;
-
-   crc = 0xFFFFFFFF;
-   for(i = 0; i < l; i++) {
-      // xor next byte to upper bits of crc
-      crc ^= (((unsigned int)message[i])<<24);
-      for (j = 0; j < 8; j++) {    // Do eight times.
-            msb = crc>>31;
-            crc <<= 1;
-            crc ^= (0 - msb) & 0x04C11DB7;
-      }
-
-   }
-#if 0   
-   printf("crc %x ", crc>>24);
-   printf("crc %x ", (crc>>16)&0xff);
-   printf("crc %x ", (crc>>8)&0xff);
-   printf("crc %x\n", crc&0xff);
-#endif 
-
-  return crc;         // don't complement crc on output
-}
-
-
-/*
- ##########################################################
  #                        Old Routines                    #
  ##########################################################
 */
 
 
 
-#if 0
-/*
- ##########################################################
- #                   Inject DoVi Metadata                 #
- ##########################################################
-*/
-void ofApp::dovi_metadata_inject(int bit_depth) {
-	int Y=0, Cb=0, Cr=0;
-	int width=0, height=0, channels=0;
-	int num_bits=0;
-	unsigned short *short_pixels;
-	unsigned char *pixels;
-	//	ofFbo fbo_dovi;
-	ofShortPixels short_pix;
-	ofPixels pix;
-	ofShortImage short_img;
-	ofImage img;
-
-	if (bit_depth == 10) {
-		short_pix.allocate(ofGetWindowWidth(), 2, OF_IMAGE_COLOR_ALPHA);
-		short_pix.setColor(1023);
-	} else {
-
-		pix.allocate(ofGetWindowWidth(), 2, OF_IMAGE_COLOR_ALPHA);
-		pix.setColor(255);
-	}
-
-
-	ofApp::dovi_metadata_update();
-	unsigned char mask = 1; // Bit mask
-	unsigned char bits[8];
-	unsigned char total_bits[1024] = {0};
-	int i, j = CHAR_BIT-1;
-
-
-		
-	int n = sizeof(dv_metadata_active)/sizeof(dv_metadata_active[0]);
-
-	if (ofxRPI4Window::dv_profile == 1) memcpy(dv_metadata_active, dv_metadata.dv_meta8_1, sizeof(dv_metadata_active));
-	if (ofxRPI4Window::dv_profile == 2) memcpy(dv_metadata_active, dv_metadata.dv_meta8_2, sizeof(dv_metadata_active));
-
-	// Extract the bits
-	for (int k=0; k < n; k++) {
-//		printf("byte 0x%02x : ",dv_metadata[k]);
-		for ( i = 0; i < 8; i++,j--,mask = 1) {
-		// Mask each bit in the byte and store it
-			bits[i] =(dv_metadata_active[k] & (mask<<=j))  !=0;
-//			printf("%d", bits[i]);
-			total_bits[num_bits] = bits[i];
-			num_bits++;
-		}
-
-	//		puts("");
-		j = CHAR_BIT-1;
-
-	}
-	//    printf("Total number of Cal bits %d\n",num_bits);
-
-	/* Create DoVi RPU Display Management Data */
-	int x=0;
-	int cycles=0;
-	int shift = bit_depth - 8;
-	int index;
-
-	for(auto line: pix.getLines(0,2)){
-
-		for(auto pixel: line.getPixels()){
-			if (cycles < 3) {
-				if (x == 1024) {
-					x = 0;
-					cycles++;
-				}				
-		//		printf("posx=%d posy=%d z=%d Before: Y %d ,Cb %d , Cr %d ",x, y, z, Y, Cb, Cr);
-				if (bit_depth == 10){
-					Cr = 1016;
-					Cb = 0xff80; 
-				} else {
-					Y = 128;// << shift;
-					Cb = 16;// << shift;
-				}
-				if (total_bits[x] == 0) {
-					if (bit_depth == 10) {
-						Y = 0x1000;
-//				Cb= 0;
-					} else {
-						Cr = 0;
-					}
-//				printf(".");
-				}
-				if (total_bits[x] == 1) {
-					if (bit_depth == 10) {
-						Y = 0x1010;
-//				Cb = 1016;
-					} else {
-						Cr = 16;// << shift;
-					}
-//				printf("^");								
-				}
-
-				pixel[0] = Y;
-				pixel[1] = Cb;
-				pixel[2] = Cr;
-	//			printf("==> After: Y %d ,Cb %d , Cr %d \n",Y, Cb, Cr);
-			 	x++;	
-			 }
- 			if (cycles == 3) break;
-			}
-	}
-
-	if (bit_depth == 10) {
-		ofSet10bitColor(1023,1023,1023,1023); 
-		short_img.setFromPixels(short_pix);
-		fbo_dovi.begin();
-		short_img.getTexture().setTextureMinMagFilter(GL_NEAREST, GL_NEAREST);
-		short_img.drawSubsection(0,0,ofGetWindowWidth(),1,0,0,ofGetWindowWidth(),1);
-		short_img.drawSubsection(0,1,1153,1,0,1);
-		fbo_dovi.end();
-		fbo10.draw(0,0,ofGetWindowWidth(),ofGetWindowHeight());
-		fbo_dovi.draw(0,0,ofGetWindowWidth(),2);		
-	} else {
-			
-		ofSetColor(255,255,255,255); 
-		img.setFromPixels(pix);
-		fbo_dovi.begin();
-		img.getTexture().setTextureMinMagFilter(GL_NEAREST, GL_NEAREST);
-		img.drawSubsection(0,0,ofGetWindowWidth(),1,0,0,ofGetWindowWidth(),1);
-		img.drawSubsection(0,1,1153,1,0,1);
-		fbo_dovi.end();
-		fbo8.draw(0,0,ofGetWindowWidth(),ofGetWindowHeight());
-		fbo_dovi.draw(0,0,ofGetWindowWidth(),2);
-	}
-}
-#endif 
 #if 0
 void ofApp::dovi_dump() {
 		int Y=0, Cb=0, Cr=0;

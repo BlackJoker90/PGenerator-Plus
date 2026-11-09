@@ -68,6 +68,8 @@ sub calman_apl_levels (@) {
  my $range_mode=int($pgenerator_conf{"rgb_quant_range"} || 0);
  # Default on YCbCr is Limited (effective_rgb_quant_range).
  $range_mode=1 if($range_mode == 0 && ($pgenerator_conf{"color_format"} || "0") ne "0");
+ # Standard DV's codes are limited-range sources (calman_pattern_source_range).
+ $range_mode=1 if(&calman_dv_source_max() > 0);
  my $limited_min=16 << $shift;
  my $limited_span=219 << $shift;
  return ($limited_min,$limited_span,$limited_min + $limited_span,"limited") if($range_mode == 1);
@@ -421,8 +423,10 @@ sub calman_clear_gci_connection (@) {
 
 # Every range the client sets is applied to the conf, and the WebUI can
 # change it during or between sessions: read the conf, not a session copy.
+# Standard DV is RGB Full on the cable (rgb_quant_range 2), but its codes are
+# limited-range sources: a window, its black and a G1 plate are video levels.
 sub calman_pattern_source_range (@) {
- return "LIMITED" if(&effective_rgb_quant_range() == 1);
+ return "LIMITED" if(&effective_rgb_quant_range() == 1 || &calman_dv_source_max() > 0);
  return "";
 }
 
@@ -2137,9 +2141,20 @@ sub pattern_daemon {
       # profile, colour space, min/max PQ, diagonal) go into the DV
       # metadata (ofApp.cpp) and nowhere else: they count in DV only.
       # Entering or leaving DV changes dv_status, which restarts anyway.
+      # The primaries count there too while dv_profile is unset (they are
+      # the DV container then), the mastering luminance while it gives the
+      # PQ (dv_pq_source "luma", a PiTPG session, without dv_minpq /
+      # dv_maxpq): main.cpp.
       if(&signal_mode_from_conf($conf) eq "dv") {
-       for my $k (qw(dv_interface dv_profile dv_color_space dv_minpq dv_maxpq dv_diagonal)) {
+       for my $k (qw(dv_interface dv_profile dv_color_space dv_minpq dv_maxpq dv_diagonal dv_signal_range
+                     dv_pq_source)) {
         $k{$k}=defined($conf->{$k}) ? "$conf->{$k}" : "";
+       }
+       my $v=sub { my $x=$conf->{$_[0]}; return defined($x) ? "$x" : ""; };
+       $k{"primaries"}=$v->("primaries") if($v->("dv_profile") eq "");
+       if($v->("dv_pq_source") eq "luma") {
+        $k{"min_luma"}=$v->("min_luma") if($v->("dv_minpq") eq "");
+        $k{"max_luma"}=$v->("max_luma") if($v->("dv_maxpq") eq "");
        }
       }
       # Keys the renderer can take in place (SIGHUP reconfigure) but that
@@ -3577,16 +3592,15 @@ sub close_connection {
  delete $legacy_external_client_name{$connection};
  my $session_software=$calibration_session{$connection} ? ($calibration_session{$connection}->{software} || "") : "";
  my $had_session=&calibration_session_close($connection,$reason);
- if($calman{$connection} || $had_session) {
-  &log("Calman: socket disconnected, preserving pattern state") if($calman{$connection});
-  # A refusal belongs to the socket of the program that asked: a probe or
-  # a second program closing leaves it in place.
-  my $owner=&signal_refused_owner();
-  &signal_refused_clear(($session_software || "calibration software")." disconnected")
-   if($owner eq "$connection" || ($owner eq "" && $had_session));
- }
+ &log("Calman: socket disconnected, preserving pattern state") if($calman{$connection});
+ # A refusal belongs to the socket of the program that asked, with or without
+ # a session: a probe or a second program closing leaves it in place.
+ my $owner=&signal_refused_owner();
+ &signal_refused_clear(($session_software || "calibration software")." disconnected")
+  if($owner eq "$connection" || ($owner eq "" && $had_session));
  &release_source_rgb_quant_range("hcfr") if($is_hcfr);
  &pitpg_closed($connection,$pitpg) if($pitpg);
+ &pitpg_live_catch_up() if(defined &pitpg_live_catch_up);
  $calman{$connection}=0;
  $cmd{$connection}="";
  delete $pending_cmd{$connection};

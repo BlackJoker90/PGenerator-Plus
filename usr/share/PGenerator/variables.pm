@@ -422,6 +422,10 @@ $rgb_quant_range_source="";
 $external_rgb_quant_range_active=0;
 share(%rpc_client);
 share(%hcfr_client);
+# PiTPG clients connected (pitpg.pm). %pitpg_conn lives in the main thread
+# only; the WebUI workers and the renderer start read this count.
+share($pitpg_clients);
+$pitpg_clients=0;
 
 # threads::shared: share() must see an empty scalar first. Assigning a value
 # (especially 0) before share() leaves the variable unshared — lock() then

@@ -111,7 +111,7 @@ The UPGCI handshake now has proper ACKs and the settings format Calman actually 
 <td valign="top">
 
 ### 🌈 Dolby Vision, fixed
-Low Latency DV renders at **12-bit** and really switches the TV into DV, with pattern codes sent at 10-bit. The display's EDID Dolby block sets the DV metadata defaults. Standard DV always uses the 8-bit tunnel the TV expects, also after a 10-bit Calman session, and its AVI infoframe names the timing's own VIC instead of a fixed 1080p60 (CTA-861). Leaving DV signals "DV off" properly and gives back the format, range and depth you had before DV, and the SDR colorimetry. Calman DV consistently runs as standard DV.
+Low Latency DV renders at **12-bit** and really switches the TV into DV, with pattern codes sent at 10-bit. The display's EDID Dolby block sets the DV metadata defaults. Standard DV always uses the 8-bit tunnel the TV expects, also after a 10-bit Calman session, and its AVI infoframe names the timing's own VIC instead of a fixed 1080p60 (CTA-861). Leaving DV signals "DV off" properly and gives back the format, range and depth you had before DV, and the SDR colorimetry. Calman DV consistently runs as standard DV. Standard DV builds its metadata and tunnel codes the way PiTPG 2.0.3 does, with the metadata carried in one parity bit per pixel so the patch keeps its codes, and in two points the way ETSI GS CCM 001 asks where PiTPG does not: the L1 average is the value a display assumes without L1, (min + max) / 2 of the mastering PQ, and the packet's metadata id steps each time the metadata change; connected as PiTPG, ColourSpace also gets PiTPG's mastering display from Max/Min Luma, its BT.2020 or P3-D65 container and limited or full range.
 
 </td>
 </tr>
@@ -186,7 +186,8 @@ Next to the settings, **On the cable** shows what is actually sent (format, rang
 | HDR10 / HLG at 12-bit | renderer crashed | bit-exact 10-bit |
 | HLG meter targets | power curve: 50 % HLG targeted 435 cd/m² on a 1000 cd/m² display | **ITU-R BT.2100 HLG** (50 % → 51 cd/m², 75 % → 203 cd/m²); colour and saturation targets are the BT.2100 display of the codes sent |
 | Signal-mode switch | ~10 s | **~3.5–4.5 s** |
-| Low Latency Dolby Vision | TV did not switch into DV | 12-bit, TV switches into DV |
+| Low Latency Dolby Vision | TV did not switch into DV | 12-bit, TV switches into DV; for ColourSpace connected as PiTPG also RGB at the 10/12-bit depth the display's Dolby block lists |
+| Standard Dolby Vision metadata | fixed Dolby default mastering display, limited range only | **as PiTPG 2.0.3**, with ETSI GS CCM 001's L1 average and a metadata id that steps on each change: metadata in a parity bit; for a PiTPG client the mastering display from Max/Min Luma, BT.2020 or P3-D65 container, limited or full range |
 | Standard Dolby Vision AVI infoframe | VIC always 16 (1080p60), also at 24, 30 Hz or 4K | **the VIC of the timing on the cable** (e.g. 1080p24 → 32, 2160p24 → 93; patched vc4) |
 | Calman UPGCI | settings replies Calman could not parse | ACK + parseable settings, `GET_SETTINGS` |
 | Calman YCbCr 4:2:0 request | no defined answer | clean NAK, current format kept, WebUI notice |
@@ -346,9 +347,9 @@ PGenerator+ is a free, open-source display calibration suite for the Raspberry P
 - **Protocol:** XML network calibration protocol (port `85`)
 - **Connect:** **Hardware Options** → Hardware `Network` (or `PGenerator`) → enter the Pi's IP.
 - **Connect as PiTPG:** in a Profiling window, **Hardware Options** → Hardware `PiTPG` → enter the Pi's IP in *Network Address* (PGenerator+ is `pgenerator.local`, not `PiTPG.local`). Port 85 tells the two protocols apart by the client's first bytes, so the classic entry keeps working.
-  - *What it does:* PiTPG protocol 2 as PiTPG 2.0.0 answers it (reported edition `basic`): settings with PiTPG's value ranges, rolled back when one is refused; modes matched to the display's own list within 0.005 Hz, the EDID's timing preferred over the userdef boot mode; patches whose reply carries the DRM flip that showed them (sequence, time, frame period); the 11 test patterns (Contrast, Brightness, ANSI 1/2, Corner Box 1/2, Probe Alignment, Granger, horizontal and vertical ramps, FALD) drawn in the last patch's window; a peak note for HDR10 and Dolby Vision patches above the display's declared peak; HDMI info, EDID, InfoFrames, log and kernel log as texts.
-  - *Codes and depth:* as in PiTPG, patch codes go out unchanged: the patch scale (Full, Legal, Extended) sets the RGB range in the AVI infoframe, not the codes, and the link follows the patch depth (8-bit patches on an 8-bit link, 10-bit patches need a 10-bit one). Both end with the next settings change and when ColourSpace disconnects, and the output settings in effect before them come back.
-  - *Differences from a PiTPG:* standard Dolby Vision goes out limited range only (a Full or Extended patch scale is refused there), Granger is not drawn in Dolby Vision, YCbCr with a Full scale is refused (YCbCr is always Limited), and refused settings are put back rather than kept. Ted's Edition content is not part of it.
+  - *What it does:* PiTPG protocol 2 as PiTPG 2.0.0 answers it (reported edition `basic`): settings with PiTPG's value ranges, rolled back when one is refused, and after a refusal patches are refused until settings that work come or ColourSpace disconnects (HDR metadata sent in between waits until then); modes matched to the display's own list within 0.005 Hz, the EDID's timing preferred over the userdef boot mode; patches whose reply carries the DRM flip that showed them (sequence, time, frame period); the 11 test patterns (Contrast, Brightness, ANSI 1/2, Corner Box 1/2, Probe Alignment, Granger, horizontal and vertical ramps, FALD) drawn in the last patch's window; a peak note for HDR10 and Dolby Vision patches above the display's declared peak; HDMI info, EDID, InfoFrames, log and kernel log as texts.
+  - *Codes and depth:* as in PiTPG, patch codes go out unchanged: the patch scale (Full, Legal, Extended) sets the RGB range in the AVI infoframe, not the codes (in TV-led Dolby Vision it sets the range of the Dolby signal instead: Full gives full-range tunnel codes and metadata, Legal and User limited ones, Extended is refused), and the link follows the patch depth (8-bit patches on an 8-bit link, 10-bit patches need a 10-bit one). Both end with the next settings change and when ColourSpace disconnects, and the output settings in effect before them come back.
+  - *Differences from a PiTPG:* the standard Dolby Vision infoframe is always the HDMI 1.4b form with the mode byte (a PiTPG picks the form by the display's Dolby block version) and Low Latency keeps PB5 at 0 where a PiTPG sets 0x10 for a display whose Dolby block (version 2) declares interface bit 0 (so HDMI info names the display's own colour container, as a PiTPG does without PB5); the Pi's kernel packs both; Granger is not drawn in Dolby Vision, YCbCr with a Full scale is refused (YCbCr is always Limited), and refused settings are put back rather than kept, and their refusal ends when ColourSpace disconnects. Ted's Edition content is not part of it.
 
 **3. HCFR**
 
@@ -432,7 +433,7 @@ On-device closed-loop calibration of LG TVs through the webOS calibration API. L
 | **SDR** | Rec.709, 8- or 10-bit, RGB Full / Limited or YCbCr (always Limited) |
 | **HDR10** | PQ (ST.2084), full DRM InfoFrame metadata, 10-bit (12-bit requests go out as bit-exact 10-bit) |
 | **HLG** | Hybrid Log-Gamma, 10-bit |
-| **Dolby Vision** | Standard (TV-led, 8-bit RGB tunnel; used for Calman DV) or Low Latency (LLDV, 12-bit) |
+| **Dolby Vision** | Standard (TV-led, 8-bit RGB tunnel; used for Calman DV) or Low Latency (LLDV, 12-bit YCbCr 4:2:2); with ColourSpace connected as PiTPG also full-range Standard and LLDV as RGB at the 10/12-bit depth the display's Dolby block lists |
 
 <a id="bit-exact-4k"></a>
 
@@ -457,7 +458,7 @@ The Pi 4's KMS driver sets the HDMI InfoFrames directly:
 - **Dolby Vision:** a DOVI output metadata blob from `PGeneratord.dv`, with DV capability detected from the EDID VSVDB
 - **SPD:** a stock Pi kernel names the Pi "Broadcom Videocore", source type media player, and some displays treat that source type differently (an ASUS PA32DC limited LLDV to Rec.709 until it was removed, see Light Illusion's [HDMI InfoFrames](https://www.lightillusion.com/hdmi_infoframes.html)). The vc4 driver shipped with PGenerator+ (Pi 4) never sends it; the card shows the packet enable bit read back from the HDMI block as proof
 
-The Dolby Vision card shows what the display declares in its EDID Dolby block: peak and black luminance, supported interfaces (Standard / Low Latency) and primaries. Choosing Dolby Vision fills in the declared peak and black while Max/Min Luma are still at the factory 1000 / 0.005; otherwise it warns when Max Luma or the transport does not match (a higher Max Luma is fine to test the display's tone mapping) and sets the declared values with one button, and the measurement strip flags DV patches above the declared peak, which the display clips. With the Standard transport the card also shows the mastering display the DV metadata carries (`source_min/max_PQ`, by default the Dolby 62 / 3696 = 0.005–4000 cd/m², as in PGenerator 1.6); Max/Min Luma do not change it, a port 85 client can. In HDR10 the strip flags greyscale patches above the peak the display's HDR static metadata block declares (Desired Content Max Luminance, 50 × 2^(CV/32) cd/m²); most TVs leave that value out, so nothing is flagged for them.
+The Dolby Vision card shows what the display declares in its EDID Dolby block: peak and black luminance, supported interfaces (Standard / Low Latency) and primaries. Choosing Dolby Vision fills in the declared peak and black while Max/Min Luma are still at the factory 1000 / 0.005; otherwise it warns when Max Luma or the transport does not match (a higher Max Luma is fine to test the display's tone mapping) and sets the declared values with one button, and the measurement strip flags DV patches above the declared peak, which the display clips. With the Standard transport the card also shows the mastering display the DV metadata carries (`source_min/max_PQ`): by default the Dolby 62 / 3696 = 0.005–4000 cd/m², as in PGenerator 1.6, or the values a port 85 client sent; while ColourSpace is connected as PiTPG, Max/Min Luma as 12-bit PQ, as PiTPG 2.0.3 sets it (0.005 / 1000 cd/m² → 62 / 3079). In HDR10 the strip flags greyscale patches above the peak the display's HDR static metadata block declares (Desired Content Max Luminance, 50 × 2^(CV/32) cd/m²); most TVs leave that value out, so nothing is flagged for them.
 
 ### 🏗️ Architecture
 
@@ -530,7 +531,10 @@ PGenerator 1.6 treats this as a normal `GETSTATUS`. PGenerator+ also shows the s
 | `dv_interface` | `0`=Standard, `1`=Low Latency | DV interface type |
 | `dv_map_mode` | `1`=Absolute, `2`=Relative | DV source-mapping mode of the `.dv` renderer |
 | `dv_metadata` | `2`=Perceptual, `3`=Absolute, `4`=Relative | Calman metadata-mode bookkeeping |
-| `dv_color_space` | `0`=YCbCr422, `1`=RGB444, `2`=YCbCr444 | DV colour space |
+| `dv_color_space` | `0` | Kept for clients that send it; no effect on the signal: the Standard DV packet always signals YCbCr (`signal_color_space` 0, ETSI GS CCM 001 table 6) |
+| `dv_signal_range` | `1`=Limited, `2`=Full | Standard DV tunnel range (a PiTPG client's patch scale sets it) |
+| `dv_ll_rgb` | `1`=RGB, empty=YCbCr 4:2:2 | Low Latency DV as RGB (a PiTPG client's colour format sets it) |
+| `dv_pq_source` | `luma`, empty | Standard DV mastering PQ from Max/Min Luma (set for a PiTPG client); empty: 62 / 3696 unless `dv_minpq`/`dv_maxpq` are set |
 | `update_repo` | `owner/repo` | Optional: override the OTA source (default from `update-channel`) |
 
 **LUT correction:** `/etc/PGenerator/lut.txt` holds per-channel deltas (`R,G,B=R_delta,G_delta,B_delta`, plus an `ALL` wildcard). The daemon applies them before writing pattern files.

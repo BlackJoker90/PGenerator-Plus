@@ -286,6 +286,10 @@ sub vendor_infoframe {
   # PB4 bit 1 Dolby_Vision_Signal, bit 0 Low_Latency; the renderer's "off"
   # frame carries the OUI with both clear.
   return { kind=>"Dolby VSIF", label=>"Dolby VSIF" } if(($b[4] & 0x03) == 0x03);
+  # Standard DV in the Dolby form, as pitpgd 2.0.3 sends it for a v1-12 or
+  # v2 VSVDB (dv_vsif_build; the patched vc4.ko, patch_vc4_dv_vsif.py):
+  # Dolby_Vision_Signal without Low_Latency.
+  return { kind=>"Standard DV VSIF", label=>"Standard DV VSIF (Dolby form)" } if(($b[4] & 0x03) == 0x02);
   return { kind=>"other", label=>sprintf("Dolby VSIF without the low-latency DV signal (PB4 0x%02x)",$b[4]) };
  }
  return { kind=>"Standard DV VSIF", label=>"Standard DV VSIF" } if($oui eq "00:0c:03" && $len == 0x18);
@@ -625,7 +629,9 @@ for(my $n=0;$n<@scenarios;$n++) {
  }
  # Dolby Vision is signalled by the vendor infoframe, not the pixels: LLDV
  # by the Dolby VSIF (OUI 00:D0:46), standard DV by the HDMI 1.4b VSIF
- # (OUI 00:0C:03) with the DV length 0x18. Outside DV neither may be sent.
+ # (OUI 00:0C:03) with the DV length 0x18 or, for a v1-12 / v2 VSVDB with
+ # the patched vc4.ko, by the Dolby VSIF without Low_Latency (PB4 0x02).
+ # Outside DV neither may be sent.
  my $vsif=&vendor_infoframe();
  my $dv_kind=$vsif->{kind};
  my $want_dv=(($sc->{config}{signal_mode} || "") eq "dv") ? ((($sc->{config}{dv_transport} || "") eq "standard") ? "Standard DV VSIF" : "Dolby VSIF") : "none";

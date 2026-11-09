@@ -281,6 +281,24 @@ sub conf_after_helper_writes(@) {
  return %after;
 }
 
+# The Dolby Vision VSIF form for the display's VSVDB (PGEdidDolby block), as
+# pitpgd 2.0.3 picks it (edid_sink_caps, dv_vsif_build): standard DV as the
+# HDMI 1.4b VSIF with PB4/PB5 0 for a v0 block (length byte 0x19) or a v1
+# block of 15 bytes (0x0e), "1"; the Dolby VSIF 81 01 1B | 46 D0 00 | 02 for
+# any other block, "2". Low latency with PB5 0x10 (pitpgd: "BT.2020
+# container") when a v2 block sets interface bit 0 (Low-Latency-HDMI).
+# Without a block both are empty and the kernel sends its own form.
+# drm_override.so hands them to the patched vc4.ko (dovi_vsif_marker).
+sub dv_vsif_conf_for_vsvdb(@) {
+ my $dv=shift;
+ return ("","") if(ref($dv) ne "HASH");
+ my $v=$dv->{version} // -1;
+ my $len=$dv->{length} // 0;
+ my $form=(($v == 0 && $len == 26) || ($v == 1 && $len == 15)) ? "1" : "2";
+ my $bt2020=($v == 2 && !$dv->{error} && $dv->{ll_hdmi}) ? "1" : "";
+ return ($form,$bt2020);
+}
+
 sub normalize_dv_transport_conf(@) {
  return if(
   int($pgenerator_conf{"dv_status"} || 0) != 1 &&
@@ -295,6 +313,8 @@ sub normalize_dv_transport_conf(@) {
  # pitpgd output_decide; otherwise YCbCr 4:2:2 12-bit limited.
  my $ll_rgb=(($main::pitpg_clients || 0) && $dv_transport eq "lldv" && ($pgenerator_conf{"dv_ll_rgb"} // "") eq "1") ? 1 : 0;
  my $range=$pgenerator_conf{"rgb_quant_range"} // "";
+ my (undef,$dv)=&signal_display_caps();
+ my ($vsif_form,$ll_bt2020)=&dv_vsif_conf_for_vsvdb($dv);
  my %wanted=(
   signal_mode=>"dv",
   is_sdr=>"0",
@@ -306,6 +326,8 @@ sub normalize_dv_transport_conf(@) {
   dv_status=>"1",
   dv_interface=>&pg_dv_transport_interface($dv_transport),
   dv_metadata=>"$dv_metadata",
+  dv_vsif_form=>$vsif_form,
+  dv_ll_bt2020=>$ll_bt2020,
   dv_color_space=>"0",
   color_format=>$ll_rgb ? "0" : &pg_dv_transport_color_format($dv_transport),
   colorimetry=>"9",

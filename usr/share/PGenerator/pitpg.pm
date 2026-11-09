@@ -222,9 +222,11 @@ sub pitpg_hdmi_info (@) {
  my (undef,$raw)=&pitpg_edid();
  my ($dvmax)=&pitpg_display_luminance($raw);
  if(&pitpg_dv_ll()) {
-  # pitpgd hdmi_info: "(BT.2020 container)" only with VSIF PB5 bit 4,
-  # which the Pi's kernel packer does not send; otherwise this text.
-  $t.=", Dolby Vision Low-Latency (display's own colour container)";
+  # pitpgd hdmi_info: "(BT.2020 container)" only with VSIF PB5 bit 4. The
+  # kernel's packer sends PB5 0; the patched vc4.ko sets the bit when the
+  # VSVDB declares Low-Latency-HDMI (dv_ll_bt2020, dv_vsif_conf_for_vsvdb).
+  my $bt2020=(($pgenerator_conf{"dv_ll_bt2020"} // "") eq "1" && &webui_vc4_dv_vsif_forms()) ? 1 : 0;
+  $t.=", Dolby Vision Low-Latency (".($bt2020 ? "BT.2020 container" : "display's own colour container").")";
  } elsif(&pitpg_dv_tv_led()) {
   my $map=$pgenerator_conf{"dv_map_mode"} // "";
   $t.=sprintf(", Dolby Vision TV-led (12-bit YCbCr 4:2:2 %s range in RGB tunnel, %s container%s)",

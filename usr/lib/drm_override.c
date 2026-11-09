@@ -178,6 +178,10 @@ static int dv_interface = 0;     /* 0=Standard, 1=Low-Latency */
 static int is_ll_dovi = 0;
 static int is_std_dovi = 0;
 static int dv_map_mode = -1;
+/* The VSIF form the daemon picked from the display's Dolby VSVDB
+ * (command.pm dv_vsif_conf_for_vsvdb): 0 none, 1 H14b, 2 Dolby VSIF. */
+static int dv_vsif_form = 0;
+static int dv_ll_bt2020 = 0;     /* 1: low latency with PB5 0x10 */
 static int conf_read = 0;
 static volatile int overrides_suspended = 0;
 
@@ -261,6 +265,8 @@ static void parse_config(char *buf) {
     is_ll_dovi = 0;
     is_std_dovi = 0;
     dv_map_mode = -1;
+    dv_vsif_form = 0;
+    dv_ll_bt2020 = 0;
 
     char *p = buf;
     while (*p) {
@@ -298,6 +304,19 @@ static void parse_config(char *buf) {
             p[4] == 'a' && p[5] == 'p' && p[6] == '_' && p[7] == 'm' &&
             p[8] == 'o' && p[9] == 'd' && p[10] == 'e' && p[11] == '=') {
             dv_map_mode = (p[12] - '0');
+        }
+        if (p[0] == 'd' && p[1] == 'v' && p[2] == '_' && p[3] == 'v' &&
+            p[4] == 's' && p[5] == 'i' && p[6] == 'f' && p[7] == '_' &&
+            p[8] == 'f' && p[9] == 'o' && p[10] == 'r' && p[11] == 'm' &&
+            p[12] == '=') {
+            dv_vsif_form = (p[13] == '1' || p[13] == '2') &&
+                           (p[14] == '\n' || p[14] == 0) ? p[13] - '0' : 0;
+        }
+        if (p[0] == 'd' && p[1] == 'v' && p[2] == '_' && p[3] == 'l' &&
+            p[4] == 'l' && p[5] == '_' && p[6] == 'b' && p[7] == 't' &&
+            p[8] == '2' && p[9] == '0' && p[10] == '2' && p[11] == '0' &&
+            p[12] == '=') {
+            dv_ll_bt2020 = (p[13] == '1' && (p[14] == '\n' || p[14] == 0)) ? 1 : 0;
         }
         if (p[0] == 'c' && p[1] == 'o' && p[2] == 'l' && p[3] == 'o' &&
             p[4] == 'r' && p[5] == 'i' && p[6] == 'm' && p[7] == 'e' &&
@@ -414,6 +433,11 @@ static void parse_config(char *buf) {
         write_log("DRM_OVERRIDE: config dv_map_mode=");
         write_log(num);
         write_log("\n");
+    }
+    if (dv_vsif_form) {
+        write_log("DRM_OVERRIDE: config dv_vsif_form=");
+        write_log(dv_vsif_form == 1 ? "1 (H14b)" : "2 (Dolby)");
+        write_log(dv_ll_bt2020 ? " dv_ll_bt2020=1\n" : "\n");
     }
     /* Note: the reference GCI control-plane gate is enforced upstream
      * in daemon.pm (calman_save_setting, runtime range overrides).
@@ -565,6 +589,7 @@ static void reload_config_if_changed(void) {
 
     int old_dv_status = dv_status, old_ll = is_ll_dovi, old_std = is_std_dovi;
     int old_iface = dv_interface, old_map = dv_map_mode;
+    int old_form = dv_vsif_form, old_bt2020 = dv_ll_bt2020;
 
     write_log("DRM_OVERRIDE: conf changed, reloading\n");
     parse_config(buf);
@@ -573,7 +598,8 @@ static void reload_config_if_changed(void) {
      * let the next DV commit build a fresh one. */
     if (dv_status != old_dv_status || is_ll_dovi != old_ll ||
         is_std_dovi != old_std || dv_interface != old_iface ||
-        dv_map_mode != old_map) {
+        dv_map_mode != old_map || dv_vsif_form != old_form ||
+        dv_ll_bt2020 != old_bt2020) {
         dovi_blob_id = 0;
         dovi_injected = 0;
     }
@@ -733,6 +759,20 @@ static uint8_t dovi_kernel_interface_byte(void) {
     return is_dovi_ll_transport() ? 0x02 : 0x01;
 }
 
+/* Byte 11 of the blob (struct padding; drm.ko only compares it, a new value
+ * forces a modeset) carries the VSIF form pitpgd 2.0.3 picks from the VSVDB
+ * (dv_vsif_build) to vc4_hdmi_write_infoframe (patch_vc4_dv_vsif.py):
+ * 0xD0 | 1 H14b with PB4/PB5 0, | 2 Dolby VSIF 81 01 1B | 46 D0 00 | 02,
+ * | 4 low latency with PB5 0x10. -1: no form from the daemon, the byte
+ * stays and the kernel sends its own form. */
+static int dovi_vsif_marker(void) {
+    if (dv_vsif_form != 1 && dv_vsif_form != 2)
+        return -1;
+    if (is_dovi_ll_transport())
+        return 0xD0 | (dv_ll_bt2020 == 1 ? 0x04 : 0x00);
+    return 0xD0 | dv_vsif_form;
+}
+
 static int normalize_dovi_metadata(uint8_t *metadata, uint32_t length,
                                    const char *reason) {
     if (!metadata || length != 12 || dv_status != 1)
@@ -765,6 +805,11 @@ static int normalize_dovi_metadata(uint8_t *metadata, uint32_t length,
         metadata[8] = (uint8_t)(want_aux & 0xff);
         changed = 1;
     }
+    int marker = dovi_vsif_marker();
+    if (marker >= 0 && metadata[11] != (uint8_t)marker) {
+        metadata[11] = (uint8_t)marker;
+        changed = 1;
+    }
 
     if (changed) {
         char num[24];
@@ -782,6 +827,11 @@ static int normalize_dovi_metadata(uint8_t *metadata, uint32_t length,
         if (dv_map_mode >= 0) {
             write_log(" map=");
             itoa_simple((uint64_t)dv_map_mode, num);
+            write_log(num);
+        }
+        if (marker >= 0) {
+            write_log(" vsif=");
+            itoa_simple((uint64_t)marker, num);
             write_log(num);
         }
         write_log("\n");
@@ -802,7 +852,8 @@ static int normalize_dovi_metadata(uint8_t *metadata, uint32_t length,
  *   bytes 0-3: header (zeroes)
  *   byte 4:   low_latency flag (0=Standard, 1=LL)
  *   bytes 5-10: reserved (zeroes)
- *   byte 11:  DV param (0xb6)
+ *   byte 11:  DV param (0xb6); with a VSIF form from the daemon the
+ *             marker of dovi_vsif_marker() replaces it
  */
 /* DOVI blobs with dv_status=0 ("Dolby Vision off") created by the renderer.
  * The vc4 kernel never clears the vendor infoframe for a 0 blob, so leaving

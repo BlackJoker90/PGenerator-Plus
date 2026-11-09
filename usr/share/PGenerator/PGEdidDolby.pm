@@ -105,6 +105,7 @@ sub dolby_vsvdb_parse {
   $d{backlight_min_nits}=25+($x->[1] & 0x03)*25;
   my $if=$x->[2] & 0x03;
   $d{interface}=$V2_INTERFACE{$if};
+  $d{ll_hdmi}=$if & 0x01;
   $d{low_latency}=1;
   $d{standard}=($if >= 2) ? 1 : 0;
   $d{ycc444}=(qw(none 10 12 reserved))[(($x->[3] & 0x01) << 1) | ($x->[4] & 0x01)];

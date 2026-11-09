@@ -56,8 +56,6 @@ case "$LOW_LIGHT_MODE" in
  avg) ;;
  *) LOW_LIGHT_MODE="off" ;;
 esac
-# Preserve the established single-read spectrophotometer workflow.
-[[ "$REQUIRE_DEVICE_READY" == "1" ]] && LOW_LIGHT_MODE="off"
 # Precomputed pattern-insertion codes (mode-correct). The webui derives them
 # from the same closure the greyscale ladder uses, so an insertion patch at
 # the user-configured level lands on the same code a step at that stimulus
@@ -514,6 +512,33 @@ maybe_wait_for_initial_ready() {
  wait_for_device_ready "$step_num" "$(manual_ready_prompt_label "$step_name" "initial_measurement")" "initial_measurement"
  INITIAL_READY_PENDING=0
  return 0
+}
+
+# spotread's reason when it refuses the display type or the Meter Profile at
+# start, worded for the page. Empty when it gave none. Same text as in
+# meter_session.sh.
+spotread_refusal_message() {
+ local out="$1" line="" value="" name="${CCSS_FILE##*/}"
+ line=$(printf '%s\n' "$out" | grep -m1 -E "Failed to locate display type matching|Reading CCMX/CCSS File .* failed|Setting (Colorimeter (Calibration Spectral Samples|Correction Matrix)|CCSS? Observer) failed|Instrument doesn't have Colorimeter (Calibration Spectral Sample|Correction Matrix) capability")
+ line=$(printf '%s' "$line" | tr -d '"\\' | tr -cd '[:print:]')
+ case "$line" in
+  *"Failed to locate display type matching"*)
+   value=${line#*matching }
+   printf "This meter has no display type %s. Choose another Display Type or Meter Profile." "$value" ;;
+  *"Reading CCMX/CCSS File"*)
+   value=${line#*failed with error }
+   value=${value#*:\'}
+   value=${value%\'}
+   printf "Meter Profile %s was refused: %s" "$name" "$value" ;;
+  *"Setting "*" failed with error"*)
+   value=${line#*failed with error :\'}
+   value=${value%%\'*}
+   printf "Meter Profile %s could not be applied: %s" "$name" "$value" ;;
+  *"Calibration Spectral Sample capability"*)
+   printf "This meter cannot use a CCSS Meter Profile." ;;
+  *"Correction Matrix capability"*)
+   printf "This meter cannot use a CCMX Meter Profile." ;;
+ esac
 }
 
 output_size() {
@@ -1487,9 +1512,13 @@ EOJSON
  if [[ -n "$CCSS_FILE" && -f "$CCSS_FILE" && "$REQUIRE_DEVICE_READY" != "1" ]]; then
   if [[ "${CCSS_FILE,,}" =~ \.ccss$ ]]; then
    # Read the actual DISPLAY_TYPE_REFRESH value line, not the KEYWORD declaration.
-   # If the field is missing, fall back to the CCSS metadata so OLED/Plasma/CRT
-   # profiles don't get treated like generic LCDs (or vice versa). A CCMX uses
-   # the selected instrument base type and has no spectral refresh metadata.
+   # If the field is missing (it is optional, and ccxxmake writes none for a
+   # spectrometer), fall back to the CCSS metadata so OLED/Plasma/CRT profiles
+   # don't get treated like generic LCDs (or vice versa). A projector's CCSS gets
+   # no -y p: the i1d3 and Spyder drivers, the only ones taking a CCSS, know p only
+   # from an installed CCSS, none is installed, and spotread stops at an unknown
+   # selector. With -X the file's TECHNOLOGY sets the refresh mode anyway. A CCMX
+   # uses the selected instrument base type and has no spectral refresh metadata.
    CCSS_REFRESH=$(grep -iE '^[[:space:]]*DISPLAY_TYPE_REFRESH[[:space:]]' "$CCSS_FILE" 2>/dev/null | head -1)
    if [[ "$CCSS_REFRESH" == *'"NO"'* ]]; then
     DISPLAY_TYPE="l"
@@ -1497,9 +1526,7 @@ EOJSON
     DISPLAY_TYPE="c"
    else
     CCSS_META=$(grep -iE '^[[:space:]]*(DISPLAY|TECHNOLOGY)[[:space:]]' "$CCSS_FILE" 2>/dev/null | tr '\n' ' ')
-    if [[ "$CCSS_META" =~ [Pp]rojector ]]; then
-     DISPLAY_TYPE="p"
-    elif [[ "$CCSS_META" =~ (OLED|Plasma|CRT) ]]; then
+    if [[ "$CCSS_META" =~ (OLED|Plasma|CRT) ]]; then
      DISPLAY_TYPE="c"
     else
      DISPLAY_TYPE="l"
@@ -1582,7 +1609,7 @@ HANDLED_OFFSET=0
   # Without this, the loop runs the full 120s before timing out, and 3
   # attempts => ~6 minutes of "Initializing meter..." before the series
   # errors out. See meter-selection-empty-port-bug-2026-06-29.md.
-  if echo "$CLEAN_OUT" | grep -qiE "doesn't have|does not support|instrument doesn't support|Display/calibration type ignored|no suitable|not supported|Colorimeter Calibration Spectral Sample"; then
+  if echo "$CLEAN_OUT" | grep -qiE "doesn't have|does not support|instrument doesn't support|Display/calibration type ignored|no suitable|not supported|Colorimeter Calibration Spectral Sample|usage:|Reading CCMX/CCSS File|Setting Colorimeter Correction Matrix|Setting CCSS? Observer"; then
    break
   fi
   sleep 0.5
@@ -1595,7 +1622,8 @@ HANDLED_OFFSET=0
  fi
 
  # Failure path — tear down this attempt
- DBGOUT=$(head -c 400 "$OUTFILE" 2>/dev/null | tr '"' "'" | tr '\n' ' ' | tr '\r' ' ')
+ DBGOUT=$(head -c 400 "$OUTFILE" 2>/dev/null | tr '"' "'" | tr '\n\r' '  ' | tr -d '\\' | tr -cd '[:print:]')
+ REFUSAL=$(spotread_refusal_message "$(sed 's/\x1b\[[0-9;]*[a-zA-Z]//g' "$OUTFILE" 2>/dev/null | tr -d '\r')")
  printf "Q" >&3 2>/dev/null; exec 3>&- 2>/dev/null
  METER_SERIES_FD_OPEN=0
  kill -9 "$BG_PID" 2>/dev/null; wait "$BG_PID" 2>/dev/null
@@ -1606,9 +1634,9 @@ HANDLED_OFFSET=0
  # straight to the error path so the operator doesn't wait 6 minutes for 3
  # identical retries. Mirrors the 2026-06-29 series hang (CCSS on a
  # colorimeter); see meter-selection-empty-port-bug-2026-06-29.md.
- if echo "$DBGOUT" | grep -qiE "doesn't have|does not support|instrument doesn't support|Display/calibration type ignored|no suitable|not supported|Colorimeter Calibration Spectral Sample"; then
+ if [[ -n "$REFUSAL" ]] || echo "$DBGOUT" | grep -qiE "doesn't have|does not support|instrument doesn't support|Display/calibration type ignored|no suitable|not supported|Colorimeter Calibration Spectral Sample"; then
   write_state_json << EOJSON
-{"status":"error","series_id":"$SERIES_ID","current_step":0,"total_steps":$TOTAL,"current_name":"Meter does not support requested mode","debug":"$DBGOUT","readings":[]}
+{"status":"error","series_id":"$SERIES_ID","current_step":0,"total_steps":$TOTAL,"current_name":"${REFUSAL:-Meter does not support requested mode}","debug":"$DBGOUT","readings":[]}
 EOJSON
   pkill -9 -x spotread 2>/dev/null
  pkill -9 -x spotread_sim 2>/dev/null

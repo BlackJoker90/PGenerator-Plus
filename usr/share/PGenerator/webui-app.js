@@ -7571,7 +7571,35 @@ function meterReadingGammaAnalysisIre(reading){
   }
   if(analysis!=null) return analysis;
  }
- return meterReadingAnalysisIre(reading);
+ const analysis=meterReadingAnalysisIre(reading);
+ // An ordinary SDR greyscale step: the signal that was sent, the one the target
+ // line takes from meterGreyTargetSignal. On the slot, a display exactly on target
+ // read 2.186 at 8-bit Limited 50% (code 126 is 50.228%) and 2.213 at 60% (code 147
+ // is 59.817%). A stamped series keeps its stamp, custom greyscale its stimulus
+ // (meterGreyTargetSignal returns it), a headroom series its 109 scale.
+ if(analysis>0&&reading.analysis_ire==null&&reading.target_ire==null
+    &&meterReadingIsGreyscale(reading)&&!meterGammaHasHeadroomAnchor()&&!meterGammaRunHasLgCodeScale()){
+  const signal=meterGreyTargetSignal(analysis,reading.r_code!=null?reading.r_code:reading.r);
+  // Rounding and the 8-to-10-bit reconciliation move a code by at most 0.49 %
+  // (8-bit Full read at 10 bit: 4c/1023 against c/255). Further from the slot it is
+  // a code on another scale: 10-bit codes read at 8 bit after a change of depth, or
+  // LG extended 16..255 without a context. The slot is the better signal then.
+  if(signal>0&&Math.abs(signal*100-analysis)<=0.5) return signal*100;
+ }
+ return analysis;
+}
+
+// LG AutoCal 26 and LG 21 point: meterGreySignalFractionFromCode decodes these on
+// their own scale (legal 109, or 16..255), which only fits the target line of that
+// run. The measured gamma stays on the slot there, as the run's own 105/109 steps
+// arrive last and a decode would jump when they do. A two-point legal_superwhite run
+// is not one of them: below 100 % its codes are ordinary Limited, and a High above
+// 100 % sets the headroom anchor first.
+function meterGammaRunHasLgCodeScale(){
+ const context=(typeof meterActiveCalibrationTargetContext!=='undefined')?meterActiveCalibrationTargetContext:null;
+ if(context) return context.caller_policy==='browser_chart'
+  &&(context.headroom_strategy==='extended_sdr'||context.headroom_strategy==='lg_sdr26_ladder');
+ return typeof meterGreyAllowsHeadroomTargets==='function'&&!!meterGreyAllowsHeadroomTargets();
 }
 
 function meterGreyChartStimulusIre(item){
@@ -11627,7 +11655,7 @@ function meterEnsureDeltaECache(readings){
 // when ire<=0.
 function meterPerChannelGamma(reading, whiteReading, ire, prevReading){
  if(!reading||!whiteReading||!(ire>0)) return {r:null,g:null,b:null};
- const analysisIre=((meterChartIsDv()||meterChartIsHdr()||meterChartIsHlg())&&meterReadingIsGreyscale(reading))?(meterReadingGammaAnalysisIre(reading)||ire):ire;
+ const analysisIre=meterReadingIsGreyscale(reading)?(meterReadingGammaAnalysisIre(reading)||ire):ire;
  const readingXYZ=meterReadingXYZ(reading);
  const whiteXYZ=meterReadingXYZ(whiteReading);
  const prevXYZ=prevReading?meterReadingXYZ(prevReading):null;
@@ -11689,6 +11717,13 @@ function meterGreyscaleGammaValue(reading,whiteY,blackLevel){
  const analysisIre=meterReadingGammaAnalysisIre(reading);
  if(!(whiteY>0) || !(y>0) || !(analysisIre>0) || analysisIre>=100) return null;
  return effectiveGamma(y,whiteY,analysisIre);
+}
+
+// The level a printed gamma divides by. SDR follows the chart; the HDR report and
+// CSV keep the level they have always printed.
+function meterPrintedGammaIre(reading,nominal){
+ if(meterChartIsDv()||meterChartIsHdr()||meterChartIsHlg()) return nominal;
+ return meterReadingGammaAnalysisIre(reading)||nominal;
 }
 
 function meterBt1886BlackAwareMetricsActive(){
@@ -13166,14 +13201,20 @@ function meterLiveRgbData(reading){
 
 // Shared IRE->signal-fraction convention for every per-point gamma metric, so
 // the measured and target lines can never disagree about the divisor.
-function meterGammaSignalFraction(ire){
- let _gammaHasHeadroomAnchor=false;
+function meterGammaHasHeadroomAnchor(){
  try{
   const _gl=Array.isArray(meterReadings)?meterReadings:[];
-  _gammaHasHeadroomAnchor=_gl.some(function(rd){return rd&&(typeof meterReadingIsGreyscale!=='function'||meterReadingIsGreyscale(rd))&&Number(rd.ire)>100.5;});
+  return _gl.some(function(rd){return rd&&(typeof meterReadingIsGreyscale!=='function'||meterReadingIsGreyscale(rd))&&Number(rd.ire)>100.5;});
  }catch(e){}
- const fracBase=((typeof meterChartSignalMode==='function'&&meterChartSignalMode()==='sdr')&&_gammaHasHeadroomAnchor)?109:100;
- return (ire>1)?(ire/fracBase):ire;
+ return false;
+}
+
+// ire is a percentage, also at or below 1. Every caller passes one; a value of 1
+// or less read as a fraction lost the 1% step and made 0.913% (code 18 at 8-bit
+// Limited) a signal of 91.3%, which drew the raised-black target at 83.75.
+function meterGammaSignalFraction(ire){
+ const fracBase=((typeof meterChartSignalMode==='function'&&meterChartSignalMode()==='sdr')&&meterGammaHasHeadroomAnchor())?109:100;
+ return ire/fracBase;
 }
 
 function effectiveGamma(Y,Yw,ire,prevY,prevIre){
@@ -13201,7 +13242,7 @@ function effectiveGamma(Y,Yw,ire,prevY,prevIre){
 function effectiveGammaTopSlope(Y,Yw,ire,prevY,prevIre){
  const g=effectiveGamma(Y,Yw,ire);
  if(g!=null&&isFinite(g)) return g;
- const prevFrac=(prevIre>1)?(prevIre/100):prevIre;
+ const prevFrac=prevIre/100;
  if(prevY>0 && Yw>0 && prevFrac>0 && prevFrac<0.999999){
   const gTop=Math.log(prevY/Yw)/Math.log(prevFrac);
   return isFinite(gTop)?gTop:null;

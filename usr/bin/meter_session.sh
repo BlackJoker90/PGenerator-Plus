@@ -134,6 +134,33 @@ startup_output_excerpt() {
  sed 's/\x1b\[[0-9;]*[a-zA-Z]//g' "$OUTFILE" 2>/dev/null | tr -d '\r' | tail -n 8 | tr '\n' ' ' | sed 's/[[:space:]]\+/ /g; s/^ //; s/ $//'
 }
 
+# spotread's reason when it refuses the display type or the Meter Profile at
+# start, worded for the page. Empty when it gave none. Same text as in
+# meter_series.sh.
+spotread_refusal_message() {
+ local out="$1" line="" value="" name="${CCSS_FILE##*/}"
+ line=$(printf '%s\n' "$out" | grep -m1 -E "Failed to locate display type matching|Reading CCMX/CCSS File .* failed|Setting (Colorimeter (Calibration Spectral Samples|Correction Matrix)|CCSS? Observer) failed|Instrument doesn't have Colorimeter (Calibration Spectral Sample|Correction Matrix) capability")
+ line=$(printf '%s' "$line" | tr -d '"\\' | tr -cd '[:print:]')
+ case "$line" in
+  *"Failed to locate display type matching"*)
+   value=${line#*matching }
+   printf "This meter has no display type %s. Choose another Display Type or Meter Profile." "$value" ;;
+  *"Reading CCMX/CCSS File"*)
+   value=${line#*failed with error }
+   value=${value#*:\'}
+   value=${value%\'}
+   printf "Meter Profile %s was refused: %s" "$name" "$value" ;;
+  *"Setting "*" failed with error"*)
+   value=${line#*failed with error :\'}
+   value=${value%%\'*}
+   printf "Meter Profile %s could not be applied: %s" "$name" "$value" ;;
+  *"Calibration Spectral Sample capability"*)
+   printf "This meter cannot use a CCSS Meter Profile." ;;
+  *"Correction Matrix capability"*)
+   printf "This meter cannot use a CCMX Meter Profile." ;;
+ esac
+}
+
 output_size() {
  if [[ -f "$OUTFILE" ]]; then
   stat -c %s "$OUTFILE" 2>/dev/null | tr -d '[:space:]'
@@ -962,7 +989,11 @@ if [[ "$REQUIRE_DEVICE_READY" == "1" && -n "$CCSS_FILE" ]]; then
 fi
 if [[ -n "$CCSS_FILE" && -f "$CCSS_FILE" && "${CCSS_FILE,,}" =~ \.ccss$ && "$REQUIRE_DEVICE_READY" != "1" ]]; then
  # Match the actual DISPLAY_TYPE_REFRESH value, not the KEYWORD line.
- # Fall back to CCSS metadata when the explicit refresh hint is absent.
+ # Fall back to CCSS metadata when the explicit refresh hint is absent: the field
+ # is optional, and ccxxmake writes none for a spectrometer. A projector's CCSS gets
+ # no -y p: the i1d3 and Spyder drivers, the only ones taking a CCSS, know p only from
+ # an installed CCSS, none is installed, and spotread stops at an unknown selector.
+ # With -X the file's TECHNOLOGY sets the refresh mode anyway.
  CCSS_REFRESH=$(grep -iE '^[[:space:]]*DISPLAY_TYPE_REFRESH[[:space:]]' "$CCSS_FILE" 2>/dev/null | head -1)
  if [[ "$CCSS_REFRESH" == *'"NO"'* ]]; then
   DISPLAY_TYPE="l"
@@ -970,9 +1001,7 @@ if [[ -n "$CCSS_FILE" && -f "$CCSS_FILE" && "${CCSS_FILE,,}" =~ \.ccss$ && "$REQ
   DISPLAY_TYPE="c"
  else
   CCSS_META=$(grep -iE '^[[:space:]]*(DISPLAY|TECHNOLOGY)[[:space:]]' "$CCSS_FILE" 2>/dev/null | tr '\n' ' ')
-  if [[ "$CCSS_META" =~ [Pp]rojector ]]; then
-   DISPLAY_TYPE="p"
-  elif [[ "$CCSS_META" =~ (OLED|Plasma|CRT) ]]; then
+  if [[ "$CCSS_META" =~ (OLED|Plasma|CRT) ]]; then
    DISPLAY_TYPE="c"
   else
    DISPLAY_TYPE="l"
@@ -1072,7 +1101,7 @@ while (( WAITED < 900 )); do
   STARTUP_HINT="communications_failure"
   break
  fi
- if echo "$CLEAN_OUT" | grep -qiE "doesn't have|does not support|instrument doesn't support|Display/calibration type ignored|no suitable|not supported|Colorimeter Calibration Spectral Sample|usage:"; then
+ if echo "$CLEAN_OUT" | grep -qiE "doesn't have|does not support|instrument doesn't support|Display/calibration type ignored|no suitable|not supported|Colorimeter Calibration Spectral Sample|usage:|Reading CCMX/CCSS File|Setting Colorimeter Correction Matrix|Setting CCSS? Observer"; then
   STARTUP_HINT="unsupported_mode"
   break
  fi
@@ -1088,8 +1117,9 @@ if ! sed 's/\x1b\[[0-9;]*[a-zA-Z]//g' "$OUTFILE" 2>/dev/null | tr -d '\r' | grep
   log "spotread init failed after communications failure${FAIL_CONTEXT:+: $FAIL_CONTEXT}"
   write_state '{"status":"error","message":"Meter communication failed during init"}'
  elif [[ "$STARTUP_HINT" == "unsupported_mode" ]]; then
-  log "spotread rejected the requested mode${FAIL_CONTEXT:+: $FAIL_CONTEXT}"
-  write_state '{"status":"error","message":"Meter does not support requested mode"}'
+  REFUSAL=$(spotread_refusal_message "$(sed 's/\x1b\[[0-9;]*[a-zA-Z]//g' "$OUTFILE" 2>/dev/null | tr -d '\r')")
+  log "spotread rejected the requested mode${REFUSAL:+: $REFUSAL}${FAIL_CONTEXT:+: $FAIL_CONTEXT}"
+  write_state "{\"status\":\"error\",\"message\":\"${REFUSAL:-Meter does not support requested mode}\"}"
  else
   log "spotread init failed${FAIL_CONTEXT:+: $FAIL_CONTEXT}"
   write_state '{"status":"error","message":"Meter init failed"}'

@@ -18405,7 +18405,7 @@ function meterBuildGreyscaleReportTable(){
  let rows='';
  gs.forEach(rd=>{
   const bal=white?rgbBalance(rd,white,greyMode,Lb):{R:100,G:100,B:100};
-  const gamma=effectiveGamma(rd.luminance,white?(white.Y||white.luminance||rd.Y):rd.Y,rd.ire);
+  const gamma=effectiveGamma(rd.luminance,white?(white.Y||white.luminance||rd.Y):rd.Y,meterPrintedGammaIre(rd,rd.ire));
   let de='--';
   // Do not force 0.00 for a Y=0 reading: meterColorDeltaE2000 scores a
   // measured black against a lit target itself (still 0 against a black
@@ -19106,7 +19106,7 @@ async function meterExportCSV(){
    }
   }
   const ire=csvIre(rd);
-  const g=colorSeries?null:effectiveGamma(rd.luminance,Lw,ire);
+  const g=colorSeries?null:effectiveGamma(rd.luminance,Lw,meterPrintedGammaIre(rd,ire));
   // Reuse the exact RGB analysis shown by the live WebUI so neutral color
   // patches export the same 100-centered greyscale balance as the chart.
   const bal=whiteR?(colorSeries?meterLiveRgbData(rd):rgbBalance(rd,whiteR,greyMode,Lb)):{R:100,G:100,B:100};

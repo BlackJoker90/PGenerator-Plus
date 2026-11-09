@@ -3628,7 +3628,7 @@ sub webui_meter_session_start (@) {
 # own -Y a is not used: only the specbos driver honours it. a, aa and aaa are
 # what a page from 2.13.40 or older still sends.
 sub webui_low_light_request_contract {
- my ($body,$force_off)=@_;
+ my ($body)=@_;
  $body="" if(!defined($body));
  my %legacy=(a=>2,aa=>3,aaa=>5);
  my $selected="";
@@ -3636,7 +3636,6 @@ sub webui_low_light_request_contract {
  if($enabled && $body=~/"low_light"\s*:\s*\{[\s\S]{0,700}?"mode"\s*:\s*"(avg|a|aa|aaa)"/i) {
   $selected=lc($1);
  }
- $selected="" if($force_off);
  my $has_count=($body=~/"(?:low_light_requested_sample_count|requested_sample_count)"\s*:/i) ? 1 : 0;
  my $provided;
  if($body=~/"(?:low_light_requested_sample_count|requested_sample_count)"\s*:\s*"?([0-9]+)"?\s*(?=[,}])/i) {
@@ -3649,7 +3648,7 @@ sub webui_low_light_request_contract {
  } elsif($selected eq "avg") {
   if(defined($provided) && $provided >= 1 && $provided <= 5) { $expected=$provided; }
   else { $error="requested_sample_count must be 1 to 5"; }
- } elsif(!$force_off && defined($provided) && $provided != $expected) {
+ } elsif(defined($provided) && $provided != $expected) {
   $error="requested_sample_count does not match low-light mode";
  }
  return {
@@ -3661,8 +3660,8 @@ sub webui_low_light_request_contract {
 }
 
 sub webui_low_light_stamp_request {
- my ($body,$force_off)=@_;
- my $contract=&webui_low_light_request_contract($body,$force_off);
+ my ($body)=@_;
+ my $contract=&webui_low_light_request_contract($body);
  return ($body,$contract->{"error"}) if(($contract->{"error"}||"") ne "");
  my $mode=$contract->{"mode"};
  my $count=$contract->{"requested_sample_count"};
@@ -3848,7 +3847,7 @@ sub webui_meter_read (@) {
 		 $request_id=$1 if($body=~/"request_id"\s*:\s*"([A-Za-z0-9_.:-]{1,96})"/);
 			 # Resolve presentation mode to the numeric execution contract once.
 			 # The value is never passed to Argyll as a process option.
-			 my $low_light_contract=&webui_low_light_request_contract($body,$require_device_ready);
+			 my $low_light_contract=&webui_low_light_request_contract($body);
 			 if(($low_light_contract->{"error"}||"") ne "") {
 			  return '{"status":"error","message":"'.$low_light_contract->{"error"}.'"}';
 			 }
@@ -4515,7 +4514,7 @@ $patch_insert_time_level=100 if($patch_insert_time_level > 100);
  $disable_aio=1 if($body=~/"disable_aio"\s*:\s*true/i);
  # Resolve the series' application sample count once at API ingress. The
  # presentation mode remains in metadata while the worker executes the integer.
- my $low_light_contract=&webui_low_light_request_contract($body,$require_device_ready);
+ my $low_light_contract=&webui_low_light_request_contract($body);
  if(($low_light_contract->{"error"}||"") ne "") {
   return '{"status":"error","message":"'.$low_light_contract->{"error"}.'"}';
  }
@@ -6707,8 +6706,7 @@ sub webui_meter_lg_autocal_start (@) {
  $body=&webui_meter_lg_autocal_body_with_defaults($body);
  $body=&webui_meter_autocal_force_standard_observer($body);
  $body=&webui_meter_lg_body_with_display_model($body);
- my ($contract_body,$contract_error)=&webui_low_light_stamp_request(
-  $body,($body=~/"require_device_ready"\s*:\s*true/i ? 1 : 0));
+ my ($contract_body,$contract_error)=&webui_low_light_stamp_request($body);
  return '{"status":"error","message":"'.$contract_error.'"}' if($contract_error ne "");
  $body=$contract_body;
  if(&webui_meter_lg_autocal_running()) {
@@ -7155,8 +7153,7 @@ sub webui_meter_lg_3d_autocal_start (@) {
  }
  $body=&webui_meter_autocal_force_standard_observer($body);
  $body=&webui_meter_lg_body_with_display_model($body);
- my ($contract_body,$contract_error)=&webui_low_light_stamp_request(
-  $body,($body=~/"require_device_ready"\s*:\s*true/i ? 1 : 0));
+ my ($contract_body,$contract_error)=&webui_low_light_stamp_request($body);
  return '{"status":"error","message":"'.$contract_error.'"}' if($contract_error ne "");
  $body=$contract_body;
  my $_autocal_handoff_guard=&webui_meter_lg_autocal_handoff_guard();

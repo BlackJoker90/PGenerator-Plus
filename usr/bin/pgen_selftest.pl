@@ -80,10 +80,13 @@ my @scenarios=(
    codes=>[@grey10,@colour10], drm=>1 },
  # Standard DV tunnels 12-bit YCbCr 4:2:2 in full-range 8-bit RGB. At 8 bpc
  # the 8-bit framebuffer holds the packed bytes exactly (a 10 bpc surface
- # rescales them), so this mode is pinned to 8 bpc.
+ # rescales them), so this mode is pinned to 8 bpc. range is the signal (the
+ # AVI says Full); the window codes are limited-range sources, and the
+ # renderer normalises SOURCE_RANGE=FULL by the whole code range
+ # (ofApp::doviSourceFull), so source_range says what they are.
  { id=>"dv_std_rgb_8", group=>"Dolby Vision", label=>"Standard", depth=>8,
    config=>{signal_mode=>"dv",dv_transport=>"standard",max_bpc=>"8"},
-   range=>"FULL", tunnel=>1, codes=>[@grey10], codes8=>[@grey8] },
+   range=>"FULL", source_range=>"LIMITED", tunnel=>1, codes=>[@grey10], codes8=>[@grey8] },
  { id=>"lldv_ycc422_12", group=>"Dolby Vision", label=>"Low Latency", depth=>12,
    config=>{signal_mode=>"dv",dv_transport=>"lldv"},
    codes=>[@grey10], codes8=>[@grey8] },
@@ -649,7 +652,7 @@ for(my $n=0;$n<@scenarios;$n++) {
   $entry->{note}="The vc4 range CSC is active after the framebuffer, so the codes on the cable cannot be read back in this mode.";
   $state{step}+=&window_count($sc);
  }
- my $range=($format eq "RGB") ? ($sc->{range} || "LIMITED") : "";
+ my $range=($format eq "RGB") ? ($sc->{source_range} || $sc->{range} || "LIMITED") : "";
  my @windows=();
  push(@windows,map { [10,1023,$_] } @{$sc->{codes} || []}) if($provable);
  push(@windows,map { [8,255,$_] } @{$sc->{codes8} || []}) if($provable);

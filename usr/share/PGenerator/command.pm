@@ -290,6 +290,11 @@ sub normalize_dv_transport_conf(@) {
  my $dv_map_mode=$pgenerator_conf{"dv_map_mode"};
  my $dv_metadata=&dv_metadata_for_map_mode($dv_map_mode);
  my $dv_transport=&pg_dv_transport_mode();
+ # Low-latency DV in RGB (dv_ll_rgb 1, a PiTPG client's colour format):
+ # RGB at the depth the VSVDB lists, in the range the client chose, as
+ # pitpgd output_decide; otherwise YCbCr 4:2:2 12-bit limited.
+ my $ll_rgb=(($main::pitpg_clients || 0) && $dv_transport eq "lldv" && ($pgenerator_conf{"dv_ll_rgb"} // "") eq "1") ? 1 : 0;
+ my $range=$pgenerator_conf{"rgb_quant_range"} // "";
  my %wanted=(
   signal_mode=>"dv",
   is_sdr=>"0",
@@ -300,15 +305,28 @@ sub normalize_dv_transport_conf(@) {
   is_std_dovi=>&pg_dv_transport_std_flag($dv_transport),
   dv_status=>"1",
   dv_interface=>&pg_dv_transport_interface($dv_transport),
-  dv_profile=>"1",
   dv_metadata=>"$dv_metadata",
   dv_color_space=>"0",
-  color_format=>&pg_dv_transport_color_format($dv_transport),
+  color_format=>$ll_rgb ? "0" : &pg_dv_transport_color_format($dv_transport),
   colorimetry=>"9",
-  primaries=>"1",
-  max_bpc=>&pg_dv_transport_max_bpc($dv_transport),
-  rgb_quant_range=>&pg_dv_transport_quant_range($dv_transport)
+  max_bpc=>$ll_rgb ? &dv_ll_rgb_bpc() : &pg_dv_transport_max_bpc($dv_transport),
+  rgb_quant_range=>$ll_rgb ? (($range eq "1" || $range eq "2") ? $range : "2") : &pg_dv_transport_quant_range($dv_transport)
  );
+ # The standard DV container: while a PiTPG client is connected it is the
+ # client's (dv_profile, or without one the primaries: main.cpp, as pitpgd
+ # apply_now). Any other DV session keeps the BT.2020 container (dv_profile
+ # 1, 8.1) and primaries 1 (the renderer's BT.2020 PQ surface, as before),
+ # so a primaries value left by an earlier HDR10 session does not pick it.
+ # Likewise the PiTPG-only keys go: the signal range of its patch scale,
+ # low latency in RGB, the PQ from the mastering luminance (1.6's 62/3696
+ # apply again).
+ if(!($main::pitpg_clients || 0)) {
+  $wanted{"dv_profile"}="1";
+  $wanted{"primaries"}="1";
+  $wanted{"dv_signal_range"}="";
+  $wanted{"dv_ll_rgb"}="";
+  $wanted{"dv_pq_source"}="";
+ }
  my @writes=();
  for my $key (sort keys %wanted) {
   # A stored "0" is a value: is_sdr=0 must not be rewritten on every start.
@@ -336,7 +354,8 @@ sub normalize_conf_write(@) {
   my $value=$file ? $file->{$key} : $before{$key};
   if(defined $value) { $pgenerator_conf{$key}=$value; }
   else { delete $pgenerator_conf{$key}; }
-  push(@missing,$key) if(!defined $value || "$value" ne "$keys{$key}");
+  # An empty value deletes the key: absent from the file is written.
+  push(@missing,$key) if((defined $value ? "$value" : "") ne "$keys{$key}");
  }
  if(!@missing) {
   &log("Signal: $what conf helper gave no OK, but PGenerator.conf reads back as written");
@@ -1170,7 +1189,7 @@ sub hdmi_sink_connected (@) {
 our @signal_conf_keys=qw(mode_idx signal_mode is_sdr is_hdr eotf colorimetry
  primaries color_format max_bpc rgb_quant_range dv_status is_ll_dovi
  is_std_dovi dv_interface dv_transport dv_metadata dv_map_mode dv_color_space
- dv_profile);
+ dv_profile dv_signal_range dv_ll_rgb dv_pq_source);
 # HDR metadata the renderer reads while it runs: snapshotted and put back
 # with the signal keys, so a refused apply leaves the output as it was.
 # Optional in a snapshot: one written before they were added still
@@ -1208,6 +1227,15 @@ sub signal_renderer_port (@) {
   }
  }
  return "";
+}
+
+# Low-latency DV in RGB: 12 bits when the VSVDB lists 12-bit RGB / 4:4:4,
+# 10 when it lists 10-bit (pitpgd edid_sink_caps / output_decide). Without
+# such a block 12: the signal check refuses RGB there (PGSignalCheck).
+sub dv_ll_rgb_bpc (@) {
+ my (undef,$dv)=&signal_display_caps();
+ return "10" if($dv && !$dv->{error} && ($dv->{ycc444} || "") eq "10");
+ return "12";
 }
 
 # What the connected display declares (PGEdidCaps), its Dolby Vision block

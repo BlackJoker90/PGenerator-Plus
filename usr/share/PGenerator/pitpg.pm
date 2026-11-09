@@ -26,6 +26,7 @@ our $pitpg_present_timeout=2.0;
 sub pitpg_open (@) {
  my ($connection,$rest)=@_;
  $pitpg_conn{$connection}={buf=>""};
+ $pitpg_clients=scalar(keys %pitpg_conn);
  # A client that stops reading must not hold the daemon: sends give up
  # after 5 s (pitpgd's SO_SNDTIMEO) and the connection closes.
  eval { $connection->setsockopt(SOL_SOCKET,SO_SNDTIMEO,pack('l!l!',5,0)) };
@@ -52,6 +53,7 @@ sub pitpg_receive (@) {
   $signal_gate_owner="$connection";
   $signal_refused_pending=0;
   &calibration_session_touch($connection);
+  &pitpg_putback_retry();
   my ($reply,$close)=PGPiTPG::handle(&pitpg_backend($connection),$m);
   # A refusal is in the reply; nothing is left for the next one.
   $signal_refused_pending=0;
@@ -84,15 +86,42 @@ sub pitpg_send (@) {
 # The client is gone (close_connection): the patch scale it chose ends with it.
 sub pitpg_closed (@) {
  my ($connection,$st)=@_;
+ # A refusal from here belongs to no socket (the client is gone), and no reply
+ # carries it: the next Calman reply must not take it for its own.
+ local $signal_gate_owner="";
+ local $signal_refused_pending=0;
  &log("PiTPG: client closed peer=".($client_ip{$connection} || ""));
  # As pitpgd: when no PiTPG client is left, the client's patch depth and
  # scale end. pitpgd leaves the output as it is until the next apply; here
  # the output follows the conf again at once, so the cable shows what the
  # WebUI does.
- if(!grep { $_ ne "$connection" } keys %pitpg_conn) {
-  # A refusal now belongs to no socket: the client is gone.
-  local $signal_gate_owner="";
-  &pitpg_apply_output("PiTPG client closed") if(&pitpg_clear_patch_state());
+ $pitpg_clients=scalar(grep { $_ ne "$connection" } keys %pitpg_conn);
+ my $put_back=&pitpg_putback_retry();
+ if(!$pitpg_clients) {
+  my $n=&pitpg_clear_patch_state() || 0;
+  # The DV keys the session changed go back (in any signal mode).
+  my @back=&pitpg_session_back(\%pitpg_session_before);
+  if(!@back || &pitpg_conf_write(@back)) {
+   $n+=@back/2;
+   %pitpg_session_before=();
+   &pitpg_client_values_store();
+  }
+  # The client's settings end with it: a new session reads the conf.
+  %pitpg_settings=();
+  # Settings still not put back must not become the output through what follows.
+  if(!$put_back) {
+   &log("PiTPG: refused settings still not put back; the output stays as it is");
+   return;
+  }
+  # Dolby Vision goes back to the form other sessions get (no client
+  # counted now: normalize_dv_transport_conf clears the PiTPG-only keys and
+  # pins the container), at once.
+  my @keys=qw(dv_profile primaries dv_signal_range dv_ll_rgb dv_pq_source color_format max_bpc rgb_quant_range);
+  my %before=map { ($_ => $pgenerator_conf{$_} // "") } @keys;
+  &normalize_dv_transport_conf();
+  &pitpg_signal_cache_drop();
+  $n+=scalar(grep { ($pgenerator_conf{$_} // "") ne $before{$_} } @keys);
+  &pitpg_apply_output("PiTPG client closed") if($n);
  }
 }
 
@@ -193,9 +222,14 @@ sub pitpg_hdmi_info (@) {
  my (undef,$raw)=&pitpg_edid();
  my ($dvmax)=&pitpg_display_luminance($raw);
  if(&pitpg_dv_ll()) {
-  $t.=", Dolby Vision Low-Latency";
+  # pitpgd hdmi_info: "(BT.2020 container)" only with VSIF PB5 bit 4,
+  # which the Pi's kernel packer does not send; otherwise this text.
+  $t.=", Dolby Vision Low-Latency (display's own colour container)";
  } elsif(&pitpg_dv_tv_led()) {
-  $t.=", Dolby Vision TV-led (12-bit YCbCr 4:2:2 limited range in RGB tunnel)";
+  my $map=$pgenerator_conf{"dv_map_mode"} // "";
+  $t.=sprintf(", Dolby Vision TV-led (12-bit YCbCr 4:2:2 %s range in RGB tunnel, %s container%s)",
+              &pitpg_dv_full() ? "full" : "limited",&pitpg_dv_container_2020() ? "BT.2020" : "P3-D65",
+              $map eq "2" ? ", Calibrate: relative" : ($map eq "1" ? ", Verify: absolute" : ""));
  }
  $t.=sprintf(", display declares a %.0f cd/m2 peak",$dvmax) if(&legacy_external_dv_active() && $dvmax > 0);
  $t.=", TEST EDID in use (not the display's own)" if(PGTestEdid::test_edid_active());
@@ -365,6 +399,17 @@ our %pitpg_client_value=();
 # puts the client's own values back at its next start
 # (pitpg_client_values_recover). A subdirectory: clean_files keeps it.
 our $pitpg_client_values_file="$var_dir/pitpg/client-values";
+# Dolby Vision keys a session changes, as they were before it (the
+# operator's transport, a classic client's PQ and container, no PQ source):
+# put back when the last client closes, so a session that follows (Calman,
+# HCFR, the WebUI) gets the form it got before. Kept in the same file.
+our @pitpg_session_keys=qw(dv_transport dv_profile dv_minpq dv_maxpq dv_pq_source);
+our %pitpg_session_key=map { ($_ => 1) } @pitpg_session_keys;
+our %pitpg_session_before=();
+# Settings written at apply, together (pitpg_dv_kind_write).
+# max_bpc and dv_interface too: their single write normalized the DV conf
+# while it still held DV, over the request's own is_hdr/eotf/max_bpc.
+our $pitpg_kind_keys="(?:dv_status|is_ll_dovi|is_std_dovi|color_format|rgb_quant_range|max_bpc|dv_interface)";
 # The last patch (window, colours, depth): test patterns are drawn in it.
 our %pitpg_last_patch=();
 
@@ -394,7 +439,8 @@ sub pitpg_backend (@) {
    # As a value the client sends: it replaces one kept while the link
    # followed the patch scale.
    &pitpg_client_value_drop($k);
-   &pitpg_conf_set($k,$v);
+   # The range a colour format implies goes with it (pitpg_dv_kind_write).
+   &pitpg_conf_set($k,$v) if($k!~/^$pitpg_kind_keys$/);
   },
   apply=>sub { return &pitpg_apply(); },
   apply_live=>sub { &pitpg_apply_live(shift); },
@@ -419,13 +465,68 @@ sub pitpg_conf_set (@) {
 }
 
 # The value a setting has for a client: what it set, else the conf.
+# dv_profile, dv_minpq and dv_maxpq only as a client set them: unset, the
+# renderer takes the container from the primaries and the PQ from the
+# mastering luminance (pitpg_apply clears values other programs left).
+our %pitpg_client_only=map { ($_ => 1) } qw(dv_profile dv_minpq dv_maxpq);
 sub pitpg_setting_value (@) {
  my $k=shift;
  return $pitpg_settings{$k} if(exists $pitpg_settings{$k});
  return $pitpg_client_value{$k} if(exists $pitpg_client_value{$k});
+ return "" if($pitpg_client_only{$k});
  my $v=$pgenerator_conf{$k};
  $v=&pg_min_luma_cmd_nits_to_wire($v) if($k eq "min_luma" && defined($v) && $v ne "");
  return defined($v) ? "$v" : "";
+}
+
+sub pitpg_conf_dv_on (@) {
+ return (int($pgenerator_conf{"dv_status"} || 0) == 1 || int($pgenerator_conf{"is_ll_dovi"} || 0) == 1 ||
+         int($pgenerator_conf{"is_std_dovi"} || 0) == 1) ? 1 : 0;
+}
+
+# The pairs that give the session's keys back: those that differ now.
+# dv_transport goes back while DV runs only when the display's Dolby block
+# is known to have the kind it names: low latency on a display without
+# TV-led (or one not read, as a boot without the display) would switch to
+# a tunnel the display may not take. At worst the operator's choice is
+# lost: kept past the session it could later write over a transport the
+# operator set since.
+sub pitpg_session_back (@) {
+ my $before=shift;
+ my @back;
+ foreach my $k (sort keys %$before) {
+  next if(($pgenerator_conf{$k} // "") eq $before->{$k});
+  if($k eq "dv_transport" && &pitpg_conf_dv_on()) {
+   my (undef,$dv)=&signal_display_caps();
+   my $kind=(lc($before->{$k}) eq "lldv") ? "low_latency" : "standard";
+   next if(!$dv || $dv->{error} || !$dv->{$kind});
+  }
+  push(@back,$k,$before->{$k});
+ }
+ return @back;
+}
+
+# A key's value before the session, once (see @pitpg_session_keys).
+sub pitpg_session_keep (@) {
+ my $changed=0;
+ foreach my $k (@_) {
+  next if(!$pitpg_session_key{$k} || exists $pitpg_session_before{$k});
+  $pitpg_session_before{$k}=defined($pgenerator_conf{$k}) ? "$pgenerator_conf{$k}" : "";
+  $changed=1;
+ }
+ &pitpg_client_values_store() if($changed);
+}
+
+# A conf write the renderer reads: confirmed by the helper, or the file
+# reads back as written. Memory follows the file either way (as
+# normalize_conf_write: the helper's timeout can end it after the rename).
+# Returns 1 or 0.
+sub pitpg_conf_write (@) {
+ my $ok=&normalize_conf_write("PiTPG",@_) ? 1 : 0;
+ # The classic protocol answers GETs from these files (pgenerator_cmd).
+ unlink(map { "$info_dir/GET_PGENERATOR_CONF_".uc($_[$_]).".info" } grep { !($_ % 2) } 0..$#_);
+ unlink("$info_dir/GET_PGENERATOR_CONF_ALL.info");
+ return $ok;
 }
 
 sub pitpg_client_value_drop (@) {
@@ -444,13 +545,14 @@ sub pitpg_client_value_keep (@) {
 
 sub pitpg_client_values_store (@) {
  my $f=$pitpg_client_values_file;
- if(!%pitpg_client_value) {
+ if(!%pitpg_client_value && !%pitpg_session_before) {
   unlink($f) if(-e $f);
   return 1;
  }
  (my $d=$f)=~s{/[^/]+$}{};
  mkdir($d) if(!-d $d);
- my $data=join("",map { "$_=$pitpg_client_value{$_}\n" } sort keys %pitpg_client_value);
+ my $data=join("",map { "$_=$pitpg_client_value{$_}\n" } sort keys %pitpg_client_value).
+          join("",map { "session.$_=$pitpg_session_before{$_}\n" } sort keys %pitpg_session_before);
  my $ok=open(my $fh,">","$f.tmp") ? 1 : 0;
  $ok=0 if($ok && !print $fh $data);
  $ok=0 if($ok && !close($fh));
@@ -464,11 +566,13 @@ sub pitpg_client_values_store (@) {
 sub pitpg_client_values_recover (@) {
  my $f=$pitpg_client_values_file;
  open(my $fh,"<",$f) or return 0;
- my @pairs;
+ my (@pairs,%session);
  while(my $l=<$fh>) {
-  push(@pairs,$1,$2) if($l=~/^(max_bpc|rgb_quant_range)=(\d*)\s*$/);
+  push(@pairs,$1,$2) if($l=~/^(max_bpc|rgb_quant_range|dv_signal_range)=(\d*)\s*$/);
+  $session{$1}=$2 if($l=~/^session\.(dv_transport|dv_profile|dv_minpq|dv_maxpq|dv_pq_source)=([\w.]*)\s*$/);
  }
  close($fh);
+ push(@pairs,&pitpg_session_back(\%session));
  if(@pairs) {
   my $ok=&set_pgenerator_conf_runtime_multi(@pairs) // "";
   if($ok!~/^\Q$ok_response\E/) {
@@ -511,6 +615,12 @@ sub pitpg_set_setting (@) {
  $pitpg_settings{$k}=$v;
  # The client's own value replaces one kept while the link followed it.
  &pitpg_client_value_drop($k);
+ # The DV kind, colour format, range, depth and interface go to the conf at apply, in one write
+ # with the transport (pitpg_dv_kind_write): written one at a time, each
+ # normalized the DV conf with the request's other keys still old, so
+ # their order in the request decided the format.
+ return "" if($k=~/^$pitpg_kind_keys$/);
+ &pitpg_session_keep($k);
  # pitpgd labels rgb_quant_range 3 as full (output_decide: 1 limited,
  # 0 default, else full); PGenerator+ has 0, 1 and 2.
  &pitpg_conf_set($k,($k eq "rgb_quant_range" && $v eq "3") ? "2" : $v);
@@ -518,6 +628,81 @@ sub pitpg_set_setting (@) {
 }
 
 our @pitpg_snapshot_keys=(@signal_conf_keys,@signal_metadata_keys,qw(dv_minpq dv_maxpq dv_diagonal));
+# The client's Dolby Vision flags: as it sent them in this session (one
+# not sent is 0), or the conf's when it sent neither (a client that finds
+# DV on). pitpgd apply_now takes the kind from the two flags alone.
+sub pitpg_dv_flags (@) {
+ my $sent=(exists($pitpg_settings{is_ll_dovi}) || exists($pitpg_settings{is_std_dovi})) ? 1 : 0;
+ my $flag=sub {
+  my $k=shift;
+  return ((($pitpg_settings{$k} // "") eq "1") ? 1 : 0) if($sent);
+  return int($pgenerator_conf{$k} || 0) == 1 ? 1 : 0;
+ };
+ return ($flag->("is_ll_dovi"),$flag->("is_std_dovi"),$sent);
+}
+
+# pitpgd output_decide for both flags (its mode 3): refused with its text.
+sub pitpg_dv_both_refusal (@) {
+ my (undef,$dv,undef,$raw)=&signal_display_caps();
+ my $caps;
+ if(($raw // "") eq "") { $caps="no EDID was read from the display"; }
+ elsif(!$dv || $dv->{error}) { $caps="the display does not support Dolby Vision (no Dolby Vision block in its EDID)"; }
+ elsif(!$dv->{low_latency}) { $caps="the display supports Dolby Vision TV-led only"; }
+ elsif(!$dv->{standard}) { $caps="the display supports Dolby Vision Low-Latency only"; }
+ else { $caps="the display supports both Dolby Vision TV-led and Low-Latency"; }
+ return "Dolby Vision was requested without choosing TV-led or Low-Latency; $caps. Choose the Dolby Vision type in ColourSpace.";
+}
+
+# The DV kind, the colour format and range the client set, the transport
+# (is_ll_dovi: low latency, is_std_dovi: TV-led) and, for low latency, RGB
+# (dv_ll_rgb 1, as pitpgd sends low latency in the client's format) in one
+# write, then one normalize. Returns "" or why the conf could not be
+# written.
+sub pitpg_dv_kind_write (@) {
+ my ($ll,$std,$sent)=&pitpg_dv_flags();
+ my %want;
+ # The HDR keys too: entering DV normalized them over (is_hdr 1, eotf 2,
+ # colorimetry 9); leaving it gives back the client's.
+ foreach my $k (qw(dv_status color_format rgb_quant_range max_bpc dv_interface is_sdr is_hdr eotf colorimetry)) {
+  next if(!exists $pitpg_settings{$k});
+  # In DV (and colorimetry in HDR) the normalize writes its own: the
+  # client's would be written and written over on every apply.
+  next if($k=~/^(?:is_sdr|is_hdr|eotf|colorimetry)$/ && ($ll || $std));
+  next if($k eq "colorimetry" && &pitpg_setting_value("is_hdr") eq "1");
+  my $v=$pitpg_settings{$k};
+  # pitpgd labels rgb_quant_range 3 as full; PGenerator+ has 0, 1 and 2.
+  $want{$k}=($k eq "rgb_quant_range" && $v eq "3") ? "2" : $v;
+ }
+ if($sent) {
+  $want{is_ll_dovi}="$ll";
+  $want{is_std_dovi}="$std";
+  # pitpgd apply_now: both flags 0 is kind 0, no Dolby Vision, whatever
+  # dv_status says.
+  $want{dv_status}="0" if(!$ll && !$std);
+ }
+ if($ll != $std) {
+  $want{dv_transport}=$ll ? "lldv" : "standard";
+  # TV-led: none (a later low-latency switch from the WebUI is 4:2:2).
+  $want{dv_ll_rgb}=($ll && &pitpg_setting_value("color_format") eq "0") ? "1" : "";
+ }
+ my @pairs=map { ($_,$want{$_}) } grep { ($pgenerator_conf{$_} // "") ne $want{$_} } sort keys %want;
+ my $what=($ll != $std) ? "Dolby Vision ".($ll ? "low latency".(($want{dv_ll_rgb} // "") eq "1" ? " in RGB" : "") : "TV-led") : "The colour settings";
+ if(@pairs) {
+  &pitpg_session_keep("dv_transport") if(exists $want{dv_transport});
+  return "$what could not be set: the setting could not be written." if(!&pitpg_conf_write(@pairs));
+  &log("PiTPG: $what") if($ll != $std);
+ }
+ &normalize_signal_mode_conf();
+ &pitpg_signal_cache_drop();
+ return "";
+}
+
+# A normalize may change any signal key: the classic protocol's GET cache
+# (pgenerator_cmd answers from these files) goes.
+sub pitpg_signal_cache_drop (@) {
+ unlink(map { "$info_dir/GET_PGENERATOR_CONF_".uc($_).".info" } @signal_conf_keys,"ALL");
+}
+
 sub pitpg_snapshot (@) {
  my %conf=map { ($_ => defined($pgenerator_conf{$_}) ? "$pgenerator_conf{$_}" : "") } @pitpg_snapshot_keys;
  return {conf=>\%conf,settings=>{%pitpg_settings},client=>{%pitpg_client_value},mode_error=>$pitpg_mode_error,
@@ -533,10 +718,16 @@ sub pitpg_restore (@) {
   my $cur=defined($pgenerator_conf{$k}) ? "$pgenerator_conf{$k}" : "";
   push(@pairs,$k,$want) if($want ne $cur);
  }
- if(@pairs) {
-  my $ok=&set_pgenerator_conf_runtime_multi(@pairs) // "";
-  &log("PiTPG: settings could not be put back: $ok") if($ok!~/^\Q$ok_response\E/);
-  unlink("$info_dir/GET_PGENERATOR_CONF_ALL.info");
+ # Not written: memory follows the file (normalize_conf_write), a refusal in
+ # place says so (the WebUI's "could not be restored"), and the keys wait for
+ # pitpg_putback_retry. A key that already waits keeps the value it goes back to.
+ if(@pairs && !&pitpg_conf_write(@pairs)) {
+  &log("PiTPG: settings could not be put back");
+  while(my ($k,$want)=splice(@pairs,0,2)) {
+   $pitpg_putback_waiting{$k}={want=>exists $pitpg_putback_waiting{$k} ? $pitpg_putback_waiting{$k}{want} : $want,
+                               left=>$pgenerator_conf{$k} // ""};
+  }
+  &pitpg_refused_restored(0);
  }
  %pitpg_settings=%{$s->{settings}};
  %pitpg_client_value=%{$s->{client}};
@@ -546,15 +737,46 @@ sub pitpg_restore (@) {
  $pitpg_patch_range=$s->{patch_range};
 }
 
+# What pitpg_restore could not write goes back before anything builds on it: at
+# the next message of any client, and when a client closes. A key that no longer holds what the
+# failed write left was set since, by someone who meant it: it stays. 1 when
+# nothing is left.
+our %pitpg_putback_waiting=();
+sub pitpg_putback_retry (@) {
+ return 1 if(!%pitpg_putback_waiting);
+ my $now=&renderer_conf_read() || \%pgenerator_conf;
+ foreach my $k (keys %pitpg_putback_waiting) {
+  delete $pitpg_putback_waiting{$k} if(($now->{$k} // "") ne $pitpg_putback_waiting{$k}{left});
+ }
+ return 0 if(%pitpg_putback_waiting && !&pitpg_conf_write(map { ($_,$pitpg_putback_waiting{$_}{want}) } sort keys %pitpg_putback_waiting));
+ %pitpg_putback_waiting=();
+ &log("PiTPG: settings put back");
+ &pitpg_refused_restored(1);
+ return 1;
+}
+
+sub pitpg_refused_restored (@) {
+ my $restored=shift;
+ my $refused=&signal_refused_read();
+ &signal_refused_set(%$refused,restored=>$restored) if($refused);
+}
+
 # The client's depth and scale end; its own max_bpc / rgb_quant_range go
 # back to the conf. No apply here: the caller applies. Returns how many
 # conf keys changed.
+# A write the helper does not confirm leaves the client values (memory and
+# file) in place for the next try or the daemon start, and returns undef.
 sub pitpg_clear_patch_state (@) {
  my @pairs;
  foreach my $k (sort keys %pitpg_client_value) {
   push(@pairs,$k,$pitpg_client_value{$k}) if(($pgenerator_conf{$k} // "") ne $pitpg_client_value{$k});
  }
- &set_pgenerator_conf_runtime_multi(@pairs) if(@pairs);
+ if(@pairs) {
+  if(!&pitpg_conf_write(@pairs)) {
+   &log("PiTPG: client bit depth and range could not be put back");
+   return undef;
+  }
+ }
  %pitpg_client_value=();
  &pitpg_client_values_store();
  &log("PiTPG: client bit depth and range cleared") if($pitpg_bit_depth || $pitpg_patch_range >= 0);
@@ -563,19 +785,80 @@ sub pitpg_clear_patch_state (@) {
  return scalar(@pairs)/2;
 }
 
-# Settings sent and applied through the gate (as RESTARTPGENERATOR).
+# Settings sent and applied through the gate (as RESTARTPGENERATOR). After any
+# refusal patches are refused until settings that work come (pitpgd app_blocked:
+# "could not be applied, so no patterns are shown"): the output stays as it was,
+# and a client must not measure one it did not choose. Settings that were applied
+# end it, also where no gate ran or its check failed. The gate and a refused mode
+# set the state themselves ($signal_refused_pending, this apply only); every other
+# refusal is set here, over an earlier one (pitpgd keeps the latest reason). The
+# protocol puts the conf back.
 sub pitpg_apply (@) {
- &pitpg_clear_patch_state();
+ $signal_refused_pending=0;
+ my $why=&pitpg_apply_settings();
+ if($why eq "") {
+  &signal_refused_clear("ColourSpace chose settings that work");
+  %pitpg_putback_waiting=();
+  return "";
+ }
+ return $why if($signal_refused_pending);
+ $signal_refused_pending=1;
+ &signal_refused_set(source=>"ColourSpace",reason=>$why,code=>"settings",requested=>"",kept=>"",alternatives=>"",
+                     restored=>%pitpg_putback_waiting ? 0 : 1,owner=>defined($signal_gate_owner) ? $signal_gate_owner : "");
+ &log("Signal: ColourSpace: settings refused: $why");
+ &webui_notice("Settings refused","ColourSpace: $why") if(defined &webui_notice);
+ return $why;
+}
+
+sub pitpg_apply_settings (@) {
+ my $not_written="The settings could not be applied: the Dolby Vision settings could not be written.";
+ # The client's depth and scale end first; a put-back the helper did not
+ # confirm stops the apply (the output would keep them).
+ return "The settings could not be applied: the output settings from before the client's patch depth and scale could not be put back."
+  if(!defined(&pitpg_clear_patch_state()));
+ my ($ll_now,$std_now,$sent)=&pitpg_dv_flags();
+ return &pitpg_dv_both_refusal() if($sent && $ll_now && $std_now);
+ # pitpgd output_decide: low latency goes out as RGB or YCbCr 4:2:2, never
+ # 4:4:4 (its texts).
+ if($ll_now && &pitpg_setting_value("color_format") eq "1") {
+  my (undef,$dv)=&signal_display_caps();
+  my $rgb=($dv && !$dv->{error} && ($dv->{interface} || "")=~/Low-Latency-HDMI/ && ($dv->{ycc444} || "none") ne "none") ? 1 : 0;
+  return $rgb ? "Dolby Vision Low-Latency is sent as RGB or YCbCr 4:2:2, not YCbCr 4:4:4. Set Colour Format in Hardware Options to RGB or YCbCr 4:2:2."
+              : "Dolby Vision Low-Latency is sent as YCbCr 4:2:2 on this display, not YCbCr 4:4:4. Set Colour Format in Hardware Options to YCbCr 4:2:2, or choose another TPG Mode.";
+ }
+ my $ll_rgb_why=&pitpg_ll_rgb_limited_refused($ll_now,&pitpg_setting_value("color_format") eq "0",
+                                              &pitpg_setting_value("rgb_quant_range"));
+ return $ll_rgb_why if($ll_rgb_why ne "");
  if($pitpg_mode_error ne "") {
   # As a refusal of the signal gate: patches are refused until settings
   # that work come (the protocol puts the conf back).
   $signal_refused_pending=1;
-  &signal_refused_set(source=>"ColourSpace",reason=>$pitpg_mode_error,code=>"mode",requested=>$pitpg_settings{mode} // "",
-                      kept=>"",alternatives=>"",restored=>1,owner=>defined($signal_gate_owner) ? $signal_gate_owner : "");
+  &signal_refused_set(source=>"ColourSpace",reason=>$pitpg_mode_error,code=>"mode",requested=>$pitpg_settings{mode} // "",kept=>"",alternatives=>"",
+                      restored=>%pitpg_putback_waiting ? 0 : 1,owner=>defined($signal_gate_owner) ? $signal_gate_owner : "");
   &log("Signal: ColourSpace asked for mode ".($pitpg_settings{mode} // "").": refused: $pitpg_mode_error");
   &webui_notice("Settings refused","ColourSpace asked for ".($pitpg_settings{mode} // "").". $pitpg_mode_error") if(defined &webui_notice);
   return $pitpg_mode_error;
  }
+ my $kind_why=&pitpg_dv_kind_write();
+ return $kind_why if($kind_why ne "");
+ # As pitpgd's config: a DV container or PQ no client set is unset, so the
+ # renderer derives it (main.cpp). Values another program wrote go.
+ # dv_pq_source "luma": without dv_minpq/dv_maxpq the PQ comes from the
+ # mastering luminance (pitpgd apply_now), only in a PiTPG session.
+ # Only for a Dolby Vision output, the one place the renderer reads them: outside
+ # it the write would restart the renderer, at this apply and at the close. The
+ # conf says so now: dv_status alone becomes Dolby Vision in the normalize above.
+ my @unset;
+ if(&pitpg_conf_dv_on()) {
+  @unset=map { ($_,"") } grep { !exists($pitpg_settings{$_}) && ($pgenerator_conf{$_} // "") ne "" } sort keys %pitpg_client_only;
+  push(@unset,"dv_pq_source","luma") if(($pgenerator_conf{"dv_pq_source"} // "") ne "luma");
+ }
+ &pitpg_session_keep(map { $unset[$_] } grep { !($_ % 2) } 0..$#unset);
+ if(@unset && !&pitpg_conf_write(@unset)) {
+  &log("PiTPG: could not write ".join(",",map { $unset[$_] } grep { !($_ % 2) } 0..$#unset));
+  return $not_written;
+ }
+ &log("PiTPG: ".join(",",map { $unset[$_] } grep { !($_ % 2) } 0..$#unset)." written for the session") if(@unset);
  return &pitpg_apply_output("PiTPG settings");
 }
 
@@ -583,21 +866,47 @@ sub pitpg_apply_output (@) {
  my $who=shift;
  if(!$is_kms || &signal_gate_conf(&signal_source_label("ColourSpace"))) {
   &pattern_generator_restart_unless_current($who);
+  # The renderer started or was found on the conf, with what waited in it.
+  %pitpg_live_waiting=();
   return "";
  }
  return "Refused: ".&signal_patches_refused();
 }
 
 # HDR metadata: in place while HDR10/HLG is on (not Low-Latency DV), as
-# pitpgd; otherwise it waits for the next apply.
+# pitpgd; otherwise it waits for the next apply. While patches are refused it
+# waits too (pitpgd app_hdr_meta_changed returns while blocked): the gate would
+# pass on the output that was kept and end the refusal. Its keys are noted: here
+# a refusal can end without an apply, when its owner closes (pitpgd's does not).
+our %pitpg_live_waiting=();
 sub pitpg_apply_live (@) {
  my $keys=shift;
  return if(int($pgenerator_conf{"is_hdr"} || 0) != 1 || int($pgenerator_conf{"is_ll_dovi"} || 0) == 1);
+ if(&signal_patches_refused() ne "") {
+  $pitpg_live_waiting{$_}=1 foreach(@$keys);
+  return;
+ }
  if(!$is_kms || &signal_gate_conf(&signal_source_label("ColourSpace"))) {
   my %changed=map { ($_ => 1) } grep { $PGPiTPG::LIVE_KEY{$_} } @$keys;
   &pattern_generator_restart_unless_current("PiTPG HDR metadata") if(!&renderer_reconfigure_in_place(\%changed));
   &log("PiTPG: HDR metadata updated");
  }
+}
+
+# A socket closed (daemon.pm close_connection), which can end a refusal without
+# an apply: the metadata that waited goes out, unless the renderer already has
+# it (another program's apply). Still refused: pitpg_apply_live notes it again.
+# A refusal from here belongs to no socket, and no reply carries it.
+sub pitpg_live_catch_up (@) {
+ return if(!%pitpg_live_waiting);
+ # Nothing goes out on settings still not put back: the keys stay noted.
+ return if(!&pitpg_putback_retry());
+ my @keys=sort keys %pitpg_live_waiting;
+ %pitpg_live_waiting=();
+ return if(&renderer_started_conf_current());
+ local $signal_gate_owner="";
+ local $signal_refused_pending=0;
+ &pitpg_apply_live(\@keys);
 }
 
 ###############################################
@@ -680,6 +989,26 @@ sub pitpg_dv_tv_led (@) {
 }
 sub pitpg_dv_ll (@) {
  return (int($pgenerator_conf{"dv_status"} || 0) == 1 && int($pgenerator_conf{"is_ll_dovi"} || 0) == 1) ? 1 : 0;
+}
+# Low-latency DV in RGB Limited: the codes are wire codes (DV does not
+# expand them), so only a vc4 without the compression CSC (RQ3V1) sends them
+# as they are. pitpgd refuses RGB Limited without its driver (its text at
+# 0x488878); returns "" or the reason.
+our $pitpg_ll_rgb_limited_text="RGB Limited range in Dolby Vision Low-Latency needs the patched vc4 HDMI driver, which is not loaded on this Pi. Use Full (ColourSpace sends Legal/Extended values itself).";
+sub pitpg_ll_rgb_limited_refused (@) {
+ my ($ll,$rgb,$range)=@_;
+ return "" if(!$ll || !$rgb || $range ne "1");
+ return &webui_rgb_limited_passthrough() ? "" : $pitpg_ll_rgb_limited_text;
+}
+# Standard DV signal range and container as the renderer reads them
+# (main.cpp): dv_signal_range 2 is full; dv_profile when set (1 BT.2020),
+# else the primaries (1 BT.2020), as pitpgd apply_now.
+sub pitpg_dv_full (@) {
+ return (($pgenerator_conf{"dv_signal_range"} // "") eq "2") ? 1 : 0;
+}
+sub pitpg_dv_container_2020 (@) {
+ my $p=$pgenerator_conf{"dv_profile"} // "";
+ return ($p ne "") ? (int($p) == 1 ? 1 : 0) : (int($pgenerator_conf{"primaries"} || 0) == 1 ? 1 : 0);
 }
 # Bits per component on the link as drm_override.so and the renderer
 # (main.cpp applySignalConf) set it: max_bpc, at least 10 for 4:2:2, and
@@ -801,13 +1130,36 @@ sub pitpg_set_patch_range (@) {
  my $r=shift;
  my $ycc=(($pgenerator_conf{"color_format"} || "0") ne "0") ? 1 : 0;
  if(&pitpg_dv_tv_led()) {
-  # PGenerator+ sends Dolby Vision TV-led as a limited-range signal only.
-  return ("range","Dolby Vision TV-led goes out as a limited-range Dolby signal here. Set Patch Scale in ColourSpace Settings to Legal.") if($r == 0 || $r == 2);
+  # As pitpgd dv_show: Full is a full-range Dolby signal (payload byte 20
+  # 0, full matrices, codes 0..4095), Legal and User a limited one;
+  # Extended is refused (pitpgd's text).
+  return ("range","Dolby Vision TV-led has no room for Extended range values (the Pi converts patch values to Dolby's own signal). Set Patch Scale in ColourSpace Settings to Full (a full-range Dolby signal, finest steps) or Legal (a limited-range Dolby signal).") if($r == 2);
+  my $want=($r == 0) ? "2" : "1";
+  my $have=$pgenerator_conf{"dv_signal_range"} // "";
+  if(($have eq "2" ? "2" : "1") ne $want) {
+   # The renderer reads the range from the conf file: a write the helper
+   # did not confirm is not taken as applied (the memory goes back too).
+   # Kept first: a stop between write and keep must still give it back.
+   my $kept=exists($pitpg_client_value{dv_signal_range});
+   &pitpg_client_value_keep("dv_signal_range",$have);
+   if(!&pitpg_conf_write("dv_signal_range",$want)) {
+    # Memory reads as the file (pitpg_conf_write); a keep made here goes
+    # when the file still holds the value before it.
+    &pitpg_client_value_drop("dv_signal_range") if(!$kept && ($pgenerator_conf{"dv_signal_range"} // "") eq $have);
+    &log("PiTPG: dolby vision: TV-led range could not be written");
+    return ("settings_not_applied","The patch scale could not be applied: the Dolby Vision signal range could not be written.");
+   }
+   my $why=&pitpg_apply_output("PiTPG patch scale");
+   return ("settings_not_applied","The patch scale could not be applied. $why") if($why ne "");
+   &log("PiTPG: dolby vision: TV-led ".($want eq "2" ? "full" : "limited")."-range form");
+  }
  } elsif($ycc) {
   return ("range","ColourSpace is set to Full range, but YCbCr is always sent as limited range. Set Patch Scale in ColourSpace Settings to Legal.") if($r == 0);
  } else {
   my $client=exists($pitpg_client_value{rgb_quant_range}) ? $pitpg_client_value{rgb_quant_range} : ($pgenerator_conf{"rgb_quant_range"} // "");
   my $label=($r == 0) ? "2" : (($r == 1 || $r == 2) ? "1" : $client);
+  my $why=&pitpg_ll_rgb_limited_refused(&pitpg_dv_ll(),($pgenerator_conf{"dv_ll_rgb"} // "") eq "1",$label);
+  return ("range",$why) if($why ne "");
   if(($pgenerator_conf{"rgb_quant_range"} // "") ne $label) {
    &pitpg_client_value_keep("rgb_quant_range",$client);
    &set_pgenerator_conf_runtime("rgb_quant_range",$label);
@@ -865,13 +1217,15 @@ sub pitpg_pack (@) {
 # Codes are wire codes at $fb bits (pitpgd never rescales them by range),
 # so every draw is SOURCE_RANGE=LIMITED: the renderer then passes them on
 # as they are (RGB Limited passthrough, RGB Full, YCbCr studio-range
-# input). In standard Dolby Vision the codes are scaled to the 12-bit
-# tunnel source as classic patches are (SOURCE_MAX=4095, BITS=8).
+# input). In standard Dolby Vision they go to the tunnel at their own
+# depth (SOURCE_MAX 255 or 1023, BITS=8 for the 8-bit tunnel surface): the
+# renderer normalises them by that depth and the signal range, as pitpgd
+# dv_ycc12 (a 12-bit shift moved full-range codes and rounding ties).
 sub pitpg_pattern_string (@) {
  my ($fb,$frames)=@_;
  my $dv=(&legacy_external_dv_source_max() == 4095) ? 1 : 0;
- my $scale=sub { return $dv ? map { &legacy_external_scale_dv_value($_,$fb) } @_ : @_; };
- my $ps="MOVIE_NAME=TestPattern\n".($dv ? "BITS=8\nSOURCE_MAX=4095\n" : "BITS=$fb\n");
+ my $scale=sub { return @_; };
+ my $ps="MOVIE_NAME=TestPattern\n".($dv ? "BITS=8\nSOURCE_MAX=".((1 << $fb) - 1)."\n" : "BITS=$fb\n");
  my $n=0;
  foreach my $f (@$frames) {
   my $bg=join(",",$scale->(@{$f->{bg}}));
@@ -891,6 +1245,16 @@ sub pitpg_pattern_string (@) {
  return $ps;
 }
 
+# How the renderer reads the codes (SOURCE_RANGE). Standard DV keeps the
+# source normalisation apart from the signal range, as pitpgd: dv_ycc12's
+# limited flag is set for patch scale Legal only (proto_handle@0x408990),
+# so Full, User and no scale normalise c / (2^b - 1), also in a limited
+# signal. Other DV: unset; else wire codes (LIMITED).
+sub pitpg_source_range (@) {
+ return ($pitpg_patch_range == 1) ? "LIMITED" : "FULL" if(&pitpg_dv_tv_led());
+ return &legacy_external_dv_active() ? "" : "LIMITED";
+}
+
 # Draws the frames and waits for the flip that shows them: that flip's
 # {seq,time_us,period_us}, undef when none came (pitpgd: "could not be
 # shown").
@@ -900,7 +1264,7 @@ sub pitpg_show (@) {
  my @before=&pitpg_presented();
  my $written=&pitpg_monotonic_us();
  &clean_pattern_files();
- &create_tmp_file($ps,&legacy_external_dv_active() ? "" : "LIMITED");
+ &create_tmp_file($ps,&pitpg_source_range());
  &load_new_pattern_file("PiTPG");
  my ($frame,$shown)=&pitpg_wait_presented($written,@before);
  return $shown ? $frame : undef;
@@ -925,7 +1289,7 @@ sub pitpg_patch (@) {
  $x=int(($W-$w)/2) if($x == -1);
  $y=int(($H-$h)/2) if($y == -1);
  %pitpg_last_patch=(x=>$x,y=>$y,w=>$w,h=>$h,rgb=>[@{$p->{rgb}}],bg=>[@{$p->{bg}}],bits=>$p->{bits});
- # Standard DV: the patch's own codes, scaled to the 12-bit tunnel source.
+ # Standard DV: the patch's own codes at its own depth.
  my $fb=&pitpg_dv_tv_led() ? $p->{bits} : &pitpg_fb_bits();
  my $frame=&pitpg_show($fb,[&pitpg_patch_frame($W,$H,$fb)]);
  return ("failed","The patch could not be shown: the renderer reported no new frame.") if(!$frame);
@@ -969,8 +1333,10 @@ sub pitpg_peak_note (@) {
  return "" if($peak <= 0);
  my $legal;
  if(&pitpg_dv_tv_led()) {
-  # PGenerator+ sends Dolby Vision TV-led as limited range only.
-  $legal=1;
+  # The codes are read as the tunnel reads them (pitpg_source_range):
+  # studio codes for scale Legal only; pitpgd proto2_handle: legal for
+  # scale 1/2, else the link, which is RGB Full in TV-led.
+  $legal=($pitpg_patch_range == 1) ? 1 : 0;
  } elsif($pitpg_patch_range < 0 || $pitpg_patch_range == 3) {
   $legal=(($pgenerator_conf{"color_format"} || "0") ne "0" || &effective_rgb_quant_range() == 1) ? 1 : 0;
  } else {

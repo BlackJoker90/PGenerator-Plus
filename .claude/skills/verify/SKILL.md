@@ -130,7 +130,7 @@ before and after).
 ## Where to look
 
 - Daemon: `/tmp/pgenerator_debug.log`; patterns: `/var/log/PGenerator/calman-patches.log` (`range=LIMITED`, `bg=`); updater: `/var/log/PGenerator/update.log`; renderer stderr: `/tmp/pg_stderr.log`; drm_override: `/tmp/drm_override.log`.
-- vc4 module: `/sys/module/vc4/srcversion` contains `RQ3V1` when a patched module is loaded; the renderer (ofxRPI4Window.cpp) and the WebUI (webui.pm rgbLimitedPassthroughSupported) test only for that. Known builds: `24E978B6C622711RQ3V1SPD` (RQ3 range patch + no SPD infoframe), `24E978B6C622RQ3V1SPDVIC` (+ D8: the real VIC in the Standard DV AVI, `vc4-rq3-nospd-dvvic.ko`). `$P status` prints it. SPD must never be on the wire: bit 3 of `HDMI_RAM_PACKET_CONFIG` stays 0.
+- vc4 module: `/sys/module/vc4/srcversion` contains `RQ3V1` when a patched module is loaded; the renderer (ofxRPI4Window.cpp) and the WebUI (webui.pm rgbLimitedPassthroughSupported) test only for that. Known builds: `24E978B6C622711RQ3V1SPD` (RQ3 range patch + no SPD infoframe), `24E978B6C622RQ3V1SPDVIC` (+ D8: the real VIC in the Standard DV AVI, `vc4-rq3-nospd-dvvic.ko`), `24E978B6C6RQ3V1SPDVICHM` (+ a connector probe no longer drops a connected sink to DVI, `vc4-rq3-nospd-dvvic-hm.ko`). `$P status` prints it. SPD must never be on the wire: bit 3 of `HDMI_RAM_PACKET_CONFIG` stays 0.
 - WebUI range text: `/var/lib/PGenerator/running/info/GET_OUTPUT_RANGE.info`.
 
 `scripts/fbprobe` is prebuilt (armhf, libdrm). Source `scripts/fbprobe.c`; rebuild

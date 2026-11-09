@@ -20,6 +20,7 @@
  
 #include "ofMain.h"
 #include "ofApp.h"
+#include "dovi_metadata.h"
 #define TEST_BUILD
 #ifdef TEST_BUILD
  const char * pgenCodeVersion = "V02.00T";
@@ -46,12 +47,13 @@ std::string max_bpc="8";
 std::string mode_idx="-1";
 std::string dv_status="0";
 std::string dv_interface="0";
-std::string dv_profile="2";
+std::string dv_profile="";
 std::string dv_map_mode="2";
-std::string dv_minpq="62";
-std::string dv_maxpq="3696";
+std::string dv_minpq="";
+std::string dv_maxpq="";
 std::string dv_diagonal="42";
-std::string dv_color_space="1";
+std::string dv_signal_range="1";
+std::string dv_pq_source="";
 /* Include RPI p4 header file */
 #include "ofxRPI4Window.h"
 // End Patch RPI p4
@@ -94,7 +96,8 @@ static void readPGeneratorConf() {
   if(el[0] == "dv_minpq")    	  dv_minpq=el[1];
   if(el[0] == "dv_maxpq")        dv_maxpq=el[1];
   if(el[0] == "dv_diagonal")     dv_diagonal=el[1];
-  if(el[0] == "dv_color_space")  dv_color_space=el[1];
+  if(el[0] == "dv_signal_range") dv_signal_range=el[1];
+  if(el[0] == "dv_pq_source")    dv_pq_source=el[1];
  }
  file.close();
 }
@@ -216,13 +219,25 @@ int main(int argc, char **argv){
   ofxRPI4Window::mode_idx=atoi(mode_idx.c_str());
   ofxRPI4Window::dv_status=atoi(dv_status.c_str());
   ofxRPI4Window::dv_interface=atoi(dv_interface.c_str());
-  ofxRPI4Window::dv_profile=atoi(dv_profile.c_str());
+  /* Standard Dolby Vision metadata as PiTPG 2.0.3 apply_now@0x40e370 sets
+     it: an explicit dv_profile picks the container (1: BT.2020, else
+     P3-D65), without one the primaries do (1 is BT.2020); explicit
+     dv_minpq / dv_maxpq are taken as they are. Without them a PiTPG session
+     (dv_pq_source "luma", pitpg.pm) takes the mastering luminance (min_luma
+     / max_luma, nits) as 12-bit PQ; any other session the Dolby default
+     62 / 3696 (0.005-4000 cd/m2) that PGenerator 1.6 sends. */
+  if(!dv_profile.empty())
+   ofxRPI4Window::dv_profile=(atoi(dv_profile.c_str()) == 1) ? 1 : 2;
+  else
+   ofxRPI4Window::dv_profile=(atoi(primaries.c_str()) == 1) ? 1 : 2;
   ofApp::dv_map_mode=atoi(dv_map_mode.c_str());
   ofxRPI4Window::dv_map_mode=ofApp::dv_map_mode;
-  ofApp::dv_minpq=atoi(dv_minpq.c_str());
-  ofApp::dv_maxpq=atoi(dv_maxpq.c_str());
+  bool pq_from_luma=(dv_pq_source == "luma");
+  ofApp::dv_minpq=!dv_minpq.empty() ? atoi(dv_minpq.c_str()) : (pq_from_luma ? dovi::pq12(atof(min_luma.c_str())) : 62);
+  ofApp::dv_maxpq=!dv_maxpq.empty() ? atoi(dv_maxpq.c_str()) : (pq_from_luma ? dovi::pq12(atof(max_luma.c_str())) : 3696);
+  /* Tunnel signal range (PiTPG Patch Scale in TV-led): 2 full, else limited. */
+  ofApp::dv_full=(atoi(dv_signal_range.c_str()) == 2) ? 1 : 0;
   ofApp::dv_diagonal=atoi(dv_diagonal.c_str());
-  ofApp::dv_color_space=atoi(dv_color_space.c_str());
   ofxRPI4Window::reloadConf=reloadSignalConf;
 
   /* Raspberry Pi KMS Run App */

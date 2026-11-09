@@ -288,6 +288,8 @@ sub signal_check {
     # display takes low-latency DV as YCbCr 4:2:2 12-bit only.
     if($lldv && $format != 2) {
      my $rgb=(($v->{interface} || "") =~ /Low-Latency-HDMI/) ? ($v->{ycc444} || "none") : "none";
+     # Both depth bits set: pitpgd edid_sink_caps takes it as 12-bit.
+     $rgb="12" if($rgb eq "reserved");
      if($rgb ne "10" && $rgb ne "12") {
       $r{alternatives}=["YCbCr 4:2:2 12-bit (low latency)"];
       return $refuse->("dv","The display takes low-latency Dolby Vision as YCbCr 4:2:2 only; its Dolby Vision block lists no RGB / 4:4:4 form.");

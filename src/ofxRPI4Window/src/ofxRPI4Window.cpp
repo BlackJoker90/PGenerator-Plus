@@ -1619,11 +1619,13 @@ bool ofxRPI4Window::rgbLimitedPassthroughSupported()
 	return supported == 1;
 }
 
-/* Dolby Vision keeps its own transport ranges and the kernel CSC. */
+/* Standard Dolby Vision keeps its full-range RGB tunnel. Low-latency DV in
+   RGB (PiTPG 2.0.3 output_decide: RGB 10/12-bit as the VSVDB allows, range
+   from the patch scale) is a plain RGB signal: its codes go out as drawn. */
 bool ofxRPI4Window::rgbLimitedPassthrough()
 {
 	return avi_info.output_format == 0 && avi_info.rgb_quant_range == 1 &&
-		!isDoVi && !is_std_DoVi && rgbLimitedPassthroughSupported();
+		!is_std_DoVi && rgbLimitedPassthroughSupported();
 }
 
 /* 3 = Limited without the compression CSC (patched vc4). For YCbCr the
@@ -1633,7 +1635,8 @@ bool ofxRPI4Window::rgbLimitedPassthrough()
    that signals Limited there. YCbCr Default (0) draws Limited codes. */
 uint64_t ofxRPI4Window::wireRgbQuantRange(int rgb_quant_range, int output_format)
 {
-	if (isDoVi || is_std_DoVi || !rgbLimitedPassthroughSupported())
+	/* Low-latency DV as YCbCr 4:2:2 keeps the range it always had. */
+	if (is_std_DoVi || (isDoVi && output_format != 0) || !rgbLimitedPassthroughSupported())
 		return (uint64_t)rgb_quant_range;
 	if (rgb_quant_range == 1 || (rgb_quant_range == 0 && output_format != 0))
 		return 3;
@@ -1794,7 +1797,7 @@ void ofxRPI4Window::setup(const ofGLESWindowSettings & settings)
 				ofLog() << "DRM: setting up Low Latency DoVi(10 bit) window/surface"; 
 
 				FindModifiers(DRM_FORMAT_ABGR2101010, HDRplaneId);
-				if (!shader_init && (avi_info.output_format != 0 || (avi_info.output_format == 0 && avi_info.rgb_quant_range == 2)))
+				if (!shader_init && avi_info.output_format != 0)
 					shader_init = 1;
 				HDRWindowSetup();
 			} else if ((bit_depth >=8) && (bit_depth <= 12)  && (avi_info.max_bpc == 12)) {
@@ -1804,14 +1807,14 @@ void ofxRPI4Window::setup(const ofGLESWindowSettings & settings)
 				ofLog() << "DRM: setting up Low Latency DoVi(12 bpc output, 10 bit surface)"; 
 
 				FindModifiers(DRM_FORMAT_ABGR2101010, HDRplaneId);
-				if (!shader_init && (avi_info.output_format != 0 || (avi_info.output_format == 0 && avi_info.rgb_quant_range == 2)))
+				if (!shader_init && avi_info.output_format != 0)
 					shader_init = 1;
 				HDRWindowSetup();
 			} else {
 				ofLog() << "DRM: setting up Low Latency DoVi(8 bit) window/surface"; 
 
 				FindModifiers(DRM_FORMAT_ARGB8888, SDRplaneId);
-				if (!shader_init && (avi_info.output_format != 0 || (avi_info.output_format == 0 && avi_info.rgb_quant_range == 2)))
+				if (!shader_init && avi_info.output_format != 0)
 					shader_init = 1;
 				SDRWindowSetup();
 			}
@@ -2189,78 +2192,20 @@ void ofxRPI4Window::dovi_pattern_shader()
 	settings.shaderSources[GL_FRAGMENT_SHADER] = R"(
 		#version 310 es
 		precision highp float;
-		uniform vec4 globalColor;
-		uniform vec3 source_rgb;
-		uniform int source_max;
-	//	uniform int bits;
-	//	uniform int colorimetry;
-	//	uniform int color_format;
-	//	uniform int rgb_quant_range;
-	//	uniform int is_image;
-	//	uniform int is_std_DoVi;
-		uniform vec3 coeffs_num;
-		uniform vec3 coeffs_div;
-		uniform sampler2D tex0;
-		uniform vec2 resolution;
-		in vec2 texCoordVarying; 
+		precision highp int;
+		uniform ivec3 tunnel_ycc;
 		out vec4 outputColor;
 
-		int sourceCode12(float rawCode)
+		/* The tunnel's 12-bit Y, Cb, Cr come from the CPU (dovi::tunnelCodes,
+		 * PiTPG's double arithmetic, ofApp::shader_begin): a float32 shader
+		 * missed PiTPG by one code near the rounding edge. Even x carries
+		 * Cb, odd x Cr; packed R = C[11:4], G = Y[11:4], B = C[3:0] Y[3:0]. */
+		void main()
 		{
-			int code = int(round(rawCode));
-			if (source_max == 4095)
-				return clamp(code, 0, 4095);
-			if (source_max == 1023)
-				return clamp(code, 0, 1023) << 2;
-			return clamp(code, 0, 255) << 4;
+			int Y = tunnel_ycc.x;
+			int C = mod(gl_FragCoord.x, 2.0) < 1.0 ? tunnel_ycc.y : tunnel_ycc.z;
+			outputColor = vec4(float(C >> 4) / 255.0, float(Y >> 4) / 255.0, float((Y & 15) | ((C & 15) << 4)) / 255.0, 1.0);
 		}
-
-		void main() 
-		{		
-			int srcR = sourceCode12(source_rgb.r);
-			int srcG = sourceCode12(source_rgb.g);
-			int srcB = sourceCode12(source_rgb.b);
-		//	float coeffs[5][3];
-		//	coeffs[0] = float[](0.2126, 0.7152, 0.0722); //BT709
-		//	coeffs[1] = float[](0.2627, 0.6780, 0.0593); //BT2020
-		//	coeffs[2] = float[](0.212630069, 0.715188177, 0.072181753);  //dovi BT709
-		//	coeffs[3] = float[](0.262710755, 0.6779981,	0.059291146); //dovi BT2020
-		//	coeffs[4] = float[](0.0, 0.0, 0.0); //dovi rgb2 coeff
-			float Y1, Y2, Cb, Cr, a;
-			int R1, G1, B1, R2, G2, B2;
-	
-				/* YCrCb422 matrix */
-				Y1 = round(coeffs_num.x * float(srcR) + coeffs_num.y * float(srcG) + coeffs_num.z * float(srcB));
-				Cb = round((((-coeffs_num.x/coeffs_div.x) * float(srcR) - (coeffs_num.y/coeffs_div.x) * float(srcG) + coeffs_div.z * float(srcB)) * 2.0 * 224.0/219.0)/2.0 + 2048.0); // Chrominance Blue
-				Y2 = Y1;
-				Cr = round(((coeffs_div.z * float(srcR) - (coeffs_num.y/coeffs_div.y) * float(srcG) - (coeffs_num.z/coeffs_div.y) * float(srcB)) * 2.0 * 224.0/219.0)/2.0 + 2048.0); // Chrominance Red
-				a = 1.0;
-				/* Pack YUV for tunneling -- to do?? */
-			
-
-				/* Pack Dolby As RGB */
-				int Y1Code = clamp(int(Y1), 0, 4095);
-				int Y2Code = clamp(int(Y2), 0, 4095);
-				int CbCode = clamp(int(Cb), 0, 4095);
-				int CrCode = clamp(int(Cr), 0, 4095);
-				R1 = CbCode >> 4;  
-				G1 = Y1Code >> 4;
-				B1 = (Y1Code & 15) | ((CbCode & 15) << 4);
-				R2 = CrCode >> 4;  
-				G2 = Y2Code >> 4;
-				B2 = (Y2Code & 15) | ((CrCode & 15) << 4);	
-				
-				//even
-				if(mod(gl_FragCoord.x,2.0)<1.0) {
-	
-					outputColor =  vec4(float(R1)/255.0,float(G1)/255.0, float(B1)/255.0,a); 
-
-				// odd
-				} else {
-
-					outputColor =  vec4(float(R2)/255.0,float(G2)/255.0, float(B2)/255.0,a); 
-				}
-		} 
 	)";
 		
 	
@@ -2289,71 +2234,58 @@ void ofxRPI4Window::dovi_image_shader()
 		#version 310 es
 		precision highp float;
 		uniform vec4 globalColor;
-
-	//	uniform int is_image;
+		uniform int dv_full;
+		uniform int dv_src_full;
 		uniform sampler2D tex0;
 		uniform vec2 resolution;
 		uniform vec3 coeffs_num;
 		uniform vec3 coeffs_div;
 		in vec2 texCoordVarying; 
 		out vec4 outputColor;
-		
+
+		/* As dovi_pattern_shader, for an 8-bit image: each pixel pair (even
+		 * x, x + 1) takes Y from its own pixel and Cb (even) / Cr (odd) from
+		 * the mean of both, before rounding (pitpgd tunnel_pair@0x404990). */
+		/* Source normalisation (dv_src_full) and signal range (dv_full)
+		 * are separate flags, as pitpgd dv_ycc12 / dv_ycc12n. */
+		float norm8(float t)
+		{
+			float code = clamp(round(t * 255.0), 0.0, 255.0);
+			if (dv_src_full == 1)
+				return code / 255.0;
+			return (code - 16.0) / 219.0;
+		}
+
+		int code12(float v)
+		{
+			int c = int(v + 0.5);
+			return dv_full == 1 ? clamp(c, 0, 4095) : clamp(c, 16, 4079);
+		}
 
 		void main() 
 		{		
-
 			vec2 onePixel = vec2(1.0, 0.0) / resolution;
-			vec4 rgb1 = texture(tex0, texCoordVarying);
-
-				//vec2 position = ( gl_FragCoord.xy / resolution.xy );
-			vec4 rgb2 = texture(tex0, texCoordVarying + onePixel);//vec4((gl_FragCoord.x+0.5)/u_resolution.x,gl_FragCoord.y/u_resolution.y,1.0,0.0);//rgb;
-				
-
-		//	float coeffs[5][3];
-		//	coeffs[0] = float[](0.2126, 0.7152, 0.0722); //BT709
-		//	coeffs[1] = float[](0.2627, 0.6780, 0.0593); //BT2020
-		//	coeffs[2] = float[](0.212630069, 0.715188177, 0.072181753);  //dovi BT709
-		//	coeffs[3] = float[](0.262710755, 0.6779981,	0.059291146); //dovi BT2020
-		//	coeffs[4] = float[](0.0, 0.0, 0.0); //dovi rgb2 coeff
-			float Y1, Y2, Cb, Cr, a;
-			int R1, G1, B1, R2, G2, B2;
-		//	float scale;
-
-
-
-
-
-
-			//	scale =  256.0;
-				/* YCrCb422 matrix */
-				Y1 = round(coeffs_num.x * float(int(rgb1.r*256.0)<<4) + coeffs_num.y* float(int(rgb1.g*256.0)<<4) + coeffs_num.z * float(int(rgb1.b*256.0)<<4) + 0.0 * float(int(rgb2.r*256.0)<<4) + 0.0 * float(int(rgb2.g*256.0)<<4) + 0.0 * float(int(rgb2.b*256.0)<<4));
-				Cb = round((((-coeffs_num.x/coeffs_div.x) * float(int(rgb1.r*256.0)<<4) - (coeffs_num.y/coeffs_div.x) * float(int(rgb1.g*256.0)<<4) + coeffs_div.z * float(int(rgb1.b*256.0)<<4) + (-coeffs_num.x/coeffs_div.x) * float(int(rgb2.r*256.0)<<4) - (coeffs_num.y/coeffs_div.x) * float(int(rgb2.g*256.0)<<4) + coeffs_div.z * float(int(rgb2.b*256.0)<<4))*224.0/219.0)/2.0 + 2048.0); // Chrominance Blue
-				Y2 = round(0.0 * float(int(rgb1.r*256.0)<<4) + 0.0 * float(int(rgb1.g*256.0)<<4) + 0.0 * float(int(rgb1.b*256.0)<<4) + coeffs_num.x * float(int(rgb2.r*256.0)<<4) + coeffs_num.y * float(int(rgb2.g*256.0)<<4) + coeffs_num.z * float(int(rgb2.b*256.0)<<4));
-				Cr = round(((coeffs_div.z * float(int(rgb1.r*256.0)<<4) - (coeffs_num.y/coeffs_div.y) * float(int(rgb1.g*256.0)<<4) - (coeffs_num.z/coeffs_div.y) * float(int(rgb1.b*256.0)<<4) + coeffs_div.z * float(int(rgb2.r*256.0)<<4) - (coeffs_num.y/coeffs_div.y) * float(int(rgb2.g*256.0)<<4) - (coeffs_num.z/coeffs_div.y) * float(int(rgb2.b*256.0)<<4))*224.0/219.0)/2.0 + 2048.0); // Chrominance Red
-				a = 1.0;
-				/* Pack YUV for tunneling -- to do?? */
-			
-
-				/* Pack Dolby As RGB */
-				R1 = int(Cb) >> 4;  
-				G1 = int(Y1) >> 4;
-				B1 = int(Y1) & 15 | ((int(Cb) & 15) << 4);
-				R2 = int(Cr) >> 4;  
-				G2 = int(Y2) >> 4;
-				B2 = int(Y2) & 15 | ((int(Cr) & 15) << 4);				
-
-				// even
-				if(mod(gl_FragCoord.x,2.0)<1.0) {
-	
-					outputColor =  vec4(float(R1)/255.0,float(G1)/255.0, float(B1)/255.0,a); 
-
-
-				// odd
-				} else {
-
-					outputColor =  vec4(float(R2)/255.0,float(G2)/255.0, float(B2)/255.0,a); 
-				}
-
+			bool even = mod(gl_FragCoord.x, 2.0) < 1.0;
+			vec2 tcA = even ? texCoordVarying : texCoordVarying - onePixel;
+			vec4 pa = texture(tex0, tcA);
+			vec4 pb = texture(tex0, tcA + onePixel);
+			vec3 a = vec3(norm8(pa.r), norm8(pa.g), norm8(pa.b));
+			vec3 b = vec3(norm8(pb.r), norm8(pb.g), norm8(pb.b));
+			float ya = (a.r - a.g) * coeffs_num.x + a.g + (a.b - a.g) * coeffs_num.z;
+			float yb = (b.r - b.g) * coeffs_num.x + b.g + (b.b - b.g) * coeffs_num.z;
+			float ys = dv_full == 1 ? 4095.0 : 3504.0;
+			float yo = dv_full == 1 ? 0.0 : 256.0;
+			float cs = dv_full == 1 ? 4095.0 : 3584.0;
+			int Y, C;
+			if (even) {
+				Y = code12(ys * ya + yo);
+				C = code12(((((a.b - ya) * cs) / coeffs_div.x + 2048.0) + (((b.b - yb) * cs) / coeffs_div.x + 2048.0)) * 0.5);
+			} else {
+				Y = code12(ys * yb + yo);
+				C = code12(((((a.r - ya) * cs) / coeffs_div.y + 2048.0) + (((b.r - yb) * cs) / coeffs_div.y + 2048.0)) * 0.5);
+			}
+			/* Pack Dolby As RGB: R = C[11:4], G = Y[11:4], B = C[3:0] Y[3:0] */
+			outputColor = vec4(float(C >> 4) / 255.0, float(Y >> 4) / 255.0, float((Y & 15) | ((C & 15) << 4)) / 255.0, 1.0);
 		} 
 	)";
 		 
@@ -2584,7 +2516,7 @@ void ofxRPI4Window::HDRWindowSetup()
         currentRenderer = make_shared<ofGLProgrammableRenderer>(this);
         makeCurrent();
 		static_cast<ofGLProgrammableRenderer*>(currentRenderer.get())->setup(3,1);
-		if ((avi_info.output_format != 0 || (isDoVi && !is_std_DoVi && avi_info.output_format == 0 && avi_info.rgb_quant_range == 2)) && shader_init) {
+		if (avi_info.output_format != 0 && shader_init) {
 
 			rgb2ycbcr_shader();
 		}
@@ -3136,7 +3068,7 @@ int ret;
         currentRenderer = make_shared<ofGLProgrammableRenderer>(this);
         makeCurrent();
 		static_cast<ofGLProgrammableRenderer*>(currentRenderer.get())->setup(3,1);
-		if ((avi_info.output_format != 0 || (isDoVi && !is_std_DoVi && avi_info.output_format == 0 && avi_info.rgb_quant_range == 2)) && shader_init) {
+		if (avi_info.output_format != 0 && shader_init) {
 
 			rgb2ycbcr_shader();
 
@@ -3256,20 +3188,20 @@ void ofxRPI4Window::update()
 				if ((bit_depth >= 8) && (bit_depth <= 10) && (avi_info.max_bpc == 10)) {
 					ofLog() << "DRM: updating Low Latency DoVi(10 bit) window/surface";
 					FindModifiers(DRM_FORMAT_ABGR2101010, HDRplaneId);
-					if (!ofxRPI4Window::shader_init && (avi_info.output_format != 0 || (avi_info.output_format == 0 && avi_info.rgb_quant_range == 2)))
+					if (!ofxRPI4Window::shader_init && avi_info.output_format != 0)
 						shader_init = 1;
 					HDRWindowSetup();
 				} else if ((bit_depth >=8) && (bit_depth <= 12)  && (avi_info.max_bpc == 12)) {
 					// 10 bit surface for 12 bpc output, see setup().
 					ofLog() << "DRM: updating Low Latency DoVi(12 bpc output, 10 bit surface)";
 					FindModifiers(DRM_FORMAT_ABGR2101010, HDRplaneId);
-					if (!ofxRPI4Window::shader_init && (avi_info.output_format != 0 || (avi_info.output_format == 0 && avi_info.rgb_quant_range == 2)))
+					if (!ofxRPI4Window::shader_init && avi_info.output_format != 0)
 						shader_init = 1;
 					HDRWindowSetup();
 				} else {
 					ofLog() << "DRM: updating Low Latency Dovi(8 bit) window/surface";
 					FindModifiers(DRM_FORMAT_ARGB8888, SDRplaneId);
-					if (!ofxRPI4Window::shader_init && (avi_info.output_format != 0 || (avi_info.output_format == 0 && avi_info.rgb_quant_range == 2)))
+					if (!ofxRPI4Window::shader_init && avi_info.output_format != 0)
 						shader_init = 1;
 					SDRWindowSetup();
 				}
@@ -4309,7 +4241,10 @@ void ofxRPI4Window::updateDoVi_Infoframe(int enable, int dv_interface)
 		dovi.dv_interface = ofxRPI4Window::is_std_DoVi ? 0 : (dv_interface ? 2 : 0);
 		dovi.backlight_metadata = 0;
 		dovi.backlight_max_luminance = 0;
-		dovi.aux_runmode = (uint8_t)ofClamp(ofxRPI4Window::dv_map_mode, 0, 255);
+		/* Standard DV: the kernel turns it into the H14b mode byte.
+		 * Low latency: PB6 and up stay zero, as PiTPG 2.0.3 sends them
+		 * (pitpgd dv_vsif_build@0x4040f0 writes PB4/PB5 only). */
+		dovi.aux_runmode = ofxRPI4Window::is_std_DoVi ? (uint8_t)ofClamp(ofxRPI4Window::dv_map_mode, 0, 255) : 0;
 		dovi.aux_version = 0;
 		dovi.aux_debug = 0;
 		target = DoviBlobFor(dovi);

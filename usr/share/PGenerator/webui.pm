@@ -10172,8 +10172,12 @@ sub webui_config_json (@) {
   $json_conf{"is_ll_dovi"}=&pg_dv_transport_ll_flag($json_dv_transport);
   $json_conf{"is_std_dovi"}=&pg_dv_transport_std_flag($json_dv_transport);
   $json_conf{"dv_interface"}=&pg_dv_transport_interface($json_dv_transport);
-  $json_conf{"color_format"}=&pg_dv_transport_color_format($json_dv_transport);
-  $json_conf{"max_bpc"}=&pg_dv_transport_max_bpc($json_conf{"max_bpc"});
+  # Low latency in RGB (a PiTPG session, dv_ll_rgb 1) goes out in the
+  # conf's own format and depth, not the transport's 4:2:2 12-bit.
+  if(($json_conf{"dv_ll_rgb"} // "") ne "1") {
+   $json_conf{"color_format"}=&pg_dv_transport_color_format($json_dv_transport);
+   $json_conf{"max_bpc"}=&pg_dv_transport_max_bpc($json_conf{"max_bpc"});
+  }
  }
  $json_conf{"rgb_quant_range"}=&webui_preferred_rgb_quant_range() if($external_rgb_quant_range_active);
  # Every value goes out as a JSON string, escaped by JSON::PP: a backslash
@@ -10369,14 +10373,21 @@ sub webui_apply_config (@) {
    # deliberate 4:2:2 right on leaving LLDV cannot be told from the leftover
    # (the form posts the DV value) and needs a second apply. Standard DV
    # (RGB) keeps its format as before.
-   my $dv_format=&pg_dv_transport_color_format();
+   # Low latency in RGB (a PiTPG client's, dv_ll_rgb 1) leaves RGB at the
+   # VSVDB's depth: a format and depth still equal to it are leftovers too.
+   my $ll_rgb=(&pg_dv_transport_mode() eq "lldv" && ($pgenerator_conf{"dv_ll_rgb"} // "") eq "1") ? 1 : 0;
+   my $dv_format=$ll_rgb ? ($pgenerator_conf{"color_format"} // "") : &pg_dv_transport_color_format();
    my $format=defined $changes{"color_format"} ? $changes{"color_format"} : ($pgenerator_conf{"color_format"} // "");
    if(&pg_dv_transport_mode() eq "lldv" && $format eq $dv_format && $format ne ($pgenerator_conf{"pre_dv_color_format"} // "0")) {
     $changes{"color_format"}=$pgenerator_conf{"pre_dv_color_format"} // "0";
    }
-   # The WebUI sends the target mode's bpc; only a leftover LLDV 12 needs undoing.
+   # The WebUI sends the target mode's bpc; only a leftover LLDV 12 (or the
+   # LL RGB depth) needs undoing.
    my $bpc=defined $changes{"max_bpc"} ? $changes{"max_bpc"} : ($pgenerator_conf{"max_bpc"} // "");
-   if($bpc eq "12") {
+   $changes{"dv_ll_rgb"}="" if($ll_rgb);
+   if($ll_rgb && $bpc eq ($pgenerator_conf{"max_bpc"} // "") && $bpc ne "12") {
+    $changes{"max_bpc"}=$pgenerator_conf{"pre_dv_max_bpc"} || "8";
+   } elsif($bpc eq "12") {
     my $pre=$pgenerator_conf{"pre_dv_max_bpc"} || "8";
     $changes{"max_bpc"}=($pre eq "12") ? "8" : $pre;
    }
@@ -10407,6 +10418,10 @@ sub webui_apply_config (@) {
    # HDR10/HLG are BT.2020 signals; see normalize_signal_mode_conf().
    $changes{"colorimetry"}="9";
   } elsif($signal_mode eq "dv") {
+   # A PiTPG client's container and low latency in RGB stay while it is
+   # connected (as in the DV branch below).
+   my $pitpg=($main::pitpg_clients || 0) ? 1 : 0;
+   my $pitpg_ll_rgb=($pitpg && $requested_dv_transport eq "lldv" && ($pgenerator_conf{"dv_ll_rgb"} // "") eq "1") ? 1 : 0;
    $changes{"is_sdr"}="0";
    $changes{"is_hdr"}="1";
    $changes{"dv_transport"}=$requested_dv_transport;
@@ -10415,11 +10430,11 @@ sub webui_apply_config (@) {
    $changes{"dv_status"}="1";
    $changes{"dv_interface"}=&pg_dv_transport_interface($requested_dv_transport);
    $changes{"eotf"}="2";
-   $changes{"primaries"}="2";
-   $changes{"max_bpc"}=&pg_dv_transport_max_bpc($requested_dv_transport, $changes{"max_bpc"} || $pgenerator_conf{"max_bpc"});
-   $changes{"color_format"}=&pg_dv_transport_color_format($requested_dv_transport);
+   $changes{"primaries"}="2" if(!$pitpg);
+   $changes{"max_bpc"}=&pg_dv_transport_max_bpc($requested_dv_transport, $changes{"max_bpc"} || $pgenerator_conf{"max_bpc"}) if(!$pitpg_ll_rgb);
+   $changes{"color_format"}=&pg_dv_transport_color_format($requested_dv_transport) if(!$pitpg_ll_rgb);
    $changes{"colorimetry"}="9";
-   $changes{"rgb_quant_range"}=&pg_dv_transport_quant_range($requested_dv_transport);
+   $changes{"rgb_quant_range"}=&pg_dv_transport_quant_range($requested_dv_transport) if(!$pitpg_ll_rgb);
   }
  }
  my %effective=%pgenerator_conf;
@@ -10471,18 +10486,30 @@ sub webui_apply_config (@) {
    $dv_map_mode="2" if($dv_metadata eq "4");
   }
   $changes{"dv_transport"}=$dv_transport;
+  # While a PiTPG client is connected its DV settings stay (pitpg.pm): the
+  # container (dv_profile, primaries), the signal range of its patch
+  # scale, the PQ from the mastering luminance, and low latency in RGB
+  # with its format, depth and range. Otherwise the WebUI sends 1.6's
+  # form: YCbCr 4:2:2 12-bit low latency, BT.2020 container, 62/3696.
+  my $pitpg=($main::pitpg_clients || 0) ? 1 : 0;
+  my $pitpg_ll_rgb=($pitpg && $dv_transport eq "lldv" && ($pgenerator_conf{"dv_ll_rgb"} // "") eq "1") ? 1 : 0;
+  if(!$pitpg) {
+   $changes{"dv_ll_rgb"}="";
+   $changes{"dv_signal_range"}="";
+   $changes{"dv_pq_source"}="";
+  }
   # The depth follows this transport, not the dv_transport still in the
   # conf (standard after LLDV would otherwise get LLDV's 12-bit).
-  $changes{"max_bpc"}=&pg_dv_transport_max_bpc($dv_transport, $changes{"max_bpc"} || $effective{"max_bpc"} || $pgenerator_conf{"max_bpc"});
+  $changes{"max_bpc"}=&pg_dv_transport_max_bpc($dv_transport, $changes{"max_bpc"} || $effective{"max_bpc"} || $pgenerator_conf{"max_bpc"}) if(!$pitpg_ll_rgb);
   $changes{"is_ll_dovi"}=&pg_dv_transport_ll_flag($dv_transport);
   $changes{"is_std_dovi"}=&pg_dv_transport_std_flag($dv_transport);
   $changes{"dv_status"}="1";
-  $changes{"color_format"}=&pg_dv_transport_color_format($dv_transport);
+  $changes{"color_format"}=&pg_dv_transport_color_format($dv_transport) if(!$pitpg_ll_rgb);
   $changes{"colorimetry"}="9";
   $changes{"eotf"}="2";
-  $changes{"primaries"}="2";
-  $changes{"rgb_quant_range"}=&pg_dv_transport_quant_range($dv_transport);
- $changes{"dv_profile"}="1";
+  $changes{"primaries"}="2" if(!$pitpg);
+  $changes{"rgb_quant_range"}=&pg_dv_transport_quant_range($dv_transport) if(!$pitpg_ll_rgb);
+ $changes{"dv_profile"}="1" if(!$pitpg);
  $changes{"dv_color_space"}="0";
   $changes{"dv_interface"}=&pg_dv_transport_interface($dv_transport);
   $changes{"dv_map_mode"}=$dv_map_mode;
@@ -10603,7 +10630,8 @@ sub webui_apply_config (@) {
  # Keys that require pattern generator restart
  my %restart_keys=map{$_=>1} qw(mode_idx eotf is_hdr is_sdr colorimetry primaries
   min_luma max_luma max_cll max_fall color_format max_bpc rgb_quant_range
-    dv_status is_ll_dovi is_std_dovi dv_interface dv_profile dv_metadata dv_color_space dv_map_mode dv_transport);
+    dv_status is_ll_dovi is_std_dovi dv_interface dv_profile dv_metadata dv_color_space dv_map_mode dv_transport dv_ll_rgb
+    dv_signal_range dv_pq_source);
 
   my @conf_writes=();
   my @conf_deletes=();
@@ -13985,17 +14013,11 @@ sub webui_pattern_legacy_byte (@) {
  return int($value*$peak_byte/255 + 0.5);
 }
 
-our $webui_pattern_image_source_range="FULL";
-
 sub webui_pattern_image_source_byte (@) {
  my $value=int(shift);
  $value=0 if($value < 0);
  $value=255 if($value > 255);
- return $value if($webui_pattern_image_source_range ne "LIMITED");
- my $normalized=int((($value - 16) * 255) / 219 + 0.5);
- $normalized=0 if($normalized < 0);
- $normalized=255 if($normalized > 255);
- return $normalized;
+ return $value;
 }
 
 sub webui_pattern_image_source_triplet (@) {
@@ -14596,12 +14618,11 @@ sub webui_pattern (@) {
 	 # components are legal-range. SOURCE_RANGE describes those authored
 	 # components; transport_signal_range remains the wire setting.
 	 my $source_range=($signal_mode eq "dv" || int($pattern_signal_range || 0) == 1) ? "LIMITED" : "FULL";
-	 # IMAGE plates author video-level codes. Outside DV the renderer takes
-	 # SOURCE_RANGE=LIMITED texels as those codes (passthrough) or expands
-	 # them itself (vc4 CSC), so they go into the PNG unchanged, as on YCbCr.
-	 # Standard DV skips the renderer's image normalisation and keeps the
-	 # stretch to 0..255 here.
-	 local $webui_pattern_image_source_range=($pattern_color_format == 0 && $signal_mode eq "dv") ? $source_range : "FULL";
+	 # IMAGE plates author video-level codes and go into the PNG unchanged.
+	 # The renderer takes SOURCE_RANGE=LIMITED texels as those codes
+	 # (passthrough), expands them itself (vc4 CSC), or in Standard DV
+	 # normalises them by this range (dovi_image_shader). On any other Full
+	 # cable they stay as authored (normalizeImageSourcePixels).
 	 my $w=$w_s || 1920; my $h=$h_s || 1080;
  my $pat=""; my $img=&webui_pattern_diag_image_file($name); my $pat_bits=&webui_pattern_effective_bits("",$signal_mode);
  # Simulated-meter capture: raw patch codes (pre bit-scaling) recorded for

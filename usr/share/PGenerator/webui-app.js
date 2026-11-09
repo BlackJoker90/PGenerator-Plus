@@ -796,6 +796,8 @@ function applyConfigState(nextConfig){
  if(rfc) rfc.checked=String(config.resolve_force_center||'0')==='1';
  const rps=document.getElementById('resolvePatchSize');
  if(rps&&document.activeElement!==rps) rps.value=(config.resolve_patch_size&&/^\d+$/.test(String(config.resolve_patch_size)))?String(config.resolve_patch_size):'';
+ const crg=document.getElementById('calman_range');
+ if(crg&&document.activeElement!==crg) crg.value=/^[12]$/.test(String(config.calman_range||''))?String(config.calman_range):'';
  // Derive signal mode from flags
  let sm='sdr';
  if(config.dv_status==='1'||config.is_ll_dovi==='1'||config.is_std_dovi==='1') sm='dv';
@@ -3294,7 +3296,7 @@ function pgSignalOwnerSync(info){
  if(alert){
   alert.hidden=!owner;
   document.getElementById('signalOwnerTitle').textContent=owner?owner+' sets the signal.':'';
-  document.getElementById('signalOwnerText').textContent=owner?'The settings here are locked while it is connected, so the cable keeps what '+owner+' shows. Change the signal in '+owner+', or disconnect it to change it here.':'';
+  document.getElementById('signalOwnerText').textContent=owner?'The settings here are locked while it is connected, so the cable keeps what '+owner+' shows. Change the signal in '+owner+', or disconnect it to change it here.'+(owner==='Calman'?' To keep the range Full or Limited whatever Calman asks for, use Range with Calman below.':''):'';
  }
  const why=owner?owner+' is connected and sets the signal':'';
  const reset=document.querySelector('#displaySettingsCard .btn-reset');
@@ -4280,7 +4282,8 @@ async function connectWifi(){
  const psk=document.getElementById('wifiPsk').value;
  const btn=event.target;btn.disabled=true;btn.textContent='Connecting...';
  const r=await fetchJSON('/api/wifi/connect',{method:'POST',
-  headers:{'Content-Type':'application/json'},body:JSON.stringify({ssid,psk}),_timeoutMs:30000});
+  // The Pi answers after the join and the DHCP lease: up to 60 s (#22).
+  headers:{'Content-Type':'application/json'},body:JSON.stringify({ssid,psk}),_timeoutMs:70000});
  if(r&&r.status==='ok'){
   toast((r.message||('Connecting to '+ssid))+'...');
   hideWifiForm();
@@ -4661,6 +4664,22 @@ async function resolvePatchSizeChanged(v){
   if(r&&r.status==='ok') toast(v?('Resolve patch size forced to '+v+'%'):'Resolve patch size follows the software');
   else toast('Failed to save setting','err');
  }catch(e){ toast('Failed to save setting','err'); }
+}
+// "Range with Calman": not a signal field, so it saves at once and stays
+// usable while Calman is connected (the daemon applies Full or Limited then).
+async function calmanRangeChanged(v){
+ const text={'':'Range follows Calman from its next range command','2':'Range stays Full while Calman is connected','1':'Range stays Limited while Calman is connected'};
+ let ok=false;
+ try{
+  const r=await fetchJSON('/api/config',{method:'POST',headers:{'Content-Type':'application/json'},
+   body:JSON.stringify({calman_range:String(v||'')})});
+  ok=!!(r&&r.status==='ok');
+  if(ok){ if(config) config.calman_range=String(v||''); toast(text[String(v||'')]||text['']); }
+  else toast(pgFailMsg('Couldn’t save Range with Calman',r),'err');
+ }catch(e){ toast('Couldn’t save Range with Calman','err'); }
+ // Not saved: show what the Pi still has.
+ const sel=document.getElementById('calman_range');
+ if(!ok&&sel) sel.value=/^[12]$/.test(String(config&&config.calman_range||''))?String(config.calman_range):'';
 }
 async function resolveForceCenterChanged(on){
  try{

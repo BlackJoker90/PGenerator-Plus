@@ -1721,6 +1721,9 @@ select:focus-visible,input:focus-visible,textarea:focus-visible,
 .field select:disabled{cursor:not-allowed}
 .field select[data-dv-locked]{cursor:default;opacity:1;background-image:none!important;padding-right:10px!important;border-style:dashed;color:var(--text-primary)}
 .dv-locked-note{display:flex;gap:8px;align-items:baseline;margin:10px 0 0;font-size:var(--fs-xs);line-height:1.45;color:var(--text2)}
+.grid.setting-tiles.calman-range{margin-top:16px;padding-top:14px;border-top:1px solid var(--border)}
+.calman-range-hint{grid-column:span 2;align-self:end;margin:0;font-size:var(--fs-xs);line-height:1.45;color:var(--text2)}
+@container (max-width:420px){.calman-range-hint{grid-column:auto}}
 .dv-locked-note::before{content:"";flex:0 0 8px;height:8px;border-radius:50%;background:var(--status-dv);transform:translateY(-1px)}
 .setting-tiles>.field>.mode-retry{grid-column:1;grid-row:1;justify-self:end;align-self:end;min-height:24px;padding:2px 10px}
 /* Command palette (Cmd/Ctrl+K): a floating panel in the active theme's

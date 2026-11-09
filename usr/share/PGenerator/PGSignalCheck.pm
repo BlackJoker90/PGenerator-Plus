@@ -333,7 +333,10 @@ sub signal_check {
 # The vendor infoframe in slot 1, as pgen_hdmi_packet prints it
 # ("slot=1 enabled=1 type=81 version=01 length=1b bytes=<PB0>:..."), the
 # same rules as the self-test: "standard" = HDMI 1.4b VSIF (OUI 00:0c:03)
-# of length 0x18, the one the Pi sends for standard Dolby Vision; "lldv" =
+# of length 0x18, the one the Pi sends for standard Dolby Vision, or the
+# Dolby VSIF (OUI 00:d0:46, length 0x1b) with Dolby_Vision_Signal and
+# without Low_Latency (PB4 0x02, the patched vc4.ko for a v1-12 / v2
+# VSVDB as pitpgd dv_vsif_build); "lldv" =
 # Dolby VSIF (OUI 00:d0:46, length 0x1b) with Dolby_Vision_Signal and
 # Low_Latency set (PB4 bits 1 and 0); "" = no Dolby Vision signal (slot
 # off or another vendor frame); undef = not readable.
@@ -347,6 +350,7 @@ sub signal_vsif_dv {
  return "" if($sum & 0xff);
  my $oui=sprintf("%02x:%02x:%02x",$b[3],$b[2],$b[1]);
  return "lldv" if($oui eq "00:d0:46" && $len == 0x1b && ($b[4] & 0x03) == 0x03);
+ return "standard" if($oui eq "00:d0:46" && $len == 0x1b && ($b[4] & 0x03) == 0x02);
  return "standard" if($oui eq "00:0c:03" && $len == 0x18);
  return "";
 }

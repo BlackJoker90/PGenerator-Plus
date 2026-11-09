@@ -14456,6 +14456,15 @@ sub webui_rgb_limited_passthrough (@) {
  return ($v=~/RQ3V1/) ? 1 : 0;
 }
 
+# vc4 that sends the Dolby Vision VSIF in the form the display's VSVDB asks
+# for, PB5 0x10 included (patch_vc4_dv_vsif.py, srcversion ...RQ3V1SPDVICHMVS).
+sub webui_vc4_dv_vsif_forms (@) {
+ open(my $fh,"<",$webui_vc4_srcversion_file) or return 0;
+ my $v=<$fh> // "";
+ close($fh);
+ return ($v=~/HMVS/) ? 1 : 0;
+}
+
 # Range Check (PGG1Patterns range_check): its codes are wire codes, so it
 # is drawn for the range on the cable. Returns (source_range, why): YCbCr
 # is always Limited on the wire (a Full request is compressed by the

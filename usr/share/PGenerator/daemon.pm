@@ -1646,13 +1646,15 @@ sub pattern_daemon {
       # Calman only sends GET_SETTINGS when CAP lists it, and it ignores a
       # CAP reply that does not start with ACK.
       my $caps="GET_SETTINGS,STATUS,CONF_FORMAT,CONF_HDR,CONF_LEVEL,CONF_DV,HDR_ENABLE,IMAGE,PUSH,RGB_S,RGB_B,RGB_A,SPECIALTY,UPDATE,YCC_A,YCC_B,YCC_S,HDR,DOLBYVISION,SIZE,10_SIZE,11_APL,CommandRGB,BITDEPTH,COLORSPACE,RANGE";
-      # The G1 source (port 2101) gets exactly its built-in list, without
-      # GET_SETTINGS. Its UI does not show what GET_SETTINGS reports: after
-      # reading "Format YCC444_10" it still showed RGB 8-bit (Calman's
-      # Color Format list has "YCbCr 444 10-bit"). The output then has to
-      # follow Calman's start-up format instead (see calman_g1_startup), so
-      # the cable and Calman's display agree.
-      $caps="STATUS,CONF_FORMAT,CONF_HDR,CONF_LEVEL,CONF_DV,HDR_ENABLE,IMAGE,PUSH,RGB_S,RGB_B,RGB_A,SPECIALTY,UPDATE,YCC_A,YCC_B,YCC_S" if($rpc_client{$connection});
+      # The G1 source (port 2101) gets its built-in list plus GET_SETTINGS.
+      # Without a GET_SETTINGS reply it forces Range Limited at every
+      # connect (Calman 5.17.6 UPGCI::Startup), whatever range its
+      # settings show, and choosing Full there again sent nothing: the
+      # cable stayed Limited. Its UI does not show what GET_SETTINGS
+      # reports (after "Format YCC444_10" it still showed RGB 8-bit), so
+      # the reply names Calman's start-up format RGB 8-bit, which the
+      # output follows (see calman_g1_startup), and the range on the cable.
+      $caps="GET_SETTINGS,STATUS,CONF_FORMAT,CONF_HDR,CONF_LEVEL,CONF_DV,HDR_ENABLE,IMAGE,PUSH,RGB_S,RGB_B,RGB_A,SPECIALTY,UPDATE,YCC_A,YCC_B,YCC_S" if($rpc_client{$connection});
       &log("Calman: CAP request, returning $caps");
       &send_calman_payload_to_client($connection,$caps,1);
       last;
@@ -1704,7 +1706,10 @@ sub pattern_daemon {
       last;
      }
      if($clean_key eq "GET_SETTINGS") {
-      delete $calman_g1_startup{$connection};
+      # The G1 source (FIRMWARE in its handshake) still starts at RGB 8-bit:
+      # the first command after the handshake switches the output to it, so
+      # the reply already names it and the range that goes with it.
+      my $g1_startup=$calman_g1_startup{$connection} ? 1 : 0;
       # Calman splits the reply into "Key Value" pairs at "," and the first
       # space. It maps Format (RGB, YCC444, YCC422, YCC420 and the _10
       # variants) to its colour format list, Range (Full/Limited) and Bits
@@ -1722,6 +1727,7 @@ sub pattern_daemon {
       $cur_bits="10" if($cur_bits eq "12" && int($pgenerator_conf{"dv_status"} || 0) != 1);
       my %ycc_format=("1"=>"YCC444","2"=>"YCC422","3"=>"YCC420");
       my $cf=$pgenerator_conf{"color_format"} || "0";
+      ($cf,$cur_bits)=("0","8") if($g1_startup);
       my $cur_format="RGB";
       if(exists $ycc_format{$cf}) {
        $cur_format=$ycc_format{$cf};
@@ -1729,7 +1735,7 @@ sub pattern_daemon {
       }
       # The range on the cable: "Default" is Limited for YCbCr and the
       # renderer's default for RGB.
-      my $cur_range=(&effective_rgb_quant_range() == 1) ? "Limited" : "Full";
+      my $cur_range=(&effective_rgb_quant_range($cf) == 1) ? "Limited" : "Full";
       my $cur_hdr=(($pgenerator_conf{"is_hdr"} || "") eq "1") ? "On" : "Off";
       my $cur_dolby=(($pgenerator_conf{"dv_status"} || "") eq "1") ? "On" : "Off";
       my $settings="Resolution $cur_res,Refresh $cur_refresh,Format $cur_format,Range $cur_range,Bits $cur_bits,HDR $cur_hdr,Dolby $cur_dolby";
@@ -1749,6 +1755,13 @@ sub pattern_daemon {
      if($type eq "INIT") {
       &calman_reset_pattern_state("INIT");
       &calman_apply_init_mode();
+      # "Range with Calman" (WebUI) holds from the start of the session, so
+      # GET_SETTINGS reports it and Calman draws its codes for it.
+      my $range_override=&calman_range_override();
+      if($range_override ne "") {
+       $calman_rgb_quant_range=$range_override + 0;
+       &apply_source_rgb_quant_range("calman",$range_override);
+      }
       # The reference's UPGCI 2.0 is the GCI plugin's handshake. The reference RPC
       # plugin connects to the RPC socket and never sends INIT:2.0, so
       # this branch is GCI-only. Mark the connection (and the global
@@ -1779,7 +1792,7 @@ sub pattern_daemon {
 	     };
 	     my $calman_release_source_range = sub {
 	      return 0 if($calman_gci{$connection});
-	      &release_source_rgb_quant_range("calman");
+	      &calman_default_rgb_quant_range();
 	      $calman_rgb_quant_range=0;
 	      return 1;
 	     };
@@ -1888,6 +1901,12 @@ sub pattern_daemon {
 	     };
 	     my $calman_save_setting = sub {
 	      my ($conf_key,$conf_val)=@_;
+	      # "Range with Calman" in the WebUI replaces the range Calman asks
+	      # for (calman_range_override; not in Dolby Vision).
+	      if($conf_key eq "rgb_quant_range") {
+	       my $o=&calman_range_override();
+	       $conf_val=$o if($o ne "");
+	      }
 	      # The reference GCI plugin (UPGCI 2.0 control plane) must not
 	      # override the user's WebUI signal-mode settings. The
 	      # reference-controlled values that affect the HDR plane
@@ -2026,7 +2045,7 @@ sub pattern_daemon {
 	         &log("Calman GCI: source-format range release ignored (WebUI owns rgb_quant_range)");
 	        } else {
 	         &log("Calman: releasing external range via source settings");
-	         &release_source_rgb_quant_range("calman");
+	         &calman_default_rgb_quant_range();
 	         $calman_rgb_quant_range=0;
 	        }
 	       }
@@ -2411,6 +2430,16 @@ sub pattern_daemon {
       &log("Calman: leaving Dolby Vision, color_format $dv_color_format from the DV transport reset to RGB");
       $calman_save_setting->("color_format","0");
      }
+     # Leaving Dolby Vision keeps the DV transport's range until Calman
+     # names one again; "Range with Calman" takes its place now. Read
+     # directly: under GCI the dv_status save above is suppressed, and
+     # calman_range_override is empty while dv_status is 1.
+     my $range_override=(($pgenerator_conf{"calman_range"} // "")=~/^([12])$/) ? $1 : "";
+     if($range_override ne "" && ($pgenerator_conf{"rgb_quant_range"} || "") ne $range_override) {
+      &log("Calman: leaving Dolby Vision, range $range_override (Range with Calman)");
+      $calman_rgb_quant_range=$range_override + 0;
+      $calman_save_setting->("rgb_quant_range",$range_override);
+     }
     };
 
     my $calman_handle_rpc_source_alias = sub {
@@ -2439,7 +2468,7 @@ sub pattern_daemon {
        &apply_source_rgb_quant_range("calman",$calman_rgb_quant_range);
       } else {
        &log("Calman: releasing external range via RPC RANGE=$rpc_payload");
-       &release_source_rgb_quant_range("calman");
+       &calman_default_rgb_quant_range();
        $calman_rgb_quant_range=0;
       }
       &calman_replay_last_pattern("RPC RANGE");
@@ -2470,7 +2499,7 @@ sub pattern_daemon {
         &apply_source_rgb_quant_range("calman",$calman_rgb_quant_range);
        } else {
         &log("Calman: releasing external range via RPC CMD");
-        &release_source_rgb_quant_range("calman");
+        &calman_default_rgb_quant_range();
         $calman_rgb_quant_range=0;
        }
        &calman_replay_last_pattern("RPC CMD range");
@@ -2480,13 +2509,13 @@ sub pattern_daemon {
      return 0;
     };
 
-    # The G1 source is not offered GET_SETTINGS (see CAP). It starts the
-    # connection at RGB 8-bit (its constructor default), sends only Range
-    # Limited and sends CONF_LEVEL:Format only when the user changes the
-    # colour format. Match that default on the first command so the
-    # output agrees with what Calman shows.
+    # The G1 source starts the connection at RGB 8-bit (its constructor
+    # default), whatever GET_SETTINGS reports (see CAP), and sends
+    # CONF_LEVEL:Format only when the user changes the colour format.
+    # Match that default on the first command so the output agrees with
+    # what Calman shows. The range stays as GET_SETTINGS reported it.
     if($type ne "INIT" && delete $calman_g1_startup{$connection}) {
-     &log("Calman G1: no GET_SETTINGS after the handshake, using Calman's start-up format RGB 8-bit");
+     &log("Calman G1: using Calman's start-up format RGB 8-bit");
      $calman_apply_source_payload->("RGB",1);
      $calman_apply->();
     }
@@ -2513,7 +2542,7 @@ sub pattern_daemon {
         $calman_save_setting->("rgb_quant_range","$calman_rgb_quant_range");
         &apply_source_rgb_quant_range("calman",$calman_rgb_quant_range);
        } else {
-        &release_source_rgb_quant_range("calman");
+        &calman_default_rgb_quant_range();
         $calman_rgb_quant_range=0;
         $calman_save_setting->("rgb_quant_range",&webui_preferred_rgb_quant_range());
        }
@@ -2785,7 +2814,7 @@ sub pattern_daemon {
         &apply_source_rgb_quant_range("calman",$calman_rgb_quant_range);
        } else {
         &log("Calman: releasing external range via QRNG=$pattern_cmd");
-        &release_source_rgb_quant_range("calman");
+        &calman_default_rgb_quant_range();
         $calman_rgb_quant_range=0;
         $calman_save_setting->("rgb_quant_range",&webui_preferred_rgb_quant_range());
        }
@@ -3033,7 +3062,7 @@ sub pattern_daemon {
          &calman_replay_last_pattern("CONF_LEVEL range");
         } else {
         &log("Calman: releasing external range via CONF_LEVEL=$cl");
-        &release_source_rgb_quant_range("calman");
+        &calman_default_rgb_quant_range();
         $calman_rgb_quant_range=0;
         &calman_replay_last_pattern("CONF_LEVEL range");
        }
@@ -3586,6 +3615,15 @@ sub close_connection {
    if($owner eq "$connection" || ($owner eq "" && $had_session));
  }
  &release_source_rgb_quant_range("hcfr") if($is_hcfr);
+ # "Range with Calman" put its range on the cable at INIT. When the last
+ # Calman session ends without SHUTDOWN/TERM/QUIT (socket closed, keepalive
+ # drop, VM paused), the WebUI's range comes back as it does after SHUTDOWN;
+ # a reconnecting Calman gets the override again at its INIT.
+ if($had_session && $session_software eq "Calman" && &calman_range_override() ne ""
+    && !grep { ($calibration_session{$_}->{software} || "") eq "Calman" } keys %calibration_session) {
+  &log("Calman: last session closed without SHUTDOWN, the WebUI's range comes back (Range with Calman)");
+  &release_source_rgb_quant_range("calman");
+ }
  &pitpg_closed($connection,$pitpg) if($pitpg);
  $calman{$connection}=0;
  $cmd{$connection}="";

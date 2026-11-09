@@ -129,10 +129,13 @@ sub webui_preferred_rgb_quant_range (@) {
 # Range on the wire: 1 Limited, 2 Full. Default (0) is Limited for YCbCr
 # (the renderer's YCbCr scaling); for RGB the kernel picks it per mode and
 # the renderer, which resolves it the same way, records the result.
+# $color_format: the format to judge it for (default: the configured one).
 sub effective_rgb_quant_range (@) {
+ my $color_format=shift;
+ $color_format=($pgenerator_conf{"color_format"} || "0") if(!defined $color_format || $color_format eq "");
  my $quant_range=$pgenerator_conf{"rgb_quant_range"} || "0";
  return $quant_range + 0 if($quant_range =~/^[12]$/);
- return 1 if(($pgenerator_conf{"color_format"} || "0") ne "0");
+ return 1 if($color_format ne "0");
  if(open(my $fh,"<",$renderer_default_range_file)) {
   my $line=<$fh> || "";
   close($fh);
@@ -141,10 +144,28 @@ sub effective_rgb_quant_range (@) {
  return 2;
 }
 
+# The WebUI's "Range with Calman" (calman_range): 1 Limited or 2 Full takes
+# the place of the range Calman asks for, from the start of its session;
+# anything else follows Calman. Dolby Vision keeps its transport's range.
+# Returns "1", "2" or "".
+sub calman_range_override (@) {
+ my $o=defined($pgenerator_conf{"calman_range"}) ? "$pgenerator_conf{calman_range}" : "";
+ return "" if($o !~/^[12]$/);
+ return "" if(int($pgenerator_conf{"dv_status"} || 0) == 1);
+ return $o;
+}
+
 sub apply_source_rgb_quant_range (@) {
  my $source=lc(shift || "webui");
  my $quant_range=shift;
  my $owner_changed=0;
+ if($source eq "calman") {
+  my $o=&calman_range_override();
+  if($o ne "" && (!defined($quant_range) || "$quant_range" ne $o)) {
+   &log("Calman: range ".(defined($quant_range) ? $quant_range : "")." requested, $o kept (Range with Calman)");
+   $quant_range=$o;
+  }
+ }
  if($source eq "webui") {
   my $ycbcr=(($pgenerator_conf{"color_format"} || "0") ne "0");
   # Default on YCbCr already is Limited on the wire: a pattern request has nothing
@@ -196,6 +217,17 @@ sub release_source_rgb_quant_range (@) {
  return 0 if($source eq "");
  return 0 if($rgb_quant_range_source ne $source && !($source ne "webui" && $external_rgb_quant_range_active));
  return &apply_source_rgb_quant_range("webui",&webui_preferred_rgb_quant_range());
+}
+
+# Calman asks for its default range during its session (CONF_LEVEL:Range
+# Default, RANGE:Default, QRNG:DEFAULT, ...): with "Range with Calman" set
+# the override stays on the cable, else the WebUI's range comes back. The end
+# of the session (TERM, SHUTDOWN, QUIT) releases with
+# release_source_rgb_quant_range.
+sub calman_default_rgb_quant_range (@) {
+ my $o=&calman_range_override();
+ return &apply_source_rgb_quant_range("calman",$o) if($o ne "");
+ return &release_source_rgb_quant_range("calman");
 }
 
 sub set_pgenerator_conf_runtime(@) {
@@ -2626,7 +2658,11 @@ sub sudo(@) {
   my $arg = defined($_) ? $_ : "";
   push(@arg_base64,($arg eq "") ? "=" : encode_base64($arg,""));
  }
- return `$pg_cmd_env="@arg_base64" timeout 15 $sudo_cmd`;
+ # Seconds an action may run. WIFI_APPLYCONF waits up to 20 s for the
+ # association and up to 18 s for the DHCP lease (wifi_apply_conf); cut at
+ # 15 s it printed nothing and the WebUI reported a failed join (#22).
+ my $limit=((defined($_[0]) ? $_[0] : "") eq "WIFI_APPLYCONF") ? 60 : 15;
+ return `$pg_cmd_env="@arg_base64" timeout $limit $sudo_cmd`;
 }
 
 ###############################################

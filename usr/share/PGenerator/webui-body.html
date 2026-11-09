@@ -215,6 +215,17 @@ __PG_LOGO_DARK__
     </select>
    </div>
   </fieldset>
+  <div class="grid setting-tiles calman-range">
+   <div class="field">
+    <label for="calman_range">Range with Calman</label>
+    <select id="calman_range" onchange="calmanRangeChanged(this.value)" aria-describedby="calmanRangeHint">
+     <option value="">Follow Calman</option>
+     <option value="2">Always Full (0-255)</option>
+     <option value="1">Always Limited (16-235)</option>
+    </select>
+   </div>
+   <p class="calman-range-hint" id="calmanRangeHint">Saved right away, also while Calman is connected. Full or Limited holds for the whole Calman session, whatever range Calman asks for, from Calman&rsquo;s next pattern; set Calman&rsquo;s patterns to the same range. Follow Calman takes effect with Calman&rsquo;s next range command. YCbCr is Limited on the cable either way: Full there reads Calman&rsquo;s patterns as 0&#8209;255. Dolby Vision keeps the range of its transport.</p>
+  </div>
   <p class="dv-locked-note" id="dvLockedNote" hidden></p>
  </div>
 

@@ -10240,7 +10240,9 @@ sub _webui_conf_value_text (@) {
 
 # Values a signal key may take: the WebUI's choices (webui-body.html), the
 # DRM colorimetry enum 0-12 (drm_override.c), the DV transport values and
-# plain numbers for the HDR metadata. "" deletes the key and passes.
+# plain numbers for the HDR metadata, and "Range with Calman"
+# (calman_range, not a signal key: it stays settable while Calman is
+# connected). "" deletes the key and passes.
 our %webui_signal_value_ok=(
  signal_mode=>qr/^(?:sdr|hdr10|hlg|dv)$/i,
  max_bpc=>qr/^(?:8|10|12)$/,
@@ -10261,11 +10263,58 @@ our %webui_signal_value_ok=(
  dv_color_space=>qr/^\d{1,2}$/,
  dv_profile=>qr/^\d{1,2}$/,
  mode_idx=>qr/^(?:-1|\d{1,4})$/,
+ calman_range=>qr/^[012]$/,
  min_luma=>qr/^\d{1,6}(?:\.\d{1,6})?$/,
  max_luma=>qr/^\d{1,6}(?:\.\d{1,6})?$/,
  max_cll=>qr/^\d{1,6}(?:\.\d{1,6})?$/,
  max_fall=>qr/^\d{1,6}(?:\.\d{1,6})?$/,
 );
+
+# Settings that are not part of the signal and are meant to be changed while
+# calibration software owns it. A POST of only these is written as posted:
+# the signal derivation in webui_apply_config (YCbCr turns a Full range into
+# Limited, Dolby Vision fills in its primaries) would otherwise overwrite
+# what the software set and restart the renderer for a setting that is not
+# part of the signal.
+our %webui_conf_only_keys=(calman_range=>1);
+
+# Writes a POST of only %webui_conf_only_keys keys. Same helper, read-back
+# and memory rules as webui_apply_config; nothing else is derived, the
+# renderer is not restarted. Returns as webui_apply_config does.
+sub webui_apply_conf_only (@) {
+ my $changes=shift;
+ my (@writes,@deletes,%written);
+ foreach my $k (sort keys %$changes) {
+  my $cur=defined($pgenerator_conf{$k}) ? "$pgenerator_conf{$k}" : "";
+  next if("$changes->{$k}" eq $cur);
+  if("$changes->{$k}" eq "") { push(@deletes,$k,""); }
+  else { push(@writes,$k,$changes->{$k}); }
+  $written{$k}=$changes->{$k};
+ }
+ push(@writes,@deletes);
+ if(@writes && (&sudo("SET_PGENERATOR_CONF_MULTI",@writes) // "")!~/^OK/) {
+  # The helper's timeout can end it after the rename: what reads back as
+  # written is saved.
+  &webui_reload_pgenerator_conf();
+  foreach my $k (keys %written) {
+   next if((defined($pgenerator_conf{$k}) ? "$pgenerator_conf{$k}" : "") eq "$written{$k}");
+   &log("WebUI: settings not saved, writing PGenerator.conf failed");
+   my $result='{"status":"error","message":"The settings could not be saved: writing PGenerator.conf failed. The output was not changed."}';
+   return wantarray ? ($result,0) : $result;
+  }
+  &log("WebUI: conf helper gave no OK, but PGenerator.conf reads back as written");
+ }
+ $pgenerator_conf{$_}=$written{$_} foreach(keys %written);
+ # "Range with Calman" set to Full or Limited while Calman is connected:
+ # the cable takes it now. Following Calman again waits for Calman's next
+ # range command.
+ if(exists $changes->{"calman_range"} && grep { $_->{software} eq "Calman" } &webui_calibration_sessions()) {
+  my $o=&calman_range_override();
+  &apply_source_rgb_quant_range("calman",$o) if($o ne "");
+ }
+ my $result='{"status":"ok","restart":false}';
+ return wantarray ? ($result,0) : $result;
+}
 
 # $opts->{local}: the request came from this device (the self-test posts
 # over 127.0.0.1). Internal calls pass no $opts and count as local.
@@ -10334,6 +10383,7 @@ sub webui_apply_config (@) {
    return wantarray ? ($result,0) : $result;
   }
  }
+ return &webui_apply_conf_only(\%changes) if(%changes && !grep { !$webui_conf_only_keys{$_} } keys %changes);
   my $requested_dv_transport=&pg_dv_transport_mode($changes{"dv_transport"} || $pgenerator_conf{"dv_transport"});
  # HDR10/HLG and DV force BT.2020 colorimetry below. Remember the SDR choice
  # when leaving SDR and give it back on the way in, else SDR kept signalling
@@ -10509,7 +10559,13 @@ sub webui_apply_config (@) {
   my $result='{"status":"error","message":"YCbCr 4:2:0 is not supported by the current HDMI driver. Use RGB, YCbCr 4:4:4, or YCbCr 4:2:2."}';
   return wantarray ? ($result,0) : $result;
  }
- if(($effective_color_format == 1 || $effective_color_format == 2) && $effective_rgb_quant_range == 2) {
+ # A range set by calibration software (Calman's Full or "Range with
+ # Calman" on YCbCr: its 0-255 codes on a Limited link) is not the WebUI's
+ # to normalize: a POST that names neither the range nor the format leaves
+ # it, else any other setting saved during the session read Calman's codes
+ # as video levels and restarted the renderer.
+ my $range_held_external=($external_rgb_quant_range_active && !exists $posted{"rgb_quant_range"} && !exists $posted{"color_format"});
+ if(($effective_color_format == 1 || $effective_color_format == 2) && $effective_rgb_quant_range == 2 && !$range_held_external) {
   # YCbCr transports are Limited-range on the wire; Full range is an
   # RGB-only concept. Coerce (rather than error) so older saved configs
   # normalize on their next apply. The UI mirrors this by disabling the
@@ -10668,6 +10724,12 @@ sub webui_apply_config (@) {
   }
   $pgenerator_conf{$_}=$conf_written{$_} foreach(keys %conf_written);
   $webui_rgb_quant_range_preferred=$changes{"rgb_quant_range"} if(exists $changes{"rgb_quant_range"});
+ # "Range with Calman" posted together with other settings, while Calman is
+ # connected: as in webui_apply_conf_only.
+ if(exists $changes{"calman_range"} && grep { $_->{software} eq "Calman" } &webui_calibration_sessions()) {
+  my $o=&calman_range_override();
+  &apply_source_rgb_quant_range("calman",$o) if($o ne "");
+ }
  # Settings that work: what a later refused apply goes back to, and the end
  # of a refusal a calibration program was left in.
  if($signal_changed) {

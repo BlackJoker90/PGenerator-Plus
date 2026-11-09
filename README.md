@@ -163,7 +163,7 @@ Press **OK or Menu on the TV remote** and a menu of every pattern appears on the
 ### 🚫 Refused settings, with the reason
 A setting the Pi or the display cannot carry is **refused instead of quietly changed**: 10-bit RGB at 4K 60 Hz needs 742.5 MHz on the link and the Pi 4 sends at most 600 MHz; a YCbCr format, a bit depth or an HDR mode missing from the display's EDID; TV-led Dolby Vision at 4K 60 Hz or low-latency DV in RGB where the display's Dolby block does not list it. The output stays as it was, the WebUI says why and what works instead, and **patches are refused until working settings arrive** (Calman gets a NAK). In Output, options that cannot go out stay visible but locked, with the reason next to them.
 
-While **Calman, ColourSpace or LightSpace is connected, it sets the signal**: the Output settings, presets and Apply are locked with the reason, and `/api/config` refuses signal changes, so the cable keeps what the software shows. Settings other than the signal still save; HCFR and Resolve only send patches and leave the signal to the WebUI. Sessions are tracked per socket and port: Calman from its `INIT` on 2100 (UPGCI) or 2101 (G1), not from its discovery probe; port 85 clients from their first pattern. A session ends with Calman's `SHUTDOWN` or when its socket closes, and a client that vanishes without closing (VM paused, network gone) is dropped after about a minute by TCP keepalive instead of staying "connected". The header tooltip lists each session with port, protocol and when data last came.
+While **Calman, ColourSpace or LightSpace is connected, it sets the signal**: the Output settings, presets and Apply are locked with the reason, and `/api/config` refuses signal changes, so the cable keeps what the software shows. Settings other than the signal still save; HCFR and Resolve only send patches and leave the signal to the WebUI. **Range with Calman** (below the Display Settings) is the exception for the range: *Always Full* or *Always Limited* holds for the whole Calman session, whatever range Calman asks for (also its Default), and can be changed while Calman is connected (it applies from Calman's next pattern; back to *Follow Calman*, the default, from Calman's next range command). When Calman's socket closes without a SHUTDOWN, *Always Full* or *Always Limited* gives the WebUI's range back as after one. YCbCr is Limited on the cable either way: *Always Full* then reads Calman's patterns as 0-255 codes. Dolby Vision keeps the range of its transport. Sessions are tracked per socket and port: Calman from its `INIT` on 2100 (UPGCI) or 2101 (G1), not from its discovery probe; port 85 clients from their first pattern. A session ends with Calman's `SHUTDOWN` or when its socket closes, and a client that vanishes without closing (VM paused, network gone) is dropped after about a minute by TCP keepalive instead of staying "connected". The header tooltip lists each session with port, protocol and when data last came.
 
 </td>
 <td valign="top">
@@ -192,6 +192,7 @@ Next to the settings, **On the cable** shows what is actually sent (format, rang
 | Calman YCbCr 4:2:0 request | no defined answer | clean NAK, current format kept, WebUI notice |
 | Settings the Pi or display can't carry | applied anyway: vc4 quietly lowers the depth, or the display shows nothing | **refused with the reason** (link bandwidth, EDID), output kept, patches refused until working settings arrive |
 | WebUI signal change during a Calman / ColourSpace session | applied, so the cable no longer matched what the software showed | **locked with the reason**: the software sets the signal while it is connected |
+| Range with Calman | – | **Follow Calman**, or **Always Full** / **Always Limited** for the whole Calman session |
 | What goes out on the cable | – | **shown next to the settings**, quiet adjustments named (e.g. 12-bit sent as 10-bit) |
 | Range mismatch between Pi and display | – | **Range Check** test image: shows whether the display decodes Limited or Full, next to the range on the cable, plus an EDID check that predicts from the display's EDID (QS/QY) and the Pi's AVI infoframe (Q/YQ, VIC) whether the display on Auto matches |
 | HDMI link drop during a measurement | – | **recorded with the time**, notice and banner: readings across it can't be combined |
@@ -278,7 +279,13 @@ Next to the settings, **On the cable** shows what is actually sent (format, rang
 - **USB:** the Pi 4's USB-C port to your computer: a network as CDC-NCM (Linux, macOS, Windows 11 without a driver), rebuilt as RNDIS when the computer does not use NCM within 5 s (older Windows). The Pi is `10.10.12.1`; the boot partition also appears as a drive.
 - **Wireless PAN:** join the Pi's access point (SSID `PGenerator`, password `PGenerator`).
   <p align="left"><img src="screenshots/join_wifi_pan.png" alt="Join WiFi PAN" width="200"/></p>
-- **Wireless LAN:** join your own Wi-Fi from **Connectivity** in the Web UI, after connecting once by one of the methods above.
+- **Wireless LAN:** join your own Wi-Fi from **Connectivity** in the Web UI, after connecting once by one of the methods above. Joining and getting an address can take up to a minute; the Web UI waits for it.
+- **Wireless LAN over SSH** (`root` / `PGenerator!!$`): add the network to `/etc/wpa_supplicant/wpa_supplicant.conf` and restart the WiFi client; the Pi joins it on every boot from then on.
+
+  ```bash
+  wpa_passphrase "YourNetwork" "YourPassword" | grep -v '#psk' >> /etc/wpa_supplicant/wpa_supplicant.conf
+  /etc/init.d/wpa_supplicant restart
+  ```
 
 </details>
 
@@ -332,6 +339,7 @@ PGenerator+ is a free, open-source display calibration suite for the Raspberry P
   - *Dolby Vision needs the G1 source:* the UPGCI source does not send Calman's Dolby Vision command (`CONF_DV`). In a Calman 5.14 log, "Dolby Vision RGB Tunneling" sent the same commands as HDR10, so the output is HDR10. Connect as **Portrait Displays G1** instead, which sends it. Whether Calman Home offers the G1 source is not confirmed.
   - *Bit depth:* the Calman thread follows the configured bit depth. 10-bit codes stay exact, and codes are rounded to the output depth with a notice when one is not exact.
   - *Modes:* `CONF_FORMAT` requests resolve to the EDID copy of a mode rather than the userdef boot mode. G1 sessions start at Calman's RGB 8-bit default.
+  - *Range:* the output follows Calman's range commands. A G1 session starts at the range on the cable (the Range setting in Output), which the Pi reports to Calman; without that report Calman's G1 source forces Limited at every connect. **Range with Calman** in Output keeps the range Full or Limited for the whole session whatever Calman asks for; set Calman's patterns to the same range then. On YCbCr the cable stays Limited and *Always Full* means Calman's patterns are read as 0-255.
   - *Windows and APL:* fixed, custom and gray-surround APL windows (`RGB_S`, `RGB_A`, `CommandRGB`, `10_SIZE`, `11_APL`). With limited range, window backgrounds are drawn at black.
   - *Unsupported formats:* a YCbCr 4:2:0 request gets a NAK, and the WebUI shows a notice. The current format stays.
   - *Refused settings:* settings the Pi or the display cannot carry (link bandwidth, missing EDID support for a format, depth or HDR mode) get a NAK. The output stays as it was, the WebUI shows the reason and what works, and patches get a NAK until Calman sends settings that work (or disconnects). The same applies to port 85 clients (`ERR:Refused: …`).
@@ -375,7 +383,7 @@ Served on **port 80** at `http://pgenerator.local`. It has a **Desktop** layout 
 
 | Workspace | What's in it |
 |---|---|
-| **Output** | Signal mode (SDR / HDR10 / HLG / Dolby Vision), resolution from the EDID, bit depth, colour format, colorimetry, range, and HDR10 and DV metadata (with hints for measuring Dolby Vision). Options the Pi or the display cannot carry stay visible but locked, with the reason. **On the cable** shows what is actually sent and any quiet adjustment; banners show refused settings (with what works), HDMI link interruptions during a measurement and a test EDID in use. Shows a banner while no display is connected. Moving the cable to the other HDMI port keeps the resolution (the mode is followed by its timing, not its list position) and the output follows the cable. Below it the **Signal Self-Test**: draws known codes in every signal mode and reads the scanout back, next to link depth, range CSC, AVI infoframe, HDR metadata and the Dolby Vision infoframe |
+| **Output** | Signal mode (SDR / HDR10 / HLG / Dolby Vision), resolution from the EDID, bit depth, colour format, colorimetry, range, and HDR10 and DV metadata (with hints for measuring Dolby Vision); **Range with Calman** (follow Calman, or always Full / Limited). Options the Pi or the display cannot carry stay visible but locked, with the reason. **On the cable** shows what is actually sent and any quiet adjustment; banners show refused settings (with what works), HDMI link interruptions during a measurement and a test EDID in use. Shows a banner while no display is connected. Moving the cable to the other HDMI port keeps the resolution (the mode is followed by its timing, not its list position) and the output follows the cable. Below it the **Signal Self-Test**: draws known codes in every signal mode and reads the scanout back, next to link depth, range CSC, AVI infoframe, HDR metadata and the Dolby Vision infoframe |
 | **Patterns** | Calman G1 plates (favourites Basic Alignment, Warm-Up, Granger Rainbow, plus all others; Basic Alignment doubles as an overscan check: numbered rings 1 to 5 % in from each edge, so the outermost ring still visible shows how much the display crops), the test images Range Check (sub-black codes show whether the display decodes the signal as Limited or Full, next to the range on the cable; an EDID check from the display's EDID and the Pi's AVI infoframe says whether the display on Auto should match), White Clipping and Black Clipping, your own uploaded images and videos, and **playlists** you step through with the TV remote; "Show menu on TV" opens the on-screen pattern menu |
 | **Calibration** | Meter detection, single and continuous reads, series runs (Greyscale 21/11, Colors 30, Saturation 24), charts, and session export |
 | **Meter Profiler** | Meter correction (CCSS) editor and preview |
@@ -519,6 +527,7 @@ PGenerator 1.6 treats this as a normal `GETSTATUS`. PGenerator+ also shows the s
 | `color_format` | `0`=RGB, `1`=YCbCr444, `2`=YCbCr422 | HDMI output colour format |
 | `colorimetry` | `0`=BT.709, `1`=BT.2020 | AVI InfoFrame colorimetry |
 | `rgb_quant_range` | `0`=Auto, `1`=Limited, `2`=Full | RGB quantisation range (YCbCr always goes out Limited) |
+| `calman_range` | empty or `0`=follow Calman, `1`=Limited, `2`=Full | Range with Calman: replaces the range Calman asks for while it is connected, its Default included (not in Dolby Vision; on YCbCr the cable stays Limited and `2` reads Calman's codes as Full) |
 | `max_bpc` | `8`, `10`, `12` | Bits per channel |
 | `eotf` | `0`=SDR, `2`=PQ, `3`=HLG | Transfer function |
 | `primaries` | `1`=Rec.2020, `2`=P3/D65, `3`=P3/DCI | Mastering display primaries |

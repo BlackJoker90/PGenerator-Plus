@@ -226,6 +226,16 @@ __PG_LOGO_DARK__
    </div>
    <p class="calman-range-hint" id="calmanRangeHint">Saved right away, also while Calman is connected. Full or Limited holds for the whole Calman session, whatever range Calman asks for, from Calman&rsquo;s next pattern; set Calman&rsquo;s patterns to the same range. Follow Calman takes effect with Calman&rsquo;s next range command. YCbCr is Limited on the cable either way: Full there reads Calman&rsquo;s patterns as 0&#8209;255. Dolby Vision keeps the range of its transport.</p>
   </div>
+  <div class="grid setting-tiles calman-range">
+   <div class="field">
+    <label for="calman_dv_container">Dolby Vision with Calman</label>
+    <select id="calman_dv_container" onchange="calmanDvContainerChanged(this.value)" aria-describedby="calmanDvContainerHint">
+     <option value="2">P3-D65</option>
+     <option value="1">BT.2020</option>
+    </select>
+   </div>
+   <p class="calman-range-hint" id="calmanDvContainerHint">Saved right away, also while Calman is connected. The colour space Dolby Vision signals for Calman&rsquo;s patches. P3-D65 fits Calman&rsquo;s Dolby Vision workflows, whose patches are P3 colours. With BT.2020 the same patches are BT.2020 colours and measure more saturated than Calman&rsquo;s targets; greys are the same in both. It applies from the first picture Calman shows until Calman disconnects, to everything shown in Standard Dolby Vision in that time, the WebUI&rsquo;s own patterns and measurements included. Without Calman, Dolby Vision is BT.2020; going back restarts the picture and the last patch is gone.</p>
+  </div>
   <p class="dv-locked-note" id="dvLockedNote" hidden></p>
  </div>
 
@@ -705,7 +715,7 @@ __PG_LOGO_DARK__
      </div>
     </div>
    <div class="field field-gamut">
-    <label>Target Colorspace <span class="meter-help-tip" title="Affects meter target math and chart references. Dolby Vision patterns still use BT.2020 container signalling; this setting changes the analysis target, not the DV transport primaries." aria-label="Target colorspace help">?</span></label>
+    <label>Target Colorspace <span class="meter-help-tip" title="Affects meter target math and chart references. Dolby Vision patterns keep their container signalling (BT.2020; P3-D65 while a Calman session has taken it, see Output); this setting changes the analysis target, not the DV transport primaries." aria-label="Target colorspace help">?</span></label>
     <select id="meterTargetGamut" aria-label="Target colorspace">
      <option value="auto">Auto (match signal)</option>
      <option value="bt709" selected>BT.709</option>

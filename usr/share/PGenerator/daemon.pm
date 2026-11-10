@@ -122,6 +122,95 @@ sub calman_scale_value (@) {
  return int($value/$input_max*$target_max + 0.5);
 }
 
+# Calman's own level formula (calmanv5.dll 5.17.6, FUN_10443d50): the code
+# of a level held in percent is scale*percent + offset in double arithmetic,
+# then up when the fraction is 0.5 or more. Scale 2.55 (Full) / 2.19
+# (Limited) at 8 bit, 10.23 / 8.76 at 10 bit; offset 16 / 64 in Limited.
+sub calman_level_code (@) {
+ my ($percent,$limited,$ten_bit)=@_;
+ my $scale=$limited ? ($ten_bit ? 8.76 : 2.19) : ($ten_bit ? 10.23 : 2.55);
+ my $offset=$limited ? ($ten_bit ? 64 : 16) : 0;
+ my $x=$scale*$percent + $offset;
+ my $code=int($x);
+ $code++ if($x - $code >= 0.5);
+ return $code;
+}
+
+# The range Calman computes its levels for: the one it asked for in this
+# session, else the one on the cable. Returns 1 for Limited.
+sub calman_levels_limited (@) {
+ return ($calman_rgb_quant_range == 1 ? 1 : 0) if(($calman_rgb_quant_range || 0)=~/^[12]$/);
+ return (&effective_rgb_quant_range() == 1) ? 1 : 0;
+}
+
+# "Dolby Vision with Calman": Calman is about to draw a picture. From here
+# until its last session ends, Standard Dolby Vision signals the session's
+# container (command.pm dv_session_profile), for the WebUI's patterns too.
+# Standard Dolby Vision that is already on (the WebUI's) takes it now: the
+# conf, and a renderer restart when the running one was started with
+# another container. Taken here and not in Calman's apply, so nothing of it
+# passes the settings gate or its refused state, and not at INIT, so a
+# Calman that shows nothing changes nothing. Checked against the renderer
+# when the conf changed and at the first picture (a conf that already names
+# the container the renderer does not send). Low Latency DV, SDR, HDR10 and
+# PiTPG clients are not touched (dv_container_follow). The plate drawn at a
+# daemon start has no session and takes nothing. Returns 1 after a restart.
+sub calman_dv_container_take (@) {
+ return 0 if(!&calman_session_open());
+ my $first=$calman_dv_container_taken ? 0 : 1;
+ $calman_dv_container_taken=1;
+ # Refused settings: no patch is drawn (signal_refuse_patch), nothing to take.
+ return 0 if(&signal_patches_refused() ne "");
+ my $wrote=&dv_container_follow("Calman");
+ return 0 if(!$wrote && !$first);
+ return 0 if(!&dv_standard_active() || ($main::pitpg_clients || 0) || !&dv_container_restart_needed());
+ &log("Calman: Dolby Vision container changed, restarting the pattern generator before the patch");
+ &pattern_generator_stop();
+ &load_new_pattern_file("calman");
+ return 1;
+}
+
+# Calman's 10 bit codes of one colour at the output's depth: the nearest
+# code each (calman_scale_value), except a grey at a whole percent on an
+# 8 bit output, which gets the 8 bit code of that percent. Only a code off
+# the 8 bit grid is such a grey: a multiple of 4 is also what an 8 bit
+# triplet looks like and keeps code/4. Returns (r,g,b,grey,nearest): grey
+# is the percent grey's code ("" otherwise), nearest what rounding gave.
+# $calman_precision_lost is left set when a code had no exact code and was
+# not such a grey.
+sub calman_codes_out (@) {
+ my ($c0,$c1,$c2,$calman_max,$target_max)=@_;
+ $calman_precision_lost=0;
+ my @out=map { &calman_scale_value($_,$calman_max) } ($c0,$c1,$c2);
+ my $nearest=$out[0];
+ my $grey="";
+ if($calman_precision_lost && $target_max == 255 && int($c0) == int($c1) && int($c1) == int($c2)) {
+  $grey=&calman_percent_grey_8bit(int($c0),&calman_levels_limited());
+  if($grey ne "") {
+   @out=($grey,$grey,$grey);
+   $calman_precision_lost=0;
+  }
+ }
+ return (@out,$grey,$nearest);
+}
+
+# A grey Calman holds as a percent level goes out in 10 bit whatever bit
+# depth Calman is set to (its patch dispatcher FUN_106759b0 calls the
+# formula with the 10 bit constants; RGB triplets arrive as 8 bit codes
+# times 4). Rounded again for an 8 bit output, such a code can be one code
+# off the 8 bit code of the same percent: 2 % Limited is 82, which rounds to
+# 21, where the 8 bit formula gives 20. Returns the 8 bit code of the whole
+# percent whose 10 bit code this is, or "" when it is none. A multiple of 4
+# is never asked: it cannot be told from an 8 bit triplet and keeps code/4
+# (the same code in Limited; in Full the two can differ by one).
+sub calman_percent_grey_8bit (@) {
+ my ($code,$limited)=@_;
+ for my $percent (0..($limited ? 109 : 100)) {
+  return &calman_level_code($percent,$limited,0) if(&calman_level_code($percent,$limited,1) == $code);
+ }
+ return "";
+}
+
 sub calman_scale_triplet_8bit (@) {
  my $r=shift;
  my $g=shift;
@@ -488,6 +577,7 @@ sub calman_remember_pattern (@) {
 sub calman_render_commandrgb_pattern (@) {
  my $pattern_cmd=shift;
  my $connection=shift;
+ &calman_dv_container_take();
  my @el_cmd=split(",",$pattern_cmd);
  my $cr_r_in=int($el_cmd[0]);
  my $cr_g_in=int($el_cmd[1]);
@@ -529,24 +619,27 @@ sub calman_render_rgb_pattern (@) {
  my $pattern_cmd=shift;
  my $full_key=shift;
  my $connection=shift;
+ &calman_dv_container_take();
  my @el_cmd=split(",",$pattern_cmd);
  my $calman_max=1023;
  my $target_max=&calman_target_max();
  my $source_max=&calman_dv_source_max();
  my $rgb_raw="$el_cmd[0],$el_cmd[1],$el_cmd[2]";
  &log("Calman PATTERN: type=$type raw=$rgb_raw bits_default=$bits_default target_max=$target_max");
- $calman_precision_lost=0;
- my $r=&calman_scale_value($el_cmd[0],$calman_max);
- my $g=&calman_scale_value($el_cmd[1],$calman_max);
- my $b=&calman_scale_value($el_cmd[2],$calman_max);
+ # A whole-percent grey at 8 bit: the 8 bit code of that percent, as
+ # Calman's own 8 bit formula gives it, and nothing to tell the user.
+ my ($r,$g,$b,$grey,$nearest)=&calman_codes_out($el_cmd[0],$el_cmd[1],$el_cmd[2],$calman_max,$target_max);
+ &log("Calman PATTERN: $rgb_raw is Calman's 10 bit code of a whole percent; its 8 bit code is $grey".($grey != $nearest ? " (rounding the 10 bit code gave $nearest)" : ""))
+  if($grey ne "");
  if($calman_precision_lost) {
-  &log("Calman PATTERN: $rgb_raw at 10 bit has no exact code at ".($target_max == 255 ? 8 : 10)." bit output; rounded to $r,$g,$b");
-  # Once per 10 minutes: Calman works at a finer bit depth than the output.
+  my $out_bits=$target_max == 255 ? 8 : 10;
+  &log("Calman PATTERN: $rgb_raw at 10 bit has no exact code at $out_bits bit output; rounded to $r,$g,$b");
+  # Once per 10 minutes. Calman's bit depth setting does not decide this:
+  # it sends its percent levels in 10 bit either way.
   if(time() - ($calman_precision_notice_time || 0) > 600) {
    $calman_precision_notice_time=time();
-   my $out_bits=$target_max == 255 ? 8 : 10;
    my $sent=join(",",map { int($_) } @el_cmd[0..2]);
-   &webui_notice("Calman sends finer codes than the output carries","Calman sent $sent (10 bit), but PGenerator+ outputs $out_bits bit, so the patch was rounded to $r,$g,$b. For bit-exact patches set the same bit depth in Calman and in PGenerator+.");
+   &webui_notice("Patch rounded to $out_bits bit","Calman sent $sent as 10-bit codes. The output is $out_bits bit, so the patch went out as the nearest codes: $r,$g,$b. Calman sends percent levels in 10 bit whatever its bit depth setting says; whole-percent greys get their exact $out_bits-bit code and do not show this note. For finer steps choose a 10-bit format in Calman.");
   }
  }
  my $patch_context=&calman_patch_context();
@@ -570,7 +663,8 @@ sub calman_render_rgb_pattern (@) {
  }
  my $source_range=&calman_pattern_source_range();
  if($type =~/RGB_B/) {
-  my $bg_val=&calman_scale_value($el_cmd[3],$calman_max);
+  # The background as the patch: a percent grey gets the same code in both.
+  my ($bg_val)=&calman_codes_out($el_cmd[3],$el_cmd[3],$el_cmd[3],$calman_max,$target_max);
   $calman_apl_enabled=0;
   $calman_bg="$bg_val,$bg_val,$bg_val";
   &clean_pattern_files();
@@ -601,9 +695,7 @@ sub calman_render_rgb_pattern (@) {
   my $win_pct=$calman_win_size;
   my $effective_bg=$current_bg;
   if(scalar(@el_cmd) >= 7) {
-   my $bg_r=&calman_scale_value($el_cmd[3],$calman_max);
-   my $bg_g=&calman_scale_value($el_cmd[4],$calman_max);
-   my $bg_b=&calman_scale_value($el_cmd[5],$calman_max);
+   my ($bg_r,$bg_g,$bg_b)=&calman_codes_out($el_cmd[3],$el_cmd[4],$el_cmd[5],$calman_max,$target_max);
    $effective_bg="$bg_r,$bg_g,$bg_b";
    $win_pct=int($el_cmd[6]);
   } elsif(scalar(@el_cmd) >= 4) {
@@ -848,6 +940,7 @@ sub show_boot_pattern (@) {
 
 sub calman_render_specialty_pattern (@) {
  my $pattern_cmd=shift;
+ &calman_dv_container_take();
  my $sp_name=uc($pattern_cmd);
  $sp_name=~s/^\s+|\s+$//g;
  my $g1_key=&g1_pattern_key($sp_name);
@@ -2108,6 +2201,9 @@ sub pattern_daemon {
       # mid-DV session cannot leave dv_status=0 / signal_mode=hdr10.
       $calman_enforce_mode_coherence->() if($calman_gci{$connection});
       $calman_dv_transition_active=0;
+      # The container of this session ("Dolby Vision with Calman"), before
+      # the apply compares the conf with the running renderer.
+      &dv_container_follow("Calman Dolby Vision",1);
      };
      #
      # Helper: apply pending settings — restart pattern generator if dirty
@@ -2208,6 +2304,7 @@ sub pattern_daemon {
        # the coalescing path) sets it back to 1, and the loop
        # re-runs to pick up the latest conf.
        $calman_settings_dirty=0;
+       my $refused=0;
        eval {
         $calman_force_dv_rgb->();
         # Refused settings: a signal the board or display cannot carry
@@ -2216,6 +2313,7 @@ sub pattern_daemon {
         # Calman chooses settings that work (return leaves the eval).
         if(!&signal_gate_conf(&signal_source_label("Calman"))) {
          &log("Calman: apply refused, output unchanged");
+         $refused=1;
          return;
         }
         # Compare the current mode-affecting conf to the last
@@ -2370,6 +2468,15 @@ sub pattern_daemon {
        };
        $calman_apply_in_progress=0;
        $did_work=1;
+       # One gate decision per command. In Dolby Vision the next round would
+       # save Calman's explicit bit depth again ($calman_force_dv_rgb) over
+       # the conf the gate just put back, be refused again and never end
+       # (CONF_LEVEL:Bits 10 twice at 4K60): the pattern thread hung.
+       # Calman's next command sets the flag again.
+       if($refused) {
+        $calman_settings_dirty=0;
+        last;
+       }
       }
       return ($did_work ? 1 : 0);
      };
@@ -2381,6 +2488,10 @@ sub pattern_daemon {
     my $calman_set_dv_rgb = sub {
      my ($dv_map_mode,$dv_metadata)=@_;
      my $dv_transport="standard";
+     # Calman switches Dolby Vision on or sets its mapping itself: its
+     # session's container ("Dolby Vision with Calman") goes into the same
+     # apply and restart, not into a second one at the first patch.
+     $calman_dv_container_taken=1 if(&calman_session_open());
      # Mark a DV transition in progress so $calman_enforce_mode_coherence
      # writes dv_status=1 (and the standard-transport DV flags) as a
      # daemon-derived update when is_hdr/eotf/primaries are saved below.
@@ -3662,6 +3773,24 @@ sub close_connection {
     && !grep { ($calibration_session{$_}->{software} || "") eq "Calman" } keys %calibration_session) {
   &log("Calman: last session closed without SHUTDOWN, the WebUI's range comes back (Range with Calman)");
   &release_source_rgb_quant_range("calman");
+ }
+ # "Dolby Vision with Calman" ends with the last Calman session, however it
+ # ended (SHUTDOWN, TERM and QUIT close their session before they come
+ # here): Dolby Vision that stays on goes back to the BT.2020 container the
+ # WebUI's own patterns and measurements are computed for.
+ # The renderer is compared with the conf whenever the session had taken
+ # the container, not only when the conf changed here: a refused apply may
+ # have put dv_profile back already while the renderer kept the session's.
+ my $dv_container_was_taken=$calman_dv_container_taken;
+ $calman_dv_container_taken=0 if(!$pitpg && !&calman_session_open());
+ if(!$pitpg && !&calman_session_open() && (&dv_container_follow("no Calman session") || $dv_container_was_taken)
+    && &dv_standard_active() && !($main::pitpg_clients || 0) && &dv_container_restart_needed()) {
+  # As a WebUI apply: a restart through load_new_pattern_file's start
+  # ladder. The patch on screen goes with it, as at every renderer restart
+  # (pattern_generator_stop clears the pattern file); it is not drawn again,
+  # because the same triplet is another colour in the other container.
+  &pattern_generator_stop();
+  &load_new_pattern_file("Dolby Vision container");
  }
  &pitpg_closed($connection,$pitpg) if($pitpg);
  &pitpg_live_catch_up() if(defined &pitpg_live_catch_up);

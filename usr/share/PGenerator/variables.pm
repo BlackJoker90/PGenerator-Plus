@@ -318,6 +318,10 @@ $calman_apl=18;
 $calman_apl_enabled=0;
 $calman_bg="";
 $calman_settings_dirty=0;
+# "Dolby Vision with Calman": 1 from the first picture Calman draws (or its
+# own switch to Dolby Vision) until its last session ends (command.pm
+# dv_session_profile; shared with the WebUI workers).
+$calman_dv_container_taken=0;
 $calman_win_size=10;
 $calman_explicit_max_bpc=0;
 $calman_last_pattern_kind="";
@@ -403,6 +407,7 @@ share($doing_wifi_scan);
 share($calman_apl);
 share($calman_apl_enabled);
 share($calman_settings_dirty);
+share($calman_dv_container_taken);
 share($calman_win_size);
 share($calman_explicit_max_bpc);
 share($calman_last_pattern_kind);
@@ -454,6 +459,10 @@ $resolve_last_pattern="";
 # file next to it can fail to be written, this copy cannot.
 share(%signal_refused_mem);
 %signal_refused_mem=();
+# Held while the applied snapshot is written (command.pm
+# signal_applied_snapshot_write, signal_applied_snapshot_set).
+share($signal_applied_guard);
+$signal_applied_guard=0;
 
 $webui_info_cache="";
 $webui_info_cache_time=0;

@@ -798,6 +798,8 @@ function applyConfigState(nextConfig){
  if(rps&&document.activeElement!==rps) rps.value=(config.resolve_patch_size&&/^\d+$/.test(String(config.resolve_patch_size)))?String(config.resolve_patch_size):'';
  const crg=document.getElementById('calman_range');
  if(crg&&document.activeElement!==crg) crg.value=/^[12]$/.test(String(config.calman_range||''))?String(config.calman_range):'';
+ const cdc=document.getElementById('calman_dv_container');
+ if(cdc&&document.activeElement!==cdc) cdc.value=String(config.calman_dv_container||'')==='1'?'1':'2';
  // Derive signal mode from flags
  let sm='sdr';
  if(config.dv_status==='1'||config.is_ll_dovi==='1'||config.is_std_dovi==='1') sm='dv';
@@ -4680,6 +4682,33 @@ async function calmanRangeChanged(v){
  // Not saved: show what the Pi still has.
  const sel=document.getElementById('calman_range');
  if(!ok&&sel) sel.value=/^[12]$/.test(String(config&&config.calman_range||''))?String(config.calman_range):'';
+}
+// "Dolby Vision with Calman": like "Range with Calman" it is not a signal
+// field and saves at once. In a Calman Dolby Vision session that has shown
+// a picture the daemon switches the container right away.
+async function calmanDvContainerChanged(v){
+ const val=String(v)==='1'?'1':'2';
+ const text={'2':'Calman’s Dolby Vision patches are signalled as P3-D65','1':'Calman’s Dolby Vision patches are signalled as BT.2020'};
+ let ok=false;
+ try{
+  const r=await fetchJSON('/api/config',{method:'POST',headers:{'Content-Type':'application/json'},
+   body:JSON.stringify({calman_dv_container:val})});
+  ok=!!(r&&r.status==='ok');
+  if(ok){
+   if(config) config.calman_dv_container=val;
+   toast(text[val]);
+   // In a Calman Dolby Vision session the renderer restarts for it: follow
+   // that restart and say so when it fails.
+   if(r.restart&&r.restart_id){
+    try{ await waitForRendererRestart(r.restart_id,60000); }
+    catch(e){ toast('Dolby Vision with Calman is saved, but the renderer did not come back'+(e&&e.message?': '+e.message:''),'err'); }
+   }
+  }
+  else toast(pgFailMsg('Couldn’t save Dolby Vision with Calman',r),'err');
+ }catch(e){ toast('Couldn’t save Dolby Vision with Calman','err'); }
+ // Not saved: show what the Pi still has.
+ const sel=document.getElementById('calman_dv_container');
+ if(!ok&&sel) sel.value=String(config&&config.calman_dv_container||'')==='1'?'1':'2';
 }
 async function resolveForceCenterChanged(on){
  try{

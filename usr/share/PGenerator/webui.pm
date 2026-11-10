@@ -10266,9 +10266,10 @@ sub _webui_conf_value_text (@) {
 
 # Values a signal key may take: the WebUI's choices (webui-body.html), the
 # DRM colorimetry enum 0-12 (drm_override.c), the DV transport values and
-# plain numbers for the HDR metadata, and "Range with Calman"
-# (calman_range, not a signal key: it stays settable while Calman is
-# connected). "" deletes the key and passes.
+# plain numbers for the HDR metadata, and "Range with Calman" and "Dolby
+# Vision with Calman" (calman_range, calman_dv_container; not signal keys:
+# they stay settable while Calman is connected). "" deletes the key and
+# passes.
 our %webui_signal_value_ok=(
  signal_mode=>qr/^(?:sdr|hdr10|hlg|dv)$/i,
  max_bpc=>qr/^(?:8|10|12)$/,
@@ -10290,6 +10291,7 @@ our %webui_signal_value_ok=(
  dv_profile=>qr/^\d{1,2}$/,
  mode_idx=>qr/^(?:-1|\d{1,4})$/,
  calman_range=>qr/^[012]$/,
+ calman_dv_container=>qr/^[12]$/,
  min_luma=>qr/^\d{1,6}(?:\.\d{1,6})?$/,
  max_luma=>qr/^\d{1,6}(?:\.\d{1,6})?$/,
  max_cll=>qr/^\d{1,6}(?:\.\d{1,6})?$/,
@@ -10302,7 +10304,7 @@ our %webui_signal_value_ok=(
 # Limited, Dolby Vision fills in its primaries) would otherwise overwrite
 # what the software set and restart the renderer for a setting that is not
 # part of the signal.
-our %webui_conf_only_keys=(calman_range=>1);
+our %webui_conf_only_keys=(calman_range=>1,calman_dv_container=>1);
 
 # Writes a POST of only %webui_conf_only_keys keys. Same helper, read-back
 # and memory rules as webui_apply_config; nothing else is derived, the
@@ -10337,6 +10339,16 @@ sub webui_apply_conf_only (@) {
  if(exists $changes->{"calman_range"} && grep { $_->{software} eq "Calman" } &webui_calibration_sessions()) {
   my $o=&calman_range_override();
   &apply_source_rgb_quant_range("calman",$o) if($o ne "");
+ }
+ # "Dolby Vision with Calman" changed while Calman is connected in Standard
+ # Dolby Vision: the cable takes the other container now. The restart is
+ # the caller's, as for any signal change (detached worker, start ladder;
+ # the pattern on screen goes with it until the next patch): dv_profile is
+ # no in-place key. No restart when the running renderer already sends it.
+ if(exists $changes->{"calman_dv_container"} && &dv_container_follow("Dolby Vision with Calman") && &dv_container_restart_needed()) {
+  my $restart_id=&webui_renderer_restart_begin();
+  my $result='{"status":"ok","restart":true'.($restart_id ne "" ? ',"restart_id":"'.$restart_id.'"' : "").'}';
+  return wantarray ? ($result,1,$restart_id,{changed=>{dv_profile=>1},dv_before=>1}) : $result;
  }
  my $result='{"status":"ok","restart":false}';
  return wantarray ? ($result,0) : $result;
@@ -10581,7 +10593,9 @@ sub webui_apply_config (@) {
   $changes{"eotf"}="2";
   $changes{"primaries"}="2" if(!$pitpg);
   $changes{"rgb_quant_range"}=&pg_dv_transport_quant_range($dv_transport) if(!$pitpg_ll_rgb);
- $changes{"dv_profile"}="1" if(!$pitpg);
+ # The container: BT.2020, or "Dolby Vision with Calman" while a Calman
+ # session is open (command.pm dv_session_profile).
+ $changes{"dv_profile"}=&dv_session_profile($dv_transport) if(!$pitpg);
  $changes{"dv_color_space"}="0";
   $changes{"dv_interface"}=&pg_dv_transport_interface($dv_transport);
   $changes{"dv_map_mode"}=$dv_map_mode;
@@ -10781,6 +10795,13 @@ sub webui_apply_config (@) {
  if(exists $changes{"calman_range"} && grep { $_->{software} eq "Calman" } &webui_calibration_sessions()) {
   my $o=&calman_range_override();
   &apply_source_rgb_quant_range("calman",$o) if($o ne "");
+ }
+ # "Dolby Vision with Calman" posted together with other settings: the
+ # container follows it as in webui_apply_conf_only; the restart of this
+ # POST reads the file after it.
+ if(exists $changes{"calman_dv_container"} && &dv_container_follow("Dolby Vision with Calman") && &dv_container_restart_needed()) {
+  $need_restart=1;
+  $changed_restart_keys{"dv_profile"}=1;
  }
  # Settings that work: what a later refused apply goes back to, and the end
  # of a refusal a calibration program was left in.

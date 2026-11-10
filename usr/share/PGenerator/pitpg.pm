@@ -1266,7 +1266,7 @@ sub pitpg_show (@) {
  my @before=&pitpg_presented();
  my $written=&pitpg_monotonic_us();
  &clean_pattern_files();
- &create_tmp_file($ps,&pitpg_source_range());
+ return undef if(!&create_tmp_file($ps,&pitpg_source_range()));
  &load_new_pattern_file("PiTPG");
  my ($frame,$shown)=&pitpg_wait_presented($written,@before);
  return $shown ? $frame : undef;

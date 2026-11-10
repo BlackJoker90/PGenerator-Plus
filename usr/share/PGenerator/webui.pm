@@ -7827,11 +7827,36 @@ sub webui_meter_settings_save (@) {
   target_white_x target_white_y custom_d65_enabled
   hdr_bt2390 hdr_diffuse_white hdr_diffuse_white_auto incl_lum sep_lum color_incl_lum color_sep_lum simulate_spectro
  );
- my @parts;
- while($body=~/"(\w+)"\s*:\s*("[^"\\]*(?:\\.[^"\\]*)*"|-?\d+(?:\.\d+)?|true|false|null)/g) {
-  push @parts, "\"$1\":$2" if($allowed{$1});
+ # Only a JSON object is a settings body: anything else (no body, a cut-off
+ # or garbled one) used to save as {} and wipe every setting.
+ return '{"status":"error","message":"Meter settings must be a JSON object"}'
+  if(!defined($body) || $body!~/^\s*\{.*\}\s*$/s);
+ # The posted keys change the stored settings; keys the body leaves out keep
+ # their stored value (the page posts the full set, an API client may post
+ # one key), read from the copy webui_meter_settings_load reads first.
+ my $kv=qr/"(\w+)"\s*:\s*("[^"\\]*(?:\\.[^"\\]*)*"|-?\d+(?:\.\d+)?|true|false|null)/;
+ my (%merged,@order);
+ foreach my $path ($_meter_settings_runtime,$_meter_settings_persist,$_meter_settings_persist_legacy,$_meter_settings_file) {
+  next unless(-f $path);
+  my $stored="";
+  if(open(my $fh,"<",$path)) { local $/; $stored=<$fh>; close($fh); }
+  next unless(defined($stored) && $stored=~/^\s*\{/);
+  while($stored=~/$kv/g) {
+   # incl_lum and disable_aio are no longer saved by the page: an old stored
+   # value is dropped on the next save, as before (a kept incl_lum:true
+   # turned every grey reference mode back into EOTF on load).
+   next if(!$allowed{$1} || $1 eq "incl_lum" || $1 eq "disable_aio");
+   push(@order,$1) if(!exists $merged{$1});
+   $merged{$1}=$2;
+  }
+  last;
  }
- my $safe="{".join(",",@parts)."}";
+ while($body=~/$kv/g) {
+  next if(!$allowed{$1});
+  push(@order,$1) if(!exists $merged{$1});
+  $merged{$1}=$2;
+ }
+ my $safe="{".join(",",map { "\"$_\":$merged{$_}" } @order)."}";
  if($safe=~/"delay_user_set"\s*:\s*true/i) {
   $safe=~s/,?\s*"delay_explicit"\s*:\s*(?:true|false|null|"[^"]*"|-?\d+(?:\.\d+)?)//g;
   $safe=~s/\{\s*,/\{/g;
@@ -14602,8 +14627,7 @@ sub webui_range_check_refresh (@) {
  # RGB Full.
  my $lim=(($pgenerator_conf{"color_format"} || "0") ne "0" || &effective_rgb_quant_range() == 1);
  my $k=$lim ? 16 : 0;
- &create_tmp_file("PATTERN_NAME=stop\nBITS=8\nDRAW=RECTANGLE\nDIM=$w,$h\nRGB=$k,$k,$k\nBG=$k,$k,$k\nPOSITION=0,0\nEND=1\n",$lim ? "LIMITED" : "");
- return 1;
+ return &create_tmp_file("PATTERN_NAME=stop\nBITS=8\nDRAW=RECTANGLE\nDIM=$w,$h\nRGB=$k,$k,$k\nBG=$k,$k,$k\nPOSITION=0,0\nEND=1\n",$lim ? "LIMITED" : "") ? 1 : 0;
 }
 
 # Once the renderer is back after a signal change: wait until the new
@@ -14892,10 +14916,7 @@ elsif($pat eq "" && $name eq "uploaded_diag_video") {
  # the default FRAME for single-shot patterns that have none.
  $pat="PATTERN_NAME=$name\nBITS=$pat_bits\nSOURCE_MAX=$pattern_source_max\n".$pat;
  $pat.="FRAME=$frame_default\n" if($pat !~ /^FRAME=/m);
- open(my $fh,">","$command_file.tmp");
- print $fh $pat;
- close($fh);
- rename("$command_file.tmp","$command_file");
+ return '{"status":"error","message":"Pattern could not be written (see the log)"}' if(!&pattern_file_write($pat));
  &create_return_file();
  # Record what is now on screen for the simulated meter. Patch/stabilization
  # captured raw codes above; named solid fields map to their 8-bit authoring

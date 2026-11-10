@@ -332,6 +332,10 @@ $calibration_sessions="";
 # Set by a refused apply (command.pm signal_gate_conf); the next reply to
 # the program that asked carries the refusal (daemon.pm send_key_to_client).
 $signal_refused_pending=0;
+# 1 when this thread's last write of the pattern file failed (pattern.pm
+# pattern_file_write); the next reply to Calman is NAK (send_key_to_client).
+# Per thread on purpose: a WebUI worker's failed write is not Calman's.
+$pattern_write_failed=0;
 # The pattern socket whose command is being handled (daemon.pm
 # pattern_daemon): a refusal is recorded with it as owner, and only that
 # socket's close ends it. Per thread, "" outside the pattern loop.

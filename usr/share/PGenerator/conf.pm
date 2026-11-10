@@ -120,21 +120,23 @@ sub get_pgenerator_conf(@) {
 ###############################################
 #        Get Conf Pattern Function            #
 ###############################################
+# undef when the name is refused (pattern_template_name_ok).
 sub get_conf_pattern (@) {
  my $pattern = shift;
- my $type = shift;
+ my $type = shift // "";
  my $str = "";
  my $val = "";
- open(PATTERN,"$pattern_templates/$pattern");
- while(<PATTERN>) {
+ return undef if(!&pattern_template_name_ok($pattern));
+ open(my $fh,"<","$pattern_templates/$pattern") or return "";
+ while(<$fh>) {
   $str.=$_;
-  if($_=~/^$type=(.*)/) {
+  if($_=~/^\Q$type\E=(.*)/) {
    chomp($val=$1);
+   close($fh);
    return $val;
-   last;
   }
  }
- close(PATTERN);
+ close($fh);
  chomp($str);
  return $str;
 }
@@ -142,23 +144,31 @@ sub get_conf_pattern (@) {
 ###############################################
 #        Set Conf Pattern Function            #
 ###############################################
+# Returns "" when done, else the reason for the client.
 sub set_conf_pattern (@) {
  my $pattern = shift;
- my $type = shift;
+ my $type = shift // "";
  my $val = shift;
+ return "Refused: not a pattern name" if(!&pattern_template_name_ok($pattern));
  my $pattern_dir=$pattern_templates;
  $pattern_dir="$var_dir/running/tmp" if($type eq "TEMPLATERAMDISK");
  my $str = '';
  $val=~s/\r\n?/\n/g if(defined($val));
  if($type eq "TESTCMD") {
-  copy("$pattern_dir/$pattern","$command_file");
-  return;
+  # The template becomes the pattern through pattern_file_write (checked,
+  # its own temp file), as every other pattern.
+  open(my $fh,"<","$pattern_dir/$pattern") or return "Pattern template not found";
+  my $tpl=do { local $/; <$fh> };
+  close($fh);
+  return &pattern_file_write($tpl // "") ? "" : "Pattern not written";
  }
  if($type !~/^TEMPLATE/) {
-  open(PATTERN,"$pattern_dir/$pattern");
-  while(<PATTERN>) {
-   next if($_=~/^$type=(.*)/ || $_=~/^END=1/);
-   $str.=$_;
+  if(open(my $fh,"<","$pattern_dir/$pattern")) {
+   while(<$fh>) {
+    next if($_=~/^\Q$type\E=(.*)/ || $_=~/^END=1/);
+    $str.=$_;
+   }
+   close($fh);
   }
  }
  # Start Patch for HCFR
@@ -170,13 +180,21 @@ sub set_conf_pattern (@) {
   chomp($val);
  }
  # End Patch for HCFR
- open(PATTERN,">$pattern_dir/$pattern.tmp");
- print PATTERN "$type=" if($type !~/^TEMPLATE/);
- print PATTERN "$val\n";
- print PATTERN "$str";
- print PATTERN "END=1\n" if($type !~/^TEMPLATE/);
- close(PATTERN);
- rename("$pattern_dir/$pattern.tmp","$pattern_dir/$pattern");
+ my $out=($type !~/^TEMPLATE/ ? "$type=" : "").($val // "")."\n".$str.($type !~/^TEMPLATE/ ? "END=1\n" : "");
+ my $tid=eval { threads->tid() } // 0;
+ my $tmp="$pattern_dir/$pattern.$$.$tid.tmp";
+ my $ok=0;
+ if(open(my $fh,">",$tmp)) {
+  $ok=(print $fh $out) ? 1 : 0;
+  $ok=0 if(!close($fh));
+  $ok=0 if($ok && !rename($tmp,"$pattern_dir/$pattern"));
+ }
+ if(!$ok) {
+  unlink($tmp);
+  &log("Pattern: template $pattern_dir/$pattern not written ($!)");
+  return "Template not written";
+ }
+ return "";
 }
 
 return 1;

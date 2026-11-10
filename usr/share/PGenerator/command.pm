@@ -155,6 +155,21 @@ sub calman_range_override (@) {
  return $o;
 }
 
+# Remembers the WebUI's range once, while the conf still holds it and before
+# an external source's range replaces it there; release_source_rgb_quant_range
+# gives it back. In Dolby Vision that is the WebUI's SDR range
+# (pre_dv_rgb_quant_range, put back when the WebUI leaves DV); Default is
+# remembered as the range it gives on the cable. Calman calls it when its
+# session opens, before it writes anything (its DV entry saves dv_status
+# before the range, so a later call could not tell whose DV it is).
+sub remember_webui_rgb_quant_range (@) {
+ return if($webui_rgb_quant_range_preferred ne "");
+ my $key=&renderer_dv_conf_active() ? "pre_dv_rgb_quant_range" : "rgb_quant_range";
+ my $quant_range=defined($pgenerator_conf{$key}) ? "$pgenerator_conf{$key}" : "";
+ $quant_range=&effective_rgb_quant_range() if($quant_range !~/^[12]$/);
+ $webui_rgb_quant_range_preferred="$quant_range";
+}
+
 sub apply_source_rgb_quant_range (@) {
  my $source=lc(shift || "webui");
  my $quant_range=shift;
@@ -168,19 +183,27 @@ sub apply_source_rgb_quant_range (@) {
  }
  if($source eq "webui") {
   my $ycbcr=(($pgenerator_conf{"color_format"} || "0") ne "0");
-  # Default on YCbCr already is Limited on the wire: a pattern request has nothing
-  # to apply and must not rewrite the configured range.
-  if($ycbcr && ($pgenerator_conf{"rgb_quant_range"} || "0") !~/^[12]$/) {
-   $external_rgb_quant_range_active=0;
-   $rgb_quant_range_source=$source;
-   return 0;
+  if(&renderer_dv_conf_active()) {
+   # In Dolby Vision the transport sets the range (normalize_dv_transport_conf):
+   # the WebUI's SDR range written there only restarted the renderer back
+   # into the same DV range. It stays remembered for when DV is left; a
+   # range a client left in the DV conf goes back to the transport's.
+   $quant_range=&dv_transport_rgb_quant_range();
+  } else {
+   # Default on YCbCr already is Limited on the wire: a pattern request has nothing
+   # to apply and must not rewrite the configured range.
+   if($ycbcr && ($pgenerator_conf{"rgb_quant_range"} || "0") !~/^[12]$/) {
+    $external_rgb_quant_range_active=0;
+    $rgb_quant_range_source=$source;
+    return 0;
+   }
+   $quant_range=&webui_preferred_rgb_quant_range() if($ycbcr || $quant_range !~/^[12]$/);
+   $webui_rgb_quant_range_preferred=$quant_range;
   }
-  $quant_range=&webui_preferred_rgb_quant_range() if($ycbcr || $quant_range !~/^[12]$/);
-  $webui_rgb_quant_range_preferred=$quant_range;
   $external_rgb_quant_range_active=0;
  } else {
   $quant_range=2 if($quant_range !~/^[12]$/);
-  $webui_rgb_quant_range_preferred=$pgenerator_conf{"rgb_quant_range"} if($webui_rgb_quant_range_preferred eq "");
+  &remember_webui_rgb_quant_range();
   $external_rgb_quant_range_active=1;
  }
  return 0 if(($pgenerator_conf{"rgb_quant_range"}||"") eq "$quant_range" && $rgb_quant_range_source eq $source);
@@ -188,7 +211,9 @@ sub apply_source_rgb_quant_range (@) {
   $owner_changed=($rgb_quant_range_source ne $source);
   $rgb_quant_range_source=$source;
   &log("Signal range owner: source=$source rgb_quant_range=$quant_range (no restart)");
-  if($owner_changed) {
+  # In Dolby Vision the transport's range is on the wire already, and the
+  # in-place reconfigure refuses there anyway.
+  if($owner_changed && !&renderer_dv_conf_active()) {
    # The value on the wire is unchanged. A running renderer owns the
    # connector properties (and DRM master): modetest -w here would steal
    # master from it. Ask it to re-assert the range in place instead; if it
@@ -331,6 +356,23 @@ sub dv_vsif_conf_for_vsvdb(@) {
  return ($form,$bt2020);
 }
 
+# Low-latency DV in RGB (dv_ll_rgb 1, a PiTPG client's colour format):
+# RGB at the depth the VSVDB lists, in the range the client chose, as
+# pitpgd output_decide; otherwise YCbCr 4:2:2 12-bit limited.
+sub dv_ll_rgb_active (@) {
+ my $dv_transport=shift // &pg_dv_transport_mode();
+ return (($main::pitpg_clients || 0) && $dv_transport eq "lldv" && ($pgenerator_conf{"dv_ll_rgb"} // "") eq "1") ? 1 : 0;
+}
+
+# The range Dolby Vision puts on the cable (normalize_dv_transport_conf):
+# the transport's, for low-latency RGB the one the client chose.
+sub dv_transport_rgb_quant_range (@) {
+ my $dv_transport=&pg_dv_transport_mode();
+ my $range=$pgenerator_conf{"rgb_quant_range"} // "";
+ return (($range eq "1" || $range eq "2") ? $range : "2") if(&dv_ll_rgb_active($dv_transport));
+ return &pg_dv_transport_quant_range($dv_transport);
+}
+
 sub normalize_dv_transport_conf(@) {
  return if(
   int($pgenerator_conf{"dv_status"} || 0) != 1 &&
@@ -340,11 +382,7 @@ sub normalize_dv_transport_conf(@) {
  my $dv_map_mode=$pgenerator_conf{"dv_map_mode"};
  my $dv_metadata=&dv_metadata_for_map_mode($dv_map_mode);
  my $dv_transport=&pg_dv_transport_mode();
- # Low-latency DV in RGB (dv_ll_rgb 1, a PiTPG client's colour format):
- # RGB at the depth the VSVDB lists, in the range the client chose, as
- # pitpgd output_decide; otherwise YCbCr 4:2:2 12-bit limited.
- my $ll_rgb=(($main::pitpg_clients || 0) && $dv_transport eq "lldv" && ($pgenerator_conf{"dv_ll_rgb"} // "") eq "1") ? 1 : 0;
- my $range=$pgenerator_conf{"rgb_quant_range"} // "";
+ my $ll_rgb=&dv_ll_rgb_active($dv_transport);
  my (undef,$dv)=&signal_display_caps();
  my ($vsif_form,$ll_bt2020)=&dv_vsif_conf_for_vsvdb($dv);
  my %wanted=(
@@ -364,7 +402,7 @@ sub normalize_dv_transport_conf(@) {
   color_format=>$ll_rgb ? "0" : &pg_dv_transport_color_format($dv_transport),
   colorimetry=>"9",
   max_bpc=>$ll_rgb ? &dv_ll_rgb_bpc() : &pg_dv_transport_max_bpc($dv_transport),
-  rgb_quant_range=>$ll_rgb ? (($range eq "1" || $range eq "2") ? $range : "2") : &pg_dv_transport_quant_range($dv_transport)
+  rgb_quant_range=>&dv_transport_rgb_quant_range()
  );
  # The standard DV container: while a PiTPG client is connected it is the
  # client's (dv_profile, or without one the primaries: main.cpp, as pitpgd

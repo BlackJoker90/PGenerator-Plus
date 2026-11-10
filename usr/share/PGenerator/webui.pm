@@ -10748,7 +10748,9 @@ sub webui_apply_config (@) {
    return wantarray ? ($result,0) : $result;
   }
   $pgenerator_conf{$_}=$conf_written{$_} foreach(keys %conf_written);
-  $webui_rgb_quant_range_preferred=$changes{"rgb_quant_range"} if(exists $changes{"rgb_quant_range"});
+  # The WebUI's own range is its SDR one: Dolby Vision's comes with the
+  # transport, and the SDR one comes back when DV is left (pre_dv_*).
+  $webui_rgb_quant_range_preferred=$changes{"rgb_quant_range"} if(exists $changes{"rgb_quant_range"} && !&renderer_dv_conf_active());
  # "Range with Calman" posted together with other settings, while Calman is
  # connected: as in webui_apply_conf_only.
  if(exists $changes{"calman_range"} && grep { $_->{software} eq "Calman" } &webui_calibration_sessions()) {

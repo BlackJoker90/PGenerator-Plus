@@ -1383,7 +1383,14 @@ sub pattern_daemon {
      $probe_key=~s/^\s+|\s+$//g;
      # EOF arrives here as an empty key: it ends the socket, it opens nothing.
      if($probe_key=~/^(?:|SN|CAP|GET_SETTINGS|STATUS|FIRMWARE)$/) { &calibration_session_touch($connection); }
-     else { &calibration_session_open($connection,"Calman"); }
+     else {
+      # Before Calman writes anything: the WebUI's range, given back when
+      # the session ends. Taken later (apply_source_rgb_quant_range), the
+      # conf already held Calman's range (it is saved before it is applied)
+      # and right after a daemon start that was kept as the WebUI's.
+      &remember_webui_rgb_quant_range();
+      &calibration_session_open($connection,"Calman");
+     }
     } else {
      &calibration_session_touch($connection);
     }

@@ -54,7 +54,6 @@ sub resolve_connection_thread (@) {
   &log("Resolve: disconnected from $ip:$port");
   $calibration_client_ip="";
   $calibration_client_software="";
-  eval { &release_source_rgb_quant_range("resolve"); };
   eval {
    lock($resolve_last_pattern);
    $resolve_last_pattern="";
@@ -293,7 +292,10 @@ sub resolve_handle_message (@) {
   lock($resolve_last_pattern);
   $resolve_last_pattern="$r_p,$g_p,$b_p;$r_bg,$g_bg,$b_bg;$geom_x,$geom_y,$geom_cx,$geom_cy;$bits";
  }
- &apply_source_rgb_quant_range("resolve",2);
+ # The protocol has no range: the codes are drawn as sent, in the range the
+ # WebUI set (the client sets its levels to match the display). Resolve
+ # neither takes the range nor gives one back, so a Calman or LightSpace
+ # range stays theirs.
  &resolve_draw_pattern($r_p,$g_p,$b_p,$r_bg,$g_bg,$b_bg,$geom_x,$geom_y,$geom_cx,$geom_cy,$bits);
 }
 
@@ -439,10 +441,15 @@ sub resolve_draw_pattern (@) {
  } elsif($bits > $bits_default) {
   ($draw,$source_max)=("RECTANGLE",(1 << $bits) - 1);
  }
+ # The codes go out as sent: on a Limited link they are video levels
+ # already (SOURCE_RANGE=LIMITED, as for Calman and HCFR); untagged, the
+ # renderer took them for full range and compressed them a second time
+ # (16 -> 30 on RGB Limited).
+ my $source_range=(&effective_rgb_quant_range() == 1) ? "LIMITED" : "";
  &clean_pattern_files();
  # Full field pattern (geometry covers entire screen)
  if($geom_cx >= 0.99 && $geom_cy >= 0.99) {
-  &create_pattern_file($draw,"$w_s,$h_s",100,"$rgb_str","$bg_str","","","",1,"resolve","",$source_max);
+  &create_pattern_file($draw,"$w_s,$h_s",100,"$rgb_str","$bg_str","","","",1,"resolve",$source_range,$source_max);
  } else {
   # Windowed pattern -- compute pixel dimensions from geometry fractions
   my $win_w=int($geom_cx*$w_s+0.5);
@@ -458,7 +465,7 @@ sub resolve_draw_pattern (@) {
   # The protocol carries no client identity, so this applies to every
   # Resolve-protocol sender. Size still follows the sent geometry.
   $pos_str=$position_default if(($pgenerator_conf{"resolve_force_center"}||"") eq "1");
-  &create_pattern_file($draw,"$win_w,$win_h",100,"$rgb_str","$bg_str","$pos_str","","",1,"resolve","",$source_max);
+  &create_pattern_file($draw,"$win_w,$win_h",100,"$rgb_str","$bg_str","$pos_str","","",1,"resolve",$source_range,$source_max);
  }
 }
 

@@ -141,12 +141,52 @@ sub create_pattern_file (@) {
                             bg=>$bg,
                             meta=>"draw=$draw;position=$position;simple=$simple;resolution=$resolution",
                             pattern=>$pattern_string);
- open(FILE,">$command_file.tmp");
- print FILE $pattern_string;
- close(FILE);
- rename("$command_file.tmp","$command_file");
+ return 0 if(!&pattern_file_write($pattern_string));
  &load_new_pattern_file("$requested_by");
  &stats("patterns",1);
+}
+
+# A name from a port 85 client (GETCONF, SETCONF, TESTTEMPLATE, SAVEIMAGES)
+# is a file name in its directory: no "/", not "." or "..", no control
+# characters (a newline ended the name early in a "$" match). These names
+# went into two-argument opens ("x|" ran as a shell command) and into paths
+# ("../" left the directory). The opens take three arguments now, so other
+# characters (spaces, as the two-argument open allowed) stay usable.
+# Returns 1 if it is one.
+sub pattern_template_name_ok (@) {
+ my $name=shift // "";
+ return 1 if($name ne "" && $name ne "." && $name ne ".." && $name!~/[\/\x00-\x1f\x7f]/);
+ &log("Pattern: name \"".(substr($name,0,60)=~s/[\x00-\x1f\x7f]/?/gr)."\" refused (not a file name)");
+ return 0;
+}
+
+# Writes the renderer's pattern file ($command_file) through a temp file of
+# this process and thread (the daemon thread and the WebUI workers write it
+# at once), checking every step: a failed write (running/ is a 20 MB tmpfs)
+# leaves the previous pattern, is logged and returns 0, and the caller must
+# not reload the old file as if it were the new one. The result of the last
+# write of this thread is kept in $pattern_write_failed (per thread, not
+# shared): send_key_to_client answers Calman with NAK after a failed write.
+sub pattern_file_write (@) {
+ my ($str)=@_;
+ my $tid=eval { threads->tid() } // 0;
+ my $tmp="$command_file.$$.$tid.tmp";
+ my $err="";
+ if(open(my $fh,">",$tmp)) {
+  $err="write: $!" if(!print $fh $str);
+  $err="close: $!" if(!close($fh) && $err eq "");
+  $err="rename: $!" if($err eq "" && !rename($tmp,$command_file));
+ } else {
+  $err="open: $!";
+ }
+ if($err ne "") {
+  unlink($tmp);
+  &log("Pattern: $command_file not written ($err); the previous pattern stays");
+  $pattern_write_failed=1;
+  return 0;
+ }
+ $pattern_write_failed=0;
+ return 1;
 }
 
 ###############################################
@@ -157,11 +197,20 @@ sub execute_functions (@) {
  my $dim=shift;
  my $res=shift;
  my $functions=shift;
- open(FUNCTIONS,"$functions");
- while(<FUNCTIONS>) {
+ # The name comes from a port 85 client and the file's lines are run as
+ # Perl: only a plain name of a file in the daemon's directory (a two-
+ # argument open ran "|cmd" as a shell command).
+ # Returns "" or the reason it was refused.
+ if($functions !~/^\w+\.server\z/) {
+  &log("Pattern: FUNCTIONS name \"".substr($functions,0,60)."\" refused (not a plain name)");
+  return "not a plain name";
+ }
+ open(my $fh,"<",$functions) or return "";
+ while(<$fh>) {
   eval $_;
  }
- close(FUNCTIONS);
+ close($fh);
+ return "";
 }
 
 ###############################################
@@ -173,22 +222,25 @@ sub play_video(@) {
  my ($duration,$repeat) = split("-",shift);
  my $width = int(shift || 0);
  my $height = int(shift || 0);
- my $play_as_root=($program =~ /(^|\/)(?:omxplayer(?:\.bin)?|pg_diag_video_player)$/) ? 1 : 0;
  my $response="OK";
- $repeat=0 if($repeat != 1);
+ $repeat=(defined($repeat) && $repeat eq "1") ? 1 : 0;
+ # Player, file and duration come from a port 85 client. Only the players
+ # the root helper starts (PGenerator_cmd.pl play_video_root), with its
+ # rules for the file and the duration: any other program ran here through
+ # a shell line, which started any program, an uploaded file included.
+ if(($program // "")!~/^(?:[\w.\/-]*\/)?(?:omxplayer(?:\.bin)?|pg_diag_video_player)\z/
+    || ($video // "") eq "" || $video=~/(^\/|\.\.|[\r\n\0])/ || $video!~/^[A-Za-z0-9 _.\-\/()]+\z/
+    || ($duration // "")!~/^\d+[smhd]?\z/) {
+  &log("Video: request refused (player, file or duration not accepted)");
+  return "Video request refused";
+ }
  &pattern_generator_stop();
- #system("$timeout --foreground -k $duration $duration $program '$video_dir/$video' &>/dev/null");
  &create_pattern_file("$draw_default","$w_s,$h_s",$res_default,"$rgb_default","$bg_default","$position_default","","","","play_video");
  $program_video_to_kill=$program;
- if($play_as_root) {
-  $response=&sudo("PLAY_VIDEO","$program","$video","$duration","$repeat","$width","$height");
-  chomp($response);
-  $response=~s/^ERR://;
-  $response="Video playback failed to start" if($response eq "");
- } else {
-  # timeout exit with 124 and kill process exit with 143
-  system("while [ true ]; do $timeout --foreground -k $duration $duration $program '$video_dir/$video' &>/dev/null;if [ \$? == 143 ] || [ $repeat == 0 ];then exit 0;fi; done &");
- }
+ $response=&sudo("PLAY_VIDEO","$program","$video","$duration","$repeat","$width","$height");
+ chomp($response);
+ $response=~s/^ERR://;
+ $response="Video playback failed to start" if($response eq "");
  return $response;
  #&pattern_generator_start();
 }
@@ -260,7 +312,8 @@ sub get_pattern_image (@) {
   ($preview="preview-".$_)=~s/\.png$/.jpg/;
   $preview=~s/\%//g;
   $size_str=$img_width."x".$img_height;
-  system("$convert -resize $size_str $pattern_frames/$_ $var_dir/running/$preview") if(!-f "$var_dir/running/$preview");
+  # No shell: the frame name carries the template's FRAME_NAME.
+  system($convert,"-resize",$size_str,"$pattern_frames/$_","$var_dir/running/$preview") if(!-f "$var_dir/running/$preview");
   return "<img src=http://\$ip_device:\$port_device/running/$preview-".time().">";
  }
  return $ok_response;
@@ -324,12 +377,14 @@ sub get_patternimages_list (@) {
 sub save_images_pattern (@) {
  my $file = shift;
  my $images = shift;
+ return 0 if(!&pattern_template_name_ok($file));
  open(FILE,">$pattern_frames/pattern.info");
  print FILE $file;
  close(FILE);
- open(FILE,">$var_dir/running/$file.save");
+ open(FILE,">","$var_dir/running/$file.save");
  close(FILE);
  &create_return_file();
+ return 1;
 }
 
 ###############################################
@@ -457,32 +512,29 @@ sub get_pattern (@) {
  # Read Pattern
  #
  $pattern_dir = "$var_dir/running/tmp" if($type eq "$test_template_ramdisk_command");
+ return &error() if(!&pattern_template_name_ok($pattern));
  my $file_pattern="$pattern_dir/$pattern";
  return &error() if(!-f $file_pattern);
- open($pattern,"$pattern_dir/$pattern");
- $first_row=<$pattern>;
- $first_row=<$pattern> if($first_row =~/^PERMANENT=/);
+ open(my $pfh,"<",$file_pattern) or return &error();
+ $first_row=<$pfh> // "";
+ $first_row=<$pfh> // "" if($first_row =~/^PERMANENT=/);
  chomp($first_row);
  #
- # EVAL Pattern
+ # EVAL Pattern: disabled, as EVAL= lines below. Its rows ran as Perl in
+ # the daemon, and a port 85 client can write any template (SETCONF
+ # TEMPLATE). No template that ships uses it.
  #
  if($first_row eq "EVALPATTERN=") {
-  while(<$pattern>) {
-   $rules.=$_;
-  }
-  eval $rules;
-  return &error() if($@ ne "");
-  $file_pattern="$var_dir/running/$pattern.tmp";
-  open(TMP,">$file_pattern");
-  print TMP $str;
-  close(TMP);
-  $str="";
+  close($pfh);
+  &log("Pattern: template $pattern refused (EVALPATTERN is disabled)");
+  return &error("$error_response:Refused: eval denied");
  }
  #
  # Classic Pattern
  #
- open($pattern,"$file_pattern");
- while(<$pattern>) {
+ close($pfh);
+ open($pfh,"<",$file_pattern) or return &error();
+ while(<$pfh>) {
   $scaling_disabled=1 if(/^# SCALING=DISABLED/ || $scaling_done);
   next if($_=~/^(#|\n|\r)/);
   if($_=~/^VAR=(.*)=(.*)/) {
@@ -490,7 +542,16 @@ sub get_pattern (@) {
    next;
   }
   foreach $key (keys %var) {
-   $_=~s/$key/$var{$key}/g;
+   # The key is a regex, as it always was; one that does not compile (a
+   # template's "VAR=(=x" from a port 85 client) died here and ended the
+   # daemon with its WebUI threads.
+   my $re=eval { qr/$key/ };
+   if(!defined $re) {
+    &log("Pattern: VAR \"".(substr($key,0,60)=~s/[\x00-\x1f\x7f]/?/gr)."\" ignored (not a valid pattern)");
+    delete $var{$key};
+    next;
+   }
+   $_=~s/$re/$var{$key}/g;
   }
   #
   # FRAME
@@ -550,9 +611,14 @@ sub get_pattern (@) {
   } 
   if($_=~/^DIM=NATIVE/) {
    if($draw_type eq "IMAGE") {
-    open(IDENTIFY,"$identify '$image'|");
-    $dim=(<IDENTIFY>)=~s/ /,/r;
-    close(DENTIFY);
+    # No shell, and the name only as an existing file with a path: the
+    # name comes from the template, and identify reads "|cmd" and "coder:"
+    # names as commands and formats.
+    my $image_path=(($image // "")=~m{^/}) ? $image : "./".($image // "");
+    if(-f $image_path && open(my $id,"-|","identify","-ping","-format","%w %h",$image_path)) {
+     $dim=((<$id>) // "")=~s/ /,/r;
+     close($id);
+    }
     $_="DIM=$dim\n" if($dim ne "");
    }
   }
@@ -583,7 +649,7 @@ sub get_pattern (@) {
   #
   # EVAL DISABLED for security reason
   #
-  return &error("eval denied") if($_=~/^EVAL=(.*)/);
+  return &error("$error_response:Refused: eval denied") if($_=~/^EVAL=(.*)/);
   # 
   # POSITION
   #
@@ -659,12 +725,10 @@ sub get_pattern (@) {
  $source_range=&pattern_default_source_range($source_range) if($str !~/^SOURCE_RANGE=/m);
  $str=~s/^END=(.*)$/SOURCE_RANGE=$source_range\nEND=$1/mg if($source_range ne "");
  $str.="FRAME=$frame_default\n"  if($str !~/\n^FRAME=/m);
- open(PATTERN,">$command_file.tmp");
- print PATTERN "PATTERN_NAME=$pattern\n" if($str !~/^PATTERN_NAME=/m);
- print PATTERN "BITS=$bits\n"   if($str !~/\n^BITS=/m);
- print PATTERN $str;
- close(PATTERN);
- rename("$command_file.tmp","$command_file");
+ my $head="";
+ $head.="PATTERN_NAME=$pattern\n" if($str !~/^PATTERN_NAME=/m);
+ $head.="BITS=$bits\n"   if($str !~/\n^BITS=/m);
+ return &error("pattern not written") if(!&pattern_file_write($head.$str));
  &load_new_pattern_file("$requested_by");
  unlink("$var_dir/running/$pattern.tmp") if(-f "$var_dir/running/$pattern.tmp");
  #
@@ -752,10 +816,7 @@ sub create_tmp_file(@) {
  my $source_range = shift;
  $source_range=&pattern_default_source_range($source_range) if($pattern_string !~/^SOURCE_RANGE=/m);
  $pattern_string=~s/^END=(.*)$/SOURCE_RANGE=$source_range\nEND=$1/mg if($source_range ne "");
- open(FILE,">$command_file.tmp");
- print FILE $pattern_string;
- close(FILE);
- rename("$command_file.tmp","$command_file");
+ return &pattern_file_write($pattern_string);
 }
 
 ###############################################

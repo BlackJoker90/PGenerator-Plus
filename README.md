@@ -319,7 +319,7 @@ PGenerator+ is a free, open-source display calibration suite for the Raspberry P
 
 - **Precision HDMI patterns:** full-screen patches, windows, APL backgrounds, custom RGB triplets and patch sizes, drawn through DRM/KMS.
 - **HDR and Dolby Vision:** HDR10 (ST.2084 PQ with mastering metadata), HLG, standard and Low Latency Dolby Vision. AVI, DRM and DOVI infoframes are set correctly, and capabilities are detected from the EDID.
-- **Network control:** Calman (UPGCI, port 2100), ColourSpace / LightSpace and HCFR (port 85; ColourSpace also through its `PiTPG` entry, PiTPG protocol 2), DeviceControl, and the Resolve XML protocol (port 20002, outbound). UDP discovery runs on port 1977.
+- **Network control:** Calman (UPGCI, port 2100), ColourSpace / LightSpace and HCFR (port 85; ColourSpace also through its `PiTPG` entry, PiTPG protocol 2), DeviceControl, and the Resolve XML protocol (port 20002, outbound). UDP discovery runs on port 1977. Names and values a port 85 client sends never reach a shell or a path outside their directory, and templates never run as Perl (`EVALPATTERN` templates are refused, as `EVAL=` lines always were): template names (`GETCONF`, `SETCONF`, `TESTTEMPLATE`, `SAVEIMAGES`) are file names without `/` or control characters, `FUNCTIONS` names are plain words, and `VIDEO` plays only with `omxplayer` or `pg_diag_video_player`, a file under the video directory and a duration such as `30s`. A refused request is answered `ERR` (`ERR:Refused: …` where the command has a reply).
 - **Web dashboard:** signal settings, diagnostic patterns, a live infoframe decoder, HDMI-CEC, networking, OTA, and meter measurements. The measurement workspaces can be hidden for pattern-only setups.
 - **LG AutoCal (SDR and HDR):** on-device closed-loop calibration of LG TVs: 26-point greyscale, RGB balance, 3D LUT and HDR tone mapping, with an optional Tone Mapping Shadow Fix.
 - **Meter workflows:** ArgyllCMS `spotread` with persistent sessions, greyscale, colour and saturation sweeps, CCSS management, and live ΔE and chromaticity charts.
@@ -345,7 +345,7 @@ PGenerator+ is a free, open-source display calibration suite for the Raspberry P
   - *Windows and APL:* fixed, custom and gray-surround APL windows (`RGB_S`, `RGB_A`, `CommandRGB`, `10_SIZE`, `11_APL`). With limited range, window backgrounds are drawn at black.
   - *Unsupported formats:* a YCbCr 4:2:0 request gets a NAK, and the WebUI shows a notice. The current format stays.
   - *Refused settings:* settings the Pi or the display cannot carry (link bandwidth, missing EDID support for a format, depth or HDR mode) get a NAK. The output stays as it was, the WebUI shows the reason and what works, and patches get a NAK until Calman sends settings that work (or disconnects). The same applies to port 85 clients (`ERR:Refused: …`).
-  - *YCbCr is always Limited:* with Range Full on a YCbCr output (Calman, LightSpace, Resolve), the full-range codes are converted to studio range (0–1023 → 64–940) and the AVI infoframe says Limited, also on modes without a CEA VIC.
+  - *YCbCr is always Limited:* with Range Full on a YCbCr output (Calman, LightSpace), the full-range codes are converted to studio range (0–1023 → 64–940) and the AVI infoframe says Limited, also on modes without a CEA VIC.
   - *Session safety:* pattern state is cleared on session start, shutdown and disconnect.
   - *Connect as G1:* Calman can also connect through **Find Source → Portrait Displays G1** and controls PGenerator+ completely that way: patches, signal modes and every G1 specialty pattern (Basic Alignment, Warm-Up, Granger Rainbow, Brightness, Contrast, Color Bars, SMPTE, ANSI checkerboards and the rest). The same 19 patterns are in the WebUI under Patterns.
   - *Compatibility note:* PGenerator+ is an independent community project, not affiliated with or endorsed by Portrait Displays. Make sure your Calman license and workflow comply with the vendor's terms.
@@ -370,6 +370,7 @@ PGenerator+ is a free, open-source display calibration suite for the Raspberry P
 
 - **Protocol:** XML calibration protocol (port `20002`). PGenerator+ connects *outbound* to the calibration PC, which helps across subnets.
 - **Connect:** in the Web UI's **Resolve Protocol** card, enter the PC's IP and port and click **Connect**.
+- **Range:** the protocol carries no range. The codes are drawn as sent, in the range set in Output; Resolve neither changes the range nor gives one back when it disconnects. Set the client's levels to the display's input range: on RGB Limited (and on YCbCr) the client sends video levels (DisplayCAL: Output levels *Auto* detects it, or *TV RGB 16-235*; ColourSpace: Patch Scale *Legal*), on RGB Full it sends full range.
 - **Bit depth:** the XML's `bits` is the precision of the patch codes, not an output setting. The output keeps the depth set in the WebUI: 8-bit codes on a 10-bit output take the same 8 → 10-bit step as the G1 patches, 10-bit codes on an 8-bit output are scaled to 8 bits by the renderer.
 - **Windows redirect helper:** `tools/PGenerator-Resolve-Redirect.bat` forwards Calman's local port 20002 to the Pi.
 
@@ -602,7 +603,7 @@ All endpoints are on port 80 and return JSON.
 | POST | `/api/meter/series/preview` | The steps that series would send, with nothing started or stopped |
 | GET | `/api/meter/series/status` | Series progress and readings |
 | POST | `/api/meter/stop` · `/clear` · `/reset` | Stop, clear results, force a meter reset |
-| GET / POST | `/api/meter/settings` | Load / save meter settings (POST replaces them; send the full object) |
+| GET / POST | `/api/meter/settings` | Load / save meter settings (POST changes the keys it carries and keeps the others; a body that is not a JSON object is refused) |
 | GET | `/api/ccss/list` · `/api/ccss/all` | Custom / all CCSS profiles |
 | POST | `/api/ccss/upload` | Upload a `.ccss` or spectral `.csv` |
 | POST | `/api/ccss/delete/{filename}` | Delete a custom profile |

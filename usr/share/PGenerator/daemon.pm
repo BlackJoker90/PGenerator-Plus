@@ -825,7 +825,7 @@ sub calman_render_g1_pattern (@) {
   $ps.="DRAW=IMAGE\nDIM=$f->{w},$f->{h}\nRGB=0,0,0\nBG=$bg_str\nPOSITION=$f->{x},$f->{y}\nIMAGE=$f->{file}\nEND=1\n";
   $ps.="FRAME_NAME=G1_${key}_$i\nFRAME=$f->{ms}\n";
  }
- &create_tmp_file($ps,$source_range);
+ return 0 if(!&create_tmp_file($ps,$source_range));
  &load_new_pattern_file("calman") if(!exists $o->{load} || $o->{load});
  &log("Calman G1: $key ${w}x${h} range=$range bits=$bits frames=".scalar(@frames).(scalar(@frames) > 1 ? " hz=".($opt{hz} || "default") : ""));
  return 1;
@@ -867,8 +867,7 @@ sub calman_render_specialty_pattern (@) {
    my $ps="MOVIE_NAME=TestPattern\nBITS=8\n";
    $ps.=&webui_pattern_image_pattern($w_s,$h_s,$img);
    $ps.="FRAME_NAME=TestPattern\nFRAME=$frame_default\n";
-   &create_tmp_file($ps,$source_range);
-   &load_new_pattern_file("calman");
+   &load_new_pattern_file("calman") if(&create_tmp_file($ps,$source_range));
   } else {
    &log("Calman: BRIGHTNESS image render failed, falling back to flat patch");
    &create_pattern_file("RECTANGLE","$w_s,$h_s",100,"$black_rgb",&calman_current_bg(),"","","",1,"calman",$source_range,$source_max);
@@ -879,8 +878,7 @@ sub calman_render_specialty_pattern (@) {
    my $ps="MOVIE_NAME=TestPattern\nBITS=8\n";
    $ps.=&webui_pattern_image_pattern($w_s,$h_s,$img);
    $ps.="FRAME_NAME=TestPattern\nFRAME=$frame_default\n";
-   &create_tmp_file($ps,$source_range);
-   &load_new_pattern_file("calman");
+   &load_new_pattern_file("calman") if(&create_tmp_file($ps,$source_range));
   } else {
    &log("Calman: CONTRAST image render failed, falling back to flat patch");
    &create_pattern_file("RECTANGLE","$w_s,$h_s",100,"$white_rgb",&calman_current_bg(),"","","",1,"calman",$source_range,$source_max);
@@ -891,8 +889,7 @@ sub calman_render_specialty_pattern (@) {
    my $ps="MOVIE_NAME=TestPattern\nBITS=8\n";
    $ps.=&webui_pattern_image_pattern($w_s,$h_s,$img);
    $ps.="FRAME_NAME=TestPattern\nFRAME=$frame_default\n";
-   &create_tmp_file($ps,$source_range);
-   &load_new_pattern_file("calman");
+   &load_new_pattern_file("calman") if(&create_tmp_file($ps,$source_range));
   } else {
    &log("Calman: ALIGNMENT image render failed, falling back to flat patch");
    &create_pattern_file("RECTANGLE","$w_s,$h_s",100,"$gray128_rgb",&calman_current_bg(),"","","",1,"calman",$source_range,$source_max);
@@ -1280,6 +1277,8 @@ sub pattern_daemon {
     ############################
     my $key_framed=0;
     my $http_request=0;
+    # A failed pattern write answers the command that made it, not a later one.
+    $pattern_write_failed=0;
     if($pending_cmd{$connection} && @{$pending_cmd{$connection}}) {
      $key=shift(@{$pending_cmd{$connection}});
      $key_framed=1;
@@ -2776,6 +2775,15 @@ sub pattern_daemon {
       $prim_val="0" if($pattern_cmd =~/^BT709$/i);
       $prim_val="1" if($pattern_cmd =~/^BT2020$/i);
       $prim_val="2" if($pattern_cmd =~/^P3$/i || $pattern_cmd =~/^DCI.?P3$/i);
+      # The renderer indexes its primaries table (DisplayChromacityList,
+      # ofxRPI4Window.h, entries 0-5) with this value without a bound:
+      # anything else is answered with NAK and not written.
+      if($prim_val !~/^[0-5]$/) {
+       &log("Calman: $type:$pattern_cmd answered with NAK (primaries must be 0 to 5)");
+       eval { $connection->send($nak_cmd_string); };
+       &close_connection($connection,"send error: $@") if($@);
+       last;
+      }
       $calman_save_setting->("primaries","$prim_val");
       # Update colorimetry to match gamut (BT.709=2, BT.2020/P3=9)
       $calman_save_setting->("colorimetry",$prim_val eq "0" ? "2" : "9");
@@ -3331,8 +3339,12 @@ sub pattern_daemon {
      $log_string="Received video request command";
      $log_string.=" ($key)" if($key ne "");
      &log($log_string);
-     &play_video($program,$video,$duration);
-     &send_key_to_client($connection,$ok_response);
+     my $video_result=&play_video($program,$video,$duration) // "";
+     # OK only when the player started (the root helper answers OK); a
+     # request the helper refuses (no such file) is an error too.
+     &send_key_to_client($connection,$video_result eq "OK" ? $ok_response
+                                    : $video_result eq "Video request refused" ? "$error_response:Refused: $video_result"
+                                    : "$error_response:$video_result");
      last;
     }
     #
@@ -3340,8 +3352,7 @@ sub pattern_daemon {
     # SAVEIMAGES:NOME:
     #
     if($key=~/$save_images_command:(.*):/) {
-     &save_images_pattern($1,"$pattern_frames/");
-     &send_key_to_client($connection,$ok_response);
+     &send_key_to_client($connection,&save_images_pattern($1,"$pattern_frames/") ? $ok_response : "$error_response:Refused: not a pattern name");
      last;
     }
     #
@@ -3417,7 +3428,8 @@ sub pattern_daemon {
     # GETCONF:CALIBRATION:DIMENSIONS
     #
     if($key=~/$get_conf_command:(.*):(.*)/) {
-     $response="$ok_response:".&get_conf_pattern($1,$2);
+     my $conf_val=&get_conf_pattern($1,$2);
+     $response=defined($conf_val) ? "$ok_response:$conf_val" : "$error_response:Refused: not a pattern name";
      &send_key_to_client($connection,$response);
      last;
     }
@@ -3428,8 +3440,8 @@ sub pattern_daemon {
     if($key=~/$set_conf_command:(.*):(.*):(.*)/sm) {
      @el=split(":",$key,4); 
       &legacy_external_mark_hcfr($connection) if($el[1] eq "HCFR");
-     &set_conf_pattern($el[1],$el[2],$el[3]);
-     &send_key_to_client($connection,$ok_response);
+     my $conf_why=&set_conf_pattern($el[1],$el[2],$el[3]);
+     &send_key_to_client($connection,$conf_why eq "" ? $ok_response : "$error_response:$conf_why");
      last;
     }
     #
@@ -3449,8 +3461,8 @@ sub pattern_daemon {
      $log_string="Received rgb triplet request command";
      $log_string.=" ($key)" if($key ne "");
      &log($log_string);
-     &execute_functions($draw,$dim,$res,$functions.'.'.server);
-     &send_key_to_client($connection,$ok_response);
+     my $fn_why=&execute_functions($draw,$dim,$res,$functions.'.'.server) // "";
+     &send_key_to_client($connection,$fn_why eq "" ? $ok_response : "$error_response:Refused: $fn_why");
      last;
     }
     #
@@ -3556,6 +3568,13 @@ sub send_key_to_client (@) {
  if($signal_refused_pending) {
   $signal_refused_pending=0;
   $response=$nak_cmd_string if($calman{$connection});
+ }
+ # The pattern this command drew could not be written (pattern.pm
+ # pattern_file_write): the previous patch is still on screen, so Calman
+ # must not measure it as this one.
+ if($pattern_write_failed) {
+  $pattern_write_failed=0;
+  $response=$calman{$connection} ? $nak_cmd_string : "$error_response:Pattern not written$end_cmd_string";
  }
  eval { $connection->send("$response"); };
  if($@) {

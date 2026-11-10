@@ -2152,6 +2152,18 @@ sub clean_files(@) {
 ###############################################
 #                CMD Function                 #
 ###############################################
+# The renderer indexes its mastering primaries table with "primaries"
+# (DisplayChromacityList, ofxRPI4Window.h, entries 0-5) without a bound: a
+# client's value outside it is refused and logged, not written.
+sub cmd_conf_value_ok (@) {
+ my ($key,$value)=@_;
+ # An empty value deletes the key (PiTPG "primaries":null); the renderer
+ # then uses its default.
+ return 1 if($key ne "primaries" || $value=~/^[0-5]?$/);
+ &log("CMD: SET_PGENERATOR_CONF_PRIMARIES:$value refused (primaries must be 0 to 5)");
+ return 0;
+}
+
 sub pgenerator_cmd (@) {
  my $cmd = shift;
  my $response = "";
@@ -2182,7 +2194,7 @@ sub pgenerator_cmd (@) {
   unlink("$info_dir/GET_DISCOVERABLE.info");
   &sudo("SET_DISCOVERABLE","$1");
  }
- if($cmd =~/SET_PGENERATOR_CONF_(IS_SDR|IS_HDR|IS_LL_DOVI|IS_STD_DOVI|EOTF|PRIMARIES|MAX_LUMA|MIN_LUMA|MAX_CLL|MAX_FALL|COLOR_FORMAT|COLORIMETRY|RGB_QUANT_RANGE|MAX_BPC|DV_STATUS|DV_INTERFACE|DV_PROFILE|DV_MAP_MODE|DV_MINPQ|DV_MAXPQ|DV_DIAGONAL|MODE_IDX|DV_METADATA|DV_COLOR_SPACE|DV_TRANSPORT|SIGNAL_MODE|CALMAN_MODE_IDX):(.*)/) {
+ if($cmd =~/SET_PGENERATOR_CONF_(IS_SDR|IS_HDR|IS_LL_DOVI|IS_STD_DOVI|EOTF|PRIMARIES|MAX_LUMA|MIN_LUMA|MAX_CLL|MAX_FALL|COLOR_FORMAT|COLORIMETRY|RGB_QUANT_RANGE|MAX_BPC|DV_STATUS|DV_INTERFACE|DV_PROFILE|DV_MAP_MODE|DV_MINPQ|DV_MAXPQ|DV_DIAGONAL|MODE_IDX|DV_METADATA|DV_COLOR_SPACE|DV_TRANSPORT|SIGNAL_MODE|CALMAN_MODE_IDX):(.*)/ && &cmd_conf_value_ok(lc($1),"$2")) {
   my $conf_key=lc($1);
   my $conf_value=$2;
   # 1.6 compatibility: CMD MIN_LUMA is wire units (0.0001 nits), conf is nits.

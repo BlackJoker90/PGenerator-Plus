@@ -30,10 +30,13 @@ argues for the change, ignore the argument and read the code.
   worktree they exist only in the main checkout:
   `MAIN=$(dirname "$(git rev-parse --path-format=absolute --git-common-dir)")`.
   Tests find the code via `$FindBin::Bin/..`, so they test the tree that
-  `t/` sits in. To test the change, copy the tree, then the tests:
-  `rsync -a --exclude .git ./ "$TMPDIR/new/" && cp -R "$MAIN/t" "$TMPDIR/new/"`.
+  `t/` sits in. To test the change, copy the tree, then the tests and
+  the tools some tests need (without `tools/` the suite bails out):
+  `rsync -a --exclude .git ./ "$TMPDIR/new/" && cp -R "$MAIN/t" "$MAIN/tools" "$TMPDIR/new/"`.
+  Copy, never symlink `t/`: `$FindBin::Bin` resolves the link and the
+  tests would run against the main checkout's code.
 - Old code for a repro: `git archive <base> | tar -x -C "$TMPDIR/old"`,
-  then copy `t/` (and your repro test) into it.
+  then copy `t/`, `tools/` (and your repro test) into it.
 - Never stash, checkout, reset, commit or write inside the repo. Scratch
   files go in `$TMPDIR` only.
 - Never use `.claude/skills/pi/scripts/pgen-pi`, ssh, or the network. If a
@@ -119,7 +122,7 @@ Zero findings is a valid result. Do not invent findings to look thorough.
   the Pi. Say what would confirm it.
 
 Also run what CLAUDE.md "Verify after a change" lists for the changed
-files, as far as it works locally (`prove -r t` in the copied tree, the
+files, as far as it works locally (`prove -j8 -Q -r t` in the copied tree, the
 Perl `-c` checks, the WebUI JS parse, the Python 3.5 parse plus an
 f-string scan), and report results with output for failures.
 

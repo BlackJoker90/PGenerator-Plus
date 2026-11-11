@@ -51,7 +51,13 @@ the main checkout's copy.
 
 Run what applies and say what was and was not checked:
 
-- `prove -r t` (code-value tests: bits, Calman scaling, G1 plates, playlists)
+- `prove -j8 -Q -r t` (code-value tests: bits, Calman scaling, G1 plates,
+  playlists). Parallel, as the release gate runs it: serial it took 784 s
+  on 2026-11-11 (-j8: 107 s) and outlasts a 600 s Bash call; `-v` only on
+  a failing file.
+  In the Bash sandbox `t/pi_exp.t`, `t/refused_settings.t` and
+  `t/meter_ccss_y_selector.t` fail on sandbox limits (ptys, sockets, temp
+  files); rerun just those unsandboxed before calling a red real.
 - Perl: `perl -I usr/share/PGenerator -c <file>` for scripts in `usr/bin`,
   `usr/sbin`; modules are checked by `tools/runtime/pgen_release_checks.sh`
   (`pgen_release_check_runtime_syntax`)

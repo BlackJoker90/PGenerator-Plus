@@ -454,6 +454,9 @@ public:
 	void DisablePlane(uint32_t plane_id, const char* plane); 
 	void ResetConnectorProperties();
 	void ResetConnectorOnExit();
+	/* Switch the CRTC off before a commit that keeps its mode but has to
+	   reach the encoder (see the definition). */
+	void SwitchOffIfModeKept(bool range_known, uint64_t range_before);
 	int SetPlaneId();
 
 	/* Userspace access to HDR, DoVi , AVI Infoframes */
@@ -540,4 +543,9 @@ public:
 	bool exit_started = false;
 	bool reload_pending = false;
 	bool exit_reset_done = false;
+	/* SwitchOffIfModeKept: the first flip of this process was checked; the
+	   "rgb quant range" value the request being built sets. */
+	bool modeset_checked = false;
+	bool pending_rgb_quant_range_set = false;
+	uint64_t pending_rgb_quant_range = 0;
 };

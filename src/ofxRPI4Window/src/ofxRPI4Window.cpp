@@ -1,6 +1,7 @@
 #include "ofxRPI4Window.h"
 #include "igt_edid.h"
 #include "cea_vic.h"
+#include "mode_kept.h"
 
 #include <dlfcn.h>
 #include <fcntl.h>
@@ -887,6 +888,8 @@ ofxRPI4Window::drm_mode_get_property(int drm_fd, uint32_t object_id, uint32_t ob
 	bool found = false;
 
 	proplist = drmModeObjectGetProperties(drm_fd, object_id, object_type);
+	if (!proplist)
+		return false;
 	for (uint32_t i = 0; i < proplist->count_props; i++) {
 		_prop = drmModeGetProperty(drm_fd, proplist->props[i]);
 		if (!_prop)
@@ -973,7 +976,9 @@ ofxRPI4Window::drm_mode_get_property(int drm_fd, uint32_t object_id, uint32_t ob
 				drmModeFreeProperty(_prop);
 			break;
 		}
-	if (prop) drmModeFreeProperty(_prop);
+	/* Not the one asked for: freed whether or not the caller wants the
+	   matching property back (callers passing NULL leaked these). */
+	drmModeFreeProperty(_prop);
 	}
 
 
@@ -3700,6 +3705,8 @@ void ofxRPI4Window::ResetConnectorProperties()
 	} else {
 		rgb_quant_range = (avi_info.rgb_quant_range == 1 || avi_info.rgb_quant_range == 2)
 			? wireRgbQuantRange(avi_info.rgb_quant_range, avi_info.output_format) : 2;
+		pending_rgb_quant_range = rgb_quant_range;
+		pending_rgb_quant_range_set = true;
 		drm_mode_atomic_set_property(device, req, "rgb quant range" , connectorId, prop_id, rgb_quant_range, prop, 0);
 	}		
 
@@ -3890,6 +3897,68 @@ void ofxRPI4Window::DisablePlane(uint32_t plane_id, const char* plane)
 	
 }
 
+/* vc4 programs the CSC and the AVI quantisation range only when it enables
+ * the encoder (a modeset), and its connector check does not count "rgb
+ * quant range" as a reason for one (see reloadSignalConf in main.cpp). A
+ * commit that keeps the mode already on the CRTC is no modeset, so the range
+ * the CRTC was last enabled with stays on the wire whatever we set:
+ * - at boot the kernel enables its video= mode with Default, i.e. Limited
+ *   on a CEA VIC; when that mode is ours (a display whose 1080p60 is the
+ *   CEA timing), RGB Full went out as Limited until a depth change;
+ * - after a renderer the console restores its mode with Default
+ *   (ResetConnectorOnExit), the same when it is ours;
+ * - a range written while no renderer ran (apply_drm_properties) has not
+ *   reached the encoder either, though the property already holds it.
+ * So on the first flip of this process, and on any flip that changes the
+ * range, switch the CRTC off when the mode stays: the commit that follows
+ * enables it, and with it the CSC and the infoframe, with our values. A
+ * different mode is a modeset anyway; this costs one blank only where the
+ * console's mode is ours. */
+void ofxRPI4Window::SwitchOffIfModeKept(bool range_known, uint64_t range_before)
+{
+	bool first = !modeset_checked;
+	modeset_checked = true;
+	bool check = pgModeKeptCheck(first, range_known, range_before, pending_rgb_quant_range_set, pending_rgb_quant_range);
+	if (!check || device < 0 || !crtcId)
+		return;
+	uint32_t active_prop = 0;
+	uint64_t active = 0, blob_id = 0;
+	if (!drm_mode_get_property(device, crtcId, DRM_MODE_OBJECT_CRTC, "ACTIVE", &active_prop, &active, NULL))
+		return;
+	bool same = false;
+	if (active && drm_mode_get_property(device, crtcId, DRM_MODE_OBJECT_CRTC, "MODE_ID", NULL, &blob_id, NULL) && blob_id) {
+		drmModePropertyBlobRes *blob = drmModeGetPropertyBlob(device, (uint32_t)blob_id);
+		if (blob && blob->length >= sizeof(drmModeModeInfo))
+			same = pgSameModeTimings(*(const drmModeModeInfo *)blob->data, mode);
+		if (blob)
+			drmModeFreePropertyBlob(blob);
+	}
+	if (!pgModeKeptSwitchOff(check, active != 0, same))
+		return;
+	drmModeAtomicReq *off = drmModeAtomicAlloc();
+	if (!off)
+		return;
+	int ret = -EINVAL;
+	/* drm_override.so would add its fallback DOVI blob to this commit (the
+	   first real one of the process, without the renderer's DOVI): it goes
+	   to the kernel as built, like the exit reset. */
+	void (*set_suspended)(int) = (void (*)(int))dlsym(RTLD_DEFAULT, "drm_override_set_suspended");
+	if (drmModeAtomicAddProperty(off, crtcId, active_prop, 0) >= 0) {
+		if (set_suspended)
+			set_suspended(1);
+		ret = drmModeAtomicCommit(device, off, DRM_MODE_ATOMIC_ALLOW_MODESET, NULL);
+		if (set_suspended)
+			set_suspended(0);
+	}
+	drmModeAtomicFree(off);
+	if (ret < 0)
+		fprintf(stderr, "PGEN: mode kept, CRTC off before the range commit refused (%s); the range may not reach the encoder\n", strerror(-ret));
+	else
+		fprintf(stderr, "PGEN: mode kept (%s), CRTC switched off so the commit enables it with rgb quant range %llu (was %s%llu)\n",
+			first ? "first flip" : "range change", (unsigned long long)pending_rgb_quant_range,
+			range_known ? "" : "unknown ", (unsigned long long)range_before);
+}
+
 int ofxRPI4Window::SetPlaneId()
 {
 	if (isHDR)
@@ -3910,6 +3979,9 @@ void ofxRPI4Window::FlipPage(bool flip, uint32_t fb_id)
 		 * properties in one request are fine: libdrm keeps the last value.
 		 * Blobs are created before the commit and only referenced by it, so
 		 * their lifetime does not force separate commits. */
+		uint64_t range_before = 0;
+		bool range_known = connectorId && drm_mode_get_property(device, connectorId, DRM_MODE_OBJECT_CONNECTOR, "rgb quant range", NULL, &range_before, NULL);
+		pending_rgb_quant_range_set = false;
 		dovi_pending = false;
 		batch_req = true;
 		SetModeProperties();
@@ -3933,6 +4005,7 @@ void ofxRPI4Window::FlipPage(bool flip, uint32_t fb_id)
 					ofLog() << "DRM: atomic_request DOVI_OUTPUT_METADATA(blob): blob_id = " << dovi_pending_blob;
 				dovi_pending = false;
 			}
+			SwitchOffIfModeKept(range_known, range_before);
 			ofLog() << "DRM: committing mode, infoframes and plane in one atomic request";
 			drm_mode_atomic_commit(device, DRM_MODE_ATOMIC_ALLOW_MODESET | DRM_MODE_PAGE_FLIP_EVENT | DRM_MODE_ATOMIC_NONBLOCK);
 			return;
@@ -3943,7 +4016,11 @@ void ofxRPI4Window::FlipPage(bool flip, uint32_t fb_id)
 			drmModeAtomicFree(req);
 			req = nullptr;
 		}
+		pending_rgb_quant_range_set = false;
 		SetModeProperties();
+		/* The connector properties are committed now; the CRTC goes off
+		   before SetActivePlane enables it with them. */
+		SwitchOffIfModeKept(range_known, range_before);
 	}
 
 	SetActivePlane(SetPlaneId(), currentWindowRect, fb_id); 
@@ -4325,8 +4402,10 @@ void ofxRPI4Window::updateAVI_Infoframe(uint32_t plane_id, struct avi_infoframe 
 		ofLogError() << "DRM: Unable to find RGB Quant Range";
 	} else {	
 		rgb_quant_range = wireRgbQuantRange(avi_infoframe.rgb_quant_range, avi_infoframe.output_format);
+		pending_rgb_quant_range = rgb_quant_range;
+		pending_rgb_quant_range_set = true;
 		drm_mode_atomic_set_property(device, req, "rgb quant range", connectorId, prop_id, rgb_quant_range, prop, 0);
-	}	
+	}
 
 	ofLog() << "DRM: Setting plane properties";
 	

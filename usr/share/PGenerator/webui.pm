@@ -10456,6 +10456,9 @@ sub webui_apply_config (@) {
  # stayed limited and HDR10 asked for a 12 bpc surface after LLDV. The WebUI
  # posts its form values, so a value still equal to the DV one counts as
  # "not chosen" too; a value the user changed is kept.
+ # Format and depth from before Dolby Vision that the caller did not name,
+ # and the depth to end on where one of them is not given back.
+ my (%pre_dv_back,%pre_dv_floor);
  if(defined $changes{"signal_mode"}) {
   # An empty signal_mode names no mode: DV stays on and nothing is given
   # back. (The values are kept on the way into DV further down, once the
@@ -10482,16 +10485,18 @@ sub webui_apply_config (@) {
    # (An emptied pre_dv_color_format is RGB, as a missing one.)
    my $pre_dv_format=(($pgenerator_conf{"pre_dv_color_format"} // "")=~/^([012])$/) ? $1 : "0";
    if(&pg_dv_transport_mode() eq "lldv" && $format eq $dv_format && $format ne $pre_dv_format) {
-    $changes{"color_format"}=$pre_dv_format;
+    $pre_dv_back{"color_format"}=$pre_dv_format;
    }
    # The WebUI sends the target mode's bpc; only a leftover LLDV 12 (or the
    # LL RGB depth) needs undoing.
    my $bpc=defined $changes{"max_bpc"} ? $changes{"max_bpc"} : ($pgenerator_conf{"max_bpc"} // "");
    $changes{"dv_ll_rgb"}="" if($ll_rgb);
    if($ll_rgb && $bpc eq ($pgenerator_conf{"max_bpc"} // "") && $bpc ne "12") {
-    $changes{"max_bpc"}=$pre_dv_bpc;
+    $pre_dv_back{"max_bpc"}=$pre_dv_bpc;
+    $pre_dv_floor{"max_bpc"}="8";
    } elsif($bpc eq "12") {
-    $changes{"max_bpc"}=($pre_dv_bpc eq "12") ? "8" : $pre_dv_bpc;
+    $pre_dv_back{"max_bpc"}=($pre_dv_bpc eq "12") ? "8" : $pre_dv_bpc;
+    $pre_dv_floor{"max_bpc"}="8";
    }
    # Standard DV is RGB, and the page's form puts 8 into the conf with it.
    # A caller that names neither on leaving (an API client that posts only
@@ -10501,14 +10506,16 @@ sub webui_apply_config (@) {
    # depth set while in DV is a setting of its own, not a leftover (the
    # link is 8 bit there whatever it holds), and stays. A conf without
    # pre_dv_* (Calman or a port 85 client entered DV) stays as it is.
+   # (Set further down, once the new mode's flags are known: only what the
+   # output carries at the mode it is in now.)
    if(&pg_dv_transport_mode() eq "standard") {
     my $pre_format=$pgenerator_conf{"pre_dv_color_format"} // "";
-    if(!defined $changes{"color_format"} && $pre_format=~/^[012]$/ && ($pgenerator_conf{"color_format"} // "0") eq "0") {
-     $changes{"color_format"}=$pre_format;
+    if(!defined $changes{"color_format"} && $pre_format=~/^[12]$/ && ($pgenerator_conf{"color_format"} // "0") eq "0") {
+     $pre_dv_back{"color_format"}=$pre_format;
     }
     my $pre_bpc=$pgenerator_conf{"pre_dv_max_bpc"} // "";
-    if(!defined $changes{"max_bpc"} && $pre_bpc=~/^(?:8|10)$/ && ($pgenerator_conf{"max_bpc"} // "") eq "8") {
-     $changes{"max_bpc"}=$pre_bpc;
+    if(!defined $changes{"max_bpc"} && $pre_bpc eq "10" && ($pgenerator_conf{"max_bpc"} // "") eq "8") {
+     $pre_dv_back{"max_bpc"}=$pre_bpc;
     }
    }
   }
@@ -10557,6 +10564,55 @@ sub webui_apply_config (@) {
    $changes{"rgb_quant_range"}=&pg_dv_transport_quant_range($requested_dv_transport) if(!$pitpg_ll_rgb);
   }
  }
+ # The format and depth from before Dolby Vision, for a caller that named
+ # neither (above): given back as far as the output carries them. Dolby
+ # Vision runs at every mode (Standard on an 8-bit link, Low Latency in
+ # YCbCr 4:2:2), so the mode may have been changed in it: HDR10 RGB 10-bit
+ # from 1080p60 does not fit 2160p60, and {"signal_mode":"hdr10"} was refused
+ # for a depth it had not named, with Dolby Vision left on (after Standard DV
+ # 2.13.47 left it as RGB 8-bit). Tried in this order: both, the format with
+ # 8-bit, the depth without the format, neither; the last one is not tried,
+ # the signal check below judges it with everything else that was posted.
+ my $pre_dv_not_back="";
+ if(%pre_dv_back) {
+  my %base=(%pgenerator_conf,%changes);
+  # An empty mode_idx names no mode (it is dropped below): the output's.
+  $base{"mode_idx"}=$pgenerator_conf{"mode_idx"} if(defined $changes{"mode_idx"} && $changes{"mode_idx"} eq "");
+  # opRGB and BT.2020 constant luminance named by the caller for SDR are for
+  # RGB (refused with YCbCr below): YCbCr is not given back under them. In
+  # HDR10 and HLG the colorimetry is 9 by now, whatever was posted.
+  my $rgb_only=(exists $posted{"colorimetry"} && ($base{"colorimetry"} // "")=~/^[78]$/) ? 1 : 0;
+  my @tries=({%pre_dv_floor,%pre_dv_back});
+  if(exists $pre_dv_back{"color_format"} && exists $pre_dv_back{"max_bpc"}) {
+   push(@tries,{%pre_dv_floor,"color_format"=>$pre_dv_back{"color_format"}});
+   push(@tries,{%pre_dv_floor,"max_bpc"=>$pre_dv_back{"max_bpc"}});
+  }
+  push(@tries,{%pre_dv_floor});
+  # One modetest read for the trials (signal_mode_info runs it per check
+  # otherwise); none to be had: each check reads it itself.
+  my $modetest_out=`timeout 3 $modetest -c 2>/dev/null`;
+  $modetest_out=undef if(!defined $modetest_out || $modetest_out eq "");
+  my %tried;
+  foreach my $i (0..$#tries) {
+   my $try=$tries[$i];
+   if($i < $#tries) {
+    my %trial=(%base,%$try);
+    next if($tried{join(",",map { "$_=$trial{$_}" } qw(color_format max_bpc))}++);
+    next if($rgb_only && ($trial{"color_format"} // "0") ne "0");
+    my ($check)=eval { &signal_check_conf(\%trial,$modetest_out) };
+    next if($check && !$check->{ok});
+   }
+   $changes{$_}=$try->{$_} foreach(keys %$try);
+   if(grep { ($try->{$_} // "") ne $pre_dv_back{$_} } keys %pre_dv_back) {
+    # (YCbCr 4:2:2 has one depth on the link and is named without it.)
+    my %was=(%base,%pre_dv_floor,%pre_dv_back);
+    my %now=(%base,%$try);
+    my $label=sub { my $c=shift; my $f=$c->{"color_format"} // "0"; return PGSignalCheck::signal_format_label($f,$f eq "2" ? 0 : ($c->{"max_bpc"} || 8)); };
+    $pre_dv_not_back=eval { require PGSignalCheck; $label->(\%was)." from before Dolby Vision is not carried here: sent as ".$label->(\%now)."." } // "";
+   }
+   last;
+  }
+ }
  my %effective=%pgenerator_conf;
  foreach my $k (keys %changes) {
   $effective{$k}=$changes{$k};
@@ -10578,6 +10634,8 @@ sub webui_apply_config (@) {
  # or a port 85 client starts does not end on values from an older one. A
  # visit one of those ends leaves them in the conf until the format, depth,
  # range or mode is set here outside DV: that is newer than what they hold.
+ # When one of those switches DV on, the format and depth go
+ # (forget_pre_dv_format_depth, command.pm); the range stays, as the WebUI's.
  # (Not any request: the Pi tools give pre_dv_* back with a POST of their
  # own and post the DV keys after it.) The self-test's own switches touch
  # neither (it writes them back itself), nor does a request that posts them.
@@ -10712,6 +10770,7 @@ sub webui_apply_config (@) {
   $changes{"max_bpc"}="10";
  }
  my @adjusted=();
+ push(@adjusted,$pre_dv_not_back) if($pre_dv_not_back ne "");
  # HDR10, HLG and DV are BT.2020 signals (normalize_signal_mode_conf does
  # the same on every renderer start): the colorimetry is 9 in them. A
  # posted 10 (BT2020_YCC) is the same on the wire (drm_override maps 9 to

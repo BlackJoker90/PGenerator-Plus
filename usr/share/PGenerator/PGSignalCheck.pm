@@ -194,15 +194,14 @@ sub _alternatives {
 }
 
 # The same for a Dolby Vision request: its transport fixes the format
-# (standard: RGB, 8 or 10 bit as in PGenerator 1.6; low latency: YCbCr
-# 4:2:2 12-bit unless the display lists RGB / 4:4:4), so only other DV
-# forms are offered. $v is the display's Dolby Vision block, if read.
+# (standard: 8-bit RGB, see signal_check; low latency: YCbCr 4:2:2 12-bit
+# unless the display lists RGB / 4:4:4), so only other DV forms are
+# offered. $v is the display's Dolby Vision block, if read.
 sub _dv_alternatives {
  my ($req,$board,$d,$v,$lldv,$bpc)=@_;
  my @alt;
  my $ok=($v && !$v->{error}) ? $v : undef;
  if(!$lldv) {
-  push(@alt,"8-bit Dolby Vision") if($bpc != 8 && _fits($req,$board,$d,0,8));
   push(@alt,"Dolby Vision (low latency)") if((!$ok || !defined $ok->{low_latency} || $ok->{low_latency}) && _fits($req,$board,$d,2,12));
  } else {
   push(@alt,"Dolby Vision (low latency) in YCbCr 4:2:2") if(int($req->{color_format} || 0) != 2 && _fits($req,$board,$d,2,12));
@@ -253,6 +252,19 @@ sub signal_check {
  if($format == 2 && !$dv && $bpc != 10) {
   push(@{$r{adjustments}},"$bpc-bit YCbCr 4:2:2 is sent as 10-bit codes (4:2:2 is always a 12-bit HDMI container).");
   $bpc=10;
+  $label=signal_format_label($format,$bpc);
+ }
+ # Standard (TV-led) Dolby Vision is 12-bit YCbCr 4:2:2 packed into 8-bit
+ # RGB: its link is 8 bit whatever depth is set (drm_override.c and the
+ # renderer's applySignalConf; as pitpgd output_decide, which reads neither
+ # the depth setting nor the patch depth there). The setting stays for the
+ # signal after Dolby Vision, so it is judged as what goes out. No
+ # adjustment: in Dolby Vision the transport sets format, depth and range
+ # (signal_wire_adjustments), and a note here would mark every session of a
+ # client that asks for 10 bit; a POST that names the depth is told so
+ # (webui.pm webui_apply_config).
+ if($dv && !$lldv && $bpc != 8) {
+  $bpc=8;
   $label=signal_format_label($format,$bpc);
  }
 

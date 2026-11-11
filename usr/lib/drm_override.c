@@ -368,6 +368,14 @@ static void parse_config(char *buf) {
      * 8 bit TMDS clock either way, so asking for 10 changes nothing else. */
     if (output_fmt_found && output_fmt_override == 2 && max_bpc_override < 10)
         max_bpc_override = 10;
+    /* Standard (TV-led) Dolby Vision is 12-bit YCbCr 4:2:2 packed into 8-bit
+     * RGB: its link is 8 bpc whatever depth the conf holds (as pitpgd
+     * output_decide, which reads neither the depth setting nor the patch
+     * depth there). The conf's depth stays for the signal after Dolby
+     * Vision. Standard is told from Low-Latency as in is_dovi_ll_transport();
+     * the renderer has the same rule (main.cpp applySignalConf). */
+    if (dv_status == 1 && !(is_ll_dovi == 1 && is_std_dovi != 1) && max_bpc_override > 0)
+        max_bpc_override = 8;
 
     if (max_bpc_override > 0) {
         char num[24];

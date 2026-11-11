@@ -840,8 +840,8 @@ function applyConfigState(nextConfig){
 	  syncDvOutputEotfState();
 	  const dvTransport=dvTransportDefaults(getVal('dv_transport'));
 	  setVal('dv_transport',dvTransport.dv_transport);
-	  // LLDV always goes out at 12 bpc; standard DV carries 8 or 10.
-	  setVal('max_bpc',dvTransport.dv_transport==='lldv'?dvTransport.max_bpc:dvRgbMaxBpc(config.max_bpc||dvTransport.max_bpc));
+	  // The transport sets the depth: standard DV 8 bpc, LLDV 12 bpc.
+	  setVal('max_bpc',dvTransport.max_bpc);
 	  setVal('color_format',dvTransport.color_format);
   setVal('dv_interface',dvTransport.dv_interface);
   setVal('colorimetry','9');
@@ -1848,7 +1848,10 @@ function updateDropdowns(){
 	  const dvTransport=dvTransportDefaults(getVal('dv_transport'));
 	  setVal('dv_transport',dvTransport.dv_transport);
 	  setVal('dv_interface',dvTransport.dv_interface);
-  const allowedBpc=dvTransport.dv_transport==='lldv'?['12']:['8','10'];
+  // The transport sets the depth: TV-led is an 8-bit RGB tunnel, low
+  // latency 12-bit YCbCr 4:2:2. Standard's link is 8 bit whatever the conf
+  // holds (drm_override.c parse_config, main.cpp applySignalConf).
+  const allowedBpc=[dvTransport.max_bpc];
   const targetFmt=dvTransport.color_format;
   Array.from(fmtSel.options).forEach(function(o){o.disabled=o.value!==targetFmt;o.style.display=o.value===targetFmt?'':'none';});
   fmtSel.value=targetFmt;
@@ -1862,11 +1865,13 @@ function updateDropdowns(){
    pgSetOptionUnavailable(o,o.value===targetRange?'':'Set by Dolby Vision');
   });
   pgSyncRangeDefaultOption(rngSel);
+  // The range's codes are named at the depth just set, not the one before.
+  pgSyncRangeLabels(rngSel);
   // What Dolby Vision fixes is shown fixed, not left editable and then
   // overwritten on Apply (applySettings sends these values in DV).
   const colSel=document.getElementById('colorimetry');
   setVal('colorimetry','9');
-  pgDvLockFields([fmtSel,rngSel,colSel].concat(allowedBpc.length===1?[bpcSel]:[]),dvTransport);
+  pgDvLockFields([fmtSel,rngSel,colSel,bpcSel],dvTransport);
   // The platform DV transport uses its configured TMDS bandwidth.
   const maxTmds=(caps&&caps.max_tmds)?caps.max_tmds*1000:600000;
   // TV-led DV at 2160p60 only where a version 0/1 Dolby block says so
@@ -3216,9 +3221,6 @@ function dvTransportMode(value){
  // Same rule as pg_dv_transport_mode() in variables.pm.
  return String(value||'').toLowerCase()==='lldv' ? 'lldv' : 'standard';
 }
-function dvRgbMaxBpc(value){
- return String(value||'').trim()==='10' ? '10' : '8';
-}
 // Lock the fields Dolby Vision sets and say why under the settings; an
 // empty list unlocks only the fields this function locked.
 function pgDvLockFields(sels,dvTransport){
@@ -3232,7 +3234,7 @@ function pgDvLockFields(sels,dvTransport){
  if(!sels.length||!dvTransport){ note.hidden=true; note.textContent=''; return; }
  note.textContent=dvTransport.dv_transport==='lldv'
   ?'Set by Dolby Vision Low Latency: YCbCr 4:2:2, 12-bit, Limited range, BT.2020.'
-  :'Set by Dolby Vision Standard: RGB, Full range, BT.2020. Bit depth: 8 or 10.';
+  :'Set by Dolby Vision Standard: 8-bit RGB carrying the 12-bit picture, Full range, BT.2020.';
  note.hidden=false;
 }
 
@@ -3355,7 +3357,7 @@ async function applySettings(){
 	   dv_transport:dvTransport.dv_transport,
 	   is_ll_dovi:dvTransport.is_ll_dovi,is_std_dovi:dvTransport.is_std_dovi,
    dv_status:'1',primaries:'1',color_format:dvTransport.color_format,colorimetry:'9',
-   max_bpc:(dvTransport.dv_transport==='lldv'?dvTransport.max_bpc:dvRgbMaxBpc(getVal('max_bpc'))),
+   max_bpc:dvTransport.max_bpc,
    rgb_quant_range:dvTransport.rgb_quant_range,eotf:'2',
    dv_interface:dvTransport.dv_interface,
    dv_map_mode:getVal('dv_map_mode'),
@@ -21869,6 +21871,21 @@ function meterGreyNormalizeProfilesState(){
  return state;
 }
 
+// Up to 2.13.46 the page could show Dolby Vision Standard (dv, RGB) at
+// 10 bit; it is always 8 bit now, so a profile saved for that mode is found
+// under the 8-bit key. An 8-bit profile someone set up stays, and so does
+// the other; an untouched one (the page makes it as soon as the mode is
+// shown: blank is such a profile as JSON) gives way.
+function meterGreyStdDvKeysTo8(profiles,blank){
+ Object.keys(profiles).forEach(key=>{
+  if(key.indexOf('dv|fmt:0|bpc:10|')!==0) return;
+  const k8=key.replace('|bpc:10|','|bpc:8|');
+  if(profiles[k8]&&JSON.stringify(profiles[k8])!==blank) return;
+  profiles[k8]=profiles[key];
+  delete profiles[key];
+ });
+}
+
 function meterGreyNormalizeProfilesStateNow(){
  if(!meterGreyPatchProfiles||typeof meterGreyPatchProfiles!=='object') meterGreyPatchProfiles={};
  meterGreyPatchProfiles.format='pgenerator-greyscale-profile-v2';
@@ -21935,6 +21952,7 @@ function meterGreyNormalizeProfilesStateNow(){
  Object.keys(meterGreyPatchProfiles.profiles).forEach(key=>{
   meterGreyPatchProfiles.profiles[key]=normalize(meterGreyPatchProfiles.profiles[key]);
  });
+ meterGreyStdDvKeysTo8(meterGreyPatchProfiles.profiles,JSON.stringify(normalize(null)));
  if(!meterGreyPatchProfiles.profiles['__all__']) meterGreyPatchProfiles.profiles['__all__']=meterGreyProfileTemplate();
  return meterGreyPatchProfiles;
 }
@@ -24031,6 +24049,19 @@ function pgPresetSettingsNow(){
  return settings;
 }
 
+// The depth a preset puts on the cable: in Dolby Vision the transport's (a
+// preset saved up to 2.13.46 may hold 10 for Standard, which went out then).
+function pgPresetBpc(s){
+ return String(s.signal_mode||'')==='dv'?dvTransportDefaults(s.dv_transport).max_bpc:String(s.max_bpc||'');
+}
+// The preset's values the fields could not take (this display or mode).
+function pgPresetMissedKeys(s,mode){
+ return PG_PRESET_ORDER.filter(key=>{
+  if(s[key]==null) return false;
+  const el=pgPresetFieldEl(key,mode);
+  return el&&String(el.value)!==(key==='max_bpc'?pgPresetBpc(s):String(s[key]));
+ });
+}
 // Chips: what the preset puts on the cable, in the order of the header.
 function pgPresetChips(s){
  const chips=[];
@@ -24046,7 +24077,7 @@ function pgPresetChips(s){
   if(mm) res=(mm[1]==='4096'?'DCI ':'')+mm[2]+(mm[3]?'i':'p')+pgPresetModeLabel(m).replace(/^.*-/,'');
  }
  if(res) chips.push({text:res});
- let bpc=String(s.max_bpc||'');
+ let bpc=pgPresetBpc(s);
  // Outside Dolby Vision 12 bpc goes out as 10 bpc (see pgCaptureHeaderSignal).
  if(sm!=='dv'&&bpc==='12') bpc='10';
  if(bpc) chips.push({text:bpc+'-bit',bits:bpc});
@@ -24071,6 +24102,7 @@ function pgPresetActiveId(){
   return Object.keys(s).every(k=>{
    if(k==='mode_label') return true;
    if(k==='mode_idx') return s.mode_label?now.mode_label===s.mode_label:String(now.mode_idx)===String(s.mode_idx);
+   if(k==='max_bpc') return String(now[k])===pgPresetBpc(s);
    return String(now[k])===String(s[k]);
   });
  });
@@ -24217,11 +24249,7 @@ function pgPresetLoad(id){
  pgApplyAskSnoozed=false;
  pgApplyAskSoon();
  // Say which values this display or mode could not take.
- const missed=PG_PRESET_ORDER.filter(key=>{
-  if(s[key]==null) return false;
-  const el=pgPresetFieldEl(key,mode);
-  return el&&String(el.value)!==String(s[key]);
- }).map(key=>(APPLY_BAR_FIELDS.find(f=>f[0]===key)||[key,key])[1]);
+ const missed=pgPresetMissedKeys(s,mode).map(key=>(APPLY_BAR_FIELDS.find(f=>f[0]===key)||[key,key])[1]);
  if(idx==null&&(p.settings||{}).mode_label) missed.unshift('Resolution '+pgPresetChips(p.settings).filter(c=>/^(DCI )?\d+[pi]/.test(c.text)).map(c=>c.text).join(''));
  const sel=document.getElementById('presetSelect');
  if(sel&&Array.from(sel.options).some(o=>o.value===p.id)) sel.value=p.id;

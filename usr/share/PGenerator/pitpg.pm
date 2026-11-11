@@ -1014,7 +1014,9 @@ sub pitpg_dv_container_2020 (@) {
 }
 # Bits per component on the link as drm_override.so and the renderer
 # (main.cpp applySignalConf) set it: max_bpc, at least 10 for 4:2:2, and
-# 12 only in Dolby Vision. 8 or 10 for the framebuffer.
+# 12 only in Dolby Vision. 8 or 10 for the framebuffer. Not for Dolby Vision
+# TV-led, whose link is 8 whatever max_bpc holds (pitpg_wire_bpc; the
+# callers ask pitpg_dv_tv_led first).
 sub pitpg_link_bits (@) {
  my $bpc=int($pgenerator_conf{"max_bpc"} || 8);
  $bpc=10 if(int($pgenerator_conf{"color_format"} || 0) == 2 && $bpc < 10);

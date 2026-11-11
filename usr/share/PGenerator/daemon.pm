@@ -1936,6 +1936,11 @@ sub pattern_daemon {
 	     # unset by the DV handler after all its saves complete.
 	     #
 	     my $calman_dv_transition_active=0;
+	     # Set when the coherence below takes dv_status from 1 to 0 for this
+	     # command (EOTF and CONF_HDR save eotf first, which runs it): by
+	     # the time $calman_set_non_dv_mode looks, the conf no longer says
+	     # that Dolby Vision was on.
+	     my $calman_coherence_left_dv=0;
 	     my $calman_enforce_mode_coherence = sub {
 	      return if(!$calman_gci{$connection});
 	      my $eotf_val=int($pgenerator_conf{"eotf"} || 0);
@@ -1995,6 +2000,7 @@ sub pattern_daemon {
 	       my $cur="$pgenerator_conf{$k}";
 	       $cur="" if(!defined $cur);
 	       next if($cur eq "$v");
+	       $calman_coherence_left_dv=1 if($k eq "dv_status" && "$v" eq "0" && $cur eq "1");
 	       &sudo("SET_PGENERATOR_CONF",$k,$v);
 	       $pgenerator_conf{$k}="$v";
 	       $changed=1;
@@ -2004,6 +2010,35 @@ sub pattern_daemon {
 	       $calman_settings_dirty=1;
 	       &log("Calman GCI: signal-mode coherence enforced (eotf=$eotf_val primaries=$prim_val is_hdr=$is_hdr_val)");
 	      }
+	     };
+	     # Dolby Vision has ended for a session that has named no range: the
+	     # WebUI's applies, after Dolby Vision its own SDR range, not the
+	     # transport's. Calman's UPGCI source (port 2100) has no range
+	     # control and sends video-level codes whatever GET_SETTINGS reports
+	     # (Calman 2026 on the Pi: 20 % is 0240,0240,0240): with the
+	     # transport's Full left in the conf they went out as Full, and the
+	     # WebUI cannot change the signal while Calman is connected. The G1
+	     # source (RPC port) shows the range GET_SETTINGS reported and draws
+	     # its codes for it: there it stays. "Range with Calman" has its own
+	     # branch in $calman_set_non_dv_mode.
+	     # Called where DV ends: after the save whose coherence took
+	     # dv_status to 0 (after the 2.0 handshake that can be the eotf or
+	     # the primaries of EOTF, CONF_HDR, PRIM), and by
+	     # $calman_set_non_dv_mode once its own saves are done (LLDV's
+	     # YCbCr is reset there first). dv_status is read here, after those
+	     # saves: a 2.0 request for HDR10 does not leave DV, and the
+	     # transport's range stays. Written as the coherence writes, as a
+	     # daemon-derived update.
+	     my $calman_range_after_dv = sub {
+	      return if(int($pgenerator_conf{"dv_status"} || 0) == 1);
+	      return if($calman_rgb_quant_range || $rpc_client{$connection});
+	      return if(($pgenerator_conf{"calman_range"} // "")=~/^[12]$/);
+	      my $webui_range=&webui_preferred_rgb_quant_range();
+	      return if(($pgenerator_conf{"rgb_quant_range"} || "") eq "$webui_range");
+	      &log("Calman: leaving Dolby Vision, range $webui_range (the WebUI's; Calman has named none)");
+	      &sudo("SET_PGENERATOR_CONF","rgb_quant_range","$webui_range");
+	      $pgenerator_conf{"rgb_quant_range"}="$webui_range";
+	      $calman_settings_dirty=1;
 	     };
 	     my $calman_save_setting = sub {
 	      my ($conf_key,$conf_val)=@_;
@@ -2097,8 +2132,10 @@ sub pattern_daemon {
 	      # as a daemon-derived update so the conf stays coherent
 	      # and drm_override.so stops rewriting the renderer's
 	      # wire colorimetry back to 2.
-	      $calman_enforce_mode_coherence->() if($calman_gci{$connection} &&
-	        ($conf_key eq "eotf" || $conf_key eq "is_hdr" || $conf_key eq "primaries"));
+	      if($calman_gci{$connection} && ($conf_key eq "eotf" || $conf_key eq "is_hdr" || $conf_key eq "primaries")) {
+	       $calman_enforce_mode_coherence->();
+	       $calman_range_after_dv->() if($calman_coherence_left_dv);
+	      }
 	     };
 	     my $calman_note_explicit_bpc = sub {
 	      my $bpc=&calman_valid_bpc(shift);
@@ -2542,6 +2579,37 @@ sub pattern_daemon {
      $calman_dv_transition_active=0;
     };
 
+    # A range Calman names (CONF_LEVEL Range, QRNG, SetRange, the RPC CMD):
+    # saved and applied with the command, through the same apply as every
+    # other setting (the gate, the record a refused apply goes back to,
+    # settings saved earlier and still waiting). Up to 2.13.47 the save
+    # was followed only by apply_source_rgb_quant_range(), which found the
+    # conf already at the new value: it did nothing once Calman owned the
+    # range (the second range command of a session) and otherwise only
+    # re-asserted it, so the AVI range followed with the next patch (seen
+    # with Calman 2026 on the Pi). That call still records Calman as the
+    # range's owner. A refused apply put the conf back: the range is not
+    # Calman's then (a CommandRGB drawn again would apply it past the gate),
+    # and the caller does not draw the last pattern again. Returns 1 when the
+    # range was taken.
+    # In Dolby Vision the transport sets the range and the next apply puts it
+    # back (calman_force_dv_rgb): no apply for a range that does not stay.
+    my $calman_name_range = sub {
+     my $range=shift;
+     my $range_before=$calman_rgb_quant_range;
+     $calman_rgb_quant_range=$range + 0;
+     $calman_save_setting->("rgb_quant_range","$calman_rgb_quant_range");
+     if(int($pgenerator_conf{"dv_status"} || 0) != 1) {
+      $calman_apply->(0);
+      if(&signal_patches_refused() ne "") {
+       $calman_rgb_quant_range=$range_before;
+       return 0;
+      }
+     }
+     &apply_source_rgb_quant_range("calman",$calman_rgb_quant_range);
+     return 1;
+    };
+
     my $calman_set_non_dv_mode = sub {
      my ($mode,$eotf_val,$colorimetry,$max_bpc)=@_;
 	     $mode=lc($mode || "sdr");
@@ -2550,7 +2618,8 @@ sub pattern_daemon {
 	     $max_bpc=($eotf_val >= 2) ? "10" : "8" if(!defined $max_bpc || $max_bpc eq "");
 	     $max_bpc=$calman_preferred_bpc->($max_bpc,$eotf_val >= 2);
 	     # LLDV forces YCbCr 4:2:2; leaving DV must not keep it for SDR/HDR10.
-	     my $dv_color_format=(int($pgenerator_conf{"dv_status"} || 0) == 1) ? &pg_dv_transport_color_format() : "0";
+	     my $dv_before=(int($pgenerator_conf{"dv_status"} || 0) == 1) ? 1 : 0;
+	     my $dv_color_format=($dv_before || $calman_coherence_left_dv) ? &pg_dv_transport_color_format() : "0";
 	     $calman_save_setting->("signal_mode",$mode);
      $calman_save_setting->("is_sdr",$eotf_val >= 2 ? "0" : "1");
      $calman_save_setting->("is_hdr",$eotf_val >= 2 ? "1" : "0");
@@ -2574,6 +2643,8 @@ sub pattern_daemon {
       &log("Calman: leaving Dolby Vision, range $range_override (Range with Calman)");
       $calman_rgb_quant_range=$range_override + 0;
       $calman_save_setting->("rgb_quant_range",$range_override);
+     } elsif($range_override eq "" && ($dv_before || $calman_coherence_left_dv)) {
+      $calman_range_after_dv->();
      }
     };
 
@@ -2625,19 +2696,20 @@ sub pattern_daemon {
       }
       if($rpc_payload =~/^SET_PGENERATOR_CONF_RGB_QUANT_RANGE:([012])$/i) {
        my $range_val=$1;
-       $calman_save_setting->("rgb_quant_range","$range_val");
+       my $range_taken=1;
        if($calman_gci{$connection}) {
+        $calman_save_setting->("rgb_quant_range","$range_val");
         &log("Calman GCI: RPC CMD rgb_quant_range ignored at runtime (WebUI owns it)");
        } elsif($range_val eq "1" || $range_val eq "2") {
-        $calman_rgb_quant_range=$range_val + 0;
-        &log("Calman: external range set to $calman_rgb_quant_range via RPC CMD");
-        &apply_source_rgb_quant_range("calman",$calman_rgb_quant_range);
+        &log("Calman: external range set to $range_val via RPC CMD");
+        $range_taken=$calman_name_range->($range_val);
        } else {
+        $calman_save_setting->("rgb_quant_range","$range_val");
         &log("Calman: releasing external range via RPC CMD");
         &calman_default_rgb_quant_range();
         $calman_rgb_quant_range=0;
        }
-       &calman_replay_last_pattern("RPC CMD range");
+       &calman_replay_last_pattern("RPC CMD range") if($range_taken);
        return 1;
       }
      }
@@ -2669,19 +2741,17 @@ sub pattern_daemon {
        # branches (GCI and non-GCI) take the same path: save
        # the conf and apply the source range.
        if($range_val =~/full/i) {
-        $calman_rgb_quant_range=2;
-        $calman_save_setting->("rgb_quant_range","$calman_rgb_quant_range");
-        &apply_source_rgb_quant_range("calman",$calman_rgb_quant_range);
+        $calman_name_range->(2);
        } elsif($range_val =~/limit/i) {
-        $calman_rgb_quant_range=1;
-        $calman_save_setting->("rgb_quant_range","$calman_rgb_quant_range");
-        &apply_source_rgb_quant_range("calman",$calman_rgb_quant_range);
+        $calman_name_range->(1);
        } else {
         &calman_default_rgb_quant_range();
         $calman_rgb_quant_range=0;
         $calman_save_setting->("rgb_quant_range",&webui_preferred_rgb_quant_range());
        }
        $calman_apply->(0) if(!$calman_gci{$connection});
+       # As a SPECIALTY on its own: no plate for settings that were refused.
+       last if(&signal_refuse_patch($connection,"Calman SPECIALTY"));
        &calman_render_specialty_pattern($specialty);
        &calman_remember_pattern("SPECIALTY","SPECIALTY",$specialty);
        &send_key_to_client($connection,"");
@@ -2944,6 +3014,7 @@ sub pattern_daemon {
      #
       if($type eq "QRNG") {
        my $qrng_val="0";
+       my $qrng_taken=1;
        $qrng_val="2" if($pattern_cmd =~/^FULL$/i);
        $qrng_val="1" if($pattern_cmd =~/^LIMITED$/i);
        # rgb_quant_range is now in the GCI allow-list, so all
@@ -2952,17 +3023,15 @@ sub pattern_daemon {
        # the command and the WebUI would flip back to the stale
        # conf value on the next poll.
        if($qrng_val eq "1" || $qrng_val eq "2") {
-        $calman_rgb_quant_range=$qrng_val + 0;
-        &log("Calman: external range set to $calman_rgb_quant_range via QRNG");
-        $calman_save_setting->("rgb_quant_range","$calman_rgb_quant_range");
-        &apply_source_rgb_quant_range("calman",$calman_rgb_quant_range);
+        &log("Calman: external range set to $qrng_val via QRNG");
+        $qrng_taken=$calman_name_range->($qrng_val);
        } else {
         &log("Calman: releasing external range via QRNG=$pattern_cmd");
         &calman_default_rgb_quant_range();
         $calman_rgb_quant_range=0;
         $calman_save_setting->("rgb_quant_range",&webui_preferred_rgb_quant_range());
        }
-      &calman_replay_last_pattern("QRNG");
+      &calman_replay_last_pattern("QRNG") if($qrng_taken);
       &send_key_to_client($connection,"");
       last;
      }
@@ -3013,18 +3082,12 @@ sub pattern_daemon {
      #
       if($type eq "SetRange") {
        my $range_val=int($pattern_cmd);
-       if($range_val == 1) {
-       $calman_rgb_quant_range=1;
-       } else {
-       $calman_rgb_quant_range=2;
-       }
+       $range_val=($range_val == 1) ? 1 : 2;
        # rgb_quant_range is now in the GCI allow-list, so all
        # branches (GCI and non-GCI) take the same path: save
        # the conf and apply the source range.
-       &log("Calman: external range set to $calman_rgb_quant_range");
-       $calman_save_setting->("rgb_quant_range","$calman_rgb_quant_range");
-       &apply_source_rgb_quant_range("calman",$calman_rgb_quant_range);
-       &calman_replay_last_pattern("SetRange");
+       &log("Calman: external range set to $range_val");
+       &calman_replay_last_pattern("SetRange") if($calman_name_range->($range_val));
       &send_key_to_client($connection,"");
       last;
      }
@@ -3193,17 +3256,11 @@ sub pattern_daemon {
         # rejected the command and the WebUI would flip back
         # to the stale conf value on the next poll.
         if($rv =~/full/) {
-        $calman_rgb_quant_range=2;
-         &log("Calman: external range set to $calman_rgb_quant_range via CONF_LEVEL");
-         $calman_save_setting->("rgb_quant_range","$calman_rgb_quant_range");
-         &apply_source_rgb_quant_range("calman",$calman_rgb_quant_range);
-         &calman_replay_last_pattern("CONF_LEVEL range");
+         &log("Calman: external range set to 2 via CONF_LEVEL");
+         &calman_replay_last_pattern("CONF_LEVEL range") if($calman_name_range->(2));
         } elsif($rv =~/limit/) {
-         $calman_rgb_quant_range=1;
-         &log("Calman: external range set to $calman_rgb_quant_range via CONF_LEVEL");
-         $calman_save_setting->("rgb_quant_range","$calman_rgb_quant_range");
-         &apply_source_rgb_quant_range("calman",$calman_rgb_quant_range);
-         &calman_replay_last_pattern("CONF_LEVEL range");
+         &log("Calman: external range set to 1 via CONF_LEVEL");
+         &calman_replay_last_pattern("CONF_LEVEL range") if($calman_name_range->(1));
         } else {
         &log("Calman: releasing external range via CONF_LEVEL=$cl");
         &calman_default_rgb_quant_range();
@@ -3397,7 +3454,10 @@ sub pattern_daemon {
       $response_tmp=&pgenerator_cmd($1);
      }
      chomp($response_tmp);
-     $response="$ok_response:".$response_tmp;
+     # A refused command (a setting outside its values, a mode the link
+     # cannot carry) is answered with its error alone: with OK: in front the
+     # client read it as done.
+     $response=($response_tmp=~/^\Q$error_response\E:Refused: /) ? $response_tmp : "$ok_response:".$response_tmp;
      &send_key_to_client($connection,$response);
      last;
     }

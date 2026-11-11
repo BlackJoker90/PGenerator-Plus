@@ -10441,16 +10441,17 @@ sub webui_apply_config (@) {
  # posts its form values, so a value still equal to the DV one counts as
  # "not chosen" too; a value the user changed is kept.
  if(defined $changes{"signal_mode"}) {
-  my $to_dv=(lc($changes{"signal_mode"}) eq "dv");
-  # The self-test's mode switches must not replace the user's own pre-DV
-  # values.
-  if(!$dv_before && $to_dv && !$selftest) {
-   $changes{"pre_dv_rgb_quant_range"}=$pgenerator_conf{"rgb_quant_range"} || "2";
-   $changes{"pre_dv_max_bpc"}=$pgenerator_conf{"max_bpc"} || "8";
-   $changes{"pre_dv_color_format"}=$pgenerator_conf{"color_format"} || "0";
-  } elsif($dv_before && !$to_dv) {
+  # An empty signal_mode names no mode: DV stays on and nothing is given
+  # back. (The values are kept on the way into DV further down, once the
+  # mode is known also for a request that names it by its flags.)
+  my $leaves_dv=(lc($changes{"signal_mode"})=~/^(?:sdr|hdr10|hlg)$/) ? 1 : 0;
+  # A pre_dv_* value that is not one (a conf edited by hand) counts as
+  # missing.
+  my $pre_dv_range=(($pgenerator_conf{"pre_dv_rgb_quant_range"} // "")=~/^([12])$/) ? $1 : "2";
+  my $pre_dv_bpc=(($pgenerator_conf{"pre_dv_max_bpc"} // "")=~/^(8|10|12)$/) ? $1 : "8";
+  if($dv_before && $leaves_dv) {
    if(!defined $changes{"rgb_quant_range"} || $changes{"rgb_quant_range"} eq ($pgenerator_conf{"rgb_quant_range"} // "")) {
-    $changes{"rgb_quant_range"}=$pgenerator_conf{"pre_dv_rgb_quant_range"} || "2";
+    $changes{"rgb_quant_range"}=$pre_dv_range;
    }
    # LLDV runs YCbCr 4:2:2; a leftover 4:2:2 would force 10 bpc below. Give
    # the format from before DV back unless the caller chose another one. A
@@ -10462,18 +10463,37 @@ sub webui_apply_config (@) {
    my $ll_rgb=(&pg_dv_transport_mode() eq "lldv" && ($pgenerator_conf{"dv_ll_rgb"} // "") eq "1") ? 1 : 0;
    my $dv_format=$ll_rgb ? ($pgenerator_conf{"color_format"} // "") : &pg_dv_transport_color_format();
    my $format=defined $changes{"color_format"} ? $changes{"color_format"} : ($pgenerator_conf{"color_format"} // "");
-   if(&pg_dv_transport_mode() eq "lldv" && $format eq $dv_format && $format ne ($pgenerator_conf{"pre_dv_color_format"} // "0")) {
-    $changes{"color_format"}=$pgenerator_conf{"pre_dv_color_format"} // "0";
+   # (An emptied pre_dv_color_format is RGB, as a missing one.)
+   my $pre_dv_format=(($pgenerator_conf{"pre_dv_color_format"} // "")=~/^([012])$/) ? $1 : "0";
+   if(&pg_dv_transport_mode() eq "lldv" && $format eq $dv_format && $format ne $pre_dv_format) {
+    $changes{"color_format"}=$pre_dv_format;
    }
    # The WebUI sends the target mode's bpc; only a leftover LLDV 12 (or the
    # LL RGB depth) needs undoing.
    my $bpc=defined $changes{"max_bpc"} ? $changes{"max_bpc"} : ($pgenerator_conf{"max_bpc"} // "");
    $changes{"dv_ll_rgb"}="" if($ll_rgb);
    if($ll_rgb && $bpc eq ($pgenerator_conf{"max_bpc"} // "") && $bpc ne "12") {
-    $changes{"max_bpc"}=$pgenerator_conf{"pre_dv_max_bpc"} || "8";
+    $changes{"max_bpc"}=$pre_dv_bpc;
    } elsif($bpc eq "12") {
-    my $pre=$pgenerator_conf{"pre_dv_max_bpc"} || "8";
-    $changes{"max_bpc"}=($pre eq "12") ? "8" : $pre;
+    $changes{"max_bpc"}=($pre_dv_bpc eq "12") ? "8" : $pre_dv_bpc;
+   }
+   # Standard DV is RGB, and the page's form puts 8 into the conf with it.
+   # A caller that names neither on leaving (an API client that posts only
+   # the new mode; the page posts its whole form, the new mode's baseline)
+   # gets the format and depth from before DV back, as it gets the range:
+   # HDR10 came back as RGB 8-bit where it had been YCbCr 4:4:4 10-bit. A
+   # depth set while in DV is a setting of its own, not a leftover (the
+   # link is 8 bit there whatever it holds), and stays. A conf without
+   # pre_dv_* (Calman or a port 85 client entered DV) stays as it is.
+   if(&pg_dv_transport_mode() eq "standard") {
+    my $pre_format=$pgenerator_conf{"pre_dv_color_format"} // "";
+    if(!defined $changes{"color_format"} && $pre_format=~/^[012]$/ && ($pgenerator_conf{"color_format"} // "0") eq "0") {
+     $changes{"color_format"}=$pre_format;
+    }
+    my $pre_bpc=$pgenerator_conf{"pre_dv_max_bpc"} // "";
+    if(!defined $changes{"max_bpc"} && $pre_bpc=~/^(?:8|10)$/ && ($pgenerator_conf{"max_bpc"} // "") eq "8") {
+     $changes{"max_bpc"}=$pre_bpc;
+    }
    }
   }
  }
@@ -10532,6 +10552,31 @@ sub webui_apply_config (@) {
    $changes{"signal_mode"}=(int($effective{"eotf"} || 0) == 3) ? "hlg" : "hdr10";
  } else {
    $changes{"signal_mode"}="sdr";
+  }
+ }
+ # pre_dv_* belong to one Dolby Vision visit that starts here. They are kept
+ # on every way into DV: the page names the mode by its flags, without
+ # signal_mode, and up to 2.13.47 its DV entry kept nothing (Calman's UPGCI
+ # source leaving that DV then had no SDR range to give back after a daemon
+ # restart). And they go when DV is left here, so a later visit that Calman
+ # or a port 85 client starts does not end on values from an older one. A
+ # visit one of those ends leaves them in the conf until the format, depth,
+ # range or mode is set here outside DV: that is newer than what they hold.
+ # (Not any request: the Pi tools give pre_dv_* back with a POST of their
+ # own and post the DV keys after it.) The self-test's own switches touch
+ # neither (it writes them back itself), nor does a request that posts them.
+ if(!$selftest && !grep { exists $posted{$_} } qw(pre_dv_rgb_quant_range pre_dv_max_bpc pre_dv_color_format)) {
+  # From the flags the conf will hold (as $dv_on below): an empty
+  # signal_mode leaves DV on.
+  my $dv_after=(int($effective{"dv_status"} || 0) || int($effective{"is_ll_dovi"} || 0) || int($effective{"is_std_dovi"} || 0)) ? 1 : 0;
+  if(!$dv_before && $dv_after) {
+   $changes{"pre_dv_rgb_quant_range"}=$pgenerator_conf{"rgb_quant_range"} || "2";
+   $changes{"pre_dv_max_bpc"}=$pgenerator_conf{"max_bpc"} || "8";
+   $changes{"pre_dv_color_format"}=$pgenerator_conf{"color_format"} || "0";
+  } elsif(!$dv_after && ($dv_before || grep { exists $posted{$_} } qw(signal_mode color_format max_bpc rgb_quant_range))) {
+   foreach my $k (qw(pre_dv_rgb_quant_range pre_dv_max_bpc pre_dv_color_format)) {
+    $changes{$k}="" if(defined $pgenerator_conf{$k} && $pgenerator_conf{$k} ne "");
+   }
   }
  }
  my $requested_mode_clock=0;

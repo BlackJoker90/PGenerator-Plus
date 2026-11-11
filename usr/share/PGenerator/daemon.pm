@@ -1824,6 +1824,9 @@ sub pattern_daemon {
       my $cur_res="${w_s}x${h_s}${cur_scan}";
       my $cur_refresh="60";
       $cur_refresh=$1 + 0 if($preferred_mode =~/\s([\d.]+)Hz/);
+      # The depth setting: in Standard Dolby Vision the link is 8 bit
+      # whatever it holds (command.pm dv_standard_link_conf), and the client
+      # reads back the depth it set, as pitpgd answers its bit depth there.
       my $cur_bits=$pgenerator_conf{"max_bpc"} || "8";
       $cur_bits="8" if($cur_bits !~/^(8|10|12)$/);
       # Outside Dolby Vision 12 bpc goes out as 10 bpc (see sync_pattern_bits_default).

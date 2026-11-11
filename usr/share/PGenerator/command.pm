@@ -680,6 +680,15 @@ sub map_broadcast_rgb(@) {
  return 0;
 }
 
+# Standard (TV-led) Dolby Vision as drm_override.so tells it from Low Latency
+# (drm_override.c is_dovi_ll_transport): its link is 8 bpc whatever max_bpc
+# the conf holds (parse_config there, main.cpp applySignalConf).
+sub dv_standard_link_conf (@) {
+ my $conf=shift || \%pgenerator_conf;
+ return 0 if(int($conf->{"dv_status"} || 0) != 1);
+ return (int($conf->{"is_ll_dovi"} || 0) == 1 && int($conf->{"is_std_dovi"} || 0) != 1) ? 0 : 1;
+}
+
 ###############################################
 #  Apply DRM Connector Properties (KMS only)  #
 ###############################################
@@ -722,6 +731,10 @@ sub apply_drm_properties (@) {
  # (4:2:2 is a 12 bit container at the 8 bit clock either way); the renderer
  # gets the same value from drm_override.so.
  $max_bpc=10 if(!$prelaunch && $pgenerator_conf{"color_format"} eq "2" && $max_bpc ne "" && $max_bpc < 10);
+ # Standard Dolby Vision goes out at 8 bpc whatever the conf holds: the
+ # depth it keeps for the signal after Dolby Vision must not reach the
+ # connector before the renderer's first commit sets 8.
+ $max_bpc=8 if($max_bpc ne "" && $max_bpc > 0 && &dv_standard_link_conf());
  if($max_bpc ne "" && $max_bpc > 0 && !$skip_unchanged->("max bpc",$max_bpc)) {
   &modetest_connector_write($connector_id,"max bpc",$max_bpc);
   &log("DRM: Set max bpc=$max_bpc on connector $connector_id");
@@ -1468,9 +1481,12 @@ sub signal_request_from_conf (@) {
  my $conf=shift || \%pgenerator_conf;
  my $modetest_out=shift;
  my $mode=&signal_mode_info($conf->{"mode_idx"},$modetest_out);
+ # Standard Dolby Vision goes out at 8 bit whatever depth the conf keeps
+ # (dv_standard_link_conf): the request, its label and the "output kept"
+ # of a refusal name that.
  return {%$mode,
   color_format=>int($conf->{"color_format"} || 0),
-  max_bpc=>int($conf->{"max_bpc"} || 8),
+  max_bpc=>&dv_standard_link_conf($conf) ? 8 : int($conf->{"max_bpc"} || 8),
   rgb_quant_range=>int($conf->{"rgb_quant_range"} || 0),
   signal_mode=>&signal_mode_from_conf($conf),
   dv_transport=>&pg_dv_transport_mode($conf->{"dv_transport"})};

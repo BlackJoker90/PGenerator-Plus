@@ -10719,6 +10719,12 @@ sub webui_apply_config (@) {
    }
   }
  }
+ # Standard Dolby Vision's link is 8 bit whatever depth is stored
+ # (drm_override.c parse_config, main.cpp applySignalConf): a POST that
+ # names another depth is told so, also when it changes nothing.
+ if($dv_on && &pg_dv_transport_mode($changes{"dv_transport"}) ne "lldv" && defined $posted{"max_bpc"} && "$posted{max_bpc}"=~/^(?:10|12)$/) {
+  push(@adjusted,"Dolby Vision Standard is sent as 8-bit RGB carrying the 12-bit picture: $posted{max_bpc}-bit is not used on the link.");
+ }
  # Keys that require pattern generator restart
  my %restart_keys=map{$_=>1} qw(mode_idx eotf is_hdr is_sdr colorimetry primaries
   min_luma max_luma max_cll max_fall color_format max_bpc rgb_quant_range
@@ -14339,8 +14345,8 @@ sub webui_pattern_effective_bits (@) {
  my $link_bits=int($pgenerator_conf{"max_bpc"} || 8);
  # The native renderer only has distinct 8-bit and 10-bit drawing paths.
  # HDR10 and HLG use the 10-bit rectangle path when the link is above 8 bpc.
- # Dolby Vision patterns are RGB tunnel codes; the link may be 8 or 10 bpc,
- # but the renderer still emits the 8-bit tunnel pattern payload.
+ # Dolby Vision patterns are RGB tunnel codes: whatever depth the conf
+ # holds, the renderer emits the 8-bit tunnel pattern payload.
  return 10 if(($signal_mode eq "hdr10" || $signal_mode eq "hlg") && $link_bits >= 10);
  return 8 if($signal_mode eq "dv");
  return 8 if($bits != 10 && $bits != 12);

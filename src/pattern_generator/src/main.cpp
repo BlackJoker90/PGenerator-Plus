@@ -125,6 +125,15 @@ static void applySignalConf() {
  int wire=atoi(max_bpc.c_str());
  if(atoi(color_format.c_str()) == 2 && wire < 10) wire=10;
  if(atoi(dv_status.c_str()) != 1 && wire == 12) wire=10;
+ /* Standard (TV-led) Dolby Vision is an 8-bit RGB tunnel: 8 bpc on the
+    link and an 8-bit surface whatever depth the conf holds (as pitpgd
+    output_decide); the conf's depth stays for the signal after it.
+    Standard is told from Low Latency as drm_override.so does it
+    (is_dovi_ll_transport), which sets the connector to the same 8. */
+ if(atoi(dv_status.c_str()) == 1 && !(atoi(is_ll_dovi.c_str()) == 1 && atoi(is_std_dovi.c_str()) != 1)) {
+  wire=8;
+  ofxRPI4Window::avi_info.max_bpc=8;
+ }
  ofxRPI4Window::wire_bpc=wire;
 }
 

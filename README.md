@@ -125,7 +125,7 @@ Without a display, the renderer waits instead of failing. The UI says so in a ba
 <td valign="top">
 
 ### 🖥️ A reworked Web UI
-**13 colour themes** (dark, light, OLED, Natrium, the lime Volt …) and workspace navigation. Only sending patterns (for example from Calman or HCFR)? Hide the Measure workspaces with one switch in Settings. The UI shows the measured HDMI link depth and clock. It is served compressed with an ETag, pauses polling in hidden tabs and uses its own dialogs instead of browser pop-ups. Toasts appear only for warnings and errors.
+**13 colour themes** (dark, light, OLED, Natrium, the lime Volt …) and workspace navigation. The look is built for a dim room: the signal settings in Output are large keys with their name inside, what the generator reads back sits in pills, and Dark and Light step in tone instead of drawing outlines, with a single aqua accent. The typeface is served by the Pi itself, so the page looks the same without internet. Only sending patterns (for example from Calman or HCFR)? Hide the Measure workspaces with one switch in Settings. The UI shows the measured HDMI link depth and clock. It is served compressed with an ETag, pauses polling in hidden tabs and uses its own dialogs instead of browser pop-ups. Toasts appear only for warnings and errors.
 
 </td>
 </tr>
@@ -207,6 +207,7 @@ Next to the settings, **On the cable** shows what is actually sent (format, rang
 | Display's Dolby Vision block | only "DV supported" | peak, black, interfaces and primaries shown; mismatch warnings; patches above the peak flagged |
 | SPD InfoFrame | always sent ("Broadcom Videocore", media player); can limit a display's LLDV gamut to Rec.709 (ASUS PA32DC, Light Illusion) | **never sent**: removed in the vc4 driver (Pi 4) |
 | WebUI themes | dark / light / system | **13 themes** incl. Natrium dark & light and Volt, Scope, Ultraviolet |
+| WebUI look | – | signal settings as keys with their name inside, read-back in pills, own typeface served by the Pi (works offline); a select's menu opens above or below its key, never over its name |
 | Measurement workspaces | – | **can be hidden** in Settings for pattern-only setups (Calman, HCFR) |
 | HDMI link readout | – | measured link depth and clock |
 | CPU scaling governor | fixed in `/etc/default/rcPGenerator` | **Scaling Type in the WebUI**, applies without a reboot |
@@ -726,6 +727,7 @@ This fork stands on the shoulders of:
 - **[PGenerator](https://github.com/Biasiolo/PGenerator)** by Riccardo Biasiotto: the pattern engine, TCP protocols and renderer (GPLv3).
 - **[BigShoots/PGenerator-Plus](https://github.com/BigShoots/PGenerator-Plus)**: the original PGenerator+, with the Web UI, HDR/DV configuration, meter workflows, LG AutoCal, profile building and OTA. This fork continues from its 2.12.1.
 - **[docdude/ofxRPI4WindowHDR](https://github.com/docdude/ofxRPI4WindowHDR)**, **[ArgyllCMS](https://www.argyllcms.com/)** and **[HCFR](https://github.com/hcfr/hcfr)**.
+- The Web UI's typeface: **[Gabarito](https://github.com/naipefoundry/gabarito)** by The Gabarito Project Authors, under the SIL Open Font License 1.1 ([`usr/share/PGenerator/fonts/meso-OFL.txt`](usr/share/PGenerator/fonts/meso-OFL.txt), also served at `/assets/fonts/meso-OFL.txt`).
 
 ## ☕ Support the project
 

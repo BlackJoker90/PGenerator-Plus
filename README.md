@@ -91,7 +91,7 @@ Everything the original does is still here: patterns over TCP for Calman, Colour
 <td width="50%" valign="top">
 
 ### 🎯 Bit-exact output
-10-bit pattern codes reach the GPU **without 8-bit quantisation**. **RGB Limited is bit-exact**: a patched vc4 module skips the kernel's compression CSC. HDR10/HLG at 12-bit goes out as bit-exact 10-bit instead of crashing the renderer. **8-bit patterns on a 10-bit link** go out as exactly code × 4 (126 → 504), in SDR, HDR10 and LLDV. The G1 Brightness and Contrast plates switch to **10-bit steps** (0–95, 928–1023) on a 10-bit link. Scanout readback on the Pi checks the codes; nobody has to eyeball them. At 4K: 60 Hz in 8-bit RGB or YCbCr 4:2:2, 24 / 30 Hz up to 10-bit RGB ([which signals](#bit-exact-4k)).
+10-bit pattern codes reach the GPU **without 8-bit quantisation**. **RGB Limited is bit-exact**: a patched vc4 module skips the kernel's compression CSC. The set RGB range also reaches the cable when the Pi starts in the very mode the generator uses: the HDMI driver programs the range only on a mode switch, so the renderer switches the output off once before such a picture (one extra short blank at start). HDR10/HLG at 12-bit goes out as bit-exact 10-bit instead of crashing the renderer. **8-bit patterns on a 10-bit link** go out as exactly code × 4 (126 → 504), in SDR, HDR10 and LLDV. The G1 Brightness and Contrast plates switch to **10-bit steps** (0–95, 928–1023) on a 10-bit link. Scanout readback on the Pi checks the codes; nobody has to eyeball them. At 4K: 60 Hz in 8-bit RGB or YCbCr 4:2:2, 24 / 30 Hz up to 10-bit RGB ([which signals](#bit-exact-4k)).
 
 </td>
 <td width="50%" valign="top">

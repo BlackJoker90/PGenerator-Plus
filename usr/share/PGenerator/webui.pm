@@ -11244,6 +11244,49 @@ sub webui_sanitize_edid_hex (@) {
  return join("\n",@out);
 }
 
+# The patch logs for the diagnostic report: calman-patches.log holds the
+# codes the client sent (raw) and what they were scaled to, with the signal
+# context; patch-requests.log holds what went into the renderer's pattern
+# file (bits, source range, the pattern itself). Both grow without bound, so
+# only the newest lines go in; a full Calman session is ~1300 patches.
+# The loggers fall back to /tmp only when their directory is missing, so
+# the /tmp copy is read only then (an old one next to the real log would
+# be stale).
+sub webui_logs_bundle_patch_logs (@) {
+ my $lines=int(shift || 2000);
+ my $fallback_dir=shift || "/tmp";
+ my $calman=$calman_patch_log || "/var/log/PGenerator/calman-patches.log";
+ my $dir=$calman;
+ $dir=~s|/[^/]+$||;
+ $dir="/var/log/PGenerator" if($dir eq "" || $dir eq $calman);
+ my $use_fallback=! -d $dir;
+ my @logs=(
+  ["Calman Patch Log (codes sent and scaled)",$use_fallback ? "$fallback_dir/calman-patches.log" : $calman],
+  ["Patch Requests (pattern file written)",$use_fallback ? "$fallback_dir/patch-requests.log" : "$dir/patch-requests.log"],
+ );
+ my @out;
+ foreach my $log (@logs) {
+  my ($title,$path)=@$log;
+  if(! -f $path) {
+   push @out, "", "--- $title ($path) ---", "(none found)";
+   next;
+  }
+  my $size=-s $path;
+  $size=0 if(!defined $size);
+  push @out, "", "--- $title ($path, $size bytes, last $lines lines) ---";
+  my $text="";
+  if(open(my $fh,"-|","tail","-n",$lines,"--",$path)) {
+   local $/;
+   $text=<$fh>;
+   close($fh);
+  }
+  $text="" if(!defined $text);
+  chomp($text);
+  push @out, ($text ne "") ? $text : "(unreadable or empty)";
+ }
+ return @out;
+}
+
 sub webui_create_logs_bundle (@) {
  my $ts=time();
  my $tmp="/tmp/pg_diag_${ts}.txt";
@@ -11368,6 +11411,9 @@ sub webui_create_logs_bundle (@) {
  my $pg_mode=&pgenerator_cmd("GET_MODE"); chomp($pg_mode);
  push @out, "GET_STATUS: ".($pg_status ne "" ? $pg_status : "(none found)");
  push @out, "GET_MODE: ".($pg_mode ne "" ? $pg_mode : "(none found)");
+
+ # Patch logs: the codes a client sent next to what the renderer was given
+ push @out, &webui_logs_bundle_patch_logs(2000);
 
  # Processes
  push @out, "", "--- Processes (PGenerator) ---";

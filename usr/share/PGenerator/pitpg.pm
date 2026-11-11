@@ -691,6 +691,13 @@ sub pitpg_dv_kind_write (@) {
  my $what=($ll != $std) ? "Dolby Vision ".($ll ? "low latency".(($want{dv_ll_rgb} // "") eq "1" ? " in RGB" : "") : "TV-led") : "The colour settings";
  if(@pairs) {
   &pitpg_session_keep("dv_transport") if(exists $want{dv_transport});
+  # The client switches Dolby Vision on from off: a visit of its own
+  # (forget_pre_dv_format_depth, command.pm). These flags do not pass
+  # pgenerator_cmd, which does the same for the classic protocol.
+  my %after=(%pgenerator_conf,%want);
+  if((grep { int($after{$_} || 0) } qw(dv_status is_ll_dovi is_std_dovi)) && !(grep { int($pgenerator_conf{$_} || 0) } qw(dv_status is_ll_dovi is_std_dovi))) {
+   &forget_pre_dv_format_depth("a PiTPG client");
+  }
   return "$what could not be set: the setting could not be written." if(!&pitpg_conf_write(@pairs));
   &log("PiTPG: $what") if($ll != $std);
  }

@@ -162,6 +162,34 @@ sub calman_range_override (@) {
 # remembered as the range it gives on the cable. Calman calls it when its
 # session opens, before it writes anything (its DV entry saves dv_status
 # before the range, so a later call could not tell whose DV it is).
+# pre_dv_color_format and pre_dv_max_bpc are what the WebUI had before the
+# Dolby Vision visit it started (webui_apply_config keeps them on the way in
+# and gives them back on the way out). A visit another source starts (Calman,
+# a port 85 or PiTPG client) has none: values still in the conf are an older
+# visit's, which such a source ended, and leaving this one with a request
+# that names only the mode ended on them (HDR10 YCbCr 4:4:4 10-bit where the
+# client had set SDR RGB 8-bit in between). Called where such a source
+# switches Dolby Vision on from off, before it writes the flag.
+# pre_dv_rgb_quant_range stays: it is the WebUI's range while Dolby Vision is
+# on, whoever switched that on (remember_webui_rgb_quant_range), and Calman's
+# own DV workflow in a DV the WebUI started is such a switch (HDR_ENABLE
+# leaves it, CONF_DV enters again).
+# The conf file is read: this process may not have seen what the WebUI wrote.
+sub forget_pre_dv_format_depth (@) {
+ my $who=shift;
+ my $file_conf=&renderer_conf_read();
+ my $conf=(ref($file_conf) eq "HASH") ? $file_conf : \%pgenerator_conf;
+ my @held=grep { defined $conf->{$_} && $conf->{$_} ne "" } qw(pre_dv_max_bpc pre_dv_color_format);
+ return 0 if(!@held);
+ if((&sudo("SET_PGENERATOR_CONF_MULTI",map { ($_,"") } @held) // "")!~/^OK/) {
+  &log("Dolby Vision switched on by $who: could not drop the format and depth from before an earlier one (@held)");
+  return 0;
+ }
+ $pgenerator_conf{$_}="" foreach(@held);
+ &log("Dolby Vision switched on by $who: format and depth from before an earlier one dropped (@held)");
+ return 1;
+}
+
 sub remember_webui_rgb_quant_range (@) {
  return if($webui_rgb_quant_range_preferred ne "");
  my $key=&renderer_dv_conf_active() ? "pre_dv_rgb_quant_range" : "rgb_quant_range";
@@ -2337,6 +2365,11 @@ sub pgenerator_cmd (@) {
   # Skip the write when the conf file (not the memory copy) already holds
   # exactly this value; a missing file or key writes as before.
   my $file_conf=&renderer_conf_read();
+  # A client switching Dolby Vision on from off starts a visit of its own.
+  if($conf_key=~/^(?:dv_status|is_ll_dovi|is_std_dovi)$/ && $conf_value eq "1") {
+   my $held=(ref($file_conf) eq "HASH") ? $file_conf : \%pgenerator_conf;
+   &forget_pre_dv_format_depth("a port 85 client") if(!grep { int($held->{$_} || 0) } qw(dv_status is_ll_dovi is_std_dovi));
+  }
   if(!(ref($file_conf) eq "HASH" && exists($file_conf->{$conf_key}) && $file_conf->{$conf_key} eq "$conf_value")) {
    &sudo("SET_PGENERATOR_CONF",$conf_key,$conf_value);
   }

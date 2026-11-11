@@ -498,7 +498,7 @@ def main():
         repro = os.path.join(main_checkout(root), "tools", "repro_old_new.sh")
         reasons.append(
             "code changed in this turn after the last test run: %s. "
-            "Run `prove -r t` on a fresh copy (in a worktree: the tree plus the main checkout's t/, "
+            "Run `prove -j8 -Q -r t` on a fresh copy (in a worktree: the tree plus the main checkout's t/ and tools/, "
             "see .claude/agents/pgen-reviewer.md), and for a fix `bash %s t/<test>.t` "
             "(fails on the old code, passes on the new).%s "
             "If tests just ran or do not apply, say so in the reply and stop again."

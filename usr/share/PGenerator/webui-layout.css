@@ -589,3 +589,296 @@ body.layout-tablet :is(.info-grid,.devinfo-facts)>:last-child:nth-child(odd){gri
 }
 @keyframes pg-status-pulse{50%{opacity:.35}}
 @media(prefers-reduced-motion:reduce){#statusDot{animation:none!important}}
+/* ==== Mesopic look (approved 2026-11-10) ====================================
+   This section stays the LAST one in this file: it was drawn as a layer over
+   webui-theme.css, icc_profile.css and the rules above, and relies on coming
+   after all of them. The LG card's own style block and inline styles in the
+   body still come later.
+
+   Mesopic is the eye's state in a room that is neither lit nor black, where
+   a calibrator works. Built for the hand in that half-dark: every setting is
+   a soft key with its name inside, large enough to find without looking
+   twice; what is read sits in pills, what is pressed sits in keys. Round
+   corners throughout, one friendly geometric face, text that stops well
+   short of white. One accent, a pale aqua, close to where dim-adapted
+   vision is most sensitive (the scotopic peak is at 507 nm), so a small
+   amount of it is enough.
+
+   Colour themes other than Dark and Light keep their own tokens; type and
+   structure apply to all of them.
+
+   The face is served by the daemon from fonts/ next to this file (the Pi is
+   often offline): Gabarito, SIL Open Font License 1.1, fonts/meso-OFL.txt.
+   This stylesheet is served from /assets/, so the url resolves to
+   /assets/fonts/meso.woff2. */
+
+@font-face{font-family:"PGen Mesopic";font-style:normal;font-weight:400 800;font-display:swap;src:url("fonts/meso.woff2") format("woff2")}
+
+:root{
+ --meso:"PGen Mesopic","Avenir Next","Segoe UI",system-ui,sans-serif;
+ /* Nothing under 12 px. */
+ --fs-2xs:.75rem;--fs-xs:.8125rem;
+ --r-xs:6px;--r-sm:12px;--r-md:16px;--r-lg:22px;
+ --control-h:36px;
+}
+
+:root:not([data-palette]){
+ --bg:#0a0a0c;--card:#141416;--panel:#19191c;--border:#2b2b30;--divider:#25252a;
+ --accent:#8fe0d1;--accent2:#b4eee3;--accent-fill:#6fcfbd;--accent-fill2:#8adfce;--on-accent:#05241f;--text-inverse:#05241f;
+ --text:#d2d2d6;--text2:#a2a2a8;--text-primary:#d2d2d6;--text-secondary:#a2a2a8;--text-muted:#8f8f96;--text-disabled:#62626a;
+ --surface-page:#0a0a0c;--surface-header:#0a0a0c;--surface-sidebar:#0a0a0c;--surface-card:#141416;--surface-drawer:#111113;--surface-modal:#19191c;--surface-popover:#232327;--surface-inset:#0d0d0f;--surface-field:#1f1f23;
+ --focus-ring:#e9fffa;--selected-bg:#2b2b31;--hover-bg:rgba(255,255,255,.06);
+ --status-calibration:#8fe0d1;--neutral-fill:#2b2b31;
+ --field-border:transparent;--field-border-hover:#5d5d65;
+ --tile-bg:#1f1f23;--tile-border:transparent;
+ --chart-bg:#0f0f11;--chart-grid:#25252a;--chart-axis:#404047;--chart-label:#a2a2a8;--chart-tooltip:#26262b;--meter-bar-track:#111113;
+ --scroll-track:#0a0a0c;--scroll-thumb:#35353b;--scroll-thumb-border:#35353b;--scroll-thumb-hover:#50505a;
+ --meso-lit:#e4e4e8;--meso-well:#0d0d0f;--meso-key:#1f1f23;--meso-key-hi:#38383f;
+ --control-disabled-bg:#1b1b1e;--control-disabled-text:#8f8f96;
+}
+[data-theme="light"]:not([data-palette]){
+ --bg:#dcdddd;--card:#e9eaea;--panel:#e2e3e3;--border:#bfc1c1;--divider:#cbcdcd;
+ --accent:#0b5c53;--accent2:#0f6f64;--accent-fill:#0f6f64;--accent-fill2:#0b5c53;--on-accent:#f3fffc;--text-inverse:#f3fffc;
+ --text:#151617;--text2:#484a4c;--text-primary:#151617;--text-secondary:#484a4c;--text-muted:#56585a;--text-disabled:#7f8183;
+ --surface-page:#dcdddd;--surface-header:#dcdddd;--surface-sidebar:#dcdddd;--surface-card:#e9eaea;--surface-drawer:#e2e3e3;--surface-modal:#eeefef;--surface-popover:#f1f2f2;--surface-inset:#d3d4d4;--surface-field:#d9dada;
+ --focus-ring:#062e29;--selected-bg:#cfd0d0;--hover-bg:rgba(0,0,0,.06);
+ --status-calibration:#0b5c53;--neutral-fill:#cfd0d0;
+ --field-border:transparent;--field-border-hover:#6f7173;
+ --tile-bg:#d9dada;--tile-border:transparent;
+ --chart-bg:#e2e3e3;--chart-grid:#cbcdcd;--chart-axis:#8b8d8f;--chart-label:#484a4c;--chart-tooltip:#f1f2f2;--meter-bar-track:#d3d4d4;
+ --scroll-track:#d3d4d4;--scroll-thumb:#9c9e9f;--scroll-thumb-border:#9c9e9f;--scroll-thumb-hover:#7f8183;
+ --meso-lit:#000000;--meso-well:#d3d4d4;--meso-key:#d9dada;--meso-key-hi:#c3c5c5;
+ --control-disabled-bg:#d6d7d7;--control-disabled-text:#56585a;
+}
+:root[data-palette]{--meso-lit:var(--text-primary);--meso-well:var(--surface-inset);--meso-key:var(--surface-field);--meso-key-hi:var(--selected-bg)}
+
+/* ---- Type ---- */
+body{font-family:var(--meso);font-synthesis:none;font-variant-numeric:tabular-nums;-webkit-font-smoothing:antialiased}
+button,input,select,textarea{font-family:inherit}
+::selection{background:var(--accent-fill);color:var(--on-accent)}
+input,textarea{caret-color:var(--accent)}
+body.layout-desktop .desktop-workspace-title{font-size:1.75rem;font-weight:700;line-height:1.15;letter-spacing:-.02em;margin:6px 0 16px 24px;color:var(--meso-lit)}
+body.layout-tablet .desktop-workspace-title{font-size:1.5rem;font-weight:700;line-height:1.15;letter-spacing:-.02em;margin:10px 14px 8px;color:var(--meso-lit)}
+body.layout-desktop .dashboard > .card > h2,body.layout-tablet .dashboard > .card > h2{font-size:1.1875rem;font-weight:700;line-height:1.2;letter-spacing:-.01em;color:var(--meso-lit)}
+.field label,.meter-header-label,.preset-bar-title,.signal-wire-title,.signal-port-title{font-weight:500;color:var(--text-muted)}
+strong,b{font-weight:700}
+
+/* ---- Header: what is read sits in pills ---- */
+.header{border-bottom:0;padding:10px 20px}
+.logo{flex:0 0 auto}
+.logo .ver{font-weight:500;color:var(--text-muted)}
+.hdr-right{flex:1 1 0;min-width:0}
+.status-bar{flex:1 1 0;min-width:0;order:1;justify-content:flex-start;gap:6px;font-size:var(--fs-xs);font-weight:500;color:var(--text-secondary)}
+.hdr-actions{order:2}
+.hdr-power{order:3;gap:6px}
+.status-bar > span,.status-bar .status-stack > .status-line,#hdmiWarnBadge:not(:empty){gap:7px;min-height:28px;padding:0 12px;border-radius:999px;background:var(--surface-card)}
+.status-dot{width:7px;height:7px}
+#signalStatusWrap{order:0}
+#statusWrap{order:1}#tempDisplay{order:2}#patternStatusWrap{order:3}#calStatusWrap{order:4}#meterDisplayStatusStack > #meterStatusWrap{order:5}#meterDisplayStatusStack > #lgTopStatusWrap{order:6}#meterDisplayStatusStack > #iccCompanionTopStatusWrap{order:7}#hdmiWarnBadge{order:8}#meterUsbWarnBadge{order:9}
+#statusWrap::before,#signalStatusWrap::before{color:var(--text-muted);font-weight:500}
+#statusWrap::before{content:"Pi"}
+/* The line holds the applied settings (pgCaptureHeaderSignal); the read-back
+   stands under "On the cable" in Output. */
+#signalStatusWrap::before{content:"Signal"}
+#signalStatusText{font-size:.9375rem;font-weight:700;color:var(--meso-lit);white-space:nowrap}
+#tempDisplay:empty{display:none}
+.hdr-power::before{display:none}
+.hdr-power .icon-btn{border-radius:50%;background:var(--surface-card)}
+.hdr-power .reboot-btn,.hdr-power .power-btn{color:var(--text-secondary)}
+.hdr-power .reboot-btn:hover,.hdr-power .reboot-btn:focus-visible{color:var(--status-warning)}
+.hdr-power .power-btn:hover,.hdr-power .power-btn:focus-visible{color:var(--status-error)}
+body.layout-desktop .logo{min-width:212px}
+
+/* ---- Rail: keys ---- */
+body.layout-desktop .desktop-sidebar{background:var(--surface-sidebar);border-right:0;padding:8px 12px 16px 16px}
+.desktop-nav-group+.desktop-nav-group{margin-top:18px}
+.desktop-nav-group-label{font-size:var(--fs-2xs);font-weight:500;color:var(--text-muted);padding:0 14px 5px}
+.desktop-nav{gap:2px}.desktop-nav-group{gap:2px}
+.desktop-nav-btn{min-height:42px;padding:9px 14px;border-radius:14px;font-size:.9375rem;font-weight:500;gap:12px;color:var(--text-secondary)}
+.desktop-nav-btn[aria-current="page"]{background:var(--surface-card);color:var(--meso-lit);font-weight:700}
+.desktop-nav-btn[aria-current="page"] .desktop-nav-icon{color:var(--accent)}
+.desktop-nav-icon svg{width:19px;height:19px}
+.desktop-sidebar-toggle{border-color:transparent;background:transparent;border-radius:50%}
+
+/* ---- Sections: one soft panel each ---- */
+body.layout-desktop .dashboard{padding:14px 24px 32px 8px;gap:12px}
+body.layout-desktop .dashboard > .card{background:var(--surface-card);border:0;border-radius:var(--r-lg);padding:22px 24px 24px}
+body.layout-desktop .dashboard > .card > h2{margin-bottom:18px}
+body.layout-tablet .dashboard{padding:0 10px 14px;gap:10px}
+body.layout-tablet .dashboard > .card{border:0;border-radius:var(--r-lg);padding:13px 14px 18px}
+body.layout-tablet .dashboard > .card > h2{margin-bottom:10px}
+
+/* ---- Keys: a setting with its name inside ---- */
+.setting-tiles > .field{background:var(--meso-key);border-radius:var(--r-md);padding:9px 6px 3px 14px;gap:0;min-width:0;transition:box-shadow .14s ease-out}
+.setting-tiles > .field > label{font-size:var(--fs-xs);line-height:1.3}
+.setting-tiles > .field select,.setting-tiles > .field input:not([type=checkbox]):not([type=radio]){background-color:transparent;border-color:transparent;padding-left:0;font-size:1rem;font-weight:600;color:var(--meso-lit);width:100%;border-radius:8px}
+/* The Light theme paints every select and input with !important (the [data-theme="light"] field rule above); a key carries the fill itself. */
+[data-theme="light"] .setting-tiles > .field select:not(:disabled),[data-theme="light"] .setting-tiles > .field input:not([type=checkbox]):not([type=radio]):not(:disabled){background-color:transparent!important}
+/* Resolution draws its value in .mode-select-value over a select whose own text stays transparent. */
+.setting-tiles > .field .mode-select-wrap select{color:transparent}
+.setting-tiles > .field select:focus,.setting-tiles > .field input:focus{border-color:transparent;box-shadow:none;outline:0}
+.setting-tiles > .field select[data-pg-dd-open]{border-color:transparent!important}
+/* One ring per key: the focus ring for the keyboard, the accent ring while its menu is open. */
+.setting-tiles > .field:has(:focus-visible){box-shadow:0 0 0 2px var(--focus-ring)}
+.setting-tiles > .field:has(select[data-pg-dd-open]){background:var(--meso-key-hi);box-shadow:inset 0 0 0 1.5px var(--accent)}
+.setting-tiles > .field .mode-select-value{font-size:1rem;font-weight:600;color:var(--meso-lit);padding-left:0;left:0}
+.grid.setting-tiles{gap:10px}
+.grid.setting-tiles.calman-range{align-items:center;gap:10px 22px}
+.field select,.field input,.inline-select,.meter-card-header-select{font-weight:500}
+.preset-bar-hint,.calman-range-hint,.selftest-sub{color:var(--text-secondary)}
+
+/* ---- On the cable: read back, in pills ---- */
+.signal-wire-tiles{display:flex;flex-wrap:wrap;gap:6px}
+.sw-tile,.sw-tile.sw-signal,.sw-tile.sw-signal[data-signal]{flex-direction:row;align-items:baseline;justify-content:flex-start;gap:8px;min-height:34px;padding:7px 14px;border:0;border-radius:999px;background:var(--meso-well)}
+.sw-tile dt{font-size:var(--fs-xs);font-weight:500;color:var(--text-muted)}
+.sw-tile dd,.sw-tile.sw-signal dd{font-size:.9375rem;font-weight:700;line-height:20px;letter-spacing:0;color:var(--meso-lit);overflow-wrap:normal}
+/* The kind of signal: a ring and its colour in the text. A lit field this size would be the
+   brightest thing on a phone (measured: the filled pill and dock key added a third to the page's light). */
+.sw-tile.sw-signal,.sw-tile.sw-signal[data-signal]{--meso-sig:var(--accent);box-shadow:inset 0 0 0 1.5px var(--meso-sig)}
+.sw-tile.sw-signal[data-signal="hdr"]{--meso-sig:var(--warning-text)}
+.sw-tile.sw-signal[data-signal="dv"]{--meso-sig:var(--status-dv)}
+.sw-tile.sw-signal[data-signal="unknown"]{--meso-sig:var(--text-muted)}
+.sw-tile.sw-signal dd{color:var(--meso-sig)}
+.signal-port-box{border:0;border-radius:var(--r-md);background:var(--meso-well)}
+/* The port captions are SVG text: 11 units of a 300-unit board. 12 units, and the board kept near its
+   natural width, puts them at about 12 px on screen. */
+.signal-port-board .sp-cap{font-size:12px}
+@media(min-width:1100px){
+ /* Display Settings: the board on the left, read-back and presets beside it. */
+ body.layout-desktop .dashboard > #displaySettingsCard[data-desktop-active="true"]:has(#signalPort:not([hidden])):has(#signalWireLine:not([hidden])){display:grid;grid-template-columns:330px minmax(0,1fr);column-gap:24px;align-items:start}
+ body.layout-desktop #displaySettingsCard:has(#signalPort:not([hidden])):has(#signalWireLine:not([hidden])) > *{grid-column:1 / -1;min-width:0}
+ body.layout-desktop #displaySettingsCard:has(#signalPort:not([hidden])):has(#signalWireLine:not([hidden])) > .signal-overview{display:contents}
+ body.layout-desktop #displaySettingsCard:has(#signalPort:not([hidden])):has(#signalWireLine:not([hidden])) > :is(h2,#displayNoHdmiBanner,.signal-alert){order:-2}
+ body.layout-desktop #displaySettingsCard:has(#signalWireLine:not([hidden])) #signalPort:not([hidden]){order:-1;grid-column:1;margin-bottom:18px;min-width:0;align-self:start}
+ body.layout-desktop #displaySettingsCard:has(#signalPort:not([hidden])) #signalWireLine:not([hidden]){order:-1;grid-column:2;margin-bottom:14px;min-width:0}
+ body.layout-desktop #displaySettingsCard:has(#signalPort:not([hidden])):has(#signalWireLine:not([hidden])) > #presetBar{order:-1;grid-column:1 / -1;margin-bottom:18px}
+}
+
+/* ---- What is pressed: round ---- */
+.btn{border-radius:999px;font-weight:700}
+.btn-sm{padding-left:14px;padding-right:14px}
+.card h2 .btn-reset{color:var(--text-secondary);box-shadow:none;background:var(--neutral-fill)}
+.card h2 .btn-reset:hover,.card h2 .btn-reset:focus-visible{color:var(--warning-text)}
+input[type=checkbox]:not(.pg-switch *):not(:checked):not(:disabled){border-color:var(--field-border-hover)}
+#meterSeriesTabRow > .btn.btn-primary{background:var(--meso-key-hi);color:var(--meso-lit);box-shadow:none;border-color:transparent}
+#meterSeriesTabRow > .btn.btn-secondary{background:transparent;color:var(--text-secondary);box-shadow:none}
+.meter-help-tip,.meter-icc-help{border-color:var(--field-border-hover)}
+
+/* ---- Notes ---- */
+.selftest-note,#meterNoMeterBanner{background:var(--meso-well)!important;border-color:transparent!important;border-radius:var(--r-md)!important;color:var(--text-secondary)}
+.selftest-note svg{color:var(--text-muted)}
+.selftest-verdict{border-color:transparent;background:var(--meso-well);border-radius:var(--r-md)}
+.selftest-title{font-size:1.1875rem;font-weight:700;letter-spacing:-.01em}
+
+/* ---- Tablet and phone ---- */
+body.layout-tablet .header{padding:8px 14px 8px;row-gap:5px}
+body.layout-tablet .logo img{height:30px}
+body.layout-tablet .status-bar{gap:5px;font-size:var(--fs-xs);min-height:0;justify-content:flex-start}
+/* The help mark: 15 px drawn, 44 px to hit (.meter-help-tip::before above). Drawn at 20 px where a finger looks for it. */
+body.layout-tablet .meter-help-tip{width:20px;height:20px;font-size:var(--fs-2xs)}
+/* The bar as a dock. */
+body.layout-tablet .tablet-jump-nav:not([hidden]){left:10px;right:10px;bottom:calc(8px + env(safe-area-inset-bottom));padding:5px;border:0;border-radius:26px;background:var(--surface-popover);gap:2px;
+ /* No drop shadow: nothing translucent may lie over a swatch scrolling past.
+    A solid field in the page colour closes the gap under and beside the dock. */
+ box-shadow:0 34px 0 12px var(--surface-page)}
+.tablet-nav-btn{font-weight:500;border-radius:21px;min-height:50px}
+.tablet-nav-btn[aria-current="page"]{background:var(--meso-key-hi);color:var(--meso-lit);font-weight:700}
+.tablet-nav-btn[aria-current="page"] .desktop-nav-icon{color:var(--accent)}
+.tablet-nav-more.has-current .desktop-nav-icon{color:var(--accent)}
+@media(max-width:600px){
+ body.layout-tablet .header{padding:5px 14px 7px;row-gap:3px}
+ /* Phone: only the signal keeps its pill; the chain is plain text, so a full
+    session costs two short lines, not three rows of pills. */
+ body.layout-tablet .status-bar{gap:2px 12px}
+ body.layout-tablet .status-bar > span,body.layout-tablet .status-bar .status-stack > .status-line,body.layout-tablet #hdmiWarnBadge:not(:empty){min-height:0;padding:0;border-radius:0;background:transparent;gap:6px}
+ body.layout-tablet #signalStatusWrap{flex:1 1 100%;min-height:23px;padding:0 12px;margin:0;border-radius:999px;background:var(--surface-card)}
+ body.layout-tablet #signalStatusText{font-size:min(.9375rem,3.75vw);white-space:normal}
+ body.layout-tablet #tempDisplay{position:absolute;right:120px;top:5px;height:44px;margin:0}
+ body.layout-tablet .header:has(.update-pulse) #tempDisplay{position:static;height:auto}
+ body.layout-tablet .card h2 .btn-reset{padding:6px 11px 6px 9px;font-size:var(--fs-xs)}
+ body.layout-tablet .dashboard > .card > h2{font-size:1.0625rem}
+ /* Two keys to a row: six settings in three rows. */
+ body.layout-tablet fieldset.setting-tiles.signal-fields{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+ body.layout-tablet .setting-tiles > .field{padding:8px 4px 0 13px}
+ body.layout-tablet .setting-tiles > .field select,body.layout-tablet .setting-tiles > .field .mode-select-value{font-size:.9375rem}
+}
+
+/* ---- One language on every workspace: tone steps, no outlines ----
+   What the first pass left in the old drawing (a 1 px frame around a tile, a
+   tab, a panel) takes the same three surfaces as Output: a well for what is
+   read, a key for what is pressed, a lit key for what is chosen. What is
+   live or chosen among peers carries the 1.5 px ring of the signal pill. */
+.diag-now{border:0;background:var(--meso-well);padding:10px 14px}
+.diag-now[data-state="live"]{background:var(--meso-well);box-shadow:inset 0 0 0 1.5px var(--accent)}
+.pat-btn{border:0;border-radius:var(--r-md);background:var(--meso-key)}
+.pat-btn:hover{background:var(--meso-key-hi)}
+.pat-btn.active{border:0;background:var(--meso-key-hi);box-shadow:inset 0 0 0 1.5px var(--accent)}
+[data-theme="light"] .pat-btn:hover{background-color:var(--meso-key-hi)!important}
+.pat-btn:focus-visible{box-shadow:0 0 0 2px var(--focus-ring)}
+.layout-switch{border:0;border-radius:999px;padding:3px;background:var(--meso-well)}
+.layout-switch-btn{border-radius:999px;padding:4px 14px}
+.layout-switch-btn[aria-pressed="true"],.layout-switch-btn[aria-pressed="true"]:hover{background:var(--meso-key-hi);color:var(--meso-lit);box-shadow:none}
+.theme-swatch-btn{border:0;border-radius:999px;padding:8px 14px 8px 10px;background:var(--meso-key)}
+.theme-swatch-btn:hover{background:var(--meso-key-hi)}
+.theme-swatch-btn[aria-pressed="true"]{background:var(--meso-key-hi);box-shadow:inset 0 0 0 1.5px var(--accent)}
+.info-item{border:0}
+:is(.devinfo-card,.facts-host) .devinfo-facts .info-item{border:0}
+.ccss-editor-panel,.meter-icc-panel,.meter-3dlut-workspace-section,body.layout-desktop :is(.ccss-editor-panel,.meter-icc-panel){border:0;border-radius:var(--r-md);background:var(--meso-well)}
+#meterGreyRgbLegacyWrap,#meterGreyTvWrap{border:0;border-radius:var(--r-sm);background:var(--meso-well)}
+/* The LG card brings its own style block and inline styles, after this file. */
+.dashboard .lg-current-input-value,.dashboard #lgDeviceList{border:0!important;border-radius:var(--r-sm)!important;background:var(--meso-well)!important}
+.meter-lg-rgb-bar{border:0;background:var(--meso-key)}
+.meter-icc-panel :is(select,input:not([type=checkbox]):not([type=radio]):not([type=range])){border-radius:var(--r-sm)}
+.dashboard select:disabled,.dashboard input:disabled:not([type=checkbox]):not([type=radio]){border-color:transparent}
+.meter-xyz-gear,.meter-pattern-insert-gear{border:0;border-radius:50%;background:var(--meso-key)}
+/* A state chip is its tint; a section's icon is drawn in the text grey. The accent stays
+   with what is live, what is chosen and the one action of a panel. */
+.conn-badge{box-shadow:none}
+.card-section-icon{color:var(--text-muted)}
+/* Device facts: three to a row. A Pi with both interfaces up shows nine, which closes
+   the grid; four to a row left the ninth tile alone beside three empty cells. */
+body.layout-desktop .devinfo-facts:not(.update-facts){grid-template-columns:repeat(3,minmax(0,1fr))}
+/* One field height in a row of fields. */
+:is(#apSsid,#apPass,#lgManualIp,#lgPictureMode,#resolveIp,#resolvePort,#resolvePatchSize,#meterPatternDelay,input.meter-input-disabled,.lg-current-input-value){min-height:var(--control-h);box-sizing:border-box}
+/* A warning or a parting action is a key with its colour in the word, not a drawn outline. */
+.btn-warning,.btn-danger-quiet{background:var(--neutral-fill);box-shadow:none}
+[data-theme="light"]:not([data-palette]) .btn.btn:disabled{box-shadow:none}
+.btn-warning:hover{background:color-mix(in srgb,var(--warning-text) 14%,var(--neutral-fill))}
+.btn-danger-quiet:hover{background:color-mix(in srgb,var(--red) 14%,var(--neutral-fill))}
+/* ---- States of a key ----
+   A key has no border of its own to dash or colour, so the key itself carries the state.
+   Dashed: set by the situation, not by the hand (no display modes yet, locked by Dolby Vision). */
+.setting-tiles > .field:has(.mode-select-wrap.is-empty),.setting-tiles > .field:has(select[data-dv-locked]){outline:1px dashed var(--meso-state,var(--field-border-hover));outline-offset:-1px}
+.setting-tiles > .field.is-no-display{--meso-state:color-mix(in srgb,var(--orange) 55%,var(--field-border-hover))}
+/* Resolution without modes shows a status line, not a value: muted, lighter, with room for its dot. */
+.setting-tiles > .field .mode-select-wrap.is-empty .mode-select-value{color:var(--text-secondary);font-weight:500}
+.setting-tiles > .field .mode-select-wrap.is-no-display .mode-select-value{padding-left:15px}
+/* A theme's disabled fill would stand in the key as a box of its own. */
+.setting-tiles > .field select:disabled{background-color:transparent!important}
+/* Light on the desktop: an older rule above gives a tile its card's tone there (--tile-bg on body),
+   which left a tile with neither fill nor line. */
+[data-theme="light"]:not([data-palette]) body.layout-desktop{--tile-bg:var(--meso-key)}
+/* A plot is a well. In Dark and Light its tone step frames it, so the drawn line goes. The colour
+   themes keep the line: in Contrast and Paper a plot has the tone of its card. */
+:root:not([data-palette]) :is(#lutCubeView,#ccssPreviewCanvas,#chartRGB,#chartDeltaE,#chartGammaValue,#chartEOTF,#chartGamma,#chartCubeView,#chartCIE,#chartColorDE){outline:0}
+/* Light: a secondary button is a key like any other, carried by its tone. */
+[data-theme="light"]:not([data-palette]) .btn-secondary,[data-theme="light"]:not([data-palette]) .ccss-file-input::file-selector-button{box-shadow:none}
+/* High Contrast has one tone: every surface is #000, so a tone step cannot show a key, a well or a
+   panel there. It keeps a drawn line, in its own --border, around what the rules above only fill.
+   :where() adds no weight and each :is() holds selectors of one weight, so the accent ring of what
+   is chosen, live or open (one class or attribute more) still wins. */
+:where([data-palette="contrast"]) :is(.pat-btn,.theme-swatch-btn,.meter-lg-rgb-bar,.meter-xyz-gear,.meter-pattern-insert-gear,.btn-warning,.btn-danger-quiet,.sw-tile,.signal-port-box,.diag-now,.layout-switch,.selftest-note,.selftest-verdict,.ccss-editor-panel,.meter-icc-panel,.meter-3dlut-workspace-section,.info-item,.lg-current-input-value),
+:where([data-palette="contrast"]) .setting-tiles > .field,
+:where([data-palette="contrast"]) .desktop-nav-btn[aria-current="page"],
+:where([data-palette="contrast"]) body:is(.layout-desktop,.layout-tablet) .dashboard > .card,
+:where([data-palette="contrast"]) :is(#meterNoMeterBanner,#meterGreyRgbLegacyWrap,#meterGreyTvWrap,#lgDeviceList){box-shadow:inset 0 0 0 1px var(--border)}
+:where([data-palette="contrast"]) .dashboard :is(select,input:not([type=checkbox]):not([type=radio])):disabled{border-color:var(--border)}
+/* Paper and Natrium Light: a key is only a few code values off its card and a tile has the card's
+   tone on the desktop, so what is pressed keeps a line there as well. */
+:where([data-palette="paper"],[data-palette="natrium-light"]) :is(.pat-btn,.theme-swatch-btn,.meter-lg-rgb-bar,.meter-xyz-gear,.meter-pattern-insert-gear,.info-item),
+:where([data-palette="paper"],[data-palette="natrium-light"]) .setting-tiles > .field{box-shadow:inset 0 0 0 1px var(--border)}
+
+/* ---- Motion: a key gives, nothing else moves ---- */
+.desktop-nav-btn,.tablet-nav-btn,.btn,.pat-btn,.theme-swatch-btn,.layout-switch-btn{transition:background-color .16s ease-out,color .16s ease-out,transform .12s ease-out}
+.btn:active:not(:disabled),.tablet-nav-btn:active,.pat-btn:active{transform:scale(.97)}
+@media(prefers-reduced-motion:reduce){.desktop-nav-btn,.tablet-nav-btn,.btn,.pat-btn,.theme-swatch-btn,.layout-switch-btn,.setting-tiles > .field{transition:none}.btn:active:not(:disabled),.tablet-nav-btn:active,.pat-btn:active{transform:none}}

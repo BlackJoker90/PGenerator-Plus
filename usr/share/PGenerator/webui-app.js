@@ -23468,11 +23468,23 @@ function meterCloseLutTools(){
   });
   return ul;
  }
+ // A key (.setting-tiles > .field) holds the setting's name above its select
+ // in one field. A menu placed against the select covered that name when it
+ // opened upwards, so in a key the menu is placed against the key. A key that
+ // has no box of its own (display:contents, hidden) leaves the select.
+ function anchorRect(select,own){
+  const key=select.closest?select.closest('.setting-tiles > .field'):null;
+  if(!key) return own;
+  const k=key.getBoundingClientRect();
+  return k&&k.width>0&&k.height>0?k:own;
+ }
  function position(){
   if(!menu||!current) return;
   const z=zoomOf(current)||1;
-  const r=current.getBoundingClientRect();
-  anchorX=r.left; anchorY=r.top;
+  const own=current.getBoundingClientRect();
+  // The scroll handler compares the select's own position.
+  anchorX=own.left; anchorY=own.top;
+  const r=anchorRect(current,own);
   const vw=window.innerWidth/z,vh=window.innerHeight/z;
   const top=r.top/z,bottom=r.bottom/z,left=r.left/z,width=r.width/z;
   const gap=6,margin=8,cap=360;

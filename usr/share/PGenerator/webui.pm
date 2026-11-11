@@ -888,6 +888,8 @@ sub webui_route_is_concurrent_safe (@) {
   || $path eq "/assets/icc_profile.js" || $path eq "/assets/icc_profile.css");
  # Page CSS/JS split out of the HTML: read-only, built from the fragments.
  return 1 if($path=~m{^/assets/pg-[a-z]+\.[0-9a-f]{12}\.(?:css|js)\z});
+ # The page's typeface and its licence: one fixed file each, read-only.
+ return 1 if($path=~m{^/assets/fonts/[^/]+\z});
  # Live device health and identity are read-only. Keep both on the fast lane so
  # a long profile build or calibration worker cannot freeze Device Info.
  # /api/stats reads /proc/sysfs plus a 2s response cache; its cross-call CPU
@@ -1683,6 +1685,20 @@ sub webui_handle_request (@) {
      my $content_type=($ext eq "css")?"text/css":"application/javascript";
      # The name carries the content hash, so a cached copy can never be stale.
      &webui_send_text($client,$req,"$content_type; charset=utf-8",$asset_data,"Cache-Control: public, max-age=31536000, immutable\r\n",1);
+    } else {
+     print $client "HTTP/1.1 404 Not Found\r\nCache-Control: no-store\r\nContent-Length: 0\r\n\r\n";
+    }
+   }
+   elsif($path=~m{^/assets/fonts/([^/]+)\z}) {
+    # The layout stylesheet is served from /assets/, so its url("fonts/...")
+    # lands here. webui_font_asset knows the few names there are; anything
+    # else, and a file that cannot be read whole, is a 404 and the page
+    # falls back to the system face.
+    my ($font_type,$font_data)=&webui_font_asset($1);
+    if(defined($font_data)) {
+     # No validator: a changed face ships under a new file name.
+     print $client "HTTP/1.1 200 OK\r\nContent-Type: $font_type\r\nContent-Length: ".length($font_data)."\r\nCache-Control: public, max-age=604800\r\n\r\n";
+     print $client $font_data;
     } else {
      print $client "HTTP/1.1 404 Not Found\r\nCache-Control: no-store\r\nContent-Length: 0\r\n\r\n";
     }
@@ -15033,6 +15049,54 @@ sub webui_asset (@) {
  return $content;
 }
 
+# Files in fonts/ next to this module that the page may request, with their
+# media types (font/woff2: RFC 8081). The names are the whole allowlist: the
+# request never becomes part of a path unless it is one of these keys.
+my %_webui_font_assets = (
+ "meso.woff2" => "font/woff2",
+ "meso-OFL.txt" => "text/plain; charset=utf-8",
+);
+
+# Returns (media type, bytes), or an empty list for an unknown name or a file
+# that is missing, empty or not read whole. Read per request and not cached:
+# the browser keeps the file for a week, a worker thread would keep its copy
+# for good, and a file restored by an update is served without a restart.
+sub webui_font_asset (@) {
+ my ($name)=@_;
+ return () if(!defined($name) || !exists($_webui_font_assets{$name}));
+ my $path=&_webui_asset_path("fonts/$name");
+ my $expected=-s $path;
+ my $content="";
+ my $io_error="";
+ if(open(my $fh,"<:raw",$path)) {
+  local $/;
+  $content=<$fh>//"";
+  $io_error="close failed: $!" if(!close($fh));
+  # A slurp racing an OTA/rsync rewrite returns the bytes read so far; a
+  # torn font must not sit in a browser cache for a week.
+  if($io_error eq "" && length($content)!=($expected//-1)) {
+   $io_error="short read: ".length($content)." of ".($expected//"?")." bytes";
+  }
+  # The size on disk can itself be that of a half-written file. A WOFF2
+  # names its own length: "wOF2", the flavor, then the total size of the
+  # file as a big-endian UInt32 (W3C WOFF 2.0, WOFF2Header).
+  if($io_error eq "" && $name=~/\.woff2\z/) {
+   my ($signature,$declared)=(length($content)>=12) ? unpack("a4 x4 N",$content) : ("",0);
+   if($signature ne "wOF2" || $declared!=length($content)) {
+    $io_error="not a whole WOFF2: ".length($content)." bytes, header says ".($signature eq "wOF2" ? $declared : "no WOFF2");
+   }
+  }
+ } else {
+  $io_error="open failed: $!";
+ }
+ if($io_error ne "" || $content eq "") {
+  my $reason=$io_error ne "" ? $io_error : "missing or empty";
+  &log("WebUI ERROR: UI font asset unusable: $name ($path): $reason",1);
+  return ();
+ }
+ return ($_webui_font_assets{$name},$content);
+}
+
 sub _webui_html_escape (@) {
  my ($value)=@_;
  $value="" if(!defined($value));
@@ -15124,6 +15188,13 @@ sub webui_check_assets (@) {
  my $hcfr_path=&_webui_asset_path("hcfr_chc.js");
  &log("WebUI ERROR: required UI asset unavailable at boot: hcfr_chc.js ($hcfr_path)",1)
   if(!-s $hcfr_path);
+ # Without the typeface the page still works, in the system face; say so
+ # once at boot, since the page itself cannot.
+ foreach my $font_name (sort keys %_webui_font_assets) {
+  my $font_path=&_webui_asset_path("fonts/$font_name");
+  &log("WebUI ERROR: UI font asset unavailable at boot: $font_name ($font_path)",1)
+   if(!-s $font_path);
+ }
  $_webui_asset_missing="";
  # Drop the warmed fragment cache: it exists only for the boot diagnostic,
  # and any data left here is deep-cloned into every ithreads worker (about

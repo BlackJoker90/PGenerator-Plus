@@ -38,6 +38,25 @@ Confirm the diff you are landing is the only change, then write the new hash
 into `t/webui_html_golden.sha256` (single line, no trailing spaces) and re-run
 the test to see it pass.
 
+`webui-layout.css` ends with the section "Mesopic look": the approved look,
+drawn as a layer over `webui-theme.css`, `icc_profile.css` and the rest of
+`webui-layout.css`. It relies on coming after all of them, so new layout
+rules go above it. Dark and Light take its colour tokens; the colour themes
+(`data-palette`) keep their own and take the type and structure. High
+Contrast has one tone for every surface and therefore keeps drawn lines
+(the last rules of the section).
+
+The typeface lives in `fonts/` (`meso.woff2`, Gabarito, with its licence
+`meso-OFL.txt`) and is served by `webui.pm` at `/assets/fonts/<name>`, the
+address the stylesheet's relative `url("fonts/meso.woff2")` resolves to,
+because the stylesheet itself is served from `/assets/`. The names in
+`%_webui_font_assets` are the whole allowlist. The font is cached by the
+browser for a week without a validator: a changed face ships under a new
+file name. A font that is missing, empty or cut short (its WOFF2 header
+names the file's length) is answered with 404: the page falls back to the
+system face, and the daemon logs a missing font at start
+(`t/webui_font_asset.t`).
+
 The loader reads every fragment with Perl's `<:raw>` layer. Keep UTF-8 source
 bytes and LF endings intact, and do not add banner comments inside fragments.
 Migration notes and explanations belong here instead.

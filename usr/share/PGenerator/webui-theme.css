@@ -373,7 +373,7 @@ transition:background-color .2s ease-out;cursor:default;position:relative}
 .status-bar [hidden]{display:none!important}
 .info-item[hidden]{display:none!important}
 /* Offline: the last signal, pattern and software state can no longer be trusted. */
-body.ui-offline #signalStatusWrap,body.ui-offline #patternStatusWrap,body.ui-offline #calStatusWrap{display:none!important}
+body.ui-offline #signalStatusWrap,body.ui-offline #patternStatusWrap,body.ui-offline #calStatusWrap,body.ui-offline #tempDisplay,body.ui-offline #meterStatusWrap.is-absent{display:none!important}
 .dashboard{max-width:1200px;margin:0 auto;padding:12px;display:grid;
 grid-template-columns:1fr 1fr;gap:12px}
 .card{background:var(--card);border:1px solid var(--border);border-radius:var(--r-md);padding:14px;min-width:0}
@@ -482,7 +482,7 @@ body.layout-desktop .meter-card-header-row .meter-xyz-gear{width:30px;height:30p
 #displaySettingsCard{container-type:inline-size}
 .grid.setting-tiles{grid-template-columns:repeat(3,minmax(0,1fr));gap:16px 20px}
 /* A label above its dropdown, no tile around it: the fields are the form. */
-.setting-tiles>.field{display:grid;grid-template-columns:minmax(0,1fr);grid-template-rows:auto auto;row-gap:6px;align-items:center;padding:0;min-width:0}
+.setting-tiles>.field{display:grid;grid-template-columns:minmax(0,1fr);grid-template-rows:auto auto;row-gap:6px;align-items:center;align-content:start;padding:0;min-width:0}
 .setting-tiles>.field>label{grid-column:1;grid-row:1;align-self:end}
 .setting-tiles>.field>select,.setting-tiles>.field>.mode-select-wrap{grid-column:1;grid-row:2;width:100%;min-width:0}
 @container (max-width:720px){.grid.setting-tiles{grid-template-columns:repeat(2,minmax(0,1fr))}}
@@ -800,7 +800,7 @@ transition:opacity .15s ease-out,transform .15s ease-out;z-index:999;pointer-eve
 .meter-help-tip:hover,.meter-help-tip[aria-expanded="true"]{color:var(--text-primary);border-color:var(--accent)}
 .meter-help-tip:focus-visible{outline:2px solid var(--focus-ring);outline-offset:2px}
 /* Opaque popover surface, an accent-tinted edge, and a short rise from the tip's side. */
-.help-tip-pop{position:fixed;z-index:10050;box-sizing:border-box;width:max-content;max-width:min(320px,calc(100vw - 16px));overflow:auto;overscroll-behavior:contain;padding:11px 14px;border:1px solid color-mix(in srgb,var(--accent) 32%,var(--border));border-radius:var(--r-md);background:var(--surface-popover);color:var(--text-primary);box-shadow:0 1px 0 color-mix(in srgb,var(--text-primary) 6%,transparent) inset,0 12px 32px -8px var(--shadow),0 2px 8px var(--shadow);font-size:var(--fs-sm);font-weight:400;line-height:1.55;white-space:pre-line;overflow-wrap:break-word;text-align:left;text-transform:none;letter-spacing:normal;animation:help-tip-in .16s var(--ease-out)}
+.help-tip-pop{position:fixed;z-index:10050;box-sizing:border-box;width:max-content;max-width:min(320px,calc(100vw - 16px));overflow:auto;padding:11px 14px;border:1px solid color-mix(in srgb,var(--accent) 32%,var(--border));border-radius:var(--r-md);background:var(--surface-popover);color:var(--text-primary);box-shadow:0 1px 0 color-mix(in srgb,var(--text-primary) 6%,transparent) inset,0 12px 32px -8px var(--shadow),0 2px 8px var(--shadow);font-size:var(--fs-sm);font-weight:400;line-height:1.55;white-space:pre-line;overflow-wrap:break-word;text-align:left;text-transform:none;letter-spacing:normal;animation:help-tip-in .16s var(--ease-out)}
 .help-tip-pop[data-side="above"]{--tip-rise:4px}
 /* No scrollbar chrome: the card is sized to its text; the rare overlong one still scrolls by wheel or touch */
 .help-tip-pop{scrollbar-width:none}
@@ -810,6 +810,16 @@ transition:opacity .15s ease-out,transform .15s ease-out;z-index:999;pointer-eve
 /* High Contrast keeps a solid surface and a full-strength edge */
 [data-palette="contrast"] .help-tip-pop{background:var(--surface-popover);border-color:var(--text-primary)}
 .help-tip-pop[hidden]{display:none}
+.help-tip-pop[data-capped]{overscroll-behavior:contain;scrollbar-width:thin}
+/* A tip cut by the window height shows that it scrolls. */
+.help-tip-pop[data-capped]::-webkit-scrollbar{display:block;width:6px}
+.help-tip-pop[data-capped]::-webkit-scrollbar-thumb{border-radius:3px;background:color-mix(in srgb,var(--text-primary) 30%,transparent)}
+.help-tip-pop[data-capped]:not([data-end])::after{content:"";position:sticky;bottom:-11px;display:block;height:28px;margin:-28px -14px -11px;background:linear-gradient(to bottom,transparent,var(--surface-popover));pointer-events:none}
+.help-tip-pop p{margin:0}
+.help-tip-pop:focus-visible{outline:2px solid var(--focus-ring);outline-offset:2px}
+.help-tip-pop p+p{margin-top:8px}
+/* Phone: the card spans the cards' width (pgHelpTipPlace keeps their 10 px inset). */
+@media(max-width:600px){body.layout-tablet .help-tip-pop{width:calc(100vw - 20px);max-width:calc(100vw - 20px)!important}}
 /* Reboot confirmation (memory changes): a dimmed backdrop, a card that
    rises in, the change as two chips, Cancel focused first. */
 .pg-reboot-dialog{position:fixed;inset:0;z-index:100002;display:flex;align-items:center;justify-content:center;padding:20px}
@@ -892,7 +902,12 @@ body.apply-settings-success .apply-settings-spinner{display:none}
    as a single block. Error state: title red, status dimmer red. */
 body.apply-settings-success .apply-settings-title,body.apply-settings-success .apply-settings-status{color:var(--green)}
 body.apply-settings-error .apply-settings-title{color:var(--red)}
+/* Not known yet (no answer) is no failure: amber; applied after all: plain. */
+body.apply-settings-error #applySettingsOverlay[data-tone="unknown"] .apply-settings-title{color:var(--warning-text)}
+body.apply-settings-error #applySettingsOverlay[data-tone="done"] .apply-settings-title{color:var(--text-primary)}
 body.apply-settings-error .apply-settings-status{color:#e08184}
+/* The settings apply's error: the title says it in red, the text stays readable. */
+body.apply-settings-error #applySettingsOverlay .apply-settings-status{color:var(--text-primary)}
 /* DV Config completion modal: the green check is gated on
    body.apply-settings-success for the Apply Settings flow, so this modal needs
    its own trigger. Failure hides the check and reddens the text. */
@@ -991,6 +1006,13 @@ body.apply-settings-error .apply-settings-pin-hint{color:#e08184}
    modal auto-hides 2s after success anyway. */
 .apply-settings-actions{display:flex;justify-content:center;gap:8px;margin-top:16px}
 body.apply-settings-success .apply-settings-actions{display:none}
+/* The apply modal's close: only once the apply failed; the spinner and the
+   "goes black" hint stop with it. */
+.apply-settings-close{display:none}
+body.apply-settings-error #applySettingsOverlay[data-closable] .apply-settings-close{display:flex}
+.apply-settings-kept{justify-content:center;margin-top:10px;font-size:var(--fs-sm);color:var(--text-secondary)}
+.apply-settings-kept[hidden]{display:none!important}
+body.apply-settings-error #applySettingsIcon,body.apply-settings-error #applySettingsHint{display:none!important}
 .info-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(145px,1fr));gap:6px}
 .info-item{background:var(--tile-bg);border:1px solid var(--tile-border);padding:var(--tile-pad);border-radius:var(--r-md);min-width:0}
 .info-item .label{font-size:var(--fs-sm);color:var(--text2);}
@@ -1454,17 +1476,6 @@ background:linear-gradient(135deg,var(--sw-bg) 0 50%,var(--sw-card) 50% 100%)}
 .pg-dd-menu.no-stagger .pg-dd-item,.pg-dd-menu.no-stagger .pg-dd-group,.pg-dd-menu.no-stagger .pg-dd-mark{transition-delay:0s!important}
 /* Signal Self-Test (Output). The verdict carries the header power-button tint: status colour at 14 % with a 30 % ring. */
 .selftest-card{container-type:inline-size}
-.selftest-facts{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px 24px;margin:0 0 16px;padding:0;list-style:none}
-.selftest-facts li{display:flex;min-width:0}
-.selftest-facts span{display:flex;flex-direction:column;gap:2px;min-width:0;font-size:var(--fs-sm);line-height:1.35;color:var(--text-secondary)}
-.selftest-facts strong{font-size:var(--fs-sm);font-weight:700;color:var(--text-primary)}
-@container (max-width:820px){.selftest-facts{grid-template-columns:repeat(2,minmax(0,1fr))}}
-@container (max-width:420px){.selftest-facts{grid-template-columns:minmax(0,1fr)}}
-/* The limit of the proof, styled as a warning so it is not read past; full
-   width and the same radius as the verdict card below it. */
-.selftest-note{display:flex;gap:10px;align-items:flex-start;margin:0 0 14px;padding:10px 14px 10px 12px;border-radius:var(--r-md);font-size:var(--fs-sm);line-height:1.5;color:var(--text-secondary);background:color-mix(in srgb,var(--orange) 9%,var(--surface-card));border:1px solid color-mix(in srgb,var(--orange) 40%,transparent)}
-.selftest-note svg{flex:0 0 auto;width:17px;height:17px;margin-top:1px;color:var(--warning-text)}
-.selftest-note strong{display:block;margin-bottom:1px;color:var(--text-primary);font-weight:650}
 .selftest-verdict{--st:var(--text2);position:relative;display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:center;gap:16px;padding:16px 18px;border:1px solid var(--border);border-radius:var(--r-md);background:var(--surface-inset);overflow:hidden;transition:border-color .3s ease-out}
 .selftest-verdict[data-state="running"]{--st:var(--accent)}
 .selftest-verdict[data-state="passed"]{--st:var(--status-success);border-color:color-mix(in srgb,var(--status-success) 45%,var(--border))}
@@ -1485,6 +1496,7 @@ background:linear-gradient(135deg,var(--sw-bg) 0 50%,var(--sw-card) 50% 100%)}
 .selftest-progress{position:absolute;left:0;right:0;bottom:0;height:3px;opacity:0;transition:opacity .2s ease-out}
 .selftest-verdict.has-progress .selftest-progress{opacity:1}
 .selftest-progress-fill{height:100%;background:var(--st);transform:scaleX(0);transform-origin:left;transition:transform .4s var(--ease-out)}
+.selftest-modes[hidden]{display:none}
 .selftest-modes{list-style:none;margin:14px 0 0;padding:0;border-top:1px solid var(--border)}
 /* One column grid for the whole list (rows are subgrids): group, mode, depth,
    link and result line up in every row whatever the chip or label width. */
@@ -1703,28 +1715,62 @@ select:focus-visible,input:focus-visible,textarea:focus-visible,
 .apply-bar-text{display:flex;flex-direction:column;gap:3px;min-width:0;flex:1 1 280px}
 .apply-bar-title{font-size:var(--fs-md);font-weight:600;color:var(--text-primary)}
 .apply-bar-changes{font-size:var(--fs-sm);line-height:1.45;color:var(--text-primary);overflow-wrap:anywhere}
+.apply-bar-more{display:inline-flex;align-items:center;gap:6px;white-space:nowrap;appearance:none;border:0;background:none;margin:0;padding:6px 0;min-height:36px;font:inherit;font-size:var(--fs-md);font-weight:600;color:var(--text-primary);cursor:pointer}
+.apply-bar-more::after{content:"";width:7px;height:7px;margin-top:-4px;border:solid currentColor;border-width:0 2px 2px 0;transform:rotate(45deg);transition:transform .14s ease-out}
+.apply-bar-more[aria-expanded="true"]::after{margin-top:3px;transform:rotate(-135deg)}
+@media(prefers-reduced-motion:reduce){.apply-bar-more::after{transition:none}}
+.apply-bar-more[hidden]{display:none}
 .apply-bar-changes b{font-weight:600;color:var(--text2)}
 .apply-bar-note{font-size:var(--fs-xs);line-height:1.4;color:var(--text2)}
 .apply-bar-actions{display:flex;gap:8px;flex:0 0 auto;margin-left:auto}
-/* Phones: the sticky bar must not cover a fifth of the screen. Title and
-   buttons share one row, the change list keeps two lines, the blackout
-   note goes (the Apply overlay says the renderer restarts). */
-@media (max-width:560px){
+/* Phones: the sticky bar stays low. Title and buttons share one row, the
+   change list keeps two lines ("N changes" opens the rest), the note that
+   the picture drops stays under it. Landscape phones (low windows) get the
+   same, with one line of changes and the note in the Apply overlay only. */
+@media (max-width:560px),(max-height:480px) and (pointer:coarse){
  .apply-bar-row{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:6px 10px}
  .apply-bar-text{display:contents}
  .apply-bar-title{grid-column:1;grid-row:1}
  .apply-bar-actions{grid-column:2;grid-row:1;margin-left:0}
  .apply-bar-changes{grid-column:1 / -1;grid-row:2;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;line-clamp:2;overflow:hidden}
- .apply-bar-note{display:none}
+ .apply-bar-changes.is-open{display:block;-webkit-line-clamp:none;line-clamp:none;overflow:visible}
+ /* A cut list: the title itself ("4 changes") opens all of it. */
+ .apply-bar-row:has(.apply-bar-more:not([hidden])) .apply-bar-title{display:none}
+ .apply-bar-more{grid-column:1;grid-row:1;justify-self:start}
+ /* The picture drops on Apply: said on the phone too, under the changes. */
+ .apply-bar-note{grid-column:1 / -1;grid-row:3}
+ /* 320 px: "4 changes" and the buttons keep a gap. */
+ .apply-bar-actions .btn{padding-left:12px;padding-right:12px}
 }
+@media (max-height:480px) and (pointer:coarse){
+ /* One row: "N changes" and the buttons; the list only when opened. */
+ .apply-bar-changes:not(.is-open){display:none}
+ .apply-bar-note{display:none}
+ #applyBar.card{padding-top:6px;padding-bottom:6px}
+ /* Opened in a low window: the list scrolls inside the bar, the buttons stay in view. */
+ .apply-bar-changes.is-open{max-height:30vh;overflow:auto;overscroll-behavior:contain}
+ /* While the bar is up, the workspace title (the dock names it) gives its
+    room to the changed fields above the bar. */
+ body:is(.layout-tablet,.layout-desktop):has(#applyBar.card:not([style*="none"])) .desktop-workspace-title{display:none}
+}
+@media (max-width:560px){.apply-bar-changes.is-open{max-height:40vh;overflow:auto;overscroll-behavior:contain}}
+@media (pointer:coarse){.apply-bar-more{min-height:44px}}
+@media (max-width:340px){.apply-bar-actions{gap:6px}.apply-bar-actions .btn{padding-left:10px;padding-right:10px}}
 /* Fields Dolby Vision sets: still readable, visibly fixed, no dropdown arrow. */
 .field select:disabled{cursor:not-allowed}
 .field select[data-dv-locked]{cursor:default;opacity:1;background-image:none!important;padding-right:10px!important;border-style:dashed;color:var(--text-primary)}
 .dv-locked-note{display:flex;gap:8px;align-items:baseline;margin:10px 0 0;font-size:var(--fs-xs);line-height:1.45;color:var(--text2)}
-.grid.setting-tiles.calman-range{margin-top:16px;padding-top:14px;border-top:1px solid var(--border)}
-.grid.setting-tiles.calman-range + .grid.setting-tiles.calman-range{margin-top:14px;padding-top:0;border-top:0}
-.calman-range-hint{grid-column:span 2;align-self:end;margin:0;font-size:var(--fs-xs);line-height:1.45;color:var(--text2)}
-@container (max-width:420px){.calman-range-hint{grid-column:auto}}
+/* Settings that only act during a Calman session and save on change: their own group under a hairline. */
+.calman-group{margin-top:16px;padding-top:14px;border-top:1px solid var(--border)}
+.calman-group-title{display:flex;align-items:baseline;flex-wrap:wrap;gap:2px 0;margin:0 0 8px;font-size:var(--fs-xs);font-weight:500;color:var(--text2)}
+.calman-group-note{color:var(--text-muted)}
+.calman-group-note::before{content:"\00b7";content:"\00b7" / "";padding:0 7px}
+.calman-group-note[data-state="saved"]{color:color-mix(in oklab,var(--status-success) 80%,var(--text-primary))}
+/* Narrow card: the note on its own line, no leading dot. */
+@container (max-width:420px){.calman-group-note{flex-basis:100%}.calman-group-note::before{content:none}}
+/* A tile's (i) tip shares the label row, at its end. */
+.setting-tiles>.field>.meter-help-tip{grid-column:1;grid-row:1;justify-self:end;align-self:center;margin:0 8px 0 0}
+.setting-tiles>.field:has(>.meter-help-tip)>label{padding-right:30px}
 .dv-locked-note::before{content:"";flex:0 0 8px;height:8px;border-radius:50%;background:var(--status-dv);transform:translateY(-1px)}
 .setting-tiles>.field>.mode-retry{grid-column:1;grid-row:1;justify-self:end;align-self:end;min-height:24px;padding:2px 10px}
 /* Command palette (Cmd/Ctrl+K): a floating panel in the active theme's
@@ -1769,6 +1815,7 @@ body.pg-palette-open{overflow:hidden}
    of the chosen preset as chips. */
 .preset-bar{margin:0 0 14px}
 .preset-bar-head{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px 12px;margin-bottom:8px}
+.preset-bar-label{display:inline-flex;align-items:center}
 .preset-bar-title{margin:0;font-size:var(--fs-xs);font-weight:600;color:var(--text2)}
 .preset-filter{display:flex;flex-wrap:wrap;gap:6px}
 .preset-filter[hidden]{display:none}
@@ -1795,7 +1842,6 @@ body.pg-palette-open{overflow:hidden}
 .preset-chip[data-bits]{--chip:var(--bits-8);font-weight:700;background:color-mix(in srgb,var(--chip) 16%,transparent);box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--chip) 38%,transparent)}
 .preset-chip[data-bits="10"]{--chip:var(--bits-10)}
 .preset-chip[data-bits="12"]{--chip:var(--bits-12)}
-.preset-bar-hint{margin:8px 0 0;font-size:var(--fs-sm);line-height:1.4;color:var(--text2)}
 /* Save: the name is asked inline, with the format it will store. */
 .preset-save{margin-top:12px}
 .preset-save[hidden]{display:none}

@@ -17,7 +17,7 @@ use Exporter qw(import);
 our @EXPORT_OK=qw(
  signal_check signal_board_limits signal_port_info signal_tmds_mhz
  signal_format_label signal_mode_label signal_hdr_label
- signal_wire_from_infoframes signal_wire_parts signal_wire_label signal_wire_adjustments
+ signal_wire_from_infoframes signal_wire_parts signal_wire_label signal_wire_adjustments signal_wire_compare
  signal_vsif_dv signal_avi_fields signal_range_expectation signal_range_plate_lines
 );
 
@@ -374,7 +374,7 @@ sub signal_vsif_dv {
 # Returns {format,range,eotf,bpc,tmds_mhz,dv}; a field is undef when unknown.
 sub signal_wire_from_infoframes {
  my ($avi,$drm,$link,$vsif)=@_;
- my %w=(format=>undef,range=>undef,eotf=>undef,bpc=>undef,tmds_mhz=>undef,dv=>undef);
+ my %w=(format=>undef,range=>undef,eotf=>undef,bpc=>undef,tmds_mhz=>undef,dv=>undef,drm=>0);
  $w{dv}=signal_vsif_dv($vsif) if(defined $vsif);
  my @a=map {hex($_)} grep {/^[0-9a-fA-F]{1,2}$/} split(/:/,$avi || "");
  if(@a >= 9 && $a[0] == 0x82) {
@@ -390,7 +390,8 @@ sub signal_wire_from_infoframes {
   $w{eotf}=0;
  }
  my @d=map {hex($_)} grep {/^[0-9a-fA-F]{1,2}$/} split(/:/,$drm || "");
- $w{eotf}=$d[4] if(@d >= 5 && $d[0] == 0x87);
+ # A DRM frame read (its EOTF may be 0 too: HDR10 with "SDR Gamma").
+ if(@d >= 5 && $d[0] == 0x87) { $w{eotf}=$d[4]; $w{drm}=1; }
  if($link && $link->{bpc}) {
   $w{bpc}=$link->{bpc};
   $w{tmds_mhz}=$link->{tmds_mhz} if($link->{tmds_mhz});
@@ -447,32 +448,58 @@ sub signal_wire_label {
 # depth and range itself.
 sub signal_wire_adjustments {
  my ($req,$w)=@_;
- my @adj;
+ return [map {$_->[1]} @{signal_wire_compare($req,$w)->{adjustments}}];
+}
+
+# The comparison behind signal_wire_adjustments, per setting field (signal,
+# format, depth, range) for the WebUI's field marks: {checked=>{field=>1}}
+# for each field the cable was compared on, {adjustments=>[[field,text]]}
+# for each difference. A field that was not compared gets no mark either
+# way (4:2:2 depth, YCbCr range, format and depth under Dolby Vision).
+sub signal_wire_compare {
+ my ($req,$w)=@_;
+ my (@adj,%checked);
  my $mode=lc($req->{signal_mode} || "sdr");
  if(defined $w->{dv}) {
   my $want=($mode ne "dv") ? "" : ((lc($req->{dv_transport} || "") eq "lldv") ? "lldv" : "standard");
+  # In Dolby Vision the vendor frame is the signal; outside it only a stray
+  # DV frame decides on its own ("the same" needs the EOTF too, below).
+  $checked{signal}=1 if($mode eq "dv" || $w->{dv} ne $want);
   if($w->{dv} ne $want) {
-   push(@adj,signal_hdr_label($req)." setting is sent ".($w->{dv} eq "" ? "without Dolby Vision signalling." : "with ".($mode eq "dv" ? "the $DV_WIRE_NAME{$w->{dv}} signal." : "Dolby Vision signalling.")));
+   push(@adj,[signal=>signal_hdr_label($req)." setting is sent ".($w->{dv} eq "" ? "without Dolby Vision signalling." : "with ".($mode eq "dv" ? "the $DV_WIRE_NAME{$w->{dv}} signal." : "Dolby Vision signalling."))]);
   }
  }
- return \@adj if($mode eq "dv" || !defined $w->{format});
+ return {adjustments=>\@adj,checked=>\%checked} if($mode eq "dv" || !defined $w->{format});
  my $format=int($req->{color_format} || 0);
  my $bpc=int($req->{max_bpc} || 8);
+ $checked{format}=1;
  if($w->{format} != $format) {
-  push(@adj,signal_format_label($format)." setting is sent as ".signal_format_label($w->{format}).".");
- } elsif($format != 2 && $w->{bpc} && $w->{bpc} != $bpc) {
-  push(@adj,"$bpc-bit setting is sent as $w->{bpc}-bit.");
+  push(@adj,[format=>signal_format_label($format)." setting is sent as ".signal_format_label($w->{format})."."]);
+ } elsif($format != 2 && $w->{bpc}) {
+  $checked{depth}=1;
+  push(@adj,[depth=>"$bpc-bit setting is sent as $w->{bpc}-bit."]) if($w->{bpc} != $bpc);
  }
  my %range=(1=>"Limited",2=>"Full");
  my $rr=int($req->{rgb_quant_range} || 0);
- if($format == 0 && $w->{format} == 0 && $range{$rr} && defined $w->{range} && $w->{range} != $rr) {
-  push(@adj,"$range{$rr} range setting is signalled as $range{$w->{range}}.");
+ if($format == 0 && $w->{format} == 0 && $range{$rr} && defined $w->{range}) {
+  $checked{range}=1;
+  push(@adj,[range=>"$range{$rr} range setting is signalled as $range{$w->{range}}."]) if($w->{range} != $rr);
  }
  my %want=(sdr=>0,hdr10=>2,hlg=>3);
- if(defined $w->{eotf} && exists $want{$mode} && $w->{eotf} != $want{$mode}) {
-  push(@adj,signal_hdr_label($req)." setting is sent as ".($EOTF_NAME{$w->{eotf}} || "EOTF $w->{eotf}").".");
+ if(defined $w->{eotf} && exists $want{$mode}) {
+  # HDR10 sends the EOTF the HDR settings name ($req->{eotf}, conf eotf:
+  # "SDR Gamma" 0, "HDR Gamma" 1, PQ 2) in its DRM frame; SDR is 0 whatever
+  # eotf the conf keeps. "SDR Gamma" counts as sent only with a DRM frame
+  # read: without one HDR10 is not signalled at all.
+  my $named=($mode eq "hdr10" && defined $req->{eotf} && $req->{eotf}=~/^[012]$/ && ($req->{eotf} ne "0" || $w->{drm}));
+  my $want=$named ? $req->{eotf}+0 : $want{$mode};
+  # A wrong EOTF is a difference on its own; "the same" needs the Dolby
+  # Vision vendor frame read too (it is read after the infoframes, and a
+  # stray DV signal would differ from an SDR/HDR setting).
+  $checked{signal}=1 if($w->{eotf} != $want || defined $w->{dv});
+  push(@adj,[signal=>signal_hdr_label($req)." setting is sent as ".($EOTF_NAME{$w->{eotf}} || "EOTF $w->{eotf}")."."]) if($w->{eotf} != $want);
  }
- return \@adj;
+ return {adjustments=>\@adj,checked=>\%checked};
 }
 
 # The range fields of an AVI infoframe (hex as in signal_wire_from_infoframes):

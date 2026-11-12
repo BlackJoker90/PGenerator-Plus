@@ -103,15 +103,32 @@ function pgHelpTipPrepare(el){
  if(!el.getAttribute('aria-label')) el.setAttribute('aria-label','Help');
  pgHelpTipText(el);
 }
-function pgHelpTipPlace(el,pop){
+// The top of the free view: below a fixed header (phone/tablet).
+function pgHelpTipViewTop(){
+ const hdr=document.querySelector('.header');
+ return hdr&&getComputedStyle(hdr).position!=='static'?Math.max(0,hdr.getBoundingClientRect().bottom):0;
+}
+function pgHelpTipViewBottom(){
+ const nav=document.getElementById('tabletJumpNav');
+ return nav&&!nav.hidden&&nav.getClientRects().length?nav.getBoundingClientRect().top:window.innerHeight;
+}
+// What a tip explains, which its popover must not cover: the setting tile it
+// sits in, the whole preset bar (its select and buttons), or a card's title.
+function pgHelpTipAnchor(el){
+ return el.closest('.setting-tiles>.field')||el.closest('.preset-bar')||el.closest('.card>h2')||el.closest('.field-wire-legend');
+}
+function pgHelpTipPlace(el,pop,keepSide){
  // Rects are in viewport pixels; left/top/max-height are CSS pixels, which
  // Desktop Zoom (zoom on <html>) scales. Measure in viewport pixels and
  // divide by the zoom when writing the style.
- const m=8,r=el.getBoundingClientRect(),vw=window.innerWidth;
+ // Tablet/phone: 10 px, the cards' inset, so a full-width card lines up with them.
+ const m=document.body.classList.contains('layout-tablet')?10:8,vw=window.innerWidth;
+ // A tip in a setting tile or the preset bar opens above or below all of
+ // it, never over the controls it explains; across, it stays centred on the mark.
+ const tr=el.getBoundingClientRect(),anchor=pgHelpTipAnchor(el),ar=anchor?anchor.getBoundingClientRect():tr;
+ const r={top:ar.top,bottom:ar.bottom,left:tr.left,width:tr.width};
  // Stay clear of the fixed header and the phone/tablet bottom bar.
- const nav=document.getElementById('tabletJumpNav'),hdr=document.querySelector('.header');
- const navTop=nav&&!nav.hidden&&nav.getClientRects().length?nav.getBoundingClientRect().top:window.innerHeight;
- const hdrBottom=hdr&&getComputedStyle(hdr).position!=='static'?Math.max(0,hdr.getBoundingClientRect().bottom):0;
+ const navTop=pgHelpTipViewBottom(),hdrBottom=pgHelpTipViewTop();
  const minTop=Math.min(hdrBottom,r.top)+m,maxBottom=Math.max(navTop,r.bottom)-m;
  const gap=8,below=maxBottom-(r.bottom+gap),above=(r.top-gap)-minTop;
  pop.style.maxHeight='none';pop.style.maxWidth='';pop.style.left='0px';pop.style.top='0px';
@@ -129,26 +146,67 @@ function pgHelpTipPlace(el,pop){
  let freeTop=hdrBottom+m,freeBottom=navTop-m;
  // Still too tall: let it cover header and bottom bar too (it sits above both).
  if(h>freeBottom-freeTop&&h>Math.max(below,above)){freeTop=m;freeBottom=window.innerHeight-m;}
- if(h<=below){top=r.bottom+gap;side='below';}
+ // While the page scrolls, an anchored card keeps the side it opened on,
+ // capped to the room there; with less than 60 px left it closes (false)
+ // rather than move over what it explains.
+ if(keepSide&&anchor&&(keepSide==='above'||keepSide==='below')){
+  const room=keepSide==='above'?above:below;
+  if(Math.min(h,room)<60) return false;
+  h=Math.min(h,room);side=keepSide;top=side==='below'?r.bottom+gap:r.top-gap-h;
+ }
+ else if(h<=below){top=r.bottom+gap;side='below';}
  else if(h<=above){top=r.top-gap-h;side='above';}
+ // An anchored tip never covers what it explains: the larger side, the text
+ // scrolling in it (the pinned card takes the focus for that).
+ else if(anchor&&Math.max(below,above)>=80){
+  side=below>=above?'below':'above';h=side==='below'?below:above;
+  top=side==='below'?r.bottom+gap:r.top-gap-h;
+ }
  else if(h<=freeBottom-freeTop){top=Math.min(Math.max(freeTop,r.bottom+gap-h/2),freeBottom-h);side='free';}
  else{h=freeBottom-freeTop;top=freeTop;side='free';}
- const left=Math.min(Math.max(m,r.left+r.width/2-w/2),vw-w-m);
+ // A tile's mark sits at its right edge: the card ends with the tile, so it
+ // reads as the tile's; elsewhere it is centred on the mark.
+ const tileRight=anchor&&anchor.matches('.setting-tiles>.field')?ar.right:null;
+ const left=Math.min(Math.max(m,tileRight!=null?tileRight-w:r.left+r.width/2-w/2),vw-w-m);
  pop.dataset.side=side;
  // Round up: a cap a fraction of a pixel short of the text shows a scrollbar.
  pop.style.maxHeight=h>=pr.height?'none':Math.max(60,Math.floor(h/z))+'px';
+ // Only a capped card keeps the wheel and swipe; otherwise they scroll the page.
+ pop.toggleAttribute('data-capped',h<pr.height);
+ // A capped card fades at its foot until it is scrolled to the end (touch shows no scrollbar).
+ if(!pop._pgEndWatch){ pop._pgEndWatch=1; pop.addEventListener('scroll',()=>pop.toggleAttribute('data-end',pop.scrollTop+pop.clientHeight>=pop.scrollHeight-2),{passive:true}); }
+ pop.toggleAttribute('data-end',false);
  pop.style.left=Math.round(left/z)+'px';pop.style.top=Math.round(top/z)+'px';
+ return true;
 }
 function pgHelpTipShow(el,pinned){
  const pop=document.getElementById('helpTipPop');
  if(!pop) return;
+ // A click right after the pointer arrived: the pending hover preview must not unpin it.
+ if(pgHelpTipHoverTimer){clearTimeout(pgHelpTipHoverTimer);pgHelpTipHoverTimer=0;}
  pgHelpTipPrepare(el);
  if(pgHelpTipOpen&&pgHelpTipOpen!==el) pgHelpTipOpen.setAttribute('aria-expanded','false');
  pgHelpTipOpen=el;pgHelpTipPinned=!!pinned;
- pop.textContent=pgHelpTipText(el);
+ // A blank line in the tip's text starts a new paragraph.
+ pop.textContent='';
+ pgHelpTipText(el).split(/\n{2,}/).forEach(t=>{const p=document.createElement('p');p.textContent=t;pop.appendChild(p);});
  pop.hidden=false;
  el.setAttribute('aria-expanded','true');
  pgHelpTipPlace(el,pop);
+ // An anchored tip whose text fits on neither side whole: scroll what it
+ // explains up under the header first, so the room below is as large as the
+ // view allows, then place it again.
+ const anchor=pgHelpTipAnchor(el);
+ if(pinned&&anchor&&(pop.dataset.side==='free'||pop.scrollHeight>pop.clientHeight+1)){
+  const dy=anchor.getBoundingClientRect().top-pgHelpTipViewTop()-12;
+  if(dy>0){window.scrollBy(0,dy);pgHelpTipPlace(el,pop);}
+ }
+ // A pinned tip taller than its card takes the focus, so the arrow keys
+ // scroll it; Esc or Tab hands the focus back to the mark.
+ if(pinned&&pop.scrollHeight>pop.clientHeight+1){
+  pop.tabIndex=-1;pop.setAttribute('role','dialog');pop.setAttribute('aria-label',el.getAttribute('aria-label')||'Help');
+  pop.focus({preventScroll:true});
+ } else {pop.removeAttribute('tabindex');pop.setAttribute('role','tooltip');pop.removeAttribute('aria-label');}
 }
 function pgHelpTipHide(){
  if(pgHelpTipHoverTimer){clearTimeout(pgHelpTipHoverTimer);pgHelpTipHoverTimer=0;}
@@ -177,6 +235,13 @@ function pgHelpTipsInit(){
    if(pgHelpTipOpen===el&&pgHelpTipPinned) pgHelpTipHide(); else pgHelpTipShow(el,true);
    return;
   }
+  // Tab out of a focused popover: back to its mark first, so Tab goes on
+  // from there (the popover sits at the end of the page).
+  if(e.key==='Tab'&&pgHelpTipOpen&&e.target===document.getElementById('helpTipPop')){
+   const back=pgHelpTipOpen;pgHelpTipHide();
+   if(back.isConnected) back.focus();
+   return;
+  }
   if(e.key==='Escape'&&pgHelpTipOpen){
    const back=pgHelpTipOpen;
    e.stopPropagation();pgHelpTipHide();
@@ -186,7 +251,10 @@ function pgHelpTipsInit(){
  const hover=window.matchMedia?window.matchMedia('(hover:hover) and (pointer:fine)'):null;
  // Hover preview: the pointer may cross onto the popover (to read or select
  // long text) without closing it.
- const inTipOrPop=n=>!!(n&&n.closest&&(n.closest('.meter-help-tip')||n.closest('#helpTipPop')));
+ // The open tip's tile counts too: its popover opens below the whole tile,
+ // so the pointer crosses the tile on its way there.
+ const inTipOrPop=n=>!!(n&&n.closest&&(n.closest('.meter-help-tip')||n.closest('#helpTipPop')||
+  (pgHelpTipOpen&&n.closest('.setting-tiles>.field')&&n.closest('.setting-tiles>.field')===pgHelpTipOpen.closest('.setting-tiles>.field'))));
  document.addEventListener('mouseover',e=>{
   if(!hover||!hover.matches||pgHelpTipPinned||!inTipOrPop(e.target)) return;
   if(pgHelpTipHoverTimer){clearTimeout(pgHelpTipHoverTimer);pgHelpTipHoverTimer=0;}
@@ -200,13 +268,39 @@ function pgHelpTipsInit(){
   if(pgHelpTipHoverTimer) clearTimeout(pgHelpTipHoverTimer);
   pgHelpTipHoverTimer=setTimeout(()=>{pgHelpTipHoverTimer=0;if(!pgHelpTipPinned) pgHelpTipHide();},200);
  });
- // Tabbing away closes it; a tap on the popover itself (relatedTarget null) does not.
+ // Tabbing away closes it, into the tile's own select and onto the next
+ // mark too (the tile counts only for the pointer; an open tip would cover
+ // the next mark); a tap on the popover itself (relatedTarget null) does not.
+ const inTipFocus=n=>!!(n&&(n===pgHelpTipOpen||(n.closest&&n.closest('#helpTipPop'))));
  document.addEventListener('focusout',e=>{
-  if(pgHelpTipOpen&&e.target===pgHelpTipOpen&&e.relatedTarget&&!inTipOrPop(e.relatedTarget)) pgHelpTipHide();
+  const pop=document.getElementById('helpTipPop');
+  if(pgHelpTipOpen&&(e.target===pgHelpTipOpen||e.target===pop)&&e.relatedTarget&&!inTipFocus(e.relatedTarget)) pgHelpTipHide();
  });
- // A fixed popover would drift away from its tip when the page moves;
- // scrolling inside a long popover is fine.
- window.addEventListener('scroll',e=>{if(pgHelpTipOpen&&e.target!==document.getElementById('helpTipPop')) pgHelpTipHide();},true);
+ // Focus that arrives anywhere else (a click into a field, a script) closes a pinned tip as well.
+ document.addEventListener('focusin',e=>{
+  if(pgHelpTipOpen&&pgHelpTipPinned&&!inTipFocus(e.target)) pgHelpTipHide();
+ });
+ // When the page moves, a pinned popover follows its mark (a thumb nudge
+ // while reading must not close it) and closes once the mark leaves the
+ // view; a hover preview closes. Scrolling inside a long popover is fine.
+ let pgHelpTipScrollRaf=0;
+ window.addEventListener('scroll',e=>{
+  const pop=document.getElementById('helpTipPop');
+  if(!pgHelpTipOpen||e.target===pop) return;
+  if(!pgHelpTipPinned){pgHelpTipHide();return;}
+  if(pgHelpTipScrollRaf) return;
+  pgHelpTipScrollRaf=requestAnimationFrame(()=>{
+   pgHelpTipScrollRaf=0;
+   const el=pgHelpTipOpen;if(!el||!pop) return;
+   // Gone under the fixed header or the bottom bar counts as out of view.
+   const r=el.getBoundingClientRect();
+   if(r.bottom<pgHelpTipViewTop()||r.top>pgHelpTipViewBottom()){pgHelpTipHide();return;}
+   // Same side, same reading position in a long text.
+   const st=pop.scrollTop;
+   if(pgHelpTipPlace(el,pop,pop.dataset.side)===false){pgHelpTipHide();return;}
+   pop.scrollTop=st;
+  });
+ },true);
  window.addEventListener('resize',()=>{if(pgHelpTipOpen) pgHelpTipHide();});
 }
 if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',pgHelpTipsInit);
@@ -266,12 +360,17 @@ function applySettingsModalSuccess(detail,holdMs){
  const title=document.getElementById('applySettingsTitle');
  const status=document.getElementById('applySettingsStatus');
  if(title) title.textContent='Settings applied';
- if(status) status.textContent=detail||'New signal mode is live on the display.';
+ if(status) status.textContent=detail||'The output is read again now.';
  setTimeout(()=>applySettingsModalHide(),holdMs||1500);
 }
-function applySettingsModalError(detail,heading){
+// closable: the settings apply's own error, which stays until it is closed
+// (the other callers hide the modal themselves).
+function applySettingsModalError(detail,heading,closable,tone){
  const overlay=document.getElementById('applySettingsOverlay');
  if(!overlay) return;
+ if(closable) overlay.dataset.closable='1'; else delete overlay.dataset.closable;
+ // "unknown": the outcome is not known yet (no answer), not a failure.
+ if(tone) overlay.dataset.tone=tone; else delete overlay.dataset.tone;
  document.body.classList.add('apply-settings-error');
  document.body.classList.remove('apply-settings-success');
  const title=document.getElementById('applySettingsTitle');
@@ -279,12 +378,49 @@ function applySettingsModalError(detail,heading){
  if(title) title.textContent=heading||'Apply failed';
  if(status) status.textContent=detail||'The renderer did not accept the new settings.';
  // Leave the modal up so the operator can read the error -- the corner
- // toast often scrolls off the visible area on long autocal sessions.
+ // toast often scrolls off the visible area on long autocal sessions --
+ // with one way back: the close button (Escape too) takes the focus, and
+ // the error is read out as an alert.
+ if(!closable) return;
+ const kept=document.getElementById('applySettingsKept');
+ if(kept) kept.hidden=!hasUnsavedSettings();
+ overlay.setAttribute('role','alertdialog');
+ overlay.setAttribute('aria-modal','true');
+ overlay.setAttribute('aria-labelledby','applySettingsTitle');
+ overlay.setAttribute('aria-describedby','applySettingsStatus');
+ const btn=document.getElementById('applySettingsCloseBtn');
+ if(btn) setTimeout(()=>{ if(applySettingsModalFailed()) btn.focus({preventScroll:true}); },0);
 }
+// The apply modal's own error (the LG Connect modal sets the same class).
+function applySettingsModalFailed(){
+ const o=document.getElementById('applySettingsOverlay');
+ return document.body.classList.contains('apply-settings-error')&&!document.body.classList.contains('lg-connect-active')&&!!o&&o.getAttribute('aria-hidden')==='false'&&o.dataset.closable==='1';
+}
+// Back to the settings after a failed apply: the unapplied values are still
+// in the fields, so the Apply bar comes back with them.
+function applySettingsModalClose(){
+ if(!applySettingsModalFailed()) return;
+ applySettingsModalHide();
+ if(typeof checkSettingsChanged==='function') checkSettingsChanged();
+ // The desktop shows the bar once its panels are synced.
+ if(typeof pgSyncDesktopPanels==='function') pgSyncDesktopPanels();
+ const bar=document.getElementById('applySettingsBtn');
+ const next=bar&&bar.offsetParent?bar:document.getElementById('signal_mode');
+ if(next) next.focus({preventScroll:true});
+}
+document.addEventListener('keydown',ev=>{
+ if(!applySettingsModalFailed()) return;
+ if(ev.key==='Escape'){ ev.preventDefault(); applySettingsModalClose(); return; }
+ // The focus stays in the dialog while it is up.
+ if(typeof pgDialogTrapTab==='function') pgDialogTrapTab(document.querySelector('#applySettingsOverlay .apply-settings-card'),ev);
+});
 function applySettingsModalHide(){
  const overlay=document.getElementById('applySettingsOverlay');
  if(!overlay) return;
  overlay.setAttribute('aria-hidden','true');
+ ['role','aria-modal','aria-labelledby','aria-describedby'].forEach(a=>overlay.removeAttribute(a));
+ delete overlay.dataset.closable; delete overlay.dataset.tone;
+ const said=document.getElementById('applySettingsResult'); if(said) said.textContent='';
  document.body.classList.remove('apply-settings-active','apply-settings-success','apply-settings-error');
 }
 
@@ -807,6 +943,8 @@ function applyConfigState(nextConfig){
   sm=(config.eotf==='3')?'hlg':'hdr10';
  }
  setVal('mode_idx',config.mode_idx||'');
+ // The field shows the mode in its own label (Discard, a resync, the poll).
+ updateModeSelectLabel();
  setVal('signal_mode',sm);
  setVal('max_bpc',config.max_bpc||'8');
  setVal('color_format',config.color_format||'0');
@@ -823,6 +961,11 @@ function applyConfigState(nextConfig){
  document.getElementById('min_luma').value=config.min_luma||'0.005';
  document.getElementById('max_cll').value=config.max_cll||'1000';
  document.getElementById('max_fall').value=config.max_fall||'400';
+ // Dolby Vision edits its own copies of these (dv_max_luma...): both hold
+ // the Pi's values, and the mirror between them (for a mode changed by hand)
+ // must not carry an unapplied value over them when the mode differs.
+ meterCopyHdrMetadataFields('hdr10','dv');
+ meterLastHdrMetadataMode=sm;
  meterSyncHdrMetadata();
  try{ if(typeof meterSyncTargetGammaOptionsForSignal==='function') meterSyncTargetGammaOptionsForSignal(); }catch(e){}
  if(!meterSettingsLoaded) applyMeterTargetGammaDefault(true);
@@ -1019,11 +1162,49 @@ function renderApplyBarChanges(){
  const host=document.getElementById('applyBarChanges');
  if(!host) return;
  host.textContent='';
- applyBarChanges().forEach((c,i)=>{
+ pgApplyBarWatch(host);
+ const list=applyBarChanges();
+ list.forEach((c,i)=>{
   if(i) host.append(' · ');
   const b=document.createElement('b'); b.textContent=c.label;
   host.append(b,' '+c.from+' → '+c.to);
  });
+ // Phones keep two lines of the list: when more is cut off (a signal mode
+ // also sets EOTF, primaries...), a button shows all of it before Apply.
+ pgApplyBarMoreRefresh(list.length);
+ // The bar is the only way to apply: screen readers hear when it comes up
+ // or its list changes (a region that is always there, not the bar itself).
+ const sr=document.getElementById('applyBarStatus');
+ const said=list.length?'Settings changed: '+list.map(c=>c.label+' '+c.from+' to '+c.to).join(', ')+'. Apply & Restart sends them.':'';
+ if(sr&&sr.textContent!==said) sr.textContent=said;
+}
+// The button shows while the list is cut (or opened); measured again when
+// the bar's width changes (rotation, window), an opened list stays open.
+function pgApplyBarMoreRefresh(n,remeasure){
+ const host=document.getElementById('applyBarChanges'),more=document.getElementById('applyBarMore');
+ if(!host||!more) return;
+ // A new width (rotation): measured closed; a list that now fits shows no button.
+ if(remeasure) host.classList.remove('is-open');
+ if(n==null) n=applyBarChanges().length;
+ const open=host.classList.contains('is-open');
+ // Landscape phones show no list until it is opened (one-row bar, CSS).
+ const compact=!!(window.matchMedia&&window.matchMedia('(max-height:480px) and (pointer:coarse)').matches);
+ more.hidden=!open&&!compact&&!(host.scrollHeight>host.clientHeight+1);
+ more.textContent=n+(n===1?' change':' changes');
+ more.setAttribute('aria-expanded',String(open));
+}
+let pgApplyBarObserver=null;
+function pgApplyBarWatch(host){
+ if(pgApplyBarObserver||typeof ResizeObserver!=='function') return;
+ let w=0;
+ pgApplyBarObserver=new ResizeObserver(es=>{const nw=Math.round(es[0].contentRect.width);if(nw!==w){const first=!w;w=nw;pgApplyBarMoreRefresh(null,!first);}});
+ pgApplyBarObserver.observe(host);
+}
+function applyBarShowAll(btn){
+ const host=document.getElementById('applyBarChanges');
+ if(!host) return;
+ host.classList.toggle('is-open');
+ pgApplyBarMoreRefresh();
 }
 // Discard: the fields go back to the settings the generator runs now.
 function discardSettings(){
@@ -1035,7 +1216,22 @@ function checkSettingsChanged(){
  var changed=captureSettings()!==window._savedConfig;
  document.getElementById('applyBar').style.display=changed?'':'none';
  if(changed) renderApplyBarChanges();
- else pgApplyAskSnoozed=false;
+ else {
+  const sr=document.getElementById('applyBarStatus'); if(sr&&sr.textContent) sr.textContent='';
+  // The next change starts with the list closed again.
+  const host=document.getElementById('applyBarChanges'); if(host) host.classList.remove('is-open');
+ }
+ // The tiles whose value is not applied yet carry a mark (the Apply bar lists them).
+ let saved={},now={};
+ try{ saved=JSON.parse(window._savedConfig); now=JSON.parse(captureSettings()); }catch(e){}
+ APPLY_BAR_FIELDS.forEach(([k])=>{ const t=document.getElementById(k); const tile=t&&t.closest('.setting-tiles>.field');
+  if(tile) tile.classList.toggle('is-changed',String(saved[k]??'')!==String(now[k]??'')); });
+ // The HDR metadata and Dolby Vision fields the bar lists carry the same dot.
+ // Max/Min Luma, MaxCLL and MaxFALL have a Dolby Vision copy: the dot goes on the one shown.
+ APPLY_BAR_FIELDS.forEach(([k])=>{ const shownId=meterHdrMetadataFieldId(k);
+  (shownId!==k?[k,shownId]:[k]).forEach(id=>{ const t=document.getElementById(id); const f=t&&t.closest('.signal-fields>.field');
+   if(f&&!f.closest('.setting-tiles')) f.classList.toggle('is-changed',id===shownId&&String(saved[k]??'')!==String(now[k]??'')); }); });
+ if(typeof pgRenderFieldWire==='function') pgRenderFieldWire();
  if(typeof pgPresetMarkActive==='function') pgPresetMarkActive();
  if(typeof pgPresetSaveRefresh==='function') pgPresetSaveRefresh();
  if(typeof meterUpdateReadButtons==='function') meterUpdateReadButtons();
@@ -1047,49 +1243,6 @@ function checkSettingsChanged(){
  // orphaned lgConnect() doesn't hang in the background.
  if(typeof lgConnectModalHide==='function') lgConnectModalHide();
 }
-
-// A changed output setting asks right away, like a reboot or an update: a
-// dialog lists the changes and applies them on "Apply & Restart". "Keep
-// editing" closes it for this round of edits (the Apply bar stays) until the
-// settings are applied or discarded. Only the user's own edits ask: a change
-// event counts while the page has a user activation (click, key, tap), and
-// loading a preset asks once for the whole set (pgPresetLoad).
-const PG_APPLY_ASK_FIELDS=['mode_idx','signal_mode','max_bpc','color_format','colorimetry','rgb_quant_range',
- 'eotf','primaries','max_luma','min_luma','max_cll','max_fall','dv_transport','dv_interface','dv_map_mode',
- 'dv_max_luma','dv_min_luma','dv_max_cll','dv_max_fall'];
-const PG_APPLY_ASK_ICON='<rect x="3" y="4" width="18" height="12" rx="1.5"/><path d="M8.5 20h7M12 16v4"/>';
-// var: checkSettingsChanged can run before this line has executed.
-var pgApplyAskSnoozed=false,pgApplyAskOpen=false,pgApplyAskTimer=0;
-function pgApplyAskSoon(){
- if(pgApplyAskTimer) clearTimeout(pgApplyAskTimer);
- // After the field's own handlers (dependent fields, Apply bar) have run.
- pgApplyAskTimer=setTimeout(()=>{ pgApplyAskTimer=0; pgApplyAsk(); },150);
-}
-async function pgApplyAsk(){
- if(pgApplyAskOpen||pgApplyAskSnoozed||window._configApplyPending||!hasUnsavedSettings()) return;
- const changes=applyBarChanges();
- if(!changes.length) return;
- pgApplyAskOpen=true;
- let ok=false;
- try{
-  ok=await pgConfirmReboot({
-   title:changes.length===1?'Apply the new setting?':'Apply '+changes.length+' new settings?',
-   changes:changes,
-   body:'The display shows no picture for a few seconds while the output restarts.',
-   acceptLabel:'Apply & Restart',acceptClass:'btn-primary',cancelLabel:'Keep editing',
-   tone:'accent',icon:PG_APPLY_ASK_ICON
-  });
- }finally{ pgApplyAskOpen=false; }
- if(!ok){ pgApplyAskSnoozed=true; return; }
- if(hasUnsavedSettings()) applySettings();
-}
-document.addEventListener('change',e=>{
- const id=e.target&&e.target.id;
- if(!id||!PG_APPLY_ASK_FIELDS.includes(id)||window.pgPresetLoading) return;
- const ua=navigator.userActivation;
- if(ua&&!ua.isActive) return;
- pgApplyAskSoon();
-});
 
 // Output changes can rebuild every patch thumbnail and chart. Running that
 // work in the same change event prevents the browser from painting the dirty
@@ -1522,7 +1675,8 @@ function updateModeSelectLabel(){
  const label=document.getElementById('mode_idx_text');
  if(!sel||!label)return;
  const opt=sel.options[sel.selectedIndex];
- label.textContent=opt?opt.textContent:'';
+ // A mode index the display's list does not hold (the Pi's, another client's): said so.
+ label.textContent=opt?opt.textContent:(sel.options.length?'Not in this display\u2019s list':'');
  label.title=opt?(opt.title||opt.textContent):'';
  pgSyncModeSelectEmpty();
 }
@@ -1548,7 +1702,7 @@ function pgSyncModeSelectEmpty(){
  if(waiting&&!stuck&&!pgModesWaitTimer) pgModesWaitTimer=setTimeout(()=>{ pgModesWaitTimer=0; pgSyncModeSelectEmpty(); },PG_MODES_WAIT_MS-(Date.now()-pgModesWaitSince)+50);
  if(retry) retry.hidden=!stuck;
  if(empty){
-  label.textContent=noDisplay?'No display detected':(stuck?'Display modes not received':'Reading display modes\u2026');
+  label.textContent=noDisplay?'No display':(stuck?'Display modes not received':'Reading display modes\u2026');
   label.title=noDisplay?'Plug in an HDMI display; its resolutions appear here':(stuck?'The generator has not reported the display\u2019s modes yet':'');
  }
 }
@@ -1954,6 +2108,8 @@ async function checkPing(){
   setUiOffline(false);
   pgAnnounceStatus('connection','online','Connection to PGenerator+ restored.');
   if(wasOffline){
+   // Back from an outage: what was read before it is no verdict now.
+   if(typeof pgSignalWireDrop==='function'){ pgSignalWireDrop(); pgSignalSummaryRefresh(); }
    document.getElementById('statusDot').style.background='var(--status-success)';
    document.getElementById('statusText').textContent='Connected';
    document.getElementById('statusWrap').title='Connection to PGenerator+ restored';
@@ -2103,6 +2259,7 @@ async function loadInfo(quiet){
   calDot.style.background='var(--status-success)';
   calText.style.color='';
   calText.textContent=(info.calibration.software||'Calibration software')+' connected';
+  calWrap.classList.remove('is-absent');
   calWrap.dataset.pgBaseTitle=(info.calibration.software||'Calibration software')+' connected from '+info.calibration.ip+pgCalibrationSessionsText(info.calibration);
   calWrap.title=calWrap.dataset.pgBaseTitle+pgSignalTipText();
   pgAnnounceStatus('calibration','on:'+(info.calibration.software||''),(info.calibration.software||'Calibration software')+' connected.');
@@ -2112,6 +2269,7 @@ async function loadInfo(quiet){
   calDot.style.background='var(--text2)';
   calText.style.color='var(--text2)';
   calText.textContent='No calibration software';
+  calWrap.classList.add('is-absent');
   delete calWrap.dataset.pgBaseTitle;
   calWrap.title='No calibration software connected';
   pgAnnounceStatus('calibration','off','Calibration software disconnected.');
@@ -2235,6 +2393,8 @@ async function hdmiRecheck(){
     btn.textContent='Restarting output\u2026';
     // The renderer takes the first connected connector when it starts.
     await fetchJSON('/api/restart',{method:'POST',_timeoutMs:10000}).catch(function(){});
+    // Verdicts read before the restart belong to the output as it was.
+    pgSignalWireDrop(); pgSignalChecking=true; pgRenderFieldWire();
     hdmiIgnore();
     toast('Display on '+p.label+' \u2014 output restarted');
     setTimeout(function(){ pgSignalSummaryRefresh(); if(typeof loadModes==='function') loadModes(true); },8000);
@@ -2331,7 +2491,9 @@ function pgUpdateNoHdmiBanner(connected){
  pgSyncModeSelectEmpty();
  // Plugging or unplugging changes what is on the wire: re-read the infoframes.
  if(changed&&typeof loadInfoframes==='function') loadInfoframes();
- if(changed) setTimeout(pgSignalSummaryMaybeRefresh,1500);
+ // The marks in the fields follow at once (no display: no line claims
+ // anything), and the cable is read again whatever the last poll was.
+ if(changed){ pgSignalWireDrop(); if(connected){ pgSignalChecking=true; pgRenderFieldWire(); } setTimeout(()=>{pgInfoframesSignalChanged();pgSignalSummaryRefresh();},1500); }
  pgRenderHeaderSignal();
 }
 // Header status: the output signal as last applied (config from the Pi, not
@@ -2341,16 +2503,15 @@ let pgHeaderSignal=null;
 function pgCaptureHeaderSignal(){
  const sm=String(getVal('signal_mode')||'sdr');
  const mode=({sdr:'SDR',hdr10:'HDR10',hlg:'HLG',dv:'Dolby Vision'})[sm]||sm.toUpperCase();
- let bpc=String(getVal('max_bpc')||'');
- // Outside Dolby Vision 12 bpc goes out as 10 bpc (see pgUtilityBitDepthText).
- if(sm!=='dv'&&bpc==='12') bpc='10';
+ // Outside Dolby Vision 12 bpc goes out as 10 bpc (see pgUtilityBitDepthText):
+ // said so (ruled) unless a depth verdict on the cable says it as "→ sent".
+ const bpc=String(getVal('max_bpc')||'');
  const fmt=({'0':'RGB','1':'YCbCr 4:4:4','2':'YCbCr 4:2:2'})[String(getVal('color_format'))]||'';
  const range=({'1':'Limited','2':'Full'})[String(getVal('rgb_quant_range'))]||'';
- const parts=[mode];
- if(bpc) parts.push(bpc+'-bit');
- if(fmt) parts.push(fmt+(range?' '+range:''));
+ const build=b=>{ const parts=[mode]; if(b) parts.push(b+'-bit'); if(fmt) parts.push(fmt+(range?' '+range:'')); return parts; };
+ const parts=build(bpc), ruled=build(sm!=='dv'&&bpc==='12'?'10':bpc);
  const res=pgUtilityControlText('mode_idx');
- pgHeaderSignal={text:parts.join(' \u00b7 '),title:'Output signal (applied settings): '+parts.join(', ')+(res&&res!=='-'?', '+res:'')};
+ pgHeaderSignal={text:parts.join(' \u00b7 '),ruled:ruled.join(' \u00b7 '),title:'Output signal (applied settings): '+parts.join(', ')+(res&&res!=='-'?', '+res:'')};
  pgRenderHeaderSignal();
 }
 function pgRenderHeaderSignal(){
@@ -2359,7 +2520,7 @@ function pgRenderHeaderSignal(){
  if(!wrap||!text) return;
  const dot=document.getElementById('signalDot');
  if(pgHdmiConnected===false){
-  if(dot) dot.style.background='var(--text2)';
+  if(dot) dot.style.background='var(--status-warning)';
   text.textContent='No HDMI display';
   wrap.title='No HDMI display connected; nothing is being sent';
   wrap.hidden=false;
@@ -2370,9 +2531,18 @@ function pgRenderHeaderSignal(){
  // Refused settings or a quiet adjustment: the dot says so, the tip says
  // what is on the cable (PGSignalCheck.pm, /api/signal).
  const refused=pgSignalState&&pgSignalState.refused;
- const adjusted=pgSignalWire&&pgSignalWire.adjustments&&pgSignalWire.adjustments.length;
+ const adjusted=pgSignalAdjustmentsShown().length;
  if(dot) dot.style.background=refused?'var(--status-error)':(adjusted?'var(--status-warning)':'var(--green)');
- text.textContent=pgHeaderSignal.text;
+ // Where the readback differs, the header says what is sent, not only the setting.
+ const diff=pgFieldWireDiffers();
+ text.textContent=pgFieldWireDifferKeys().indexOf('depth')>=0?pgHeaderSignal.text:(pgHeaderSignal.ruled||pgHeaderSignal.text);
+ if(diff.length){
+  const d=document.createElement('span');
+  d.className='status-diff';
+  d.textContent=' \u2192 sent '+diff.join(' \u00b7 ');
+  d.title='Sent instead: '+diff.join(', ');
+  text.appendChild(d);
+ }
  wrap.title=pgHeaderSignal.title+pgSignalTipText();
 }
 
@@ -2387,24 +2557,88 @@ function pgSignalTipText(){
  const lines=[];
  const w=pgSignalWire;
  if(w&&w.port) lines.push('Port: '+w.port.label+' (up to '+w.port.max_mode+')'+(w.port.renderer_elsewhere?', output still on '+(w.port.renderer_label||w.port.renderer):''));
- if(w&&w.sending) lines.push('On the cable'+(w.wire_read===false?' (last read)':'')+': '+w.sending);
- else if(w&&w.connected) lines.push('On the cable: not readable here');
- if(w&&w.adjustments&&w.adjustments.length) lines.push('Adjusted: '+w.adjustments.join(' '));
+ if(w&&w.sending) lines.push('Sent'+(w.wire_read===false?' (last reading)':'')+': '+w.sending);
+ else if(w&&w.connected) lines.push('Sent: not readable here');
+ const adj=pgSignalAdjustmentsShown();
+ if(adj.length) lines.push('Adjusted: '+adj.join(' '));
  const r=pgSignalState&&pgSignalState.refused;
  if(r) lines.push('Refused: '+(r.source||'Calibration software')+' asked for '+(r.requested||'other settings')+'. '+(r.reason||''));
  return lines.length?'\n'+lines.join('\n'):'';
 }
+// Every reading is numbered: an answer that arrives after a later request,
+// or after an apply or a display change, belongs to an output that has moved
+// on and is dropped (it could bring back a verdict a newer answer withheld).
+let pgSignalReqSeq=0;
+function pgSignalWireInvalidate(){
+ pgSignalReqSeq++;
+ pgSignalDvRetries=0;
+ pgSignalChecking=false;
+ const w=pgSignalWire;
+ if(w&&w.wire){
+  // The cable's sentences go with its verdicts (the settings check's own stay),
+  // those kept from an unread log too.
+  const cable=new Set([].concat(...Object.values(w.wire.differences||{}),...(w.keptCable||[])));
+  if(Array.isArray(w.adjustments)) w.adjustments=w.adjustments.filter(a=>!cable.has(a));
+  w.keptCable=[];
+  w.wire.fields={};w.wire.differences={};w.wire.compared=null;
+ }
+}
+// The same, shown at once: fields, header, the sentences under the fields.
+function pgSignalWireDrop(){
+ pgSignalWireInvalidate();
+ pgRenderSignalAlerts();
+}
 async function pgSignalSummaryRefresh(){
  pgSignalWireAt=Date.now();
+ const seq=++pgSignalReqSeq;
  const r=await fetchJSON('/api/signal',{_quiet:true,_timeoutMs:10000});
- if(!r||r.status!=='ok') return;
+ if(seq!==pgSignalReqSeq) return;
+ // No answer: what was read stays as the last reading, without a verdict
+ // (nothing newer was compared).
+ // As with an unread log, the cable's sentences that were shown stay (kept
+ // apart, so a later drop takes them out); the verdicts go.
+ if(!r||r.status!=='ok'){
+  pgSignalChecking=false;
+  const w=pgSignalWire;
+  if(w&&w.wire){
+   const cable=new Set([].concat(...Object.values(w.wire.differences||{}),...(w.keptCable||[])));
+   const shown=pgSignalAdjustmentsShown();
+   w.adjustments=(w.adjustments||[]).filter(a=>!cable.has(a)||shown.indexOf(a)>=0);
+   w.keptCable=shown.filter(a=>cable.has(a));
+   w.wire=Object.assign({},w.wire,{fields:{},differences:{},compared:null});
+   // Whatever is kept is the last reading now.
+   w.wire_read=false;
+  }
+  pgRenderSignalAlerts();
+  return;
+ }
  // The log could not be read: nothing new about the cable, so what was last
- // read stands, a warning dot included.
+ // read stands as the last reading, its sentences (and the warning dot)
+ // included, but without a verdict: nothing newer was compared.
+ // Only the sentences that were shown stay (one held back because its field
+ // was compared with other settings stays held back); they are kept apart
+ // so a later drop takes them out again.
  const last=r.wire_read===false?pgSignalWire:null;
- pgSignalWire=last?Object.assign({},r,{sending:last.sending,wire:last.wire,
-  adjustments:[...new Set([...(r.adjustments||[]),...(last.adjustments||[])])]}):r;
+ let keptCable=[];
+ if(last){
+  const cable=new Set([].concat(...Object.values((last.wire&&last.wire.differences)||{}),...(last.keptCable||[])));
+  keptCable=pgSignalAdjustmentsShown().filter(a=>cable.has(a));
+ }
+ pgSignalWire=last?Object.assign({},r,{sending:last.sending,wire:last.wire?Object.assign({},last.wire,{fields:{},differences:{},compared:null}):last.wire,
+  keptCable,adjustments:[...new Set([...(r.adjustments||[]),...(last.adjustments||[]).filter(a=>!new Set([].concat(...Object.values((last.wire&&last.wire.differences)||{}),...(last.keptCable||[]))).has(a)),...keptCable])]}):r;
+ // Right after a modeset the Dolby Vision vendor frame is read after the
+ // infoframes (wire.dv null), and a new renderer's own frame comes only with
+ // its first picture (wire.compared null): read again soon, so the verdicts
+ // do not wait for the 20 s poll; at most four times in a row. While that
+ // runs, a field not compared yet says "Checking" rather than an old value.
+ const due=!!(r.connected&&r.wire&&r.wire.parts&&(r.wire.dv===null||r.wire.compared===null)&&r.wire_read!==false);
+ const again=due&&pgSignalDvRetries<4;
+ if(again) pgSignalDvRetries++; else if(!due) pgSignalDvRetries=0;
+ pgSignalChecking=again&&r.wire.compared===null;
  pgApplySignalState({refused:r.refused,link_event:r.link_event,test_edid:r.test_edid},true);
+ if(again) setTimeout(pgSignalSummaryRefresh,2500);
 }
+let pgSignalDvRetries=0,pgSignalChecking=false;
 function pgSignalSummaryMaybeRefresh(){
  pgInfoframesSignalChanged();
  if(Date.now()-pgSignalWireAt>3000) pgSignalSummaryRefresh();
@@ -2462,42 +2696,191 @@ function pgRenderSignalAlerts(){
   }
  }
  pgRenderSignalPort();
+ pgRenderFieldWire();
+ pgRenderHeaderSignal();
+ // Below the fields: the daemon's own sentences for what differs, and the
+ // whole readback as one sentence from a daemon without wire.parts.
  const line=document.getElementById('signalWireLine');
  if(line){
   const w=pgSignalWire;
-  line.hidden=!(w&&w.connected&&w.sending);
-  if(!line.hidden){
-   pgRenderSignalWireTiles(w);
-   document.getElementById('signalWireAdjusted').textContent=(w.adjustments||[]).join(' ');
-  }
+  const on=!!(w&&w.connected&&w.sending);
+  const adj=on?pgSignalAdjustmentsShown().join(' '):'';
+  const text=document.getElementById('signalWireText');
+  const plain=on&&!(w.wire&&w.wire.parts);
+  // A live region: only a new text is written, so the 20 s poll does not repeat it.
+  const say=(el,t)=>{ if(el.textContent!==t) el.textContent=t; };
+  text.hidden=!plain;
+  say(text,plain?'Sent'+(w.wire_read===false?' (last reading)':'')+': '+w.sending:'');
+  say(document.getElementById('signalWireAdjusted'),adj);
+  // The live region itself stays rendered (a region shown together with its
+  // first text is often not announced); empty, it takes no room (CSS).
  }
 }
-// "On the cable" as tiles from wire.parts (PGSignalCheck::signal_wire_parts);
-// without parts the sentence stands alone.
-function pgRenderSignalWireTiles(w){
- document.getElementById('signalWireTitle').textContent='On the cable'+(w.wire_read===false?' (last read, not updated)':'');
- const wire=w.wire||{}, p=wire.parts;
- document.getElementById('signalWireTiles').hidden=!p;
- const text=document.getElementById('signalWireText');
- text.hidden=!!p;
- text.textContent=p?'':w.sending;
- if(!p) return;
- const set=function(id,v){ document.getElementById(id).textContent=v; };
- const m=/^(\d+)x(\d+)(i?) (.+)$/.exec(p.mode||'');
- set('signalWireMode',m?m[1]+' × '+m[2]+m[3]+' · '+m[4]:(p.mode||'—'));
- // name/depth split the format for the tiles; older daemons send only format.
- const split=p.name!==undefined;
- set('signalWireFormat',(split?p.name:p.format)||'—');
- document.getElementById('signalWireDepthTile').hidden=!split;
- set('signalWireDepth',(split&&p.depth)||'—');
- set('signalWireRange',p.range||'—');
- // Dolby Vision before its vendor frame is read: no EOTF is claimed.
- const sig=document.getElementById('signalWireSignalTile');
- set('signalWireSignal',p.signal||'Checking…');
- sig.dataset.signal=!p.signal?'unknown':/^Dolby/.test(p.signal)?'dv':p.signal==='SDR'?'sdr':'hdr';
- const mhz=wire.tmds_mhz;
- document.getElementById('signalWireLinkTile').hidden=mhz==null;
- if(mhz!=null) set('signalWireLink',(Math.round(mhz*10)/10)+' MHz');
+// "On the cable" in the setting tiles: each field the readback covers says
+// what the cable carries (wire.parts, PGSignalCheck::signal_wire_parts), with
+// a check where the daemon compared it with the setting and found it the same
+// and a warning where it differs (wire.fields, signal_wire_compare). A field
+// with an unapplied edit, or a readback taken against other applied settings,
+// gets the value without a verdict. Resolution has no readback of its own:
+// its line is the link clock read from the encoder.
+// [field, line, the setting it belongs to, the settings its verdict depends on]
+// What is sent depends on the mode and the signal mode too (a mode or signal
+// change may change depth, format or range), so every verdict needs them.
+const PG_FIELD_WIRE_BASE=['mode_idx','signal_mode','dv_transport'];
+// HDR10 sends the EOTF of the HDR settings ("HDR Gamma" too): its signal
+// verdict needs that EOTF applied; elsewhere the EOTF setting is not sent.
+const PG_FIELD_WIRE=[['signal','wireSignal',['signal_mode','dv_transport','eotf'],PG_FIELD_WIRE_BASE.concat(['eotf'])],
+ ['depth','wireDepth',['max_bpc'],PG_FIELD_WIRE_BASE.concat(['max_bpc','color_format'])],
+ ['format','wireFormat',['color_format'],PG_FIELD_WIRE_BASE.concat(['color_format'])],
+ ['range','wireRange',['rgb_quant_range'],PG_FIELD_WIRE_BASE.concat(['rgb_quant_range','color_format'])]];
+const PG_FIELD_WIRE_NOT_COMPARED='Read back, not compared with the setting:\n\u2022 Dolby Vision: it sets format, depth and range itself.\n\u2022 4:2:2: it is always a 12-bit container.\n\u2022 YCbCr: only RGB has its range compared.\n\u2022 Default range: until the renderer records what it chose.\n\u2022 Right after a start or an apply: until the output sends a picture with these settings.\n\u2022 Settings set elsewhere (a calibration program): until they are shown here.';
+// The EOTF counts only where it is sent: in HDR10.
+const PG_FIELD_WIRE_LABEL={signal:'Signal Mode',depth:'Bit Depth',format:'Color Format',range:'Range'};
+function pgFieldWireKeyApplies(k,saved){ return k!=='eotf'||String(saved.signal_mode??'')==='hdr10'; }
+const PG_FIELD_WIRE_WORD={matches:'Matches the setting.',read:'Not compared.',differs:'Differs from the setting.',pending:'Not applied yet.',checking:'Not compared yet.'};
+function pgFieldWireSet(el,state,text,title){
+ if(!el) return;
+ el.hidden=!state;
+ el.textContent='';
+ // The mark is a CSS icon: a word only screen readers hear says the same.
+ const word=PG_FIELD_WIRE_WORD[state];
+ if(word){const sr=document.createElement('span');sr.className='sr-only';sr.textContent=word+' ';el.appendChild(sr);}
+ if(state) el.appendChild(document.createTextNode(text));
+ if(state) el.dataset.state=state; else delete el.dataset.state;
+ if(title) el.title=title; else el.removeAttribute('title');
+ const tile=el.closest('.field');
+ if(tile){ tile.classList.toggle('is-wire-differs',state==='differs'); tile.classList.toggle('is-wire-pending',state==='pending'); }
+}
+function pgRenderFieldWire(){
+ const w=pgSignalWire;
+ // No display: nothing is sent, so no line claims anything.
+ const live=!!(w&&w.connected&&w.sending&&w.wire&&w.wire.parts)&&pgHdmiConnected!==false;
+ const wire=live?w.wire:{}, p=wire.parts||{};
+ let saved={},now={};
+ try{ saved=JSON.parse(window._savedConfig||'{}'); now=JSON.parse(captureSettings()); }catch(e){}
+ // A verdict belongs to the settings the daemon compared (wire.compared):
+ // it stands only where those are the applied values of this page, not
+ // while an apply is under way.
+ const compared=wire.compared||null;
+ const sameAs=keys=>!!compared&&!window._configApplyPending&&keys.every(k=>!pgFieldWireKeyApplies(k,saved)||String(compared[k]??'')===String(saved[k]??''));
+ const old=w&&w.wire_read===false?' (last reading)':'';
+ const used={};
+ const oldTitle=old?' The output could not be read just now; this is the last reading.':'';
+ // "(last reading)" is said once, in the legend, not on every line.
+ const fields=wire.fields||{};
+ // The applied resolution missing from the display's list (the select shows another): never the same, said so.
+ const modeSel=document.getElementById('mode_idx');
+ const reasons={};
+ const modeMissing=!!(compared&&compared.mode_idx!==undefined&&compared.mode_idx!==''&&String(compared.mode_idx)!=='-1'&&modeSel&&modeSel.options&&modeSel.options.length&&!Array.prototype.some.call(modeSel.options,o=>String(o.value)===String(compared.mode_idx)));
+ PG_FIELD_WIRE.forEach(([key,id,conf,deps])=>{
+  const el=document.getElementById(id);
+  // name/depth split the format; older daemons send only format.
+  const v=!live?'':key==='signal'?(p.signal||'')
+   :key==='format'?(p.name!==undefined?p.name:p.format):key==='depth'?(p.name!==undefined?p.depth:''):p.range;
+  if(!v){ pgFieldWireSet(el,''); return; }
+  const edited=conf.some(k=>pgFieldWireKeyApplies(k,now)&&String(saved[k]??'')!==String(now[k]??''));
+  // An unapplied edit: what goes out until Apply.
+  if(edited){ used.pending=1; pgFieldWireSet(el,'pending','Sent now: '+v,'Your change is not applied yet; this is what the Pi sends now.'+oldTitle); return; }
+  const verdict=sameAs(deps)?fields[key]:'';
+  // Lines being checked say so themselves; the legend explains the marks.
+  if(verdict||compared||!pgSignalChecking) used[verdict==='differs'?'differs':verdict==='matches'?'matches':'read']=1;
+  if(verdict==='differs'){ pgFieldWireSet(el,'differs','Sent as '+v,'Read inside the Pi from its HDMI output: it differs from this setting.'+oldTitle); return; }
+  if(verdict==='matches'){
+   // The value only where the field's own text does not already say it (Default range).
+   const sel=document.getElementById(conf[0]);
+   const shown=sel&&sel.selectedIndex>=0?(sel.options[sel.selectedIndex].textContent||'').toLowerCase():'';
+   pgFieldWireSet(el,'matches',(shown.indexOf(v.toLowerCase())<0?'Sent: '+v:'Sent as set'),'Read inside the Pi from its HDMI output and compared with this setting.'+oldTitle);
+   return;
+  }
+  // Being checked (a new output, read again in a moment): no old value under the new setting.
+  if(!compared&&pgSignalChecking){ pgFieldWireSet(el,'checking','Checking\u2026','Reading the output again.'); return; }
+  // Why not compared, for this field: what the field itself rules out first
+  // (the page shows such values normalised), then the reading.
+  const dv=String(saved.signal_mode??'')==='dv';
+  const cf=String(saved.color_format??'0');
+  const why=!compared?'not compared yet'
+   :modeMissing?'not compared: the applied resolution is not in this display\u2019s list of modes'
+   :dv&&key!=='signal'?'not compared: Dolby Vision sets format, depth and range itself'
+   :key==='depth'&&cf==='2'?'not compared: 4:2:2 is always a 12-bit container'
+   :key==='range'&&cf!=='0'?'not compared: only RGB has its range compared'
+   :(key==='depth'||key==='range')&&fields.format==='differs'&&!fields[key]?'not compared: the format sent differs from the setting'
+   :fields[key]||!sameAs(deps)?'not compared: the output runs with other settings than the ones shown here (being applied, or set by a calibration program)'
+   :key==='signal'&&!dv&&wire.dv===null?'not compared yet: the Dolby Vision vendor frame is read a few seconds after a mode change'
+   :key==='range'&&String(saved.rgb_quant_range??'0')==='0'?'not compared: Default range, and the renderer has not recorded what it resolved Default to'
+   :'not compared with this setting';
+  pgFieldWireSet(el,'read','Sent: '+v,'Read inside the Pi from its HDMI output, '+why+'.'+oldTitle);
+  // The same reason in the legend's (i): a title is never shown on touch.
+  const r=why.replace(/^not compared(?: yet)?(?:: |$)/,'')||'not compared yet';
+  const line=r.charAt(0).toUpperCase()+r.slice(1)+'.';
+  (reasons[line]=reasons[line]||[]).push(PG_FIELD_WIRE_LABEL[key]);
+ });
+ const modeEdited=String(saved.mode_idx??'')!==String(now.mode_idx??'');
+ // The link clock belongs to the mode it was read at: read at another mode
+ // than the one applied (another client changed it), it is not shown.
+ // Without a comparison the mode it was read at is unknown: no line, except
+ // "Link now" under an unapplied edit (what goes out until Apply, like the
+ // fields' "Sent now"), and "Checking" while the output is read again.
+ const modeChecking=live&&wire.tmds_mhz!=null&&!modeEdited&&!compared&&pgSignalChecking;
+ const mhz=live&&(modeEdited||modeChecking||(compared&&(compared.mode_idx===undefined||String(compared.mode_idx)===String(saved.mode_idx??''))))?wire.tmds_mhz:null;
+ const mhzText=mhz!=null?(Math.round(mhz*10)/10)+' MHz':'';
+ // Its line is the link clock, no readback of the setting: no mark.
+ pgFieldWireSet(document.getElementById('wireMode'),mhz!=null?(modeEdited?'pending':modeChecking?'checking':'link'):'',
+  mhz!=null?(modeChecking?'Checking\u2026':(modeEdited?'Link now: ':'Link: ')+mhzText):'',
+  mhz!=null?(modeChecking?'Reading the output again.':modeEdited?'Your change is not applied yet; this is the link clock now.':'TMDS clock read from the HDMI encoder. The resolution itself has no readback.')+oldTitle:'');
+ // Any tile with an unapplied value (Colorimetry, Resolution too) puts the bar in the legend.
+ if(document.querySelector&&document.querySelector(':is(.setting-tiles,.signal-fields)>.field.is-changed')) used.pending=1;
+ // One line under the fields says what the marks mean, for touch and screen readers too.
+ const legend=document.getElementById('fieldWireLegend');
+ if(legend){
+  // Built once and kept (an open (i) and its focus survive every reading);
+  // each entry is only shown or hidden.
+  const say={matches:'matches the setting',read:'read back, not compared',differs:'differs from the setting',pending:'changed, not applied yet',old:'last reading: the output could not be read just now'};
+  if(!legend.dataset.built){
+   legend.dataset.built='1';legend.textContent='';
+   Object.keys(say).forEach(k=>{const s=document.createElement('span');s.className=k==='old'?'field-wire-old':'field-wire';s.dataset.state=k;s.textContent=say[k];s.hidden=true;legend.appendChild(s);
+    // Spoken as a list, not one run-on phrase.
+    const sep=document.createElement('span');sep.className='sr-only';sep.textContent='; ';s.appendChild(sep);
+    // Why a value is not compared, on touch too: the same (i) as elsewhere.
+    if(k==='read'){const tip=document.createElement('span');tip.className='meter-help-tip';tip.id='fieldWireWhyTip';tip.setAttribute('aria-label','Why not compared');
+     tip.title=PG_FIELD_WIRE_NOT_COMPARED;s.appendChild(tip);if(typeof pgHelpTipPrepare==='function') pgHelpTipPrepare(tip);}});
+  }
+  if(old) used.old=1;
+  // The (i) names this card's own reasons, field by field (every case only
+  // while there is none to name).
+  const tip=document.getElementById('fieldWireWhyTip');
+  const here=Object.keys(reasons).map(r=>reasons[r].join(', ')+': '+r);
+  if(tip){ const t=(here.length?here.join('\n'):PG_FIELD_WIRE_NOT_COMPARED)+'\nColorimetry: read (Live Information), not compared.'; if(tip.dataset.tip!==t){ tip.dataset.tip=t; if(typeof pgHelpTipText==='function') pgHelpTipText(tip); } }
+  Array.prototype.forEach.call(legend.children||[],s=>{s.hidden=!used[s.dataset.state];});
+  // Its entry hidden: an open tip on it closes rather than float on its own.
+  if(!used.read&&typeof pgHelpTipOpen!=='undefined'&&pgHelpTipOpen&&pgHelpTipOpen.id==='fieldWireWhyTip') pgHelpTipHide();
+  legend.hidden=!['matches','read','differs','pending'].some(k=>used[k]);
+ }
+}
+// Which applied fields the last reading found different, with what is sent
+// instead (for the header): only while that reading is for these settings.
+function pgFieldWireDiffers(){
+ const w=pgSignalWire,p=w&&w.wire&&w.wire.parts;
+ return pgFieldWireDifferKeys().map(k=>k==='format'?(p.name!==undefined?p.name:p.format):p[k]).filter(Boolean);
+}
+// The sentences to show: the settings check's own always; the cable's
+// (wire.differences, by field) only where that field's verdict stands next
+// to the applied settings. An older daemon without them: all, as before.
+function pgSignalAdjustmentsShown(){
+ const w=pgSignalWire;
+ const all=(w&&w.adjustments)||[];
+ const diff=w&&w.wire&&w.wire.differences;
+ if(!diff) return all.slice();
+ const cable=new Set([].concat(...Object.values(diff)));
+ const keep=new Set(pgFieldWireDifferKeys());
+ return all.filter(a=>!cable.has(a)).concat(...Object.keys(diff).filter(k=>keep.has(k)).map(k=>diff[k]));
+}
+function pgFieldWireDifferKeys(){
+ const w=pgSignalWire;
+ if(!(w&&w.connected&&w.wire&&w.wire.parts&&w.wire.fields&&w.wire.compared)||window._configApplyPending||pgHdmiConnected===false) return [];
+ let saved={};
+ try{ saved=JSON.parse(window._savedConfig||'{}'); }catch(e){ return []; }
+ const c=w.wire.compared;
+ return PG_FIELD_WIRE.filter(([k,,,deps])=>w.wire.fields[k]==='differs'&&deps.every(d=>!pgFieldWireKeyApplies(d,saved)||String(c[d]??'')===String(saved[d]??''))).map(f=>f[0]);
 }
 // The HDMI port the display is on and what it carries (/api/signal port:
 // PGSignalCheck::signal_port_info). The renderer keeps the connector it
@@ -2549,9 +2932,11 @@ async function pgSignalPortRestart(){
  if(btn){ btn.disabled=true; btn.textContent='Restarting…'; }
  const r=await fetchJSON('/api/restart',{method:'POST',_timeoutMs:10000}).catch(function(){ return null; });
  if(!r||r.status!=='ok') toast('Could not restart the output','error');
+ // Verdicts read before the restart belong to the output as it was.
+ else { pgSignalWireDrop(); pgSignalChecking=true; pgRenderFieldWire(); }
  // The renderer needs a few seconds to come up on the new connector.
  setTimeout(function(){
-  if(btn){ btn.disabled=false; btn.textContent='Restart output'; }
+  if(btn){ btn.disabled=false; btn.textContent='Restart Output'; }
   pgSignalSummaryRefresh();
   if(typeof loadModes==='function') loadModes(true);
  },8000);
@@ -3330,6 +3715,9 @@ async function applySettings(){
   else meterStopContinuous();
  }
  window._configApplyPending=true;
+ // The marks step back while the output changes.
+ pgRenderFieldWire();
+ pgRenderHeaderSignal();
  meterUpdateReadButtons();
  const sm=getVal('signal_mode');
  const changes={
@@ -3376,8 +3764,15 @@ async function applySettings(){
  // click responsive without guessing how long the mode switch will take.
  applySettingsModalShow();
  document.getElementById('applyBar').style.display='none';
+ // The settings applied before this one: an edit is the user's where it
+ // differs from them (pgApplyResync keeps those).
+ let before={};
+ try{ before=JSON.parse(window._savedConfig||'{}'); }catch(e){}
+ // A resync still running for an earlier apply ends here.
+ pgApplyResyncGen++;
+ // Quiet: a failure is said in the apply dialog, not in a toast beside it.
  const r=await fetchJSON('/api/config',{method:'POST',
-  headers:{'Content-Type':'application/json'},body:JSON.stringify(changes),_timeoutMs:30000});
+  headers:{'Content-Type':'application/json'},body:JSON.stringify(changes),_timeoutMs:30000,_quiet:true});
  if(r&&r.status==='ok'){
   try{
    const restart=r.restart?await waitForRendererRestart(r.restart_id,60000):null;
@@ -3398,25 +3793,126 @@ async function applySettings(){
    if(restart&&restart.hdmi===0) applySettingsModalSuccess(restart.message,6000);
    else if(adjusted) applySettingsModalSuccess(adjusted,6000);
    else applySettingsModalSuccess();
+   // Verdicts read before this apply belong to the output as it was.
+   pgSignalWireDrop();
+   // Read at once: until the new output has sent its own picture the fields say "Checking".
+   pgSignalChecking=true;
    pgSignalSummaryRefresh();
   }catch(e){
-   applySettingsModalError((e&&e.message)||'Apply failed while reloading config.');
+   applySettingsModalError((e&&e.message)||'Apply failed while reloading config.','',true);
+   // The settings were taken but the output may be anything now: read it
+   // again rather than keep the verdicts from before, and take the Pi's
+   // settings as the applied ones.
+   pgSignalWireDrop(); pgSignalChecking=true; pgRenderFieldWire();
+   pgSignalSummaryRefresh();
+   pgApplyResync(before);
    // Fall through to finally so _configApplyPending clears and the modal
    // stays open for the operator to read.
   }finally{
    window._configApplyPending=false;
    meterUpdateReadButtons();
+   pgRenderFieldWire();
   }
   return true;
  }else{
   // Refused settings: the output stayed as it was; the reason names what
   // the board or the display cannot carry.
-  if(r&&r.refused) applySettingsModalError(r.message+' The output stays as it was.','Settings refused');
-  else applySettingsModalError((r&&r.message)||'The daemon rejected the new settings.');
   window._configApplyPending=false;
   meterUpdateReadButtons();
+  if(r){
+   if(r.refused) applySettingsModalError(r.message+' The output stays as it was.','Settings refused',true);
+   else applySettingsModalError(r.message||'The daemon rejected the new settings.','',true);
+   // Refused: nothing changed on the output, its marks come back as they were.
+   pgRenderSignalAlerts();
+  }else{
+   // No answer: the Pi may have taken the settings or not. Nothing from
+   // before stands; the output and the Pi's settings are read again (the
+   // config poll waits while the fields hold edits), the edits stay.
+   applySettingsModalError('No answer from PGenerator+. Reading the settings and the output again\u2026','Apply not confirmed',true,'unknown');
+   pgSignalWireDrop(); pgSignalChecking=true; pgRenderFieldWire();
+   pgSignalSummaryRefresh();
+   pgApplyResync(before,{report:true});
+  }
   return false;
  }
+}
+
+// After an apply whose outcome is unknown, or that failed once the Pi had
+// taken it: the Pi's settings become the applied ones (header, Discard,
+// Apply bar), and the user's own edits (values that differ from $before,
+// the settings applied before) stay where the Pi does not hold them. The
+// config poll does not do this: it waits while the fields hold edits.
+// A later apply ends it. While the Pi holds none of the values sent it asks
+// again a few times (a POST may still be writing them); report:true says
+// the outcome in the apply dialog, or in a toast once that is closed.
+let pgApplyResyncGen=0;
+async function pgApplyResync(before,opts){
+ opts=Object.assign({},opts);
+ before=before||{};
+ if(!opts.gen){ opts.gen=++pgApplyResyncGen; opts.tries=0; try{ opts.sent=JSON.parse(captureSettings()); }catch(e){ opts.sent={}; } }
+ const again=()=>{ setTimeout(()=>pgApplyResync(before,Object.assign({},opts,{tries:opts.tries+1})),3000); };
+ if(opts.gen!==pgApplyResyncGen) return false;
+ const pi=await fetchJSON('/api/config',{_quiet:true,_timeoutMs:10000});
+ if(opts.gen!==pgApplyResyncGen) return false;
+ if(!pi||typeof pi!=='object'||pi.status==='error'||!('max_bpc' in pi)){
+  if(opts.tries<10) again();
+  else if(opts.report) pgApplyResyncReport('Still no answer from PGenerator+.','Apply not confirmed','unknown');
+  return false;
+ }
+ // The fields as they are now (edits made since the apply included).
+ let edits={};
+ try{ edits=JSON.parse(captureSettings()); }catch(e){}
+ applyConfigState(pi);
+ let base={};
+ try{ base=JSON.parse(window._savedConfig||'{}'); }catch(e){}
+ const same=(a,b)=>String(a??'')===String(b??'');
+ // Every field gets its value back: the user's where it differs from the
+ // settings before the apply, the Pi's elsewhere.
+ const target={};
+ Object.keys(edits).forEach(k=>{ target[k]=same(edits[k],before[k])?base[k]:edits[k]; });
+ pgSetSettingsFields(target);
+ checkSettingsChanged();
+ // What the apply sent, and what of it the Pi holds.
+ const tried=Object.keys(opts.sent).filter(k=>!same(opts.sent[k],before[k]));
+ const took=tried.filter(k=>same(base[k],opts.sent[k]));
+ if(tried.length&&!took.length&&opts.tries<3){ again(); return true; }
+ if(opts.report){
+  if(took.length===tried.length) pgApplyResyncReport('The Pi has the new settings. The output is read again now.','Settings applied','done');
+  else if(took.length) pgApplyResyncReport('The Pi took some of the new settings, not all.','Partly applied','unknown');
+  else pgApplyResyncReport('The Pi kept the settings it had.','Not applied','');
+ }
+ const kept=document.getElementById('applySettingsKept');
+ if(kept) kept.hidden=!hasUnsavedSettings();
+ return true;
+}
+// Settings straight into the fields, without their change events: a signal
+// mode's handler would load its baseline and the meter's defaults again,
+// which the edit already went through. Cards and locks follow.
+function pgSetSettingsFields(s){
+ const sm=String(s.signal_mode||getVal('signal_mode')||'sdr');
+ Object.keys(s).forEach(k=>{
+  if(k==='mode_idx'){ setModeSelectValue(s[k]); return; }
+  setVal(['max_luma','min_luma','max_cll','max_fall'].indexOf(k)>=0?meterHdrMetadataFieldId(k,sm):k,s[k]??'');
+ });
+ meterLastHdrMetadataMode=sm;
+ updateModeVisibility();
+ updateDropdowns();
+}
+function pgApplyResyncReport(text,heading,tone){
+ const kept=document.getElementById('applySettingsKept');
+ if(kept) kept.hidden=!hasUnsavedSettings();
+ // Closed already: a toast says it.
+ if(!applySettingsModalFailed()){
+  if(typeof toast==='function') toast(heading+': '+text+(tone==='done'?'':hasUnsavedSettings()?' Your changes stay in the Apply bar.':''),tone==='done'?undefined:'warn');
+  return;
+ }
+ const title=document.getElementById('applySettingsTitle'),status=document.getElementById('applySettingsStatus'),overlay=document.getElementById('applySettingsOverlay');
+ if(title) title.textContent=heading;
+ if(status) status.textContent=text;
+ if(overlay){ if(tone) overlay.dataset.tone=tone; else delete overlay.dataset.tone; }
+ // The focus is on the button already: the outcome is said once more.
+ const said=document.getElementById('applySettingsResult');
+ if(said) said.textContent=heading+'. '+text+(kept&&!kept.hidden?' '+kept.textContent:'');
 }
 
 // Project-styled replacement for window.confirm(). Takes an options object
@@ -3752,7 +4248,7 @@ function selftestLinkText(link){
  if(!link||!link.format) return '';
  const parts=[link.format];
  // 4:2:2 always reads as the fixed 12-bit container, not a depth.
- if(link.bpc&&!/4:2:2/.test(link.format)) parts.push(link.bpc+'-bit on the cable');
+ if(link.bpc&&!/4:2:2/.test(link.format)) parts.push(link.bpc+'-bit sent');
  if(link.csc) parts.push(link.csc==='unity'?'CSC unity':'range CSC active');
  if(link.fb) parts.push('framebuffer '+link.fb);
  return parts.join(' · ');
@@ -3819,7 +4315,7 @@ function selftestRender(st){
  }else{
   title.textContent='Not run yet';
  }
- sub.textContent=selftestState.message||'Run the test with a display connected and no calibration software attached.';
+ sub.textContent=selftestState.message||'Full\u00a0Test: 12 modes, about\u00a03\u00a0min. Quick\u00a0Check: 3 modes, about\u00a040\u00a0s. Needs a display and no calibration software attached.';
  selftestMarkStale();
  const pct=running&&selftestState.steps?Math.round(100*(selftestState.step||0)/selftestState.steps):(state==='idle'?0:100);
  const fill=document.getElementById('selftestProgress');
@@ -3828,16 +4324,22 @@ function selftestRender(st){
  document.getElementById('selftestRunBtn').hidden=running;
  document.getElementById('selftestQuickBtn').hidden=running;
  document.getElementById('selftestStopBtn').hidden=!running;
- document.getElementById('selftestRunBtn').textContent=state==='idle'?'Run full test':'Run again';
+ document.getElementById('selftestRunBtn').textContent=state==='idle'?'Run Full Test':'Run Again';
+ // The modes are listed once there is something to say about them: while
+ // the test runs and with its results. Before that the (i) names them.
  const list=document.getElementById('selftestModes');
- list.innerHTML=modes.map(m=>selftestModeRow(m,results[m.id],running)).join('');
+ const any=running||(selftestState.scenarios||[]).length>0;
+ list.hidden=!any;
+ list.innerHTML=any?modes.map(m=>selftestModeRow(m,results[m.id],running)).join(''):'';
  const foot=document.getElementById('selftestFoot');
  const done=!running&&(selftestState.scenarios||[]).length>0;
  foot.hidden=!done;
  if(done){
   const when=selftestState.finished?new Date(selftestState.finished*1000):null;
+  // The limit of the proof stays next to the result it limits.
   document.getElementById('selftestFootNote').textContent=(when?'Last run '+when.toLocaleString([],{dateStyle:'medium',timeStyle:'short'}):'')
-   +(selftestState.resolution?(when?' at ':'Ran at ')+selftestState.resolution:'');
+   +(selftestState.resolution?(when?' at ':'Ran at ')+selftestState.resolution:'')
+   +((when||selftestState.resolution)?'. ':'')+'Read inside the Pi: what it sends, not what the display receives.';
  }
 }
 // A result proves the modes at the output resolution it ran at. Once the
@@ -3869,8 +4371,8 @@ function selftestPoll(delay){
 async function selftestStart(set){
  const quick=set==='quick';
  const ok=await pgConfirm({title:quick?'Run a quick check?':'Run the full self-test?',
-  body:(quick?'Three modes, about 40 seconds.':'Ten modes, about three minutes.')+' The display switches through SDR, HDR10'+(quick?'':' and Dolby Vision')+' and shows dim test windows. Calibration software must stay disconnected until it finishes. Your signal settings come back afterwards.',
-  acceptLabel:quick?'Run quick check':'Run full test',tone:'caution'});
+  body:(quick?'3 modes, about 40 seconds.':'12 modes, about 3 minutes.')+' The display switches through SDR'+(quick?' and HDR10':', HDR10, HLG and Dolby Vision')+' and shows dim test windows. Calibration software must stay disconnected until it finishes. Your signal settings come back afterwards.'+(hasUnsavedSettings()?' Unapplied changes are not part of the test.':''),
+  acceptLabel:quick?'Run Quick Check':'Run Full Test',tone:'caution'});
  if(!ok) return;
  selftestOpen={};
  const r=await fetchJSON('/api/selftest/start',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({set:quick?'quick':'full'})});
@@ -4669,6 +5171,15 @@ async function resolvePatchSizeChanged(v){
   else toast('Failed to save setting','err');
  }catch(e){ toast('Failed to save setting','err'); }
 }
+// The Calman group's caption confirms a save where it happened, for a moment.
+let pgCalmanSavedTimer=0;
+function pgCalmanSaved(){
+ const n=document.getElementById('calmanGroupNote');
+ if(!n) return;
+ n.textContent='Saved';n.dataset.state='saved';
+ if(pgCalmanSavedTimer) clearTimeout(pgCalmanSavedTimer);
+ pgCalmanSavedTimer=setTimeout(()=>{pgCalmanSavedTimer=0;n.textContent='Saved on change';delete n.dataset.state;},2500);
+}
 // "Range with Calman": not a signal field, so it saves at once and stays
 // usable while Calman is connected (the daemon applies Full or Limited then).
 async function calmanRangeChanged(v){
@@ -4678,7 +5189,7 @@ async function calmanRangeChanged(v){
   const r=await fetchJSON('/api/config',{method:'POST',headers:{'Content-Type':'application/json'},
    body:JSON.stringify({calman_range:String(v||'')})});
   ok=!!(r&&r.status==='ok');
-  if(ok){ if(config) config.calman_range=String(v||''); toast(text[String(v||'')]||text['']); }
+  if(ok){ if(config) config.calman_range=String(v||''); toast(text[String(v||'')]||text['']); pgCalmanSaved(); }
   else toast(pgFailMsg('Couldn’t save Range with Calman',r),'err');
  }catch(e){ toast('Couldn’t save Range with Calman','err'); }
  // Not saved: show what the Pi still has.
@@ -4699,6 +5210,7 @@ async function calmanDvContainerChanged(v){
   if(ok){
    if(config) config.calman_dv_container=val;
    toast(text[val]);
+   pgCalmanSaved();
    // In a Calman Dolby Vision session the renderer restarts for it: follow
    // that restart and say so when it fails.
    if(r.restart&&r.restart_id){
@@ -6250,12 +6762,14 @@ async function checkUpdate(manual,background){
  } else if(staleNote){
   document.getElementById('applyUpdateBtn').style.display='none';
   document.getElementById('updateBtn').style.display='none';
+  document.getElementById('updateBtn').classList.remove('update-pulse');
   setUpdateStatus('Couldn\u2019t check for updates. '+staleNote,'warn');
   pgMarkCurrentTile(null);
   if(manual) toast('Couldn\u2019t check for updates. '+staleNote,true);
  } else {
   document.getElementById('applyUpdateBtn').style.display='none';
   document.getElementById('updateBtn').style.display='none';
+  document.getElementById('updateBtn').classList.remove('update-pulse');
   setUpdateStatus('');
   pgMarkCurrentTile('latest','v'+r.current+' is the latest version (checked '+checkedAt+')');
   if(manual) toast('No update available — v'+r.current+' is the latest version.');
@@ -16271,7 +16785,7 @@ async function meterCheckStatus(){
   if(meterDetected){
    document.getElementById('meterStatusWrap').style.display='';
    document.getElementById('meterDot').style.background='var(--orange)';
-   document.getElementById('meterStatusText').textContent=meterLastKnownName+' (busy)';
+   document.getElementById('meterStatusText').textContent=meterLastKnownName+' (busy)';document.getElementById('meterStatusWrap').classList.remove('is-absent');
    document.getElementById('meterStatusText').style.color='var(--text)';
    syncTopStatusStack();
   }
@@ -16291,7 +16805,7 @@ async function meterCheckStatus(){
   document.getElementById('meterCard').style.display='';
   document.getElementById('meterStatusWrap').style.display='';
   document.getElementById('meterDot').style.background='var(--green)';
-  document.getElementById('meterStatusText').textContent=meterLastKnownName;
+  document.getElementById('meterStatusText').textContent=meterLastKnownName;document.getElementById('meterStatusWrap').classList.remove('is-absent');
   document.getElementById('meterStatusText').style.color='var(--text)';
   document.getElementById('meterResetRow').style.display='none';
   meterUpdateCardMode();
@@ -16305,7 +16819,7 @@ async function meterCheckStatus(){
    document.getElementById('meterCard').style.display='';
    document.getElementById('meterStatusWrap').style.display='';
    document.getElementById('meterDot').style.background=busy?'var(--orange)':'var(--green)';
-   document.getElementById('meterStatusText').textContent=busy?(meterLastKnownName+' (initializing)'):meterLastKnownName;
+   document.getElementById('meterStatusText').textContent=busy?(meterLastKnownName+' (initializing)'):meterLastKnownName;document.getElementById('meterStatusWrap').classList.remove('is-absent');
    document.getElementById('meterStatusText').style.color='var(--text)';
    meterUpdateCardMode();
    meterUpdateSeriesTabUi();
@@ -16319,7 +16833,8 @@ async function meterCheckStatus(){
    document.getElementById('meterCard').style.display='';
    document.getElementById('meterStatusWrap').style.display='';
    document.getElementById('meterDot').style.background='var(--text2)';
-   document.getElementById('meterStatusText').textContent='No Meter';
+   document.getElementById('meterStatusText').textContent='No meter';
+   document.getElementById('meterStatusWrap').classList.add('is-absent');
    document.getElementById('meterStatusText').style.color='var(--text2)';
    meterUpdateCardMode();
    meterUpdateSeriesTabUi();
@@ -23571,6 +24086,8 @@ function meterCloseLutTools(){
  }
  function open(select,viaTouch){
   if(current===select){ close(); return; }
+  // A touch opens the menu without a click, so an open help tip would stay over it.
+  if(typeof pgHelpTipHide==='function') pgHelpTipHide();
   close(true);
   current=select;
   menu=build(select);
@@ -23794,7 +24311,7 @@ function pgPaletteActions(){
   {title:'Discard changes',hint:'Back to the settings the generator runs now',when:dirty,run:()=>discardSettings()},
   {title:'Save as preset',hint:'Store the current signal settings under a name',when:typeof pgPresetSavePrompt==='function',run:()=>pgPresetSavePrompt()},
   {title:'Run full self-test',hint:'Read back every signal mode at the HDMI output',when:!!document.getElementById('selftestRunBtn'),run:()=>{ pgPaletteReveal(document.getElementById('selftestCard')); selftestStart('full'); }},
-  {title:'Run quick check',hint:'Three modes, about 40 seconds',when:!!document.getElementById('selftestQuickBtn'),run:()=>{ pgPaletteReveal(document.getElementById('selftestCard')); selftestStart('quick'); }},
+  {title:'Run quick check',hint:'3 modes, about 40 seconds',when:!!document.getElementById('selftestQuickBtn'),run:()=>{ pgPaletteReveal(document.getElementById('selftestCard')); selftestStart('quick'); }},
   {title:'Reset display settings to defaults',hint:'Asks first; nothing changes until Apply',when:typeof resetDefaults==='function',run:()=>resetDefaults()},
   {title:'Keyboard shortcuts',hint:'Show every shortcut',kbd:'?',when:true,run:()=>pgPaletteOpen('help')}
  ];
@@ -24212,6 +24729,9 @@ function pgPresetRender(){
   sel.appendChild(o);
  });
  sel.disabled=!presets.length||!!pgSignalOwner;
+ // No presets yet: the bar is one line, its title and Save.
+ const pbar=document.getElementById('presetBar');
+ if(pbar) pbar.classList.toggle('is-empty',!presets.length);
  const id=pgPresetActiveId();
  sel.value=shown.some(p=>p.id===id)?id:'';
  pgPresetRenderChips();
@@ -24257,9 +24777,6 @@ function pgPresetLoad(id){
  updateDropdowns();
  }finally{ window.pgPresetLoading=false; }
  checkSettingsChanged();
- // A preset is one deliberate change of the whole set: always ask.
- pgApplyAskSnoozed=false;
- pgApplyAskSoon();
  // Say which values this display or mode could not take.
  const missed=pgPresetMissedKeys(s,mode).map(key=>(APPLY_BAR_FIELDS.find(f=>f[0]===key)||[key,key])[1]);
  if(idx==null&&(p.settings||{}).mode_label) missed.unshift('Resolution '+pgPresetChips(p.settings).filter(c=>/^(DCI )?\d+[pi]/.test(c.text)).map(c=>c.text).join(''));

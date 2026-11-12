@@ -409,4 +409,48 @@ sub drm_differences {
  return @diff;
 }
 
+# The Dolby Vision vendor infoframe the Pi sends for a DV mode: OUI,
+# length, PB4 and PB5 (the bytes the forms differ in). With the patched
+# vc4.ko (patch_vc4_dv_vsif.py, srcversion ...HMVS) and a form from the
+# daemon (dv_vsif_form, command.pm dv_vsif_conf_for_vsvdb, as pitpgd 2.0.3
+# dv_vsif_build) drm_override.c dovi_vsif_marker picks it:
+#   standard, form 2 (v1-12 / v2 VSVDB): Dolby VSIF 46 D0 00, PB4 0x02;
+#   standard, form 1 (v0 / v1-15):       HDMI 1.4b VSIF 03 0C 00, PB4/PB5 0;
+#   low latency:                         Dolby VSIF, PB4 0x03, PB5 0x10 with
+#                                        dv_ll_bt2020 1 (VSVDB v2 LL-HDMI), else 0.
+# Otherwise the kernel's own frames go out: standard as HDMI 1.4b with
+# PB4 0x20 / PB5 0x01 (forced HDMI_VIC 1), low latency PB4 0x03, PB5 0.
+# Returns {oui, length, pb4, pb5, form}.
+sub dv_vsif_expect {
+ my ($transport,$form,$ll_bt2020,$module_forms)=@_;
+ my $ll=(defined($transport) && $transport eq "lldv") ? 1 : 0;
+ $form=(defined($form) && ($form eq "1" || $form eq "2")) ? $form : "";
+ my $marker=($module_forms && $form ne "") ? 1 : 0;
+ if($ll) {
+  my $pb5=($marker && defined($ll_bt2020) && "$ll_bt2020" eq "1") ? 0x10 : 0x00;
+  return { oui=>"00:d0:46", length=>0x1b, pb4=>0x03, pb5=>$pb5, form=>"low latency".($pb5 ? ", BT.2020 container" : "").($marker ? "" : ", kernel form") };
+ }
+ return { oui=>"00:d0:46", length=>0x1b, pb4=>0x02, pb5=>0x00, form=>"Dolby form" } if($marker && $form eq "2");
+ return { oui=>"00:0c:03", length=>0x18, pb4=>0x00, pb5=>0x00, form=>"HDMI 1.4b form" } if($marker);
+ return { oui=>"00:0c:03", length=>0x18, pb4=>0x20, pb5=>0x01, form=>"kernel HDMI 1.4b form" };
+}
+
+# The whole payload PB1..PB<length> of a dv_vsif_expect frame: OUI (LSB
+# first), PB4, PB5, the rest 0 (patch_vc4_dv_vsif.py, pitpgd dv_vsif_build;
+# tools/signal_audit/audit_infoframes.pl expects the same bytes).
+sub dv_vsif_payload {
+ my $v=shift;
+ my @o=map { hex($_) } reverse(split(/:/,$v->{oui}));
+ my @pb=(@o,$v->{pb4},$v->{pb5});
+ push(@pb,0) while(@pb < $v->{length});
+ return @pb;
+}
+
+# "46 D0 00, length 0x1b, PB4 0x02, PB5 0x00" for a {oui,length,pb4,pb5}.
+sub dv_vsif_describe {
+ my $v=shift;
+ my @o=split(/:/,$v->{oui});
+ return sprintf("%s %s %s, length 0x%02x, PB4 0x%02x, PB5 0x%02x",uc($o[2]),uc($o[1]),uc($o[0]),$v->{length},$v->{pb4},$v->{pb5});
+}
+
 1;

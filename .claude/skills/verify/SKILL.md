@@ -100,8 +100,8 @@ previous frame (e.g. 30 for code 0064): re-probe it before calling it a bug.
 
 - RGB Limited 8 and 10 bpc: prop 3, unity CSC, AVI `12:a8:04:10`, codes = (code+2)>>2 capped at 255 (8 bpc: the daemon rounds to the nearest code, daemon.pm calman_scale_value) / exact (10 bpc), incl. codes off the 8-bit grid.
 - RGB Full (`CONF_LEVEL:Range Full`): prop 2, AVI PB3 0x08.
-- YCbCr (`CONF_LEVEL:Format YCC444_10`, `YCC422_10`): prop 3 (since 2.13.23; 1 made vc4 signal Q/YQ Full on modes without a CEA VIC), CSC unchanged (the YCbCr CSC ignores the range), AVI PB3 0x04 and PB5 YQ 0x00 also on mode 20 (VIC 0). `CONF_LEVEL:Range Full` on YCbCr stays prop 3 / Limited; full-range codes come as SOURCE_RANGE=FULL and are compressed (10 bit 0/205 -> 64/240). LLDV keeps prop 1.
-- Dolby Vision LLDV (`post:{"signal_mode":"dv","dv_transport":"lldv"}`, back with `{"signal_mode":"sdr"}`): prop 1.
+- YCbCr (`CONF_LEVEL:Format YCC444_10`, `YCC422_10`): prop 3 (since 2.13.23; 1 made vc4 signal Q/YQ Full on modes without a CEA VIC), CSC unchanged (the YCbCr CSC ignores the range), AVI PB3 0x04 and PB5 YQ 0x00 also on mode 20 (VIC 0). `CONF_LEVEL:Range Full` on YCbCr stays prop 3 / Limited; full-range codes come as SOURCE_RANGE=FULL and are compressed (10 bit 0/205 -> 64/240). LLDV YCbCr too (since renderer fca952ec; before, its prop 1 signalled YQ Full on mode 20).
+- Dolby Vision LLDV (`post:{"signal_mode":"dv","dv_transport":"lldv"}`, back with `{"signal_mode":"sdr"}`): prop 3 (4:2:2 12 bit), AVI YQ Limited also on mode 20; standard DV keeps the conf's value (RGB tunnel, Full).
 - Range change from WebUI (`post:{"rgb_quant_range":"2"}` then `"1"`): the renderer rejects the in-place reload (`grep rejected /tmp/pgenerator_debug.log`) and restarts; a new `AVI IF` line must follow. vc4 only reprograms CSC/infoframe on a modeset.
 - Calman `CONF_FORMAT:1920x1080p 60` / `59.94`: EDID modes 21 / 22, never the userdef boot mode (VIC 0).
 - WebUI bit depth during an open Calman session: 10-bit codes stay exact.

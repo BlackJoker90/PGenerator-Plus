@@ -38,7 +38,7 @@ What no other PGenerator build does today. The comparison basis is the latest up
 <td width="50%" valign="top">
 
 ### 🔬 Codes proven on the cable
-The Pi reads back its own scanout. The built-in **Signal Self-Test** draws known codes in twelve signal modes and checks the pixels, the link depth, the AVI infoframe (format, range, colorimetry, VIC), the HDR metadata field by field and the Dolby Vision infoframe. 10-bit codes stay 10-bit, and **RGB Limited goes out without the kernel's compression** (patched vc4). A full 0–1023 sweep comes back exact.
+The Pi reads back its own scanout. The built-in **Signal Self-Test** draws known codes in twelve signal modes and checks the pixels, the link depth, the AVI infoframe (format, range, colorimetry, VIC), the HDR metadata field by field and the Dolby Vision infoframe, in the form the display's Dolby block asks for. 10-bit codes stay 10-bit, and **RGB Limited goes out without the kernel's compression** (patched vc4). A full 0–1023 sweep comes back exact.
 
 </td>
 <td width="50%" valign="top">
@@ -212,7 +212,7 @@ Signal Mode, Bit Depth, Color Format and Range each have a **Sent** line: what t
 | HDMI link readout | – | measured link depth and clock |
 | CPU scaling governor | fixed in `/etc/default/rcPGenerator` | **Scaling Type in the WebUI**, applies without a reboot |
 | OTA | latest release only | release notes, progress, **reinstall / rollback**, ~20 % smaller packages |
-| Self-test of the HDMI output | – | **built in**: scanout readback, link depth, AVI (colorimetry, VIC), HDR metadata fields and Dolby Vision infoframes per mode, HLG included |
+| Self-test of the HDMI output | – | **built in**: scanout readback, link depth, AVI (colorimetry, VIC), HDR metadata fields and Dolby Vision infoframes per mode (form checked against the display's Dolby block), HLG included |
 | Pattern playlists | – | **stepped with the TV remote** (HDMI-CEC), own playlists |
 | On-screen pattern menu | – | **every pattern on the TV**, picked with the remote |
 | Start and restart | static splash, WebUI just goes offline | **animated progress on the TV** (real boot steps, in the WebUI theme), restart dialog in the WebUI that reconnects by itself; WebUI up about 25 s after the kernel starts |

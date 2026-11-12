@@ -1640,8 +1640,11 @@ bool ofxRPI4Window::rgbLimitedPassthrough()
    that signals Limited there. YCbCr Default (0) draws Limited codes. */
 uint64_t ofxRPI4Window::wireRgbQuantRange(int rgb_quant_range, int output_format)
 {
-	/* Low-latency DV as YCbCr 4:2:2 keeps the range it always had. */
-	if (is_std_DoVi || (isDoVi && output_format != 0) || !rgbLimitedPassthroughSupported())
+	/* Standard DV keeps the conf's value: its RGB tunnel carries the DV
+	   bitstream in Full codes. Low-latency DV as YCbCr 4:2:2 is Limited
+	   like any YCbCr: with its 1 it signalled YQ Full on a mode without a
+	   CEA VIC (self-test 2026-11-11, idx 20). */
+	if (is_std_DoVi || !rgbLimitedPassthroughSupported())
 		return (uint64_t)rgb_quant_range;
 	if (rgb_quant_range == 1 || (rgb_quant_range == 0 && output_format != 0))
 		return 3;

@@ -29,7 +29,7 @@ body.layout-desktop #meter3dLutWorkspaceCard #meterSolvedLutList{background:var(
 body.layout-desktop .dashboard > .card > h2{cursor:default;font-size:var(--fs-lg);margin-bottom:14px}
 body.layout-desktop .dashboard > .card > h2::after{display:none}
 body.layout-desktop .dashboard > .card .drag-handle{display:none}
-body.layout-desktop .dashboard > #applyBar[data-desktop-active="true"]{display:block!important;position:sticky;bottom:12px;z-index:45;margin-top:12px;padding:10px 12px;background:rgba(20,20,31,.96);border:1px solid var(--border);border-radius:var(--r-md);box-shadow:0 8px 28px rgba(0,0,0,.4)}
+body.layout-desktop .dashboard > #applyBar[data-desktop-active="true"]{display:block!important;position:sticky;bottom:12px;z-index:45;margin-top:12px;padding:10px 12px;background:rgb(20,20,31);border:1px solid var(--border);border-radius:var(--r-md);box-shadow:0 8px 28px rgba(0,0,0,.4)}
 #meterGreyLiveRail{display:contents}
 body.layout-desktop #chartsGreyscaleFullWrap{display:grid;grid-template-columns:minmax(0,3fr) minmax(320px,1fr);grid-template-rows:auto auto;gap:10px;align-items:stretch}
 body.layout-desktop #chartsGreyscaleFullWrap #meterGreyscaleLgPrimary{grid-column:1;grid-row:1;display:grid;grid-template-columns:180px minmax(0,1fr);grid-template-rows:var(--desktop-rgb-chart-height) auto;column-gap:8px;row-gap:10px;min-width:0;padding-top:18px}
@@ -116,9 +116,9 @@ fieldset.signal-fields:disabled select,fieldset.signal-fields:disabled input{cur
 /* The HDMI port the display is on: the board's own label, large, then what
    that port carries. A port that carries less, or that the output is not
    on, says so in the warning/alert tones the card already uses. */
-/* The ports and what is on the cable side by side; each wraps to full width
-   when the card is narrow. Both share the setting tiles' surface. */
-.signal-overview{display:flex;flex-wrap:wrap;align-items:stretch;gap:10px;margin:0 0 12px}
+/* The port box above the setting tiles, on the tiles' surface; what is on
+   the cable stands in the tiles themselves. */
+.signal-overview{display:flex;flex-wrap:wrap;align-items:flex-start;gap:10px;margin:0 0 12px}
 /* One column of the setting tiles below (.grid.setting-tiles: 3/2/1 columns,
    10px gap), so the port box lines up with Resolution. */
 .signal-port{flex:0 0 calc((100% - 20px) / 3);max-width:100%;min-width:0;display:flex;flex-direction:column;gap:8px;margin:0}
@@ -150,35 +150,28 @@ fieldset.signal-fields:disabled select,fieldset.signal-fields:disabled input{cur
 .signal-port[data-tone="elsewhere"] .signal-port-note{color:var(--text-primary)}
 .signal-port-restart{margin:8px 0 0}
 .signal-port-restart[hidden]{display:none}
-.signal-wire{flex:1 1 380px;min-width:0;display:flex;flex-direction:column;gap:8px;margin:0}
-.signal-wire[hidden]{display:none}
-.signal-wire-title,.signal-port-title{margin:0;font-size:var(--fs-xs);font-weight:700;color:var(--text2);}
-.signal-wire-tiles{flex:1;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin:0}
-.signal-wire-tiles[hidden]{display:none}
-.sw-tile{display:flex;flex-direction:column;justify-content:center;gap:3px;min-width:0;margin:0;padding:var(--tile-pad);border-radius:var(--r-md);background:var(--tile-bg);border:1px solid var(--tile-border)}
-.sw-tile[hidden]{display:none}
-.sw-tile dt{font-size:var(--fs-sm);color:var(--text2)}
-.sw-tile dd{margin:0;font-size:var(--fs-md);font-weight:600;line-height:1.25;color:var(--text-primary);font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
-/* Link right of Resolution, Bit depth right of Format; a missing reading
-   lets its neighbour take the space. */
-.sw-mode:has(+.sw-link[hidden]),.sw-format:has(+.sw-depth[hidden]){grid-column:span 2}
-/* The signal type leads: it is what a calibration run hinges on. */
-.sw-signal{--sw:var(--accent);background:color-mix(in srgb,var(--sw) 12%,var(--surface-inset));border-color:color-mix(in srgb,var(--sw) 34%,transparent)}
-.sw-signal dd{font-size:var(--fs-lg);font-weight:800;letter-spacing:-.01em;color:var(--sw-text,var(--sw))}
-/* Same colours as the signal chips in the self-test (.selftest-group):
-   SDR grey, HDR10/HLG orange, Dolby Vision violet. The value text takes the
-   palette's text-safe variant where the raw hue misses 4.5:1 on the tint. */
-.sw-signal[data-signal="sdr"]{--sw:var(--text2);--sw-text:var(--text-primary);background:var(--tile-bg);border-color:var(--tile-border)}
-.sw-signal[data-signal="hdr"]{--sw:var(--status-warning);--sw-text:var(--warning-text)}
-.sw-signal[data-signal="dv"]{--sw:var(--status-dv);--sw-text:color-mix(in oklab,var(--status-dv) 80%,var(--text-primary))}
-.sw-signal[data-signal="unknown"]{--sw:var(--text-secondary)}
-.sw-signal[data-signal="unknown"] dd{font-weight:600}
-.signal-wire-text{margin:0;font-size:var(--fs-md);color:var(--text-primary);font-variant-numeric:tabular-nums}
-.signal-wire-text[hidden]{display:none}
+.signal-port-title{margin:0;font-size:var(--fs-xs);font-weight:700;color:var(--text2);}
+/* No presets yet: Save alone under the title (level with the port box beside it);
+   on a narrow card, where the presets sit under the ports, title and Save on one line. */
+.preset-bar.is-empty :is(#presetSelect,#presetDeleteBtn){display:none}
+@container (max-width:420px){
+ .preset-bar.is-empty{display:flex;flex-wrap:wrap;align-items:center;gap:8px 16px}
+ .preset-bar.is-empty .preset-bar-head{margin:0}
+}
+/* The presets take the rest of the row beside the ports and wrap below them on a phone. */
+.signal-overview>.preset-bar{flex:1 1 320px;min-width:0;margin:0;align-self:flex-start}
+@container (max-width:720px){.signal-port,.signal-overview>.preset-bar{flex-basis:calc((100% - 10px) / 2)}}
+@container (max-width:420px){.signal-port,.signal-overview>.preset-bar{flex-basis:100%}}
+/* Below the fields: the daemon's sentences where the cable differs, or the
+   whole readback from a daemon without parts. */
+.signal-wire{display:flex;flex-direction:column;gap:4px;margin:10px 0 0}
+/* The readback's live region stays rendered; empty, it takes no room. */
+#signalWireLine{margin:0;gap:0}
+#signalWireLine > :not([hidden]):not(:empty){margin-top:10px}
+#signalWireLine > :not([hidden]):not(:empty) ~ :not([hidden]):not(:empty){margin-top:4px}
+.signal-wire[hidden],.signal-wire-text[hidden]{display:none}
+.signal-wire-text{margin:0;font-size:var(--fs-sm);color:var(--text-secondary);font-variant-numeric:tabular-nums}
 .signal-wire-adjusted{margin:0;font-size:var(--fs-sm);line-height:1.45;color:var(--warning-text)}
-@container (max-width:720px){.signal-port{flex-basis:calc((100% - 10px) / 2)}.signal-wire{flex-basis:0}}
-@container (max-width:420px){.signal-port{flex-basis:100%}}
-@container (max-width:520px){.signal-wire-tiles{grid-template-columns:repeat(2,minmax(0,1fr))}}
 .signal-wire-adjusted:empty{display:none}
 #hdrCard input:disabled{opacity:.5;cursor:not-allowed}
 .desktop-utility-alert[hidden]{display:none}
@@ -207,7 +200,7 @@ body.meter-stop-active.layout-desktop .desktop-sidebar{filter:grayscale(.25);opa
 /* Theme bridge for legacy inline presentation styles. Measured patch, gamut,
    warning and brand colours intentionally remain authored values. */
 [data-theme="light"] body{background:var(--surface-page);color:var(--text-primary)}
-[data-theme="light"] body.layout-desktop .dashboard>#applyBar[data-desktop-active="true"]{background:rgba(255,255,255,.96);border-color:var(--border);box-shadow:0 8px 24px rgba(18,29,45,.14)}
+[data-theme="light"] body.layout-desktop .dashboard>#applyBar[data-desktop-active="true"]{background:#fff;border-color:var(--border);box-shadow:0 8px 24px rgba(18,29,45,.14)}
 [data-theme="light"] .header{background:var(--surface-header);color:var(--text-primary)}
 [data-theme="light"] .logo > img:first-child{display:none!important}
 [data-theme="light"] .logo .logo-light{display:block}
@@ -401,15 +394,6 @@ body.layout-tablet .hdr-power .icon-btn{width:44px;height:44px}
 body.layout-tablet .ccss-input{min-height:44px}
 body.layout-tablet .hdr-power .icon-btn svg{width:22px;height:22px}
 body.layout-tablet .hdr-power::before{top:8px;bottom:8px}
-body.layout-tablet .status-bar{font-size:var(--fs-sm)}
-/* The status line shares the first row with the actions and power group and
-   wraps inside it, so the longer labels and the signal/pattern chips never
-   run past the viewport and the header stays one row on tablets. */
-body.layout-tablet .hdr-right{min-width:0;max-width:100%;flex-wrap:wrap;justify-content:flex-end;row-gap:4px}
-body.layout-tablet .status-bar{flex:1 1 0;min-width:0;flex-wrap:wrap;row-gap:2px}
-/* Desktop needs 1024px; below that the header switch is a dead control.
-   UI Settings keeps the switch and its explanation. */
-@media(min-width:481px){body.layout-tablet .hdr-right{flex:1 1 0}}
 body.layout-tablet .btn,body.layout-tablet .btn-sm{min-height:44px}
 /* Phone: dialog/form footers stack full-width in DOM order (Cancel above the primary). */
 @media(max-width:600px){body.layout-tablet .btn-row-end{flex-direction:column;align-items:stretch}body.layout-tablet .btn-row-end>.btn{justify-content:center}}
@@ -441,11 +425,7 @@ body.layout-tablet #meterEotfScroller,body.layout-tablet #meterLuminanceScroller
 body.layout-tablet .field label,body.layout-tablet .meter-header-label,body.layout-tablet .meter-target-inline-label,body.layout-tablet .meter-toggle,body.layout-tablet .meter-toggle-label,body.layout-tablet .meter-note-toggle,body.layout-tablet .meter-inline-unit,body.layout-tablet .stat-label,body.layout-tablet .stat-sub,body.layout-tablet .info-item .label,body.layout-tablet .diag-pattern-title,body.layout-tablet .dv-badge,body.layout-tablet .pat-btn,body.layout-tablet .theme-switch-btn span,body.layout-tablet .btn-sm,body.layout-tablet .ui-choice-note,body.layout-tablet .session-format-note,body.layout-tablet .site-footer-note,body.layout-tablet .desktop-nav-title,body.layout-tablet #meterSettingsGrid .meter-target-inline-label,body.layout-tablet #meterSettingsGrid .meter-target-measure-btn,body.layout-tablet #meterSettingsGrid .meter-target-use-measured{font-size:var(--fs-xs)}
 body.layout-tablet .dashboard [style*="font-size:var(--fs-2xs)"],body.layout-tablet .dashboard [style*="font-size:var(--fs-xs)"],body.layout-tablet .dashboard [style*="font-size:var(--fs-sm)"],body.layout-tablet .dashboard [style*="font-size:.5"],body.layout-tablet .dashboard [style*="font-size:.6"],body.layout-tablet .dashboard [style*="font-size:.7"],body.layout-tablet .dashboard [style*="font-size:0.6"],body.layout-tablet .dashboard [style*="font-size:0.7"],body.layout-tablet .dashboard [style*="font-size:11px"],body.layout-tablet .dashboard [style*="font-size:11px"],body.layout-tablet .dashboard [style*="font-size:11px"],body.layout-tablet .dashboard [style*="font-size: 0.6"],body.layout-tablet .dashboard [style*="font-size: 0.7"],body.layout-tablet .dashboard [style*="font-size:11px"],body.layout-tablet .dashboard [style*="font-size:11px"],body.layout-tablet .dashboard [style*="font-size: 11px"]{font-size:var(--fs-xs)!important}
 @media(pointer:coarse){body.layout-tablet .dashboard select,body.layout-tablet .dashboard input:not([type=checkbox]):not([type=radio]):not([type=range]),body.layout-tablet .dashboard textarea{font-size:16px}}
-/* Phone header: logo + power on one row, then a single status row in
-   priority order (connection, warnings, software, signal, pattern, meter,
-   temperature); the row wraps, nothing is hidden. */
 @media(max-width:600px){
-body.layout-tablet .header{padding:10px 14px;column-gap:8px;row-gap:6px}
 /* Phone/tablet: the header is fixed, not sticky. A sticky header stays in the
    page flow, and the status polls rewrite it every few seconds; iOS WebKit
    (Safari and Chrome on iPhone) then re-laid out the page mid-scroll and the
@@ -453,13 +433,7 @@ body.layout-tablet .header{padding:10px 14px;column-gap:8px;row-gap:6px}
    padding reserves its measured height (ResizeObserver -> --pg-header-height). */
 body.layout-tablet .header{position:fixed;top:0;left:0;right:0}
 body.layout-tablet{padding-top:var(--pg-header-height,61px)}
-body.layout-tablet .hdr-right{display:contents}
-body.layout-tablet .logo{order:0;margin-right:auto}
-body.layout-tablet .hdr-actions{order:1;flex:0 1 auto}
-body.layout-tablet .hdr-power{order:2;margin-left:0}
-body.layout-tablet .hdr-power::before{display:none}
 body.layout-tablet .update-btn-more{display:none}
-body.layout-tablet .status-bar{order:3;flex:1 1 100%;width:auto;min-height:32px;flex-wrap:wrap;justify-content:flex-start;column-gap:12px;row-gap:0;padding-bottom:0;font-size:var(--fs-xs)}
 }
 .tablet-jump-nav{display:none}
 body.layout-tablet .tablet-jump-nav:not([hidden]){display:flex;position:fixed;left:0;right:0;bottom:0;z-index:60;gap:2px;padding:4px max(6px,env(safe-area-inset-right)) calc(4px + env(safe-area-inset-bottom)) max(6px,env(safe-area-inset-left));background:var(--surface-header);border-top:1px solid var(--border);box-shadow:0 -6px 18px var(--shadow);overflow-x:auto;overscroll-behavior-x:contain;scrollbar-width:none;justify-content:safe center}
@@ -660,27 +634,57 @@ input,textarea{caret-color:var(--accent)}
 body.layout-desktop .desktop-workspace-title{font-size:1.75rem;font-weight:700;line-height:1.15;letter-spacing:-.02em;margin:6px 0 16px 24px;color:var(--meso-lit)}
 body.layout-tablet .desktop-workspace-title{font-size:1.5rem;font-weight:700;line-height:1.15;letter-spacing:-.02em;margin:10px 14px 8px;color:var(--meso-lit)}
 body.layout-desktop .dashboard > .card > h2,body.layout-tablet .dashboard > .card > h2{font-size:1.1875rem;font-weight:700;line-height:1.2;letter-spacing:-.01em;color:var(--meso-lit)}
-.field label,.meter-header-label,.preset-bar-title,.signal-wire-title,.signal-port-title{font-weight:500;color:var(--text-muted)}
+.field label,.meter-header-label,.preset-bar-title,.signal-port-title{font-weight:500;color:var(--text-muted)}
 strong,b{font-weight:700}
 
-/* ---- Header: what is read sits in pills ---- */
+/* ---- Header: one status readout ----
+   The signal leads, a hairline sets it off from the chain behind it (Pi,
+   temperature, software, meter, warnings). One surface, not a row of
+   separate pills, so every entry shares one baseline and one inset. */
 .header{border-bottom:0;padding:10px 20px}
 .logo{flex:0 0 auto}
 .logo .ver{font-weight:500;color:var(--text-muted)}
 .hdr-right{flex:1 1 0;min-width:0}
-.status-bar{flex:1 1 0;min-width:0;order:1;justify-content:flex-start;gap:6px;font-size:var(--fs-xs);font-weight:500;color:var(--text-secondary)}
+.status-bar{flex:0 1 auto;min-width:0;order:1;margin-right:auto;justify-content:flex-start;gap:0 16px;min-height:36px;padding:4px 18px;border-radius:18px;background:var(--surface-card);font-size:var(--fs-xs);font-weight:500;color:var(--text-secondary)}
 .hdr-actions{order:2}
 .hdr-power{order:3;gap:6px}
-.status-bar > span,.status-bar .status-stack > .status-line,#hdmiWarnBadge:not(:empty){gap:7px;min-height:28px;padding:0 12px;border-radius:999px;background:var(--surface-card)}
-.status-dot{width:7px;height:7px}
+.status-bar > span,.status-bar .status-stack > .status-line,#hdmiWarnBadge:not(:empty){gap:7px;min-height:28px}
+#signalStatusWrap{padding-right:16px;box-shadow:1px 0 0 var(--border)}
+/* Desktop: the readout's edge on the cards' edge (240 px rail + 8 px), its text on the workspace title's (24 px in). */
+body.layout-desktop .status-bar{margin-left:8px;padding-left:24px}
+.status-dot{width:7px;height:7px;flex:0 0 auto}
 #signalStatusWrap{order:0}
 #statusWrap{order:1}#tempDisplay{order:2}#patternStatusWrap{order:3}#calStatusWrap{order:4}#meterDisplayStatusStack > #meterStatusWrap{order:5}#meterDisplayStatusStack > #lgTopStatusWrap{order:6}#meterDisplayStatusStack > #iccCompanionTopStatusWrap{order:7}#hdmiWarnBadge{order:8}#meterUsbWarnBadge{order:9}
 #statusWrap::before,#signalStatusWrap::before{color:var(--text-muted);font-weight:500}
+/* Every entry reads dot, label, value ("● Pi Connected", "● Signal SDR …"), so the dots stand in one column on a phone. */
+#statusWrap::before,#signalStatusWrap::before{order:1}
+#statusWrap > #statusDot,#signalStatusWrap > #signalDot{order:0}
+#statusWrap > #statusText,#signalStatusWrap > #signalStatusText{order:2}
+.status-bar > #meterUsbWarnBadge{align-self:center;min-height:0}
 #statusWrap::before{content:"Pi"}
-/* The line holds the applied settings (pgCaptureHeaderSignal); the read-back
-   stands under "On the cable" in Output. */
+/* The line holds the applied settings (pgCaptureHeaderSignal); what is sent
+   stands in each setting field in Output, and here after "→ sent" where it differs. */
 #signalStatusWrap::before{content:"Signal"}
 #signalStatusText{font-size:.9375rem;font-weight:700;color:var(--meso-lit);white-space:nowrap}
+#signalStatusText .status-diff{display:inline;color:var(--warning-text)}
+/* Phone/tablet: what is sent instead on its own line under the setting. */
+body.layout-tablet #signalStatusText:has(.status-diff){display:block}
+body.layout-tablet #signalStatusText .status-diff{display:block}
+/* Two value lines: label and dot stay on the first. */
+body.layout-tablet #signalStatusWrap:has(.status-diff){align-items:baseline}
+body.layout-tablet #signalStatusWrap:has(.status-diff) > #signalDot{align-self:flex-start;margin-top:7px}
+/* Desktop: a long "→ sent" is cut (its title and the readout's tip say all
+   of it), so the header keeps one row; on a wide screen it has the room.
+   Where the row is still too narrow (1024 px with an update offered), the
+   whole signal text ends in an ellipsis rather than run under the buttons. */
+body.layout-desktop #signalStatusText .status-diff{display:inline-block;max-width:24ch;overflow:hidden;text-overflow:ellipsis;vertical-align:bottom}
+@media(min-width:1400px){body.layout-desktop #signalStatusText .status-diff{max-width:none}}
+/* Below 1200 px a shorter cut, so the readout stays on one row and the
+   signal's hairline never ends a row on its own. */
+@media(max-width:1199px){body.layout-desktop .header:has(#updateBtn.update-pulse) #signalStatusText .status-diff{max-width:13ch}}
+@media(max-width:1099px){body.layout-desktop #signalStatusText .status-diff{max-width:13ch}}
+body.layout-desktop #signalStatusWrap{min-width:0;max-width:100%}
+body.layout-desktop #signalStatusText{min-width:0;overflow:hidden;text-overflow:ellipsis}
 #tempDisplay:empty{display:none}
 .hdr-power::before{display:none}
 .hdr-power .icon-btn{border-radius:50%;background:var(--surface-card)}
@@ -719,63 +723,129 @@ body.layout-tablet .dashboard > .card > h2{margin-bottom:10px}
 .setting-tiles > .field select:focus,.setting-tiles > .field input:focus{border-color:transparent;box-shadow:none;outline:0}
 .setting-tiles > .field select[data-pg-dd-open]{border-color:transparent!important}
 /* One ring per key: the focus ring for the keyboard, the accent ring while its menu is open. */
-.setting-tiles > .field:has(:focus-visible){box-shadow:0 0 0 2px var(--focus-ring)}
+.setting-tiles > .field:has(:focus-visible:not(.meter-help-tip)){box-shadow:0 0 0 2px var(--focus-ring)}
 .setting-tiles > .field:has(select[data-pg-dd-open]){background:var(--meso-key-hi);box-shadow:inset 0 0 0 1.5px var(--accent)}
 .setting-tiles > .field .mode-select-value{font-size:1rem;font-weight:600;color:var(--meso-lit);padding-left:0;left:0}
 .grid.setting-tiles{gap:10px}
-.grid.setting-tiles.calman-range{align-items:center;gap:10px 22px}
 .field select,.field input,.inline-select,.meter-card-header-select{font-weight:500}
-.preset-bar-hint,.calman-range-hint,.selftest-sub{color:var(--text-secondary)}
+.selftest-sub{color:var(--text-secondary)}
 
-/* ---- On the cable: read back, in pills ---- */
-.signal-wire-tiles{display:flex;flex-wrap:wrap;gap:6px}
-.sw-tile,.sw-tile.sw-signal,.sw-tile.sw-signal[data-signal]{flex-direction:row;align-items:baseline;justify-content:flex-start;gap:8px;min-height:34px;padding:7px 14px;border:0;border-radius:999px;background:var(--meso-well)}
-.sw-tile dt{font-size:var(--fs-xs);font-weight:500;color:var(--text-muted)}
-.sw-tile dd,.sw-tile.sw-signal dd{font-size:.9375rem;font-weight:700;line-height:20px;letter-spacing:0;color:var(--meso-lit);overflow-wrap:normal}
-/* The kind of signal: a ring and its colour in the text. A lit field this size would be the
-   brightest thing on a phone (measured: the filled pill and dock key added a third to the page's light). */
-.sw-tile.sw-signal,.sw-tile.sw-signal[data-signal]{--meso-sig:var(--accent);box-shadow:inset 0 0 0 1.5px var(--meso-sig)}
-.sw-tile.sw-signal[data-signal="hdr"]{--meso-sig:var(--warning-text)}
-.sw-tile.sw-signal[data-signal="dv"]{--meso-sig:var(--status-dv)}
-.sw-tile.sw-signal[data-signal="unknown"]{--meso-sig:var(--text-muted)}
-.sw-tile.sw-signal dd{color:var(--meso-sig)}
+/* ---- On the cable: the readback in each field it covers ---- */
+.setting-tiles > .field > .field-wire{grid-column:1;grid-row:3;display:flex;align-items:flex-start;gap:5px;min-width:0;margin:-3px 0 9px;font-size:var(--fs-xs);font-weight:500;line-height:1.3;color:var(--text-muted);font-variant-numeric:tabular-nums}
+.setting-tiles > .field > .field-wire[hidden]{display:none}
+.field-wire:is([data-state="matches"],[data-state="read"],[data-state="differs"])::before{content:"";flex:0 0 auto;width:12px;height:12px;background:currentColor;-webkit-mask:var(--fw-icon) center/contain no-repeat;mask:var(--fw-icon) center/contain no-repeat}
+.field-wire[data-state="matches"]::before{--fw-icon:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpath d='M2.2 6.4 4.8 9 9.8 3.2' fill='none' stroke='%23000' stroke-width='1.9' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");background:var(--status-success)}
+/* Read back but not compared: a ring, neither a pass nor a fail. */
+.field-wire[data-state="read"]::before{--fw-icon:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Ccircle cx='6' cy='6' r='3.6' fill='none' stroke='%23000' stroke-width='1.5'/%3E%3C/svg%3E")}
+.setting-tiles > .field > .field-wire[data-state="differs"]{color:var(--warning-text);font-weight:600}
+/* The icon sits on the first line of a wrapped value. */
+.setting-tiles > .field > .field-wire::before{margin-top:calc((1.3em - 12px) / 2)}
+/* An unapplied edit or a reading due: plain text, no mark. */
+.setting-tiles > .field > .field-wire[data-state="pending"]{color:var(--text-secondary)}
+/* Its text starts where the marked lines' text starts. The link clock is no
+   readback of the setting: no mark and no indent, flush with the value. */
+.setting-tiles > .field > .field-wire:not(#wireMode):is([data-state="pending"],[data-state="checking"])::before{content:"";flex:0 0 12px}
+/* The proof reads a step above the labels. */
+.setting-tiles > .field > .field-wire[data-state="matches"]{color:var(--text-secondary)}
+/* The marks explained once, under the fields. */
+.field-wire-legend{display:flex;flex-wrap:wrap;gap:4px 16px;margin:10px 0 0;font-size:var(--fs-xs);line-height:1.3;color:var(--text-muted)}
+.field-wire-legend[hidden]{display:none}
+.field-wire-legend .field-wire{display:inline-flex;align-items:center;gap:5px;font-weight:500;color:var(--text-muted)}
+.field-wire-legend .field-wire[data-state="differs"]::before{background:var(--warning-text)}
+/* Pending: the dot a changed tile carries after its label. */
+.field-wire-legend .field-wire[data-state="pending"]::before{content:"";flex:0 0 auto;width:6px;height:6px;margin:0 3px;border-radius:50%;background:var(--accent)}
+.field-wire-legend .meter-help-tip{margin-left:2px}
+.field-wire-old{flex-basis:100%}
+/* A value not applied yet: an accent dot after the tile's label (the Apply bar names the change); the legend shows it too. */
+:is(.setting-tiles,.signal-fields) > .field:is(.is-changed,.is-wire-pending) > label::after{content:"";display:inline-block;width:6px;height:6px;margin-left:7px;border-radius:50%;background:var(--accent);vertical-align:.12em}
+.field-wire[data-state="differs"]::before{--fw-icon:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpath d='M6 1.2 11 10.4H1Z' fill='none' stroke='%23000' stroke-width='1.5' stroke-linejoin='round'/%3E%3Cpath d='M6 4.6v2.6M6 8.7v.1' stroke='%23000' stroke-width='1.5' stroke-linecap='round'/%3E%3C/svg%3E")}
+.setting-tiles > .field.is-wire-differs{box-shadow:inset 0 0 0 1.5px var(--warning-text)}
+@media (forced-colors:active){.field-wire::before{forced-color-adjust:none;background:CanvasText!important}.setting-tiles > .field.is-wire-differs{outline:2px solid Highlight}.setting-tiles > .field:is(.is-changed,.is-wire-pending) > label::after,.field-wire-legend .field-wire[data-state="pending"]::before{forced-color-adjust:none;background:Highlight}}
 .signal-port-box{border:0;border-radius:var(--r-md);background:var(--meso-well)}
 /* The port captions are SVG text: 11 units of a 300-unit board. 12 units, and the board kept near its
    natural width, puts them at about 12 px on screen. */
 .signal-port-board .sp-cap{font-size:12px}
-@media(min-width:1100px){
- /* Display Settings: the board on the left, read-back and presets beside it. */
- body.layout-desktop .dashboard > #displaySettingsCard[data-desktop-active="true"]:has(#signalPort:not([hidden])):has(#signalWireLine:not([hidden])){display:grid;grid-template-columns:330px minmax(0,1fr);column-gap:24px;align-items:start}
- body.layout-desktop #displaySettingsCard:has(#signalPort:not([hidden])):has(#signalWireLine:not([hidden])) > *{grid-column:1 / -1;min-width:0}
- body.layout-desktop #displaySettingsCard:has(#signalPort:not([hidden])):has(#signalWireLine:not([hidden])) > .signal-overview{display:contents}
- body.layout-desktop #displaySettingsCard:has(#signalPort:not([hidden])):has(#signalWireLine:not([hidden])) > :is(h2,#displayNoHdmiBanner,.signal-alert){order:-2}
- body.layout-desktop #displaySettingsCard:has(#signalWireLine:not([hidden])) #signalPort:not([hidden]){order:-1;grid-column:1;margin-bottom:18px;min-width:0;align-self:start}
- body.layout-desktop #displaySettingsCard:has(#signalPort:not([hidden])) #signalWireLine:not([hidden]){order:-1;grid-column:2;margin-bottom:14px;min-width:0}
- body.layout-desktop #displaySettingsCard:has(#signalPort:not([hidden])):has(#signalWireLine:not([hidden])) > #presetBar{order:-1;grid-column:1 / -1;margin-bottom:18px}
-}
 
 /* ---- What is pressed: round ---- */
 .btn{border-radius:999px;font-weight:700}
 .btn-sm{padding-left:14px;padding-right:14px}
-.card h2 .btn-reset{color:var(--text-secondary);box-shadow:none;background:var(--neutral-fill)}
+.card h2 .btn-reset{color:var(--text-secondary);box-shadow:none;background:transparent}
+.card h2 .btn-reset:hover,.card h2 .btn-reset:focus-visible{background:var(--neutral-fill)}
 .card h2 .btn-reset:hover,.card h2 .btn-reset:focus-visible{color:var(--warning-text)}
+/* Disabled (a calibration program holds the signal): no fill the active one lacks. */
+.card h2 .btn.btn-reset:disabled,.card h2 .btn.btn-reset:disabled:hover{background:transparent;opacity:.5}
 input[type=checkbox]:not(.pg-switch *):not(:checked):not(:disabled){border-color:var(--field-border-hover)}
 #meterSeriesTabRow > .btn.btn-primary{background:var(--meso-key-hi);color:var(--meso-lit);box-shadow:none;border-color:transparent}
 #meterSeriesTabRow > .btn.btn-secondary{background:transparent;color:var(--text-secondary);box-shadow:none}
-.meter-help-tip,.meter-icc-help{border-color:var(--field-border-hover)}
+/* The ring holds 3:1 against the tile (non-text contrast). */
+.meter-help-tip,.meter-icc-help{border-color:color-mix(in srgb,var(--text-muted) 75%,transparent)}
 
 /* ---- Notes ---- */
-.selftest-note,#meterNoMeterBanner{background:var(--meso-well)!important;border-color:transparent!important;border-radius:var(--r-md)!important;color:var(--text-secondary)}
-.selftest-note svg{color:var(--text-muted)}
+#meterNoMeterBanner{background:var(--meso-well)!important;border-color:transparent!important;border-radius:var(--r-md)!important;color:var(--text-secondary)}
 .selftest-verdict{border-color:transparent;background:var(--meso-well);border-radius:var(--r-md)}
 .selftest-title{font-size:1.1875rem;font-weight:700;letter-spacing:-.01em}
 
-/* ---- Tablet and phone ---- */
-body.layout-tablet .header{padding:8px 14px 8px;row-gap:5px}
+/* ---- Tablet and phone ----
+   Header row 1: logo, temperature, update, power. Row 2: the status readout
+   at the cards' width (the dashboard's 10 px inset). The logo glyph, the
+   readout's lines, the workspace title and the card text all start 24 px
+   from the edge (the logo PNG carries 64/240 of its height as clear space:
+   8 px at 30 px, so the image starts at 16). */
+body.layout-tablet .header{padding:6px 10px 7px;column-gap:8px;row-gap:5px}
+body.layout-tablet .hdr-right{display:contents}
+body.layout-tablet .logo{order:0;margin-right:auto;padding-left:6px}
 body.layout-tablet .logo img{height:30px}
-body.layout-tablet .status-bar{gap:5px;font-size:var(--fs-xs);min-height:0;justify-content:flex-start}
-/* The help mark: 15 px drawn, 44 px to hit (.meter-help-tip::before above). Drawn at 20 px where a finger looks for it. */
-body.layout-tablet .meter-help-tip{width:20px;height:20px;font-size:var(--fs-2xs)}
+body.layout-tablet .hdr-actions{order:1;flex:0 1 auto}
+body.layout-tablet .hdr-power{order:2;margin-left:0}
+body.layout-tablet .hdr-power::before{display:none}
+body.layout-tablet .status-bar{order:3;flex:1 1 100%;margin:0;min-height:0;padding:6px 14px;border-radius:var(--r-lg,16px);flex-wrap:wrap;justify-content:flex-start;gap:0 14px;font-size:var(--fs-xs)}
+body.layout-tablet .status-bar > span,body.layout-tablet .status-bar .status-stack > .status-line,body.layout-tablet #hdmiWarnBadge:not(:empty){min-height:19px;gap:6px}
+body.layout-tablet #signalStatusWrap{flex:1 1 100%;min-height:22px;padding:0;box-shadow:none}
+body.layout-tablet #signalStatusText{font-size:min(.9375rem,3.9vw);white-space:normal}
+/* A pattern name wraps to its own line rather than shrinking to "On TV: 2…". */
+body.layout-tablet .status-bar > .status-pattern{flex:0 1 auto;min-width:0;max-width:100%}
+body.layout-tablet .status-bar .status-pattern .status-label{max-width:100%}
+/* From 700 px the readout fits one line, the signal set off by a hairline as on desktop; below that it stacks. */
+@media(min-width:700px){body.layout-tablet #signalStatusWrap{flex:0 0 auto;padding-right:14px;box-shadow:1px 0 0 var(--border)}}
+/* Narrow phones: an absent meter is left out of the readout rather than taking a third line. */
+@media(max-width:383px){body.layout-tablet :is(#meterStatusWrap,#calStatusWrap).is-absent{display:none!important}}
+/* With an update offered the readout has less room: an absent meter gives way below the one-line width. */
+@media(max-width:759px){body.layout-tablet .header:has(#updateBtn.update-pulse) #meterStatusWrap.is-absent{display:none!important}}
+/* Up to 400 px the update button is its icon (its aria-label names it), so power stays on row 1. */
+@media(max-width:400px){body.layout-tablet #updateBtn{font-size:0;width:44px;padding:0;justify-content:center;gap:0}}
+/* Logo, update and power on one row at 320 px: the version gives way while an update is offered (the update card names it). */
+@media(max-width:340px){body.layout-tablet .header:has(#updateBtn.update-pulse) .logo .ver{display:none}}
+/* Temperature reads on row 1, beside power (10 px inset + 94 px power + 14 px gap). */
+body.layout-tablet #tempDisplay{position:absolute;right:118px;top:6px;height:44px;margin:0}
+body.layout-tablet .header:has(#updateBtn.update-pulse) #tempDisplay{position:static;height:auto;min-height:20px}
+@media(max-width:340px){body.layout-tablet #tempDisplay{position:static;height:auto;min-height:20px}}
+/* The card's drag grip hangs in the card's left padding, so the title starts on the 24 px edge with everything else. */
+body.layout-tablet .dashboard>.card>h2{position:relative}
+body.layout-tablet .dashboard>.card>h2>.drag-handle{position:absolute;left:-14px;top:50%;transform:translateY(-50%);margin:0;padding:10px 0}
+
+/* ---- Help marks ----
+   An info mark: a drawn "i" (the "?" in the markup is hidden). 15 px drawn;
+   it hits at 25 px under a fine pointer and at 44 px on touch
+   (.meter-help-tip::before above), 20 px drawn where a finger looks for it. */
+.meter-help-tip{font-size:0}
+.meter-help-tip::after{content:"";width:100%;height:100%;background:currentColor;-webkit-mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20'%3E%3Ccircle cx='10' cy='6.1' r='1.3'/%3E%3Crect x='8.9' y='8.5' width='2.2' height='6.6' rx='1.1'/%3E%3C/svg%3E") center/100% 100% no-repeat;mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20'%3E%3Ccircle cx='10' cy='6.1' r='1.3'/%3E%3Crect x='8.9' y='8.5' width='2.2' height='6.6' rx='1.1'/%3E%3C/svg%3E") center/100% 100% no-repeat}
+body.layout-tablet .meter-help-tip{width:20px;height:20px}
+/* Mouse: the mark hits at 24 px or more (WCAG 2.5.8); the ::before is measured from the padding box (13 px). */
+@media(hover:hover) and (pointer:fine){
+ body.layout-desktop .meter-help-tip::before{content:"";position:absolute;inset:-6px}
+ /* In a setting tile the hit area grows up and sideways, never down into the select under the label row. */
+ body.layout-desktop .setting-tiles>.field>.meter-help-tip::before{inset:-11px -6px 0}
+}
+/* Touch: 44 px wide, grown upwards only, so the select or preset row under the mark keeps its own taps. */
+/* 36 px up from the mark's bottom: clear of the tile above (10 px gap + its 4 px bottom padding). */
+body.layout-tablet :is(.setting-tiles>.field,.preset-bar-label)>.meter-help-tip::before{top:auto;bottom:0;height:36px;transform:translateX(-50%)}
+@media(pointer:coarse){body.layout-desktop :is(.setting-tiles>.field,.preset-bar-label)>.meter-help-tip::before{top:auto;bottom:0;height:36px;transform:translateX(-50%)}}
+/* The tile whose tip is open lights as with an open dropdown, so a full-width card on the phone points back to it. */
+.setting-tiles > .field:has(> .meter-help-tip[aria-expanded="true"]){background:var(--meso-key-hi)}
+body.layout-tablet .meter-icc-help{width:20px;height:20px}
+/* The tile's ring is the select's; a focused mark rings only itself. */
+/* Forced colours paint backgrounds as Canvas: draw the "i" in the text colour. */
+@media(forced-colors:active){.meter-help-tip::after{forced-color-adjust:none;background:CanvasText}}
 /* The bar as a dock. */
 body.layout-tablet .tablet-jump-nav:not([hidden]){left:10px;right:10px;bottom:calc(8px + env(safe-area-inset-bottom));padding:5px;border:0;border-radius:26px;background:var(--surface-popover);gap:2px;
  /* No drop shadow: nothing translucent may lie over a swatch scrolling past.
@@ -786,15 +856,6 @@ body.layout-tablet .tablet-jump-nav:not([hidden]){left:10px;right:10px;bottom:ca
 .tablet-nav-btn[aria-current="page"] .desktop-nav-icon{color:var(--accent)}
 .tablet-nav-more.has-current .desktop-nav-icon{color:var(--accent)}
 @media(max-width:600px){
- body.layout-tablet .header{padding:5px 14px 7px;row-gap:3px}
- /* Phone: only the signal keeps its pill; the chain is plain text, so a full
-    session costs two short lines, not three rows of pills. */
- body.layout-tablet .status-bar{gap:2px 12px}
- body.layout-tablet .status-bar > span,body.layout-tablet .status-bar .status-stack > .status-line,body.layout-tablet #hdmiWarnBadge:not(:empty){min-height:0;padding:0;border-radius:0;background:transparent;gap:6px}
- body.layout-tablet #signalStatusWrap{flex:1 1 100%;min-height:23px;padding:0 12px;margin:0;border-radius:999px;background:var(--surface-card)}
- body.layout-tablet #signalStatusText{font-size:min(.9375rem,3.75vw);white-space:normal}
- body.layout-tablet #tempDisplay{position:absolute;right:120px;top:5px;height:44px;margin:0}
- body.layout-tablet .header:has(.update-pulse) #tempDisplay{position:static;height:auto}
  body.layout-tablet .card h2 .btn-reset{padding:6px 11px 6px 9px;font-size:var(--fs-xs)}
  body.layout-tablet .dashboard > .card > h2{font-size:1.0625rem}
  /* Two keys to a row: six settings in three rows. */
@@ -802,6 +863,11 @@ body.layout-tablet .tablet-jump-nav:not([hidden]){left:10px;right:10px;bottom:ca
  body.layout-tablet .setting-tiles > .field{padding:8px 4px 0 13px}
  body.layout-tablet .setting-tiles > .field select,body.layout-tablet .setting-tiles > .field .mode-select-value{font-size:.9375rem}
 }
+/* Below 360 px two keys to a row cut the values a calibrator reads
+   ("3840x2160 60Hz", "Limited (64-940)"): one to a row. */
+@media(max-width:359px){body.layout-tablet fieldset.setting-tiles.signal-fields{grid-template-columns:minmax(0,1fr)}}
+/* 360-411 px: Resolution and Range, the two longest values, take a whole row. */
+@media(min-width:360px) and (max-width:411px){body.layout-tablet fieldset.setting-tiles.signal-fields > .field:is(:has(#mode_idx),:has(#rgb_quant_range)){grid-column:1 / -1}}
 
 /* ---- One language on every workspace: tone steps, no outlines ----
    What the first pass left in the old drawing (a 1 px frame around a tile, a
@@ -867,8 +933,9 @@ body.layout-desktop .devinfo-facts:not(.update-facts){grid-template-columns:repe
    panel there. It keeps a drawn line, in its own --border, around what the rules above only fill.
    :where() adds no weight and each :is() holds selectors of one weight, so the accent ring of what
    is chosen, live or open (one class or attribute more) still wins. */
-:where([data-palette="contrast"]) :is(.pat-btn,.theme-swatch-btn,.meter-lg-rgb-bar,.meter-xyz-gear,.meter-pattern-insert-gear,.btn-warning,.btn-danger-quiet,.sw-tile,.signal-port-box,.diag-now,.layout-switch,.selftest-note,.selftest-verdict,.ccss-editor-panel,.meter-icc-panel,.meter-3dlut-workspace-section,.info-item,.lg-current-input-value),
+:where([data-palette="contrast"]) :is(.pat-btn,.theme-swatch-btn,.meter-lg-rgb-bar,.meter-xyz-gear,.meter-pattern-insert-gear,.btn-warning,.btn-danger-quiet,.signal-port-box,.diag-now,.layout-switch,.selftest-verdict,.ccss-editor-panel,.meter-icc-panel,.meter-3dlut-workspace-section,.info-item,.lg-current-input-value),
 :where([data-palette="contrast"]) .setting-tiles > .field,
+:where([data-palette="contrast"]) .status-bar,
 :where([data-palette="contrast"]) .desktop-nav-btn[aria-current="page"],
 :where([data-palette="contrast"]) body:is(.layout-desktop,.layout-tablet) .dashboard > .card,
 :where([data-palette="contrast"]) :is(#meterNoMeterBanner,#meterGreyRgbLegacyWrap,#meterGreyTvWrap,#lgDeviceList){box-shadow:inset 0 0 0 1px var(--border)}
@@ -876,9 +943,16 @@ body.layout-desktop .devinfo-facts:not(.update-facts){grid-template-columns:repe
 /* Paper and Natrium Light: a key is only a few code values off its card and a tile has the card's
    tone on the desktop, so what is pressed keeps a line there as well. */
 :where([data-palette="paper"],[data-palette="natrium-light"]) :is(.pat-btn,.theme-swatch-btn,.meter-lg-rgb-bar,.meter-xyz-gear,.meter-pattern-insert-gear,.info-item),
-:where([data-palette="paper"],[data-palette="natrium-light"]) .setting-tiles > .field{box-shadow:inset 0 0 0 1px var(--border)}
+:where([data-palette="paper"],[data-palette="natrium-light"]) :is(.setting-tiles > .field,.status-bar){box-shadow:inset 0 0 0 1px var(--border)}
 
 /* ---- Motion: a key gives, nothing else moves ---- */
 .desktop-nav-btn,.tablet-nav-btn,.btn,.pat-btn,.theme-swatch-btn,.layout-switch-btn{transition:background-color .16s ease-out,color .16s ease-out,transform .12s ease-out}
 .btn:active:not(:disabled),.tablet-nav-btn:active,.pat-btn:active{transform:scale(.97)}
 @media(prefers-reduced-motion:reduce){.desktop-nav-btn,.tablet-nav-btn,.btn,.pat-btn,.theme-swatch-btn,.layout-switch-btn,.setting-tiles > .field{transition:none}.btn:active:not(:disabled),.tablet-nav-btn:active,.pat-btn:active{transform:none}}
+/* Desktop: while the readout names what is sent instead, an absent meter
+   and calibration program ("No meter", "No calibration software") make room and the gaps close up a little, so the header
+   keeps one row. */
+body.layout-desktop .status-bar:has(.status-diff) :is(#meterStatusWrap,#calStatusWrap).is-absent{display:none}
+/* Below 1200 px always: the header keeps one height whether or not a difference shows. */
+@media(max-width:1199px){body.layout-desktop .status-bar :is(#meterStatusWrap,#calStatusWrap).is-absent{display:none}}
+body.layout-desktop .status-bar:has(.status-diff){column-gap:12px}

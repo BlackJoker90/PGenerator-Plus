@@ -125,7 +125,7 @@ Without a display, the renderer waits instead of failing. The UI says so in a ba
 <td valign="top">
 
 ### 🖥️ A reworked Web UI
-**13 colour themes** (dark, light, OLED, Natrium, the lime Volt …) and workspace navigation. The look is built for a dim room: the signal settings in Output are large keys with their name inside, what the generator reads back sits in pills, and Dark and Light step in tone instead of drawing outlines, with a single aqua accent. The typeface is served by the Pi itself, so the page looks the same without internet. Only sending patterns (for example from Calman or HCFR)? Hide the Measure workspaces with one switch in Settings. The UI shows the measured HDMI link depth and clock. It is served compressed with an ETag, pauses polling in hidden tabs and uses its own dialogs instead of browser pop-ups. Toasts appear only for warnings and errors.
+**13 colour themes** (dark, light, OLED, Natrium, the lime Volt …) and workspace navigation. The look is built for a dim room: the signal settings in Output are large keys with their name inside, each with a line for what the generator actually sends, and Dark and Light step in tone instead of drawing outlines, with a single aqua accent. The typeface is served by the Pi itself, so the page looks the same without internet. Only sending patterns (for example from Calman or HCFR)? Hide the Measure workspaces with one switch in Settings. The UI shows the measured HDMI link depth and clock. It is served compressed with an ETag, pauses polling in hidden tabs and uses its own dialogs instead of browser pop-ups. Toasts appear only for warnings and errors.
 
 </td>
 </tr>
@@ -169,7 +169,7 @@ While **Calman, ColourSpace or LightSpace is connected, it sets the signal**: th
 <td valign="top">
 
 ### 🔗 What is on the cable, and when the link dropped
-Next to the settings, **On the cable** shows what is actually sent (format, range, depth, HDR mode), read from the infoframes and the encoder, and names every quiet adjustment ("12-bit setting is sent as 10-bit."). Hover over the signal or the calibration program in the header for the same. If the HDMI link drops while Calman is connected or a measurement runs (display reset, input change, power off), the time is recorded and a notice says the readings across it can't be combined.
+Signal Mode, Bit Depth, Color Format and Range each have a **Sent** line: what the Pi actually sends, read inside the Pi from the infoframes and the encoder (Resolution shows the link clock; Colorimetry is read, see Live Information, but not compared). A check means it matches the setting, a warning names what is sent instead, and below the fields every quiet adjustment is spelled out ("12-bit setting is sent as 10-bit."). A field that is not compared (the 12-bit container of 4:2:2, the range of YCbCr, a new output before its first picture) or was compared against other settings (Calman changed them) shows the value without a verdict. It proves what the Pi sends, not what the display receives. Hover over the signal or the calibration program in the header for the same. If the HDMI link drops while Calman is connected or a measurement runs (display reset, input change, power off), the time is recorded and a notice says the readings across it can't be combined.
 
 </td>
 </tr>
@@ -197,7 +197,7 @@ Next to the settings, **On the cable** shows what is actually sent (format, rang
 | Range with Calman | – | **Follow Calman**, or **Always Full** / **Always Limited** for the whole Calman session |
 | Calman's Dolby Vision patches | signalled in the BT.2020 container | **signalled in the P3-D65 container, as PGenerator 1.6 did**: Calman's patches are colours of its P3 target; BT.2020 selectable (**Dolby Vision with Calman**) |
 | Calman's percent greys on an 8-bit output | 10-bit code with the low bits dropped | **the 8-bit code of that percent, as Calman's own 8-bit formula gives it**; other 10-bit codes go to the nearest code with a notice |
-| What goes out on the cable | – | **shown next to the settings**, quiet adjustments named (e.g. 12-bit sent as 10-bit) |
+| What goes out on the cable | – | **shown in each setting field**, checked against the setting, quiet adjustments named (e.g. 12-bit sent as 10-bit) |
 | Range mismatch between Pi and display | – | **Range Check** test image: shows whether the display decodes Limited or Full, next to the range on the cable, plus an EDID check that predicts from the display's EDID (QS/QY) and the Pi's AVI infoframe (Q/YQ, VIC) whether the display on Auto matches |
 | HDMI link drop during a measurement | – | **recorded with the time**, notice and banner: readings across it can't be combined |
 | Calman connection as G1 | – | **full control** from Calman (patches, signal modes, G1 patterns) |
@@ -207,7 +207,7 @@ Next to the settings, **On the cable** shows what is actually sent (format, rang
 | Display's Dolby Vision block | only "DV supported" | peak, black, interfaces and primaries shown; mismatch warnings; patches above the peak flagged |
 | SPD InfoFrame | always sent ("Broadcom Videocore", media player); can limit a display's LLDV gamut to Rec.709 (ASUS PA32DC, Light Illusion) | **never sent**: removed in the vc4 driver (Pi 4) |
 | WebUI themes | dark / light / system | **13 themes** incl. Natrium dark & light and Volt, Scope, Ultraviolet |
-| WebUI look | – | signal settings as keys with their name inside, read-back in pills, own typeface served by the Pi (works offline); a select's menu opens above or below its key, never over its name |
+| WebUI look | – | signal settings as keys with their name inside, each with its read-back line, own typeface served by the Pi (works offline); a select's menu opens above or below its key, never over its name |
 | Measurement workspaces | – | **can be hidden** in Settings for pattern-only setups (Calman, HCFR) |
 | HDMI link readout | – | measured link depth and clock |
 | CPU scaling governor | fixed in `/etc/default/rcPGenerator` | **Scaling Type in the WebUI**, applies without a reboot |
@@ -390,7 +390,7 @@ Served on **port 80** at `http://pgenerator.local`. It has a **Desktop** layout 
 
 | Workspace | What's in it |
 |---|---|
-| **Output** | Signal mode (SDR / HDR10 / HLG / Dolby Vision), resolution from the EDID, bit depth, colour format, colorimetry, range, and HDR10 and DV metadata (with hints for measuring Dolby Vision); **Range with Calman** (follow Calman, or always Full / Limited) and **Dolby Vision with Calman** (P3-D65 or BT.2020 container for Calman's Dolby Vision patches). Options the Pi or the display cannot carry stay visible but locked, with the reason. **On the cable** shows what is actually sent and any quiet adjustment; banners show refused settings (with what works), HDMI link interruptions during a measurement and a test EDID in use. Shows a banner while no display is connected. Moving the cable to the other HDMI port keeps the resolution (the mode is followed by its timing, not its list position) and the output follows the cable. Below it the **Signal Self-Test**: draws known codes in every signal mode and reads the scanout back, next to link depth, range CSC, AVI infoframe, HDR metadata and the Dolby Vision infoframe |
+| **Output** | Signal mode (SDR / HDR10 / HLG / Dolby Vision), resolution from the EDID, bit depth, colour format, colorimetry, range, and HDR10 and DV metadata (with hints for measuring Dolby Vision); **Range with Calman** (follow Calman, or always Full / Limited) and **Dolby Vision with Calman** (P3-D65 or BT.2020 container for Calman's Dolby Vision patches). Options the Pi or the display cannot carry stay visible but locked, with the reason. A **Sent** line in each setting field shows what is actually sent, checked against the setting, and any quiet adjustment; banners show refused settings (with what works), HDMI link interruptions during a measurement and a test EDID in use. Shows a banner while no display is connected. Moving the cable to the other HDMI port keeps the resolution (the mode is followed by its timing, not its list position) and the output follows the cable. Below it the **Signal Self-Test**: draws known codes in every signal mode and reads the scanout back, next to link depth, range CSC, AVI infoframe, HDR metadata and the Dolby Vision infoframe |
 | **Patterns** | Calman G1 plates (favourites Basic Alignment, Warm-Up, Granger Rainbow, plus all others; Basic Alignment doubles as an overscan check: numbered rings 1 to 5 % in from each edge, so the outermost ring still visible shows how much the display crops), the test images Range Check (sub-black codes show whether the display decodes the signal as Limited or Full, next to the range on the cable; an EDID check from the display's EDID and the Pi's AVI infoframe says whether the display on Auto should match), White Clipping and Black Clipping, your own uploaded images and videos, and **playlists** you step through with the TV remote; "Show menu on TV" opens the on-screen pattern menu |
 | **Calibration** | Meter detection, single and continuous reads, series runs (Greyscale 21/11, Colors 30, Saturation 24), charts, and session export |
 | **Meter Profiler** | Meter correction (CCSS) editor and preview |
@@ -463,7 +463,7 @@ The Pi 4 sends at most **600 MHz** on the HDMI link, and only on HDMI0 (HDMI1: 3
 | 4K 60 Hz, RGB / YCbCr 4:4:4, 10-bit | 742.5 MHz | **not possible**: needs HDMI 2.1 |
 | 4K 60 Hz, RGB / YCbCr 4:4:4, 12-bit | 891 MHz | **not possible**: needs HDMI 2.1 |
 
-HDMI 2.0 ends at 600 MHz; anything above needs the FRL link of HDMI 2.1, which the Pi 4 does not have. PGenerator+ **refuses** these settings with the reason and suggests what works instead (8-bit, YCbCr 4:2:2 or 24 / 30 Hz). A 12-bit RGB setting outside Dolby Vision goes out as 10-bit, and **On the cable** says so.
+HDMI 2.0 ends at 600 MHz; anything above needs the FRL link of HDMI 2.1, which the Pi 4 does not have. PGenerator+ **refuses** these settings with the reason and suggests what works instead (8-bit, YCbCr 4:2:2 or 24 / 30 Hz). A 12-bit RGB setting outside Dolby Vision goes out as 10-bit, and the Bit Depth field's **Sent** line says so.
 
 The Pi 4's KMS driver sets the HDMI InfoFrames directly:
 
@@ -585,7 +585,7 @@ All endpoints are on port 80 and return JSON.
 | POST | `/api/wifi/connect` | Connect to Wi-Fi (`ssid`, `psk`) |
 | GET / POST | `/api/wifi/ap` | Read / set AP SSID and password |
 | GET | `/api/infoframes` | AVI, DRM and SPD InfoFrame hex data, whether SPD is on the wire |
-| GET | `/api/signal` | What the settings ask for (`requested`), what is on the cable (`sending`, `wire`: format, range, EOTF, depth, TMDS clock), the check against board and display (`check`), quiet `adjustments`, the current refusal (`refused`), the last HDMI link interruption during a measurement (`link_event`) and a test EDID in use or not applied (`test_edid`) |
+| GET | `/api/signal` | What the settings ask for (`requested`), what is on the cable (`sending`, `wire`: format, range, EOTF, depth, TMDS clock, and per setting field whether it `matches` or `differs` (`fields`), the sentence for each difference, `differences`, and the settings that comparison used, `compared`), the check against board and display (`check`), quiet `adjustments`, the current refusal (`refused`), the last HDMI link interruption during a measurement (`link_event`) and a test EDID in use or not applied (`test_edid`) |
 | GET | `/api/cec/status` | HDMI-CEC TV power status |
 | GET | `/api/cec/{cmd}` | Send a CEC command (`wake`, `on`, `off`, `as`) |
 | POST | `/api/pattern` | Display a test pattern (refused with the reason while signal settings are refused) |

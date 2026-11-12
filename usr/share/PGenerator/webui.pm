@@ -11913,33 +11913,143 @@ sub webui_signal_vsif_line (@) {
  return $line;
 }
 
+# The record of the renderer the cable is compared with ({pid, conf, avi}:
+# renderer_running_record, whose conf follows an in-place reconfigure only
+# once the renderer acknowledged it), and only once that renderer has logged
+# an AVI frame of its own, one with a later kernel time than the last frame
+# before its spawn (avi, taken by renderer_start_avi_stamp): until then the
+# kernel log's last frame is the console's or the previous renderer's.
+# undef: nothing to compare with.
+sub webui_signal_verdict_record (@) {
+ my $rec=defined(&renderer_running_record) ? eval { &renderer_running_record() } : undef;
+ return undef if(ref($rec) ne "HASH" || ref($rec->{conf}) ne "HASH");
+ my $at_start=$rec->{avi};
+ return undef if(!defined $at_start || $at_start!~/^\d+(?:\.\d+)?$/);
+ my $now=&webui_avi_log_time();
+ return undef if($now!~/^\d+(?:\.\d+)?$/ || $now <= $at_start);
+ return $rec;
+}
+
+# The same renderer, with the same record, before and after the frames were
+# read: a restart in between pairs one renderer's frames with another's conf.
+sub webui_signal_same_record (@) {
+ my ($a,$b)=@_;
+ return 0 if(ref($a) ne "HASH" || ref($b) ne "HASH");
+ return 0 if(($a->{pid} // "") ne ($b->{pid} // "") || ($a->{avi} // "") ne ($b->{avi} // ""));
+ my $text=sub { my $c=shift; return join("",map { "$_=".($c->{$_} // "")."\n" } sort keys %$c); };
+ return ($text->($a->{conf}) eq $text->($b->{conf})) ? 1 : 0;
+}
+
+# The request signal_wire_compare checks the cable against, from the
+# renderer's conf ($run); $req (the settings' request) gives the rest.
+# Default range on RGB is compared only where this renderer recorded what it
+# resolved Default to: without a valid note there is no range verdict.
+sub webui_signal_compare_request (@) {
+ my ($req,$run)=@_;
+ my %c=%$req;
+ $c{color_format}=int($run->{"color_format"} || 0);
+ $c{max_bpc}=&dv_standard_link_conf($run) ? 8 : int($run->{"max_bpc"} || 8);
+ $c{signal_mode}=&signal_mode_from_conf($run);
+ # The renderer's own flags when its conf names no transport, never the
+ # global conf (it may hold another set's).
+ $c{dv_transport}=&pg_dv_transport_mode($run->{"dv_transport"},int($run->{"is_ll_dovi"} || 0) ? "lldv" : "standard");
+ $c{eotf}=int($run->{"eotf"} || 0);
+ my $set=$run->{"rgb_quant_range"} || "0";
+ if($set=~/^[12]$/) { $c{rgb_quant_range}=$set+0; }
+ else {
+  $c{rgb_quant_range}=0;
+  if($c{color_format}==0 && defined($renderer_default_range_file) && open(my $fh,'<',$renderer_default_range_file)) {
+   my $line=<$fh>;
+   close($fh);
+   $c{rgb_quant_range}=$1+0 if(defined $line && $line=~/^([12])\s*$/);
+  }
+ }
+ return \%c;
+}
+
 # What the settings ask for and what is on the cable (AVI/DRM infoframes of
 # the last modeset, the encoder's depth and TMDS readback, the vendor frame
 # for Dolby Vision), with the quiet adjustments where the two differ.
 sub webui_signal_json (@) {
  require PGSignalCheck;
- my $req=&signal_request_from_conf(\%pgenerator_conf);
- $req->{rgb_quant_range}=&effective_rgb_quant_range() if(defined &effective_rgb_quant_range);
- my ($r)=eval { &signal_check_conf(\%pgenerator_conf) };
+ # One copy of the settings for the request and for "compared": a conf
+ # written while the cable is read must not pair one set's verdict with the
+ # other set's stamp.
+ my %conf=%pgenerator_conf;
+ my $req=&signal_request_from_conf(\%conf);
+ my ($r)=eval { &signal_check_conf(\%conf) };
+ # The settings the cable is compared with: those the running renderer
+ # works from, once it has logged a frame of its own (no verdict before).
+ # Taken before the frames are read, so the frames are at least as new, and
+ # again after the last input of the comparison (frames, link registers,
+ # vendor frame, Default range note): a renderer that changed in between
+ # leaves no verdict.
+ my $rec=&webui_signal_verdict_record();
  my ($connected,$avi,$drm,undef,$read_ok)=&webui_last_infoframes();
+ my $run=$rec ? $rec->{conf} : undef;
  my $link=$connected ? &webui_hdmi_link_info() : undef;
  $link=undef if($link && !$link->{renderer});
  my $vsif=($connected && $link) ? &webui_signal_vsif_line($avi,$drm) : undef;
  my $w=PGSignalCheck::signal_wire_from_infoframes($connected ? $avi : "",$connected ? $drm : "",$link,$vsif);
- my @adj=@{PGSignalCheck::signal_wire_adjustments($req,$w)};
+ # Verdicts and their sentences only from frames of the renderer that runs
+ # now, against the settings it runs with: while it restarts (no link
+ # block), before its first frame, or while an apply is still under way the
+ # frames and the conf on disk can belong to different settings.
+ # The output still on another port than the display (the cable moved):
+ # the frames and the link registers belong to different connectors.
+ my $elsewhere=0;
+ if($link && $run) {
+  my ($port)=eval { &signal_connected_port() };
+  my $driving=eval { &signal_renderer_port() } || "";
+  $elsewhere=1 if(defined($port) && $port ne "" && $driving ne "" && $driving ne $port);
+ }
+ my $creq=($link && $run && !$elsewhere) ? &webui_signal_compare_request($req,$run) : undef;
+ $creq=undef if($creq && !&webui_signal_same_record($rec,eval { &renderer_running_record() }));
+ my $cmp=$creq ? PGSignalCheck::signal_wire_compare($creq,$w) : {adjustments=>[],checked=>{}};
+ my @adj=map {$_->[1]} @{$cmp->{adjustments}};
  unshift(@adj,@{$r->{adjustments} || []}) if($r);
- my $mode=PGSignalCheck::signal_mode_label($req);
- my $wire=PGSignalCheck::signal_wire_label($w,$mode,$req);
- my $parts=PGSignalCheck::signal_wire_parts($w,$mode,$req);
+ # Per setting field: compared on the cable, and differing (the tile marks).
+ my %differs=map {$_->[0]=>1} @{$cmp->{adjustments}};
+ my $fields=join(",",map {"\"$_\":\"".($differs{$_} ? "differs" : "matches")."\""} sort keys %{$cmp->{checked}});
+ # The same differences by field, so the page says a sentence only where it
+ # shows the field's verdict (adjustments keeps all of them, as before).
+ my %dtext;
+ push(@{$dtext{$_->[0]}},$_->[1]) foreach(@{$cmp->{adjustments}});
+ my $differences=join(",",map { my $k=$_; "\"$k\":[".join(",",map {"\"".&_webui_json_escape($_)."\""} @{$dtext{$k}})."]" } sort keys %dtext);
+ # The settings those verdicts were compared with, as the WebUI's fields
+ # hold them (applyConfigState): a verdict only stands next to these
+ # values. null: nothing was compared.
+ my $compared="null";
+ if($creq) {
+  # An empty mode_idx is index 0 to the renderer (main.cpp reads "" and
+  # atoi makes it 0, ofxRPI4Window takes modes[0]); the WebUI's select
+  # holds that index. A missing one ("-1" there: the mode the CRTC has)
+  # names no index.
+  my $midx=$run->{"mode_idx"};
+  $midx="0" if(defined $midx && $midx eq "");
+  $midx="" if(!defined $midx);
+  my %cmpconf=(signal_mode=>$creq->{signal_mode},dv_transport=>$creq->{dv_transport},mode_idx=>$midx,
+   color_format=>$run->{"color_format"} || "0",max_bpc=>$run->{"max_bpc"} || "8",
+   rgb_quant_range=>$run->{"rgb_quant_range"} || "0",eotf=>$run->{"eotf"} || "0");
+  $compared="{".join(",",map {"\"$_\":\"".&_webui_json_escape($cmpconf{$_} // "")."\""} sort keys %cmpconf)."}";
+ }
+ # The request as a label names the range Default resolves to (as at HEAD);
+ # the labels only, the comparison uses the renderer's conf.
+ my $label_req={%$req};
+ $label_req->{rgb_quant_range}=&effective_rgb_quant_range() if(defined &effective_rgb_quant_range);
+ my $mode=PGSignalCheck::signal_mode_label($label_req);
+ my $wire=PGSignalCheck::signal_wire_label($w,$mode,$label_req);
+ my $parts=PGSignalCheck::signal_wire_parts($w,$mode,$label_req);
  my $num=sub { my $v=shift; return defined($v) ? $v+0 : "null"; };
  return "{\"status\":\"ok\",\"connected\":".($connected ? "true" : "false")
-  .",\"requested\":\"".&_webui_json_escape(&signal_request_label($req))."\""
+  .",\"requested\":\"".&_webui_json_escape(&signal_request_label($label_req))."\""
   .",\"sending\":\"".&_webui_json_escape($wire)."\""
   .",\"wire\":{\"format\":".$num->($w->{format}).",\"range\":".$num->($w->{range})
   .",\"eotf\":".$num->($w->{eotf}).",\"bpc\":".$num->($w->{bpc})
   .",\"tmds_mhz\":".(defined $w->{tmds_mhz} ? sprintf("%.3f",$w->{tmds_mhz}) : "null")
   .",\"dv\":".(defined $w->{dv} ? "\"".($w->{dv} eq "" ? "none" : $w->{dv})."\"" : "null")
-  .",\"parts\":".($parts ? "{".join(",",map {"\"$_\":\"".&_webui_json_escape($parts->{$_})."\""} qw(format name depth range mode signal))."}" : "null")."}"
+  .",\"parts\":".($parts ? "{".join(",",map {"\"$_\":\"".&_webui_json_escape($parts->{$_})."\""} qw(format name depth range mode signal))."}" : "null")
+  .",\"fields\":{$fields},\"differences\":{$differences},\"compared\":$compared}"
   .",\"check\":".($r ? "{\"ok\":".($r->{ok} ? "true" : "false").",\"reason\":\"".&_webui_json_escape($r->{reason})."\"}" : "null")
   .",\"adjustments\":[".join(",",map {"\"".&_webui_json_escape($_)."\""} @adj)."]"
   .((defined($read_ok) && !$read_ok) ? ",\"wire_read\":false" : "")
@@ -14784,6 +14894,18 @@ sub webui_range_expectation_json (@) {
   .",\"format\":".$num->($e->{format}).",\"q\":".$num->($e->{q}).",\"yq\":".$num->($e->{yq})
   .",\"vic\":".$num->($e->{vic}).",\"qs\":".$num->($e->{qs}).",\"qy\":".$num->($e->{qy})
   .",\"basis\":".$str->($e->{basis}).",\"reason\":".$str->($e->{reason})."}";
+}
+
+# The kernel time of the last AVI infoframe line ("[  12.345] ... AVI IF:"),
+# as logged: "" when the log holds none, "unread" when the log could not be
+# read or that line carries no time. Times only grow until a reboot, so a
+# dropped old line (ring buffer) never looks like a new frame.
+sub webui_avi_log_time (@) {
+ my $dmesg=&webui_dmesg_log();
+ return "unread" if(!defined $dmesg);
+ my @avi=$dmesg=~/^(.*AVI IF:.*)$/mg;
+ return "" if(!@avi);
+ return ($avi[-1]=~/^\[\s*(\d+(?:\.\d+)?)\]/) ? $1 : "unread";
 }
 
 # The last AVI infoframe line of the kernel log and how many there are:

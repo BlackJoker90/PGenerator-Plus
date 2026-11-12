@@ -90,14 +90,14 @@ __PG_LOGO_DARK__
  <!-- Display Settings -->
  <div class="card" id="displaySettingsCard" data-widget="display" data-desktop-workspace="output" data-desktop-order="10" draggable="true">
   <h2><span class="drag-handle"><svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true" fill="currentColor"><circle cx="9" cy="6" r="1.6"/><circle cx="15" cy="6" r="1.6"/><circle cx="9" cy="12" r="1.6"/><circle cx="15" cy="12" r="1.6"/><circle cx="9" cy="18" r="1.6"/><circle cx="15" cy="18" r="1.6"/></svg></span>Display Settings <button type="button" class="btn btn-sm card-h2-action btn-reset" onclick="resetDefaults()" title="Reset the display settings below to SDR defaults (applied only after Apply &amp; Restart)"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 12a8.5 8.5 0 1 0 2.6-6.1"/><path d="M3.5 4v5h5"/></svg>Reset Defaults</button></h2>
-  <div id="displayNoHdmiBanner" style="display:none;background:color-mix(in srgb,var(--orange) 8%,var(--warn-base));border:1px solid color-mix(in srgb,var(--orange) 45%,var(--border));border-radius:6px;padding:10px 12px;margin-bottom:10px;font-size:var(--fs-sm);color:var(--text);line-height:1.45"><strong>No HDMI display connected.</strong> Settings can still be changed and saved; the renderer starts when a display is plugged in. The resolution list appears once the display is detected.</div>
+  <div id="displayNoHdmiBanner" style="display:none;background:color-mix(in srgb,var(--orange) 8%,var(--warn-base));border:1px solid color-mix(in srgb,var(--orange) 45%,var(--border));border-radius:6px;padding:10px 12px;margin-bottom:10px;font-size:var(--fs-sm);color:var(--text);line-height:1.45"><strong>No HDMI display connected.</strong> Settings can still be changed and saved; the output starts and the resolutions appear once a display is plugged in.</div>
   <div id="signalRefusedAlert" class="signal-alert" data-tone="refused" role="alert" hidden><strong>Settings refused</strong> <span id="signalRefusedText"></span></div>
   <div id="signalOwnerAlert" class="signal-alert" data-tone="owner" role="status" hidden><strong id="signalOwnerTitle"></strong> <span id="signalOwnerText"></span></div>
   <div id="signalTestEdidAlert" class="signal-alert" role="status" hidden><strong id="signalTestEdidTitle">Test EDID in use</strong> <span id="signalTestEdidText"></span></div>
   <div id="signalLinkAlert" class="signal-alert" role="alert" hidden><strong>HDMI link interrupted</strong> <span id="signalLinkText"></span> <button type="button" class="btn btn-sm btn-secondary signal-alert-dismiss" onclick="pgSignalLinkDismiss()">Dismiss</button></div>
   <div class="signal-overview">
     <section id="signalPort" class="signal-port" aria-labelledby="signalPortTitle" hidden>
-     <h3 class="signal-port-title" id="signalPortTitle">Pi ports</h3>
+     <h3 class="signal-port-title" id="signalPortTitle">Pi Ports</h3>
      <div class="signal-port-box">
      <svg class="signal-port-board" id="signalPortBoard" viewBox="0 54 300 68" role="img" aria-labelledby="signalPortBoardTitle">
       <title id="signalPortBoardTitle">HDMI ports</title>
@@ -123,81 +123,71 @@ __PG_LOGO_DARK__
       </g>
      </svg>
      <p class="signal-port-note" id="signalPortNote" hidden></p>
-     <button type="button" class="btn btn-sm btn-secondary signal-port-restart" id="signalPortRestart" onclick="pgSignalPortRestart()" hidden>Restart output</button>
+     <button type="button" class="btn btn-sm btn-secondary signal-port-restart" id="signalPortRestart" onclick="pgSignalPortRestart()" hidden>Restart Output</button>
      </div>
     </section>
-    <section id="signalWireLine" class="signal-wire" aria-labelledby="signalWireTitle" hidden>
-     <h3 class="signal-wire-title" id="signalWireTitle">On the cable</h3>
-     <dl class="signal-wire-tiles" id="signalWireTiles">
-      <div class="sw-tile sw-signal" id="signalWireSignalTile"><dt>Signal</dt><dd id="signalWireSignal"></dd></div>
-      <div class="sw-tile sw-mode"><dt>Resolution</dt><dd id="signalWireMode"></dd></div>
-      <div class="sw-tile sw-link" id="signalWireLinkTile"><dt>Link</dt><dd id="signalWireLink"></dd></div>
-      <div class="sw-tile sw-format"><dt>Format</dt><dd id="signalWireFormat"></dd></div>
-      <div class="sw-tile sw-depth" id="signalWireDepthTile"><dt>Bit depth</dt><dd id="signalWireDepth"></dd></div>
-      <div class="sw-tile"><dt>Range</dt><dd id="signalWireRange"></dd></div>
-     </dl>
-     <p class="signal-wire-text" id="signalWireText" hidden></p>
-     <p class="signal-wire-adjusted" id="signalWireAdjusted"></p>
-    </section>
-  </div>
-  <section class="preset-bar" id="presetBar" aria-labelledby="presetBarTitle">
-   <div class="preset-bar-head">
-    <h3 class="preset-bar-title" id="presetBarTitle">Signal presets</h3>
-    <div class="preset-filter" id="presetFilter" role="group" aria-label="Show presets of one signal type" hidden></div>
-   </div>
-   <div class="preset-row">
-    <select id="presetSelect" class="inline-select" onchange="pgPresetLoad(this.value)" aria-labelledby="presetBarTitle" aria-describedby="presetBarHint">
-     <option value="">Choose a preset…</option>
-    </select>
-    <button type="button" class="btn btn-sm btn-secondary" id="presetSaveOpenBtn" onclick="pgPresetSavePrompt()" aria-expanded="false" aria-controls="presetSaveForm"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 3h11.2L21 7.8V19a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2Z"/><path d="M7.5 3v5h8V3"/><path d="M7 21v-6.5h10V21"/></svg>Save as preset</button>
-    <button type="button" class="btn btn-sm btn-secondary" id="presetDeleteBtn" onclick="pgPresetDelete(document.getElementById('presetSelect').value)" disabled>Delete</button>
-   </div>
-   <div class="preset-chips" id="presetChips" aria-live="polite" hidden></div>
-   <form class="preset-save" id="presetSaveForm" hidden onsubmit="event.preventDefault();pgPresetSaveSubmit()">
-    <label class="preset-save-label" for="presetSaveName">Name the preset</label>
-    <div class="preset-save-row">
-     <input type="text" id="presetSaveName" class="ccss-input" maxlength="40" required autocomplete="off" spellcheck="false" placeholder="e.g. LG C3 HDR10 calibration" aria-describedby="presetSaveWhat presetSaveBlock" oninput="pgPresetSaveValidate()">
-     <button type="submit" class="btn btn-sm btn-primary" id="presetSaveBtn" disabled>Save preset</button>
-     <button type="button" class="btn btn-sm btn-secondary" onclick="pgPresetSaveClose()">Cancel</button>
+   <section class="preset-bar is-empty" id="presetBar" aria-labelledby="presetBarTitle">
+    <div class="preset-bar-head">
+     <div class="preset-bar-label"><h3 class="preset-bar-title" id="presetBarTitle">Signal Presets</h3><span class="meter-help-tip" id="presetBarHelp" aria-label="About signal presets" title="Set the fields below and save them under a name, no Apply needed. Loading a preset fills the fields; Apply &amp; Restart sends it.">?</span></div>
+     <div class="preset-filter" id="presetFilter" role="group" aria-label="Show presets of one signal type" hidden></div>
     </div>
-    <p class="preset-save-block" id="presetSaveBlock" role="status" hidden></p>
-    <div class="preset-save-what" id="presetSaveWhat"><span class="preset-save-what-label">Saves</span><span class="preset-chips" id="presetSaveChips"></span></div>
-   </form>
-   <p class="preset-bar-hint" id="presetBarHint">Set the fields below and save them under a name, no Apply needed. Loading a preset fills the fields; Apply &amp; Restart sends it.</p>
-  </section>
-  <fieldset class="grid setting-tiles signal-fields" id="displaySignalFields">
+    <div class="preset-row">
+     <select id="presetSelect" class="inline-select" onchange="pgPresetLoad(this.value)" aria-labelledby="presetBarTitle">
+      <option value="">Choose a preset…</option>
+     </select>
+     <button type="button" class="btn btn-sm btn-secondary" id="presetSaveOpenBtn" onclick="pgPresetSavePrompt()" aria-expanded="false" aria-controls="presetSaveForm"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 3h11.2L21 7.8V19a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2Z"/><path d="M7.5 3v5h8V3"/><path d="M7 21v-6.5h10V21"/></svg>Save as Preset</button>
+     <button type="button" class="btn btn-sm btn-secondary" id="presetDeleteBtn" onclick="pgPresetDelete(document.getElementById('presetSelect').value)" disabled>Delete</button>
+    </div>
+    <div class="preset-chips" id="presetChips" aria-live="polite" hidden></div>
+    <form class="preset-save" id="presetSaveForm" hidden onsubmit="event.preventDefault();pgPresetSaveSubmit()">
+     <label class="preset-save-label" for="presetSaveName">Name the preset</label>
+     <div class="preset-save-row">
+      <input type="text" id="presetSaveName" class="ccss-input" maxlength="40" required autocomplete="off" spellcheck="false" placeholder="e.g. LG C3 HDR10 calibration" aria-describedby="presetSaveWhat presetSaveBlock" oninput="pgPresetSaveValidate()">
+      <button type="submit" class="btn btn-sm btn-primary" id="presetSaveBtn" disabled>Save Preset</button>
+      <button type="button" class="btn btn-sm btn-secondary" onclick="pgPresetSaveClose()">Cancel</button>
+     </div>
+     <p class="preset-save-block" id="presetSaveBlock" role="status" hidden></p>
+     <div class="preset-save-what" id="presetSaveWhat"><span class="preset-save-what-label">Saves</span><span class="preset-chips" id="presetSaveChips"></span></div>
+    </form>
+   </section>
+  </div>
+  <fieldset class="grid setting-tiles signal-fields" id="displaySignalFields" aria-label="Signal settings">
   <div class="field field-display">
     <label for="mode_idx">Resolution</label>
     <div class="mode-select-wrap">
-     <select id="mode_idx"></select>
+     <select id="mode_idx" aria-describedby="wireMode"></select>
      <span id="mode_idx_text" class="mode-select-value"></span>
     </div>
-    <button type="button" class="btn btn-sm btn-secondary mode-retry" id="modeRetryBtn" onclick="pgRetryModes()" title="Ask the generator for the display&rsquo;s modes again" hidden>Reload modes</button>
+    <p class="field-wire" id="wireMode" hidden></p>
+    <button type="button" class="btn btn-sm btn-secondary mode-retry" id="modeRetryBtn" onclick="pgRetryModes()" title="Ask the generator for the display&rsquo;s modes again" hidden>Reload Modes</button>
    </div>
   <div class="field field-gamut">
     <label for="signal_mode">Signal Mode</label>
-    <select id="signal_mode">
+    <select id="signal_mode" aria-describedby="wireSignal">
      <option value="sdr">SDR</option>
      <option value="hdr10">HDR10 (PQ)</option>
      <option value="hlg">HLG</option>
      <option value="dv">Dolby Vision</option>
     </select>
+    <p class="field-wire" id="wireSignal" hidden></p>
    </div>
   <div class="field field-gamma">
     <label for="max_bpc">Bit Depth</label>
-    <select id="max_bpc">
+    <select id="max_bpc" aria-describedby="wireDepth">
      <option value="8">8-bit</option>
      <option value="10">10-bit</option>
      <option value="12">12-bit</option>
     </select>
+    <p class="field-wire" id="wireDepth" hidden></p>
    </div>
   <div class="field field-display">
     <label for="color_format">Color Format</label>
-    <select id="color_format" onchange="uiEnforceQuantRangeForColorFormat()">
+    <select id="color_format" aria-describedby="wireFormat" onchange="uiEnforceQuantRangeForColorFormat()">
      <option value="0">RGB</option>
      <option value="2">YCbCr 4:2:2</option>
      <option value="1">YCbCr 4:4:4</option>
     </select>
+    <p class="field-wire" id="wireFormat" hidden></p>
    </div>
   <div class="field field-gamut">
     <label for="colorimetry">Colorimetry</label>
@@ -208,35 +198,43 @@ __PG_LOGO_DARK__
    </div>
   <div class="field field-gamma">
     <label for="rgb_quant_range">Range</label>
-    <select id="rgb_quant_range" onchange="pgSyncRangeDefaultOption(this)">
+    <select id="rgb_quant_range" aria-describedby="wireRange" onchange="pgSyncRangeDefaultOption(this)">
      <option value="0">Default</option>
      <option value="2">Full (0-255)</option>
      <option value="1">Limited (16-235)</option>
     </select>
+    <p class="field-wire" id="wireRange" hidden></p>
    </div>
   </fieldset>
+  <p class="dv-locked-note" id="dvLockedNote" hidden></p>
+  <p class="field-wire-legend" id="fieldWireLegend" hidden></p>
+  <div class="signal-wire" id="signalWireLine" role="status">
+   <p class="signal-wire-text" id="signalWireText" hidden></p>
+   <p class="signal-wire-adjusted" id="signalWireAdjusted"></p>
+  </div>
+  <!-- Calman-only settings: saved on change (calmanRangeChanged / calmanDvContainerChanged), not by Apply. The details sit behind the (i) tips. -->
+  <div class="calman-group" role="group" aria-labelledby="calmanGroupTitle" aria-describedby="calmanGroupNote">
+  <h3 class="calman-group-title"><span id="calmanGroupTitle">During a Calman session</span><span class="calman-group-note" id="calmanGroupNote">Saved on change</span></h3>
   <div class="grid setting-tiles calman-range">
    <div class="field">
     <label for="calman_range">Range with Calman</label>
-    <select id="calman_range" onchange="calmanRangeChanged(this.value)" aria-describedby="calmanRangeHint">
+    <span class="meter-help-tip" id="calmanRangeHelp" aria-label="About Range with Calman" title="Follow Calman: the range Calman asks for, from Calman&rsquo;s next range command.&#10;&#10;Always Full or Always Limited: holds for the whole Calman session, whatever range Calman asks for, from Calman&rsquo;s next pattern; set Calman&rsquo;s patterns to the same range.&#10;&#10;YCbCr is Limited on the cable either way: Full there reads Calman&rsquo;s patterns as 0&#8209;255. Dolby Vision keeps the range of its transport.">?</span>
+    <select id="calman_range" onchange="calmanRangeChanged(this.value)">
      <option value="">Follow Calman</option>
      <option value="2">Always Full (0-255)</option>
      <option value="1">Always Limited (16-235)</option>
     </select>
    </div>
-   <p class="calman-range-hint" id="calmanRangeHint">Saved right away, also while Calman is connected. Full or Limited holds for the whole Calman session, whatever range Calman asks for, from Calman&rsquo;s next pattern; set Calman&rsquo;s patterns to the same range. Follow Calman takes effect with Calman&rsquo;s next range command. YCbCr is Limited on the cable either way: Full there reads Calman&rsquo;s patterns as 0&#8209;255. Dolby Vision keeps the range of its transport.</p>
-  </div>
-  <div class="grid setting-tiles calman-range">
    <div class="field">
     <label for="calman_dv_container">Dolby Vision with Calman</label>
-    <select id="calman_dv_container" onchange="calmanDvContainerChanged(this.value)" aria-describedby="calmanDvContainerHint">
+    <span class="meter-help-tip" id="calmanDvContainerHelp" aria-label="About Dolby Vision with Calman" title="The color space Dolby Vision signals for Calman&rsquo;s patches. P3-D65 fits Calman&rsquo;s Dolby Vision workflows, whose patches are P3 colors. With BT.2020 the same patches are BT.2020 colors and measure more saturated than Calman&rsquo;s targets; greys are the same in both.&#10;&#10;It applies from the first picture Calman shows until Calman disconnects, to everything shown in Standard Dolby Vision in that time, the WebUI&rsquo;s own patterns and measurements included.&#10;&#10;Without Calman, Dolby Vision is BT.2020; going back restarts the picture and the last patch is gone.">?</span>
+    <select id="calman_dv_container" onchange="calmanDvContainerChanged(this.value)">
      <option value="2">P3-D65</option>
      <option value="1">BT.2020</option>
     </select>
    </div>
-   <p class="calman-range-hint" id="calmanDvContainerHint">Saved right away, also while Calman is connected. The colour space Dolby Vision signals for Calman&rsquo;s patches. P3-D65 fits Calman&rsquo;s Dolby Vision workflows, whose patches are P3 colours. With BT.2020 the same patches are BT.2020 colours and measure more saturated than Calman&rsquo;s targets; greys are the same in both. It applies from the first picture Calman shows until Calman disconnects, to everything shown in Standard Dolby Vision in that time, the WebUI&rsquo;s own patterns and measurements included. Without Calman, Dolby Vision is BT.2020; going back restarts the picture and the last patch is gone.</p>
   </div>
-  <p class="dv-locked-note" id="dvLockedNote" hidden></p>
+  </div>
  </div>
 
  <!-- HDR Metadata -->
@@ -338,13 +336,15 @@ __PG_LOGO_DARK__
   </div>
  </div>
 
- <!-- Apply Settings Bar -->
+ <!-- Apply Settings Bar; screen readers hear it through #applyBarStatus (the bar itself is display:none until a change). -->
+ <span class="sr-only" id="applyBarStatus" role="status"></span>
  <div class="card span2" id="applyBar" data-desktop-workspace="output" data-desktop-global="dirty-settings" data-desktop-order="40" style="display:none">
   <div class="apply-bar-row">
    <div class="apply-bar-text">
     <span class="apply-bar-title">Settings changed</span>
     <span class="apply-bar-changes" id="applyBarChanges"></span>
-    <span class="apply-bar-note">The display shows no picture for a few seconds while the output restarts.</span>
+    <button class="apply-bar-more" type="button" id="applyBarMore" aria-controls="applyBarChanges" aria-expanded="false" onclick="applyBarShowAll(this)" hidden>Changes</button>
+    <span class="apply-bar-note">The display goes black for a few seconds.</span>
    </div>
    <div class="apply-bar-actions">
     <button class="btn btn-sm btn-secondary" type="button" onclick="discardSettings()">Discard</button>
@@ -356,14 +356,7 @@ __PG_LOGO_DARK__
  <!-- Signal Self-Test (Output, below Display Settings): pgen_selftest.pl walks the output through the signal
       modes and reads back the scanned-out codes (webui-app.js selftest*). -->
  <div class="card span2 selftest-card" id="selftestCard" data-widget="selftest" data-desktop-workspace="output" data-desktop-order="35" draggable="true">
-  <h2><span class="drag-handle"><svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true" fill="currentColor"><circle cx="9" cy="6" r="1.6"/><circle cx="15" cy="6" r="1.6"/><circle cx="9" cy="12" r="1.6"/><circle cx="15" cy="12" r="1.6"/><circle cx="9" cy="18" r="1.6"/><circle cx="15" cy="18" r="1.6"/></svg></span>Signal Self-Test</h2>
-  <ul class="selftest-facts" aria-label="What the self-test does">
-   <li><span><strong>Every signal mode</strong>Known codes drawn and read back from the scanout</span></li>
-   <li><span><strong>The link too</strong>Link depth, range CSC and AVI infoframe</span></li>
-   <li><span><strong>About 3 minutes</strong>Dim test windows on the display</span></li>
-   <li><span><strong>Settings come back</strong>Your signal settings are restored afterwards</span></li>
-  </ul>
-  <p class="selftest-note"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.9 2.4 17.6A2 2 0 0 0 4.1 20.6h15.8a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/><path d="M12 9.5v4"/><path d="M12 17h.01"/></svg><span><strong>Not an HDMI analyzer.</strong> Read inside the Pi, before the cable: it proves what the Pi sends, not what the display receives.</span></p>
+  <h2 aria-labelledby="selftestHeading"><span class="drag-handle"><svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true" fill="currentColor"><circle cx="9" cy="6" r="1.6"/><circle cx="15" cy="6" r="1.6"/><circle cx="9" cy="12" r="1.6"/><circle cx="15" cy="12" r="1.6"/><circle cx="9" cy="18" r="1.6"/><circle cx="15" cy="18" r="1.6"/></svg></span><span id="selftestHeading">Signal Self-Test</span> <span class="meter-help-tip" id="selftestHelp" aria-label="About the signal self-test" title="Draws known codes in every signal mode and reads them back from the scanout. It checks the link too: link depth, range conversion and the AVI infoframe.&#10;&#10;The Full Test takes about 3 minutes, the Quick Check about 40 seconds, with dim test windows on the display. Your signal settings are restored afterwards.&#10;&#10;Not an HDMI analyzer: it reads inside the Pi, so it proves what the Pi sends, not what the display receives. The same holds for the &ldquo;Sent&rdquo; lines in the signal settings.">?</span></h2>
   <div class="selftest-verdict" id="selftestVerdict" data-state="idle">
    <span class="selftest-mark" aria-hidden="true">
     <svg class="selftest-mark-icon" data-icon="idle" viewBox="0 0 24 24"><path d="M3 12h3l2.5-6 4 12 3-9 2 3H21" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
@@ -373,19 +366,19 @@ __PG_LOGO_DARK__
    </span>
    <div class="selftest-verdict-text" role="status" aria-live="polite">
     <div class="selftest-title" id="selftestTitle">Not run yet</div>
-    <div class="selftest-sub" id="selftestSub">Run the test with a display connected and no calibration software attached.</div>
+    <div class="selftest-sub" id="selftestSub">Full&nbsp;Test: 12 modes, about&nbsp;3&nbsp;min. Quick&nbsp;Check: 3 modes, about&nbsp;40&nbsp;s. Needs a display and no calibration software attached.</div>
    </div>
    <div class="selftest-actions">
-    <button type="button" class="btn btn-secondary" id="selftestQuickBtn" onclick="selftestStart('quick')">Quick check</button>
-    <button type="button" class="btn btn-primary" id="selftestRunBtn" onclick="selftestStart('full')">Run full test</button>
-    <button type="button" class="btn btn-secondary" id="selftestStopBtn" onclick="selftestCancel()" hidden>Stop test</button>
+    <button type="button" class="btn btn-secondary" id="selftestQuickBtn" onclick="selftestStart('quick')">Run Quick Check</button>
+    <button type="button" class="btn btn-primary" id="selftestRunBtn" onclick="selftestStart('full')">Run Full Test</button>
+    <button type="button" class="btn btn-secondary" id="selftestStopBtn" onclick="selftestCancel()" hidden>Stop Test</button>
    </div>
    <div class="selftest-progress" aria-hidden="true"><div class="selftest-progress-fill" id="selftestProgress"></div></div>
   </div>
   <ol class="selftest-modes" id="selftestModes" aria-label="Signal modes in the self-test"></ol>
   <div class="selftest-foot" id="selftestFoot" hidden>
    <span class="selftest-foot-note" id="selftestFootNote"></span>
-   <button type="button" class="btn btn-secondary btn-sm" id="selftestCopyBtn" onclick="selftestCopyReport()">Copy report</button>
+   <button type="button" class="btn btn-secondary btn-sm" id="selftestCopyBtn" onclick="selftestCopyReport()">Copy Report</button>
   </div>
  </div>
 
@@ -2390,7 +2383,13 @@ __PG_LOGO_DARK__
   </div>
   <div class="apply-settings-title" id="applySettingsTitle">Applying Settings</div>
   <div class="apply-settings-status" id="applySettingsStatus">Saving and restarting the renderer&hellip;</div>
-  <div class="apply-settings-hint" id="applySettingsHint" style="display:none">The display will go black for a moment while the new signal mode is applied.</div>
+  <div class="apply-settings-hint" id="applySettingsHint" style="display:none">The display goes black for a few seconds while the new settings are applied.</div>
+  <!-- Shown only when the apply failed: the way back to the settings. -->
+  <div class="apply-settings-kept apply-settings-close" id="applySettingsKept">Your changes stay in the Apply bar.</div>
+  <span class="sr-only" id="applySettingsResult" role="status"></span>
+  <div class="apply-settings-actions apply-settings-close" id="applySettingsActions">
+   <button class="btn btn-sm btn-secondary" id="applySettingsCloseBtn" type="button" onclick="applySettingsModalClose()">Back to Settings</button>
+  </div>
  </div>
 </div>
 

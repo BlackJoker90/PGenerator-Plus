@@ -1071,9 +1071,11 @@ sub renderer_running_pid (@) {
 
 # $conf: the conf read just before the spawn. Recorded only when the conf
 # still reads the same once the renderer runs; a write in between leaves no
-# record, so the next classic restart really restarts.
+# record, so the next classic restart really restarts. $avi: the kernel time
+# of the last AVI frame before the spawn (renderer_start_avi_stamp), kept in
+# the same record so it can only ever belong to this renderer.
 sub renderer_started_conf_record (@) {
- my $conf=shift;
+ my ($conf,$avi)=@_;
  my $path=&renderer_started_conf_path();
  my $pid=&renderer_running_pid();
  my $now=&renderer_conf_read();
@@ -1081,16 +1083,19 @@ sub renderer_started_conf_record (@) {
   unlink($path);
   return 0;
  }
- return &renderer_started_conf_write($pid,$conf);
+ return &renderer_started_conf_write($pid,$conf,$avi);
 }
 
-# Write the record for renderer $pid (tmp + rename). Any failed step leaves
-# no record, so the next check restarts rather than trusting a stale one.
+# Write the record for renderer $pid (tmp + rename): "<pid>" or
+# "<pid> avi=<time>", then the conf. Any failed step leaves no record, so
+# the next check restarts rather than trusting a stale one.
 sub renderer_started_conf_write (@) {
- my ($pid,$conf)=@_;
+ my ($pid,$conf,$avi)=@_;
  my $path=&renderer_started_conf_path();
+ my $head=$pid;
+ $head.=" avi=$avi" if(defined $avi && $avi=~/^\d+(?:\.\d+)?$/);
  if(open(my $fh,'>',"$path.tmp")) {
-  my $ok=print $fh "$pid\n".&renderer_conf_text($conf);
+  my $ok=print $fh "$head\n".&renderer_conf_text($conf);
   $ok=close($fh) && $ok;
   return 1 if($ok && rename("$path.tmp",$path));
   unlink("$path.tmp");
@@ -1099,8 +1104,8 @@ sub renderer_started_conf_write (@) {
  return 0;
 }
 
-# The record for the running renderer: {pid, conf}, undef when there is none
-# or it belongs to another process.
+# The record for the running renderer: {pid, conf, avi}, undef when there is
+# none or it belongs to another process. avi is undef when the record has none.
 sub renderer_started_conf_load (@) {
  open(my $fh,'<',&renderer_started_conf_path()) or return undef;
  my $pid=<$fh>;
@@ -1112,9 +1117,29 @@ sub renderer_started_conf_load (@) {
  close($fh);
  return undef if(!defined $pid);
  chomp($pid);
+ my $avi;
+ $avi=$1 if($pid=~s/ avi=(\d+(?:\.\d+)?)$//);
  my $running=&renderer_running_pid();
  return undef if($pid !~ /^\d+$/ || $running ne $pid || !%c);
- return {pid=>$pid,conf=>\%c};
+ return {pid=>$pid,conf=>\%c,avi=>$avi};
+}
+
+# The kernel log's AVI frames just before a renderer is spawned are the
+# console's or the previous renderer's (the console restores its mode when a
+# renderer exits; a new renderer commits its own frame only at its first
+# flip). The WebUI compares the cable with the renderer's settings only once
+# an AVI frame with a later kernel time is logged (webui_signal_verdict_record):
+# a time, not a count, as the ring buffer drops old lines. Taken just before
+# the spawn and kept in the renderer's start record (a separate file that
+# could not be removed would outlive its renderer). undef: the log cannot be
+# read, so the record has no time and nothing is compared.
+sub renderer_start_avi_stamp (@) {
+ return undef if(!defined(&webui_avi_log_time));
+ # The kernel time of the log's last AVI frame; none yet counts as 0.
+ my $stamp=&webui_avi_log_time();
+ return undef if(!defined $stamp || $stamp eq "unread");
+ return "0" if($stamp eq "");
+ return ($stamp=~/^\d+(?:\.\d+)?$/) ? $stamp : undef;
 }
 
 # 1 when the running renderer started with exactly the conf on disk now.
@@ -1131,10 +1156,16 @@ sub renderer_started_conf_current (@) {
 # connection that has applied nothing yet compares against this, so its
 # first apply restarts the renderer only for keys that really differ.
 sub renderer_running_conf (@) {
+ my $rec=&renderer_running_record();
+ return $rec ? $rec->{conf} : undef;
+}
+
+# The whole start record ({pid, conf, avi}) of the renderer that runs now,
+# under the same conditions as renderer_running_conf.
+sub renderer_running_record (@) {
  return undef if(!$is_kms || !&pattern_generator_is_running());
  return undef if(&renderer_stuck_in_kernel() ne "" || !&pattern_generator_has_drm_master());
- my $rec=&renderer_started_conf_load();
- return $rec ? $rec->{conf} : undef;
+ return &renderer_started_conf_load();
 }
 
 # Daemon bookkeeping the renderer does not read (main.cpp readPGeneratorConf,
@@ -1169,7 +1200,7 @@ sub renderer_started_conf_refresh (@) {
  for my $k (keys %bookkeeping) {
   delete $conf{$k} if(!defined $now->{$k});
  }
- return 0 if(!&renderer_started_conf_write($rec->{pid},\%conf));
+ return 0 if(!&renderer_started_conf_write($rec->{pid},\%conf,$rec->{avi}));
  return (&renderer_conf_text(\%conf) eq &renderer_conf_text($now)) ? 1 : 0;
 }
 
@@ -2081,6 +2112,7 @@ sub pattern_generator_start(@) {
   # (stdio), so the log of a running renderer read empty until 4 KB had
   # come together. head stays the fallback when the helper is missing.
   unlink(&renderer_started_conf_path());
+  my $start_avi=&renderer_start_avi_stamp();
   my $started_conf=&renderer_conf_read();
   my $spawn_log=(-x "/usr/bin/pgen_log_cap") ? "/usr/bin/pgen_log_cap /tmp/renderer-spawn.log 524288"
                                               : "( head -c 524288 > /tmp/renderer-spawn.log; exec cat >/dev/null )";
@@ -2117,7 +2149,7 @@ sub pattern_generator_start(@) {
    $renderer_is_master=&wait_for_renderer_drm_master(8) if(&pattern_generator_is_running());
    &blank_console_framebuffer() if($renderer_is_master);
    &renderer_applied_range_record();
-   &renderer_started_conf_record($started_conf) if($renderer_is_master);
+   &renderer_started_conf_record($started_conf,$start_avi) if($renderer_is_master);
  # Post-spawn connector reprogramming exists for sinks that miss the
  # pre-launch programming. But once the renderer holds DRM master it already
  # sets output format / Colorimetry / rgb quant range / max bpc / COLOR_RANGE

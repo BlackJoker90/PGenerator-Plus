@@ -14,7 +14,7 @@ use File::Basename ();
 use lib File::Basename::dirname(__FILE__);
 use PGMath qw(pq_decode_nits);
 
-our @EXPORT_OK=qw(dolby_vsvdb_from_edid dolby_vsvdb_parse dolby_vsvdb_json);
+our @EXPORT_OK=qw(dolby_vsvdb_from_edid dolby_vsvdb_parse dolby_vsvdb_json dolby_vsif_form);
 
 our %V2_INTERFACE=(
  0=>"Low-Latency",
@@ -131,7 +131,7 @@ sub dolby_vsvdb_json {
  return "null" if(!$d);
  my @f;
  foreach my $k (qw(version length yuv422_12bit supports_2160p60 global_dimming backlight_control
-                  backlight_min_nits low_latency standard max_pq min_pq max_nits)) {
+                  backlight_min_nits low_latency standard ll_hdmi max_pq min_pq max_nits)) {
   push(@f,"\"$k\":".int($d->{$k})) if(defined $d->{$k});
  }
  push(@f,"\"min_nits\":"._num($d->{min_nits},6)) if(defined $d->{min_nits});
@@ -147,6 +147,26 @@ sub dolby_vsvdb_json {
   push(@f,"\"primaries\":{".join(",",@p)."}");
  }
  return "{".join(",",@f)."}";
+}
+
+# The Dolby Vision VSIF form for a VSVDB (a block from dolby_vsvdb_parse, or
+# the same keys decoded from dolby_vsvdb_json), as pitpgd 2.0.3 picks it
+# (edid_sink_caps, dv_vsif_build): standard DV as the HDMI 1.4b VSIF with
+# PB4/PB5 0 for a v0 block (length byte 0x19) or a v1 block of 15 bytes
+# (0x0e), "1"; the Dolby VSIF 81 01 1B | 46 D0 00 | 02 for any other block,
+# "2". Low latency with PB5 0x10 (pitpgd: "BT.2020 container") when a v2
+# block sets interface bit 0 (Low-Latency-HDMI), "1". Without a block both
+# are empty and the kernel sends its own form. Returns (form, ll_bt2020);
+# the daemon writes them as dv_vsif_form / dv_ll_bt2020 (command.pm), the
+# self-test checks the conf against them (pgen_selftest.pl).
+sub dolby_vsif_form {
+ my $dv=shift;
+ return ("","") if(ref($dv) ne "HASH");
+ my $v=$dv->{version} // -1;
+ my $len=$dv->{length} // 0;
+ my $form=(($v == 0 && $len == 26) || ($v == 1 && $len == 15)) ? "1" : "2";
+ my $bt2020=($v == 2 && !$dv->{error} && $dv->{ll_hdmi}) ? "1" : "";
+ return ($form,$bt2020);
 }
 
 1;

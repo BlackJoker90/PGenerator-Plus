@@ -24,6 +24,7 @@ use MIME::Base64 qw(encode_base64);
 use Time::HiRes qw(sleep time);
 use lib "/usr/share/PGenerator";
 use PGSelfTestCheck;
+use PGEdidDolby ();
 
 my $state_file=shift || "/tmp/pgen-selftest.json";
 my $set=lc(shift || "full");
@@ -283,21 +284,92 @@ sub vendor_infoframe {
  $sum+=$b[$_] for(0..$len);
  return { kind=>"other", label=>"vendor infoframe with a bad checksum" } if($sum & 0xff);
  my $oui=sprintf("%02x:%02x:%02x",$b[3],$b[2],$b[1]);
+ # The bytes the DV forms differ in, for dv_vsif_form_check.
+ my %bytes=(oui=>$oui,length=>$len,pb4=>$b[4],pb5=>$b[5],pb=>[@b[1..$len]]);
  # Both DV vendor frames are version 1 (the Pi sends 81:01:1b and 81:01:18).
  return { kind=>"other", label=>sprintf("vendor infoframe, OUI %s, version 0x%02x",$oui,$ver) } if($ver != 1);
  if($oui eq "00:d0:46") {
   return { kind=>"other", label=>sprintf("Dolby VSIF with length 0x%02x instead of 0x1b",$len) } if($len != 0x1b);
   # PB4 bit 1 Dolby_Vision_Signal, bit 0 Low_Latency; the renderer's "off"
   # frame carries the OUI with both clear.
-  return { kind=>"Dolby VSIF", label=>"Dolby VSIF" } if(($b[4] & 0x03) == 0x03);
+  return { kind=>"Dolby VSIF", label=>"Dolby VSIF", %bytes } if(($b[4] & 0x03) == 0x03);
   # Standard DV in the Dolby form, as pitpgd 2.0.3 sends it for a v1-12 or
   # v2 VSVDB (dv_vsif_build; the patched vc4.ko, patch_vc4_dv_vsif.py):
   # Dolby_Vision_Signal without Low_Latency.
-  return { kind=>"Standard DV VSIF", label=>"Standard DV VSIF (Dolby form)" } if(($b[4] & 0x03) == 0x02);
+  return { kind=>"Standard DV VSIF", label=>"Standard DV VSIF (Dolby form)", %bytes } if(($b[4] & 0x03) == 0x02);
   return { kind=>"other", label=>sprintf("Dolby VSIF without the low-latency DV signal (PB4 0x%02x)",$b[4]) };
  }
- return { kind=>"Standard DV VSIF", label=>"Standard DV VSIF" } if($oui eq "00:0c:03" && $len == 0x18);
+ return { kind=>"Standard DV VSIF", label=>"Standard DV VSIF", %bytes } if($oui eq "00:0c:03" && $len == 0x18);
  return { kind=>"other", label=>"vendor infoframe, OUI $oui, length ".sprintf("0x%02x",$len) };
+}
+
+# 1 when the running vc4.ko sends the DV VSIF in the form the VSVDB asks
+# for (patch_vc4_dv_vsif.py, srcversion ...HMVS; webui.pm
+# webui_vc4_dv_vsif_forms reads the same file), 0 for another module,
+# undef when the file cannot be read.
+our $vc4_srcversion_file="/sys/module/vc4/srcversion";
+sub vc4_dv_vsif_forms {
+ open(my $fh,"<",$vc4_srcversion_file) or return undef;
+ my $v=<$fh>;
+ close($fh);
+ return undef if(!defined($v) || $v!~/\S/);
+ return ($v=~/HMVS/) ? 1 : 0;
+}
+
+# A DV mode's vendor infoframe against the form the display's VSVDB asks
+# for, in two steps: the conf's dv_vsif_form / dv_ll_bt2020 against the
+# display's VSVDB ($caps: GET /api/capabilities, its dv_vsvdb, by the
+# daemon's own rule PGEdidDolby::dolby_vsif_form), then the whole frame on
+# the wire against that form (PGSelfTestCheck::dv_vsif_expect /
+# dv_vsif_payload, the bytes tools/signal_audit/audit_infoframes.pl
+# expects). The wire is judged by what the display asks for, not by what
+# the running vc4.ko can send: a module without the VSIF patch (no reboot
+# after an update) fails with that named. The signalling check only
+# proves that a DV frame goes out, both HDMI 1.4b and Dolby form count
+# there. Added only in DV and when that check found a DV frame of the
+# transport; without the conf (GET /api/config failed), the display's
+# EDID (edid_parsed false) or the module version a step is not verified,
+# never a pass.
+sub dv_vsif_form_check {
+ my ($entry,$sc,$conf,$vsif,$module_forms,$caps)=@_;
+ return if(($sc->{config}{signal_mode} || "") ne "dv");
+ my $transport=(($sc->{config}{dv_transport} || "") eq "standard") ? "standard" : "lldv";
+ my $want_kind=($transport eq "standard") ? "Standard DV VSIF" : "Dolby VSIF";
+ return if(($vsif->{kind} || "") ne $want_kind || !defined($vsif->{pb4}));
+ my $got=PGSelfTestCheck::dv_vsif_describe($vsif);
+ if(ref($conf) ne "HASH" || !%$conf) {
+  add_check($entry,"Dolby Vision VSIF form","form from the conf","not verified (conf not readable), read $got",0,1);
+  $entry->{unverified}=1;
+  return;
+ }
+ if(ref($caps) ne "HASH" || !exists($caps->{dv_vsvdb})) {
+  add_check($entry,"Dolby Vision VSIF form for the display","form from the display's VSVDB","not verified (capabilities not readable)",0,1);
+  $entry->{unverified}=1;
+ } else {
+  my ($form,$bt2020)=PGEdidDolby::dolby_vsif_form($caps->{dv_vsvdb});
+  if(!$caps->{edid_parsed}) {
+   # No EDID read: no block is not "the display has none".
+   add_check($entry,"Dolby Vision VSIF form for the display","form from the display's VSVDB","not verified (display EDID not read)",0,1);
+   $entry->{unverified}=1;
+  } else {
+  my $name=sub { my ($f,$b)=@_; return ($f eq "1" ? "HDMI 1.4b form" : $f eq "2" ? "Dolby form" : "kernel form (no VSVDB)").($b eq "1" ? ", low latency PB5 0x10" : ""); };
+  my ($cf,$cb)=(defined($conf->{dv_vsif_form}) ? "$conf->{dv_vsif_form}" : "",defined($conf->{dv_ll_bt2020}) ? "$conf->{dv_ll_bt2020}" : "");
+  add_check($entry,"Dolby Vision VSIF form for the display",$name->($form,$bt2020),$name->($cf,$cb),($cf eq $form && $cb eq $bt2020));
+  }
+ }
+ if(!defined $module_forms) {
+  add_check($entry,"Dolby Vision VSIF form","form from the conf","not verified (vc4 module version not readable), read $got",0,1);
+  $entry->{unverified}=1;
+  return;
+ }
+ my $want=PGSelfTestCheck::dv_vsif_expect($transport,$conf->{dv_vsif_form},$conf->{dv_ll_bt2020},1);
+ my @exp=PGSelfTestCheck::dv_vsif_payload($want);
+ my @pb=@{$vsif->{pb} || []};
+ my ($i)=grep { !defined($pb[$_]) || $pb[$_] != $exp[$_] } (0..$#exp);
+ my $ok=($vsif->{oui} eq $want->{oui} && $vsif->{length} == $want->{length} && @pb == @exp && !defined($i)) ? 1 : 0;
+ $got.=sprintf(", PB%d 0x%02x instead of 0x%02x",$i+1,$pb[$i] // 0,$exp[$i]) if(defined($i) && $i > 4);
+ $got.=" (vc4.ko without the VSIF patch: reboot after the update)" if(!$ok && !$module_forms);
+ add_check($entry,"Dolby Vision VSIF form",$want->{form}.": ".PGSelfTestCheck::dv_vsif_describe($want).", PB6 and up 0",$got,$ok);
 }
 
 # The kernel's atomic state (debugfs, readable by the daemon user), from
@@ -647,11 +719,18 @@ for(my $n=0;$n<@scenarios;$n++) {
   add_check($entry,"Dolby Vision signalling",$want_dv,$vsif->{label},$dv_kind eq $want_dv);
  }
 
- # AVI colorimetry and VIC, DRM metadata fields. The conf after the switch
- # holds the values the renderer was given; its colorimetry also names the
- # matrix the Y'CbCr colour windows are expected with.
+ # The conf after the switch holds the values the renderer was given: the
+ # DV VSIF form, the AVI colorimetry and VIC, the DRM metadata fields; its
+ # colorimetry also names the matrix the Y'CbCr colour windows are
+ # expected with.
  my ($ccode,$conf)=&http_json("GET","/api/config");
  $conf={} if($ccode != 200 || ref($conf) ne "HASH");
+ if(($sc->{config}{signal_mode} || "") eq "dv") {
+  # /api/capabilities is cached by the daemon for up to 300 s; the display
+  # does not change during a self-test run.
+  my ($capcode,$caps)=&http_json("GET","/api/capabilities");
+  &dv_vsif_form_check($entry,$sc,$conf,$vsif,scalar(&vc4_dv_vsif_forms()),($capcode == 200 && ref($caps) eq "HASH") ? $caps : undef);
+ }
  $sc->{matrix}=%$conf ? PGSelfTestCheck::ycc_matrix_for(@{PGSelfTestCheck::avi_colorimetry_expect($sc->{config}{signal_mode},$format,$conf->{colorimetry})},$h) : "";
  &infoframe_checks($entry,$sc,$format,$conf,\@avi,&dri_state(),$sc->{drm} ? &sudo_cmd("HDMI_PACKET",7) : "",$if->{unread});
 

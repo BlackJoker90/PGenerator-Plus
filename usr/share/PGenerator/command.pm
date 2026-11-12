@@ -376,14 +376,11 @@ sub conf_after_helper_writes(@) {
 # container") when a v2 block sets interface bit 0 (Low-Latency-HDMI).
 # Without a block both are empty and the kernel sends its own form.
 # drm_override.so hands them to the patched vc4.ko (dovi_vsif_marker).
+# The rule lives in PGEdidDolby::dolby_vsif_form, which the self-test
+# checks the conf against.
 sub dv_vsif_conf_for_vsvdb(@) {
- my $dv=shift;
- return ("","") if(ref($dv) ne "HASH");
- my $v=$dv->{version} // -1;
- my $len=$dv->{length} // 0;
- my $form=(($v == 0 && $len == 26) || ($v == 1 && $len == 15)) ? "1" : "2";
- my $bt2020=($v == 2 && !$dv->{error} && $dv->{ll_hdmi}) ? "1" : "";
- return ($form,$bt2020);
+ require PGEdidDolby;
+ return PGEdidDolby::dolby_vsif_form(shift);
 }
 
 # Low-latency DV in RGB (dv_ll_rgb 1, a PiTPG client's colour format):

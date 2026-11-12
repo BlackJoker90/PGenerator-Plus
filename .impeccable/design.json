@@ -1,0 +1,917 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-11-12T07:05:15Z",
+  "title": "Design System: PGenerator+ WebUI",
+  "extensions": {
+    "colorMeta": {
+      "pale-aqua": {
+        "role": "primary",
+        "displayName": "Pale Aqua",
+        "canonical": "#8fe0d1",
+        "tonalRamp": [
+          "oklch(15.0% 0.012 181.2)",
+          "oklch(26.0% 0.029 181.2)",
+          "oklch(37.0% 0.049 181.2)",
+          "oklch(48.0% 0.070 181.2)",
+          "oklch(59.0% 0.075 181.2)",
+          "oklch(70.0% 0.055 181.2)",
+          "oklch(82.0% 0.033 181.2)",
+          "oklch(95.0% 0.012 181.2)"
+        ]
+      },
+      "pale-aqua-soft": {
+        "role": "neutral",
+        "displayName": "Pale Aqua Soft",
+        "canonical": "#b4eee3",
+        "tonalRamp": [
+          "oklch(15.0% 0.009 181.9)",
+          "oklch(26.0% 0.022 181.9)",
+          "oklch(37.0% 0.036 181.9)",
+          "oklch(48.0% 0.051 181.9)",
+          "oklch(59.0% 0.055 181.9)",
+          "oklch(70.0% 0.040 181.9)",
+          "oklch(82.0% 0.024 181.9)",
+          "oklch(95.0% 0.009 181.9)"
+        ]
+      },
+      "aqua-fill": {
+        "role": "primary",
+        "displayName": "Aqua Fill",
+        "canonical": "#6fcfbd",
+        "tonalRamp": [
+          "oklch(15.0% 0.014 180.1)",
+          "oklch(26.0% 0.034 180.1)",
+          "oklch(37.0% 0.057 180.1)",
+          "oklch(48.0% 0.081 180.1)",
+          "oklch(59.0% 0.087 180.1)",
+          "oklch(70.0% 0.064 180.1)",
+          "oklch(82.0% 0.038 180.1)",
+          "oklch(95.0% 0.014 180.1)"
+        ]
+      },
+      "aqua-fill-hover": {
+        "role": "neutral",
+        "displayName": "Aqua Fill Hover",
+        "canonical": "#8adfce",
+        "tonalRamp": [
+          "oklch(15.0% 0.013 179.9)",
+          "oklch(26.0% 0.031 179.9)",
+          "oklch(37.0% 0.052 179.9)",
+          "oklch(48.0% 0.073 179.9)",
+          "oklch(59.0% 0.079 179.9)",
+          "oklch(70.0% 0.058 179.9)",
+          "oklch(82.0% 0.035 179.9)",
+          "oklch(95.0% 0.013 179.9)"
+        ]
+      },
+      "on-aqua": {
+        "role": "primary",
+        "displayName": "On Aqua",
+        "canonical": "#05241f",
+        "tonalRamp": [
+          "oklch(15.0% 0.006 180.3)",
+          "oklch(26.0% 0.013 180.3)",
+          "oklch(37.0% 0.023 180.3)",
+          "oklch(48.0% 0.032 180.3)",
+          "oklch(59.0% 0.034 180.3)",
+          "oklch(70.0% 0.025 180.3)",
+          "oklch(82.0% 0.015 180.3)",
+          "oklch(95.0% 0.006 180.3)"
+        ]
+      },
+      "focus-frost": {
+        "role": "primary",
+        "displayName": "Focus Frost",
+        "canonical": "#e9fffa",
+        "tonalRamp": [
+          "oklch(15.0% 0.004 180.7)",
+          "oklch(26.0% 0.008 180.7)",
+          "oklch(37.0% 0.014 180.7)",
+          "oklch(48.0% 0.020 180.7)",
+          "oklch(59.0% 0.022 180.7)",
+          "oklch(70.0% 0.016 180.7)",
+          "oklch(82.0% 0.010 180.7)",
+          "oklch(95.0% 0.004 180.7)"
+        ]
+      },
+      "night-selected": {
+        "role": "neutral",
+        "displayName": "Night Selected",
+        "canonical": "#2b2b31",
+        "tonalRamp": [
+          "oklch(15.0% 0.002 285.7)",
+          "oklch(26.0% 0.004 285.7)",
+          "oklch(37.0% 0.006 285.7)",
+          "oklch(48.0% 0.009 285.7)",
+          "oklch(59.0% 0.010 285.7)",
+          "oklch(70.0% 0.007 285.7)",
+          "oklch(82.0% 0.004 285.7)",
+          "oklch(95.0% 0.002 285.7)"
+        ]
+      },
+      "night-divider": {
+        "role": "neutral",
+        "displayName": "Night Divider",
+        "canonical": "#25252a",
+        "tonalRamp": [
+          "oklch(15.0% 0.001 285.8)",
+          "oklch(26.0% 0.003 285.8)",
+          "oklch(37.0% 0.006 285.8)",
+          "oklch(48.0% 0.008 285.8)",
+          "oklch(59.0% 0.008 285.8)",
+          "oklch(70.0% 0.006 285.8)",
+          "oklch(82.0% 0.004 285.8)",
+          "oklch(95.0% 0.001 285.8)"
+        ]
+      },
+      "night-field-edge": {
+        "role": "neutral",
+        "displayName": "Night Field Edge",
+        "canonical": "#5d5d65",
+        "tonalRamp": [
+          "oklch(15.0% 0.002 285.9)",
+          "oklch(26.0% 0.005 285.9)",
+          "oklch(37.0% 0.008 285.9)",
+          "oklch(48.0% 0.011 285.9)",
+          "oklch(59.0% 0.012 285.9)",
+          "oklch(70.0% 0.008 285.9)",
+          "oklch(82.0% 0.005 285.9)",
+          "oklch(95.0% 0.002 285.9)"
+        ]
+      },
+      "night-page": {
+        "role": "neutral",
+        "displayName": "Night Page",
+        "canonical": "#0a0a0c",
+        "tonalRamp": [
+          "oklch(15.0% 0.001 285.9)",
+          "oklch(26.0% 0.002 285.9)",
+          "oklch(37.0% 0.003 285.9)",
+          "oklch(48.0% 0.004 285.9)",
+          "oklch(59.0% 0.004 285.9)",
+          "oklch(70.0% 0.003 285.9)",
+          "oklch(82.0% 0.002 285.9)",
+          "oklch(95.0% 0.001 285.9)"
+        ]
+      },
+      "night-panel": {
+        "role": "neutral",
+        "displayName": "Night Panel",
+        "canonical": "#141416",
+        "tonalRamp": [
+          "oklch(15.0% 0.001 286.0)",
+          "oklch(26.0% 0.001 286.0)",
+          "oklch(37.0% 0.002 286.0)",
+          "oklch(48.0% 0.003 286.0)",
+          "oklch(59.0% 0.004 286.0)",
+          "oklch(70.0% 0.003 286.0)",
+          "oklch(82.0% 0.002 286.0)",
+          "oklch(95.0% 0.001 286.0)"
+        ]
+      },
+      "night-drawer": {
+        "role": "neutral",
+        "displayName": "Night Drawer",
+        "canonical": "#111113",
+        "tonalRamp": [
+          "oklch(15.0% 0.001 286.0)",
+          "oklch(26.0% 0.001 286.0)",
+          "oklch(37.0% 0.002 286.0)",
+          "oklch(48.0% 0.003 286.0)",
+          "oklch(59.0% 0.004 286.0)",
+          "oklch(70.0% 0.003 286.0)",
+          "oklch(82.0% 0.002 286.0)",
+          "oklch(95.0% 0.001 286.0)"
+        ]
+      },
+      "night-modal": {
+        "role": "neutral",
+        "displayName": "Night Modal",
+        "canonical": "#19191c",
+        "tonalRamp": [
+          "oklch(15.0% 0.001 285.9)",
+          "oklch(26.0% 0.002 285.9)",
+          "oklch(37.0% 0.003 285.9)",
+          "oklch(48.0% 0.005 285.9)",
+          "oklch(59.0% 0.005 285.9)",
+          "oklch(70.0% 0.004 285.9)",
+          "oklch(82.0% 0.002 285.9)",
+          "oklch(95.0% 0.001 285.9)"
+        ]
+      },
+      "night-popover": {
+        "role": "neutral",
+        "displayName": "Night Popover",
+        "canonical": "#232327",
+        "tonalRamp": [
+          "oklch(15.0% 0.001 285.9)",
+          "oklch(26.0% 0.003 285.9)",
+          "oklch(37.0% 0.004 285.9)",
+          "oklch(48.0% 0.006 285.9)",
+          "oklch(59.0% 0.007 285.9)",
+          "oklch(70.0% 0.005 285.9)",
+          "oklch(82.0% 0.003 285.9)",
+          "oklch(95.0% 0.001 285.9)"
+        ]
+      },
+      "night-well": {
+        "role": "neutral",
+        "displayName": "Night Well",
+        "canonical": "#0d0d0f",
+        "tonalRamp": [
+          "oklch(15.0% 0.001 285.9)",
+          "oklch(26.0% 0.001 285.9)",
+          "oklch(37.0% 0.003 285.9)",
+          "oklch(48.0% 0.004 285.9)",
+          "oklch(59.0% 0.004 285.9)",
+          "oklch(70.0% 0.003 285.9)",
+          "oklch(82.0% 0.002 285.9)",
+          "oklch(95.0% 0.001 285.9)"
+        ]
+      },
+      "night-key": {
+        "role": "neutral",
+        "displayName": "Night Key",
+        "canonical": "#1f1f23",
+        "tonalRamp": [
+          "oklch(15.0% 0.001 285.8)",
+          "oklch(26.0% 0.003 285.8)",
+          "oklch(37.0% 0.005 285.8)",
+          "oklch(48.0% 0.006 285.8)",
+          "oklch(59.0% 0.007 285.8)",
+          "oklch(70.0% 0.005 285.8)",
+          "oklch(82.0% 0.003 285.8)",
+          "oklch(95.0% 0.001 285.8)"
+        ]
+      },
+      "night-key-lit": {
+        "role": "neutral",
+        "displayName": "Night Key Lit",
+        "canonical": "#38383f",
+        "tonalRamp": [
+          "oklch(15.0% 0.002 285.7)",
+          "oklch(26.0% 0.004 285.7)",
+          "oklch(37.0% 0.007 285.7)",
+          "oklch(48.0% 0.010 285.7)",
+          "oklch(59.0% 0.011 285.7)",
+          "oklch(70.0% 0.008 285.7)",
+          "oklch(82.0% 0.005 285.7)",
+          "oklch(95.0% 0.002 285.7)"
+        ]
+      },
+      "night-hairline": {
+        "role": "neutral",
+        "displayName": "Night Hairline",
+        "canonical": "#2b2b30",
+        "tonalRamp": [
+          "oklch(15.0% 0.001 285.8)",
+          "oklch(26.0% 0.003 285.8)",
+          "oklch(37.0% 0.005 285.8)",
+          "oklch(48.0% 0.008 285.8)",
+          "oklch(59.0% 0.008 285.8)",
+          "oklch(70.0% 0.006 285.8)",
+          "oklch(82.0% 0.004 285.8)",
+          "oklch(95.0% 0.001 285.8)"
+        ]
+      },
+      "text-lit": {
+        "role": "neutral",
+        "displayName": "Text Lit",
+        "canonical": "#e4e4e8",
+        "tonalRamp": [
+          "oklch(15.0% 0.001 286.3)",
+          "oklch(26.0% 0.002 286.3)",
+          "oklch(37.0% 0.003 286.3)",
+          "oklch(48.0% 0.005 286.3)",
+          "oklch(59.0% 0.005 286.3)",
+          "oklch(70.0% 0.004 286.3)",
+          "oklch(82.0% 0.002 286.3)",
+          "oklch(95.0% 0.001 286.3)"
+        ]
+      },
+      "text-body": {
+        "role": "neutral",
+        "displayName": "Text Body",
+        "canonical": "#d2d2d6",
+        "tonalRamp": [
+          "oklch(15.0% 0.001 286.3)",
+          "oklch(26.0% 0.002 286.3)",
+          "oklch(37.0% 0.003 286.3)",
+          "oklch(48.0% 0.005 286.3)",
+          "oklch(59.0% 0.005 286.3)",
+          "oklch(70.0% 0.004 286.3)",
+          "oklch(82.0% 0.002 286.3)",
+          "oklch(95.0% 0.001 286.3)"
+        ]
+      },
+      "text-secondary": {
+        "role": "neutral",
+        "displayName": "Text Secondary",
+        "canonical": "#a2a2a8",
+        "tonalRamp": [
+          "oklch(15.0% 0.001 286.2)",
+          "oklch(26.0% 0.003 286.2)",
+          "oklch(37.0% 0.005 286.2)",
+          "oklch(48.0% 0.007 286.2)",
+          "oklch(59.0% 0.008 286.2)",
+          "oklch(70.0% 0.006 286.2)",
+          "oklch(82.0% 0.003 286.2)",
+          "oklch(95.0% 0.001 286.2)"
+        ]
+      },
+      "text-muted": {
+        "role": "neutral",
+        "displayName": "Text Muted",
+        "canonical": "#8f8f96",
+        "tonalRamp": [
+          "oklch(15.0% 0.002 286.1)",
+          "oklch(26.0% 0.004 286.1)",
+          "oklch(37.0% 0.006 286.1)",
+          "oklch(48.0% 0.009 286.1)",
+          "oklch(59.0% 0.009 286.1)",
+          "oklch(70.0% 0.007 286.1)",
+          "oklch(82.0% 0.004 286.1)",
+          "oklch(95.0% 0.002 286.1)"
+        ]
+      },
+      "text-disabled": {
+        "role": "neutral",
+        "displayName": "Text Disabled",
+        "canonical": "#62626a",
+        "tonalRamp": [
+          "oklch(15.0% 0.002 285.9)",
+          "oklch(26.0% 0.004 285.9)",
+          "oklch(37.0% 0.008 285.9)",
+          "oklch(48.0% 0.011 285.9)",
+          "oklch(59.0% 0.011 285.9)",
+          "oklch(70.0% 0.008 285.9)",
+          "oklch(82.0% 0.005 285.9)",
+          "oklch(95.0% 0.002 285.9)"
+        ]
+      },
+      "amber-warning": {
+        "role": "state",
+        "displayName": "Amber Warning",
+        "canonical": "#e8a55b",
+        "tonalRamp": [
+          "oklch(15.0% 0.018 67.1)",
+          "oklch(26.0% 0.043 67.1)",
+          "oklch(37.0% 0.072 67.1)",
+          "oklch(48.0% 0.102 67.1)",
+          "oklch(59.0% 0.110 67.1)",
+          "oklch(70.0% 0.080 67.1)",
+          "oklch(82.0% 0.048 67.1)",
+          "oklch(95.0% 0.018 67.1)"
+        ]
+      },
+      "coral-error": {
+        "role": "state",
+        "displayName": "Coral Error",
+        "canonical": "#ee7570",
+        "tonalRamp": [
+          "oklch(15.0% 0.023 24.1)",
+          "oklch(26.0% 0.053 24.1)",
+          "oklch(37.0% 0.090 24.1)",
+          "oklch(48.0% 0.127 24.1)",
+          "oklch(59.0% 0.137 24.1)",
+          "oklch(70.0% 0.100 24.1)",
+          "oklch(82.0% 0.060 24.1)",
+          "oklch(95.0% 0.023 24.1)"
+        ]
+      },
+      "green-success": {
+        "role": "state",
+        "displayName": "Green Success",
+        "canonical": "#5fb878",
+        "tonalRamp": [
+          "oklch(15.0% 0.019 151.1)",
+          "oklch(26.0% 0.045 151.1)",
+          "oklch(37.0% 0.076 151.1)",
+          "oklch(48.0% 0.107 151.1)",
+          "oklch(59.0% 0.116 151.1)",
+          "oklch(70.0% 0.085 151.1)",
+          "oklch(82.0% 0.051 151.1)",
+          "oklch(95.0% 0.019 151.1)"
+        ]
+      },
+      "bits-8": {
+        "role": "state",
+        "displayName": "Bits 8",
+        "canonical": "#3aa99f",
+        "tonalRamp": [
+          "oklch(15.0% 0.015 186.6)",
+          "oklch(26.0% 0.036 186.6)",
+          "oklch(37.0% 0.060 186.6)",
+          "oklch(48.0% 0.084 186.6)",
+          "oklch(59.0% 0.091 186.6)",
+          "oklch(70.0% 0.067 186.6)",
+          "oklch(82.0% 0.040 186.6)",
+          "oklch(95.0% 0.015 186.6)"
+        ]
+      },
+      "bits-10": {
+        "role": "state",
+        "displayName": "Bits 10",
+        "canonical": "#4f8ff0",
+        "tonalRamp": [
+          "oklch(15.0% 0.024 258.5)",
+          "oklch(26.0% 0.057 258.5)",
+          "oklch(37.0% 0.096 258.5)",
+          "oklch(48.0% 0.135 258.5)",
+          "oklch(59.0% 0.145 258.5)",
+          "oklch(70.0% 0.106 258.5)",
+          "oklch(82.0% 0.064 258.5)",
+          "oklch(95.0% 0.024 258.5)"
+        ]
+      },
+      "bits-12": {
+        "role": "state",
+        "displayName": "Bits 12",
+        "canonical": "#d062b8",
+        "tonalRamp": [
+          "oklch(15.0% 0.026 336.4)",
+          "oklch(26.0% 0.061 336.4)",
+          "oklch(37.0% 0.103 336.4)",
+          "oklch(48.0% 0.145 336.4)",
+          "oklch(59.0% 0.157 336.4)",
+          "oklch(70.0% 0.115 336.4)",
+          "oklch(82.0% 0.069 336.4)",
+          "oklch(95.0% 0.026 336.4)"
+        ]
+      },
+      "day-page": {
+        "role": "neutral",
+        "displayName": "Day Page",
+        "canonical": "#dcdddd",
+        "tonalRamp": [
+          "oklch(15.0% 0.000 197.1)",
+          "oklch(26.0% 0.000 197.1)",
+          "oklch(37.0% 0.001 197.1)",
+          "oklch(48.0% 0.001 197.1)",
+          "oklch(59.0% 0.001 197.1)",
+          "oklch(70.0% 0.001 197.1)",
+          "oklch(82.0% 0.000 197.1)",
+          "oklch(95.0% 0.000 197.1)"
+        ]
+      },
+      "day-panel": {
+        "role": "neutral",
+        "displayName": "Day Panel",
+        "canonical": "#e9eaea",
+        "tonalRamp": [
+          "oklch(15.0% 0.000 197.1)",
+          "oklch(26.0% 0.000 197.1)",
+          "oklch(37.0% 0.001 197.1)",
+          "oklch(48.0% 0.001 197.1)",
+          "oklch(59.0% 0.001 197.1)",
+          "oklch(70.0% 0.001 197.1)",
+          "oklch(82.0% 0.000 197.1)",
+          "oklch(95.0% 0.000 197.1)"
+        ]
+      },
+      "day-key": {
+        "role": "neutral",
+        "displayName": "Day Key",
+        "canonical": "#d9dada",
+        "tonalRamp": [
+          "oklch(15.0% 0.000 197.1)",
+          "oklch(26.0% 0.000 197.1)",
+          "oklch(37.0% 0.001 197.1)",
+          "oklch(48.0% 0.001 197.1)",
+          "oklch(59.0% 0.001 197.1)",
+          "oklch(70.0% 0.001 197.1)",
+          "oklch(82.0% 0.000 197.1)",
+          "oklch(95.0% 0.000 197.1)"
+        ]
+      },
+      "day-key-lit": {
+        "role": "neutral",
+        "displayName": "Day Key Lit",
+        "canonical": "#c3c5c5",
+        "tonalRamp": [
+          "oklch(15.0% 0.000 197.1)",
+          "oklch(26.0% 0.001 197.1)",
+          "oklch(37.0% 0.001 197.1)",
+          "oklch(48.0% 0.002 197.1)",
+          "oklch(59.0% 0.002 197.1)",
+          "oklch(70.0% 0.001 197.1)",
+          "oklch(82.0% 0.001 197.1)",
+          "oklch(95.0% 0.000 197.1)"
+        ]
+      },
+      "day-teal": {
+        "role": "primary",
+        "displayName": "Deep Teal",
+        "canonical": "#0b5c53",
+        "tonalRamp": [
+          "oklch(15.0% 0.011 183.1)",
+          "oklch(26.0% 0.026 183.1)",
+          "oklch(37.0% 0.044 183.1)",
+          "oklch(48.0% 0.061 183.1)",
+          "oklch(59.0% 0.066 183.1)",
+          "oklch(70.0% 0.049 183.1)",
+          "oklch(82.0% 0.029 183.1)",
+          "oklch(95.0% 0.011 183.1)"
+        ]
+      },
+      "day-teal-fill": {
+        "role": "primary",
+        "displayName": "Teal Fill",
+        "canonical": "#0f6f64",
+        "tonalRamp": [
+          "oklch(15.0% 0.012 182.7)",
+          "oklch(26.0% 0.030 182.7)",
+          "oklch(37.0% 0.050 182.7)",
+          "oklch(48.0% 0.070 182.7)",
+          "oklch(59.0% 0.076 182.7)",
+          "oklch(70.0% 0.056 182.7)",
+          "oklch(82.0% 0.033 182.7)",
+          "oklch(95.0% 0.012 182.7)"
+        ]
+      },
+      "day-text": {
+        "role": "neutral",
+        "displayName": "Day Text",
+        "canonical": "#151617",
+        "tonalRamp": [
+          "oklch(15.0% 0.000 248.0)",
+          "oklch(26.0% 0.001 248.0)",
+          "oklch(37.0% 0.002 248.0)",
+          "oklch(48.0% 0.002 248.0)",
+          "oklch(59.0% 0.002 248.0)",
+          "oklch(70.0% 0.002 248.0)",
+          "oklch(82.0% 0.001 248.0)",
+          "oklch(95.0% 0.000 248.0)"
+        ]
+      },
+      "day-text-secondary": {
+        "role": "neutral",
+        "displayName": "Day Text Secondary",
+        "canonical": "#484a4c",
+        "tonalRamp": [
+          "oklch(15.0% 0.001 247.9)",
+          "oklch(26.0% 0.002 247.9)",
+          "oklch(37.0% 0.003 247.9)",
+          "oklch(48.0% 0.004 247.9)",
+          "oklch(59.0% 0.004 247.9)",
+          "oklch(70.0% 0.003 247.9)",
+          "oklch(82.0% 0.002 247.9)",
+          "oklch(95.0% 0.001 247.9)"
+        ]
+      },
+      "day-text-muted": {
+        "role": "neutral",
+        "displayName": "Day Text Muted",
+        "canonical": "#56585a",
+        "tonalRamp": [
+          "oklch(15.0% 0.001 247.9)",
+          "oklch(26.0% 0.001 247.9)",
+          "oklch(37.0% 0.002 247.9)",
+          "oklch(48.0% 0.003 247.9)",
+          "oklch(59.0% 0.004 247.9)",
+          "oklch(70.0% 0.003 247.9)",
+          "oklch(82.0% 0.002 247.9)",
+          "oklch(95.0% 0.001 247.9)"
+        ]
+      },
+      "day-text-lit": {
+        "role": "neutral",
+        "displayName": "Day Text Lit",
+        "canonical": "#000000",
+        "tonalRamp": [
+          "oklch(15.0% 0.000 0.0)",
+          "oklch(26.0% 0.000 0.0)",
+          "oklch(37.0% 0.000 0.0)",
+          "oklch(48.0% 0.000 0.0)",
+          "oklch(59.0% 0.000 0.0)",
+          "oklch(70.0% 0.000 0.0)",
+          "oklch(82.0% 0.000 0.0)",
+          "oklch(95.0% 0.000 0.0)"
+        ]
+      },
+      "day-well": {
+        "role": "neutral",
+        "displayName": "Day Well",
+        "canonical": "#d3d4d4",
+        "tonalRamp": [
+          "oklch(15.0% 0.000 197.1)",
+          "oklch(26.0% 0.000 197.1)",
+          "oklch(37.0% 0.001 197.1)",
+          "oklch(48.0% 0.001 197.1)",
+          "oklch(59.0% 0.001 197.1)",
+          "oklch(70.0% 0.001 197.1)",
+          "oklch(82.0% 0.000 197.1)",
+          "oklch(95.0% 0.000 197.1)"
+        ]
+      },
+      "day-focus": {
+        "role": "neutral",
+        "displayName": "Day Focus",
+        "canonical": "#062e29",
+        "tonalRamp": [
+          "oklch(15.0% 0.007 182.9)",
+          "oklch(26.0% 0.016 182.9)",
+          "oklch(37.0% 0.026 182.9)",
+          "oklch(48.0% 0.037 182.9)",
+          "oklch(59.0% 0.040 182.9)",
+          "oklch(70.0% 0.029 182.9)",
+          "oklch(82.0% 0.018 182.9)",
+          "oklch(95.0% 0.007 182.9)"
+        ]
+      },
+      "day-warning": {
+        "role": "state",
+        "displayName": "Day Warning",
+        "canonical": "#8f4700",
+        "tonalRamp": [
+          "oklch(15.0% 0.018 54.5)",
+          "oklch(26.0% 0.042 54.5)",
+          "oklch(37.0% 0.072 54.5)",
+          "oklch(48.0% 0.101 54.5)",
+          "oklch(59.0% 0.109 54.5)",
+          "oklch(70.0% 0.080 54.5)",
+          "oklch(82.0% 0.048 54.5)",
+          "oklch(95.0% 0.018 54.5)"
+        ]
+      },
+      "day-error": {
+        "role": "state",
+        "displayName": "Day Error",
+        "canonical": "#c62828",
+        "tonalRamp": [
+          "oklch(15.0% 0.029 26.7)",
+          "oklch(26.0% 0.069 26.7)",
+          "oklch(37.0% 0.116 26.7)",
+          "oklch(48.0% 0.164 26.7)",
+          "oklch(59.0% 0.177 26.7)",
+          "oklch(70.0% 0.129 26.7)",
+          "oklch(82.0% 0.077 26.7)",
+          "oklch(95.0% 0.029 26.7)"
+        ]
+      },
+      "day-success": {
+        "role": "state",
+        "displayName": "Day Success",
+        "canonical": "#217a36",
+        "tonalRamp": [
+          "oklch(15.0% 0.020 147.5)",
+          "oklch(26.0% 0.047 147.5)",
+          "oklch(37.0% 0.079 147.5)",
+          "oklch(48.0% 0.112 147.5)",
+          "oklch(59.0% 0.120 147.5)",
+          "oklch(70.0% 0.088 147.5)",
+          "oklch(82.0% 0.053 147.5)",
+          "oklch(95.0% 0.020 147.5)"
+        ]
+      }
+    },
+    "typographyMeta": {
+      "display": {
+        "displayName": "Display",
+        "purpose": "The workspace title."
+      },
+      "display-tablet": {
+        "displayName": "Display (Tablet)",
+        "purpose": "The workspace title on Tablet."
+      },
+      "headline": {
+        "displayName": "Headline",
+        "purpose": "Card titles, the self-test title."
+      },
+      "headline-phone": {
+        "displayName": "Headline (phone)",
+        "purpose": "Card titles under 600 px."
+      },
+      "body": {
+        "displayName": "Body",
+        "purpose": "Running text in cards and dialogs."
+      },
+      "hex": {
+        "displayName": "Hex",
+        "purpose": "Raw infoframe bytes and pairing codes only."
+      },
+      "title": {
+        "displayName": "Title",
+        "purpose": "The value inside a setting key."
+      },
+      "readout": {
+        "displayName": "Readout",
+        "purpose": "The signal in the header."
+      },
+      "label": {
+        "displayName": "Label",
+        "purpose": "Field labels, readback lines, nav group labels."
+      },
+      "caption": {
+        "displayName": "Caption",
+        "purpose": "The smallest size; nothing under 12 px."
+      }
+    },
+    "shadows": [
+      {
+        "name": "dock-lift",
+        "value": "0 8px 28px rgba(0,0,0,.4)",
+        "purpose": "The Apply bar floating over the cards on Desktop (dark)."
+      },
+      {
+        "name": "dock-lift-day",
+        "value": "0 8px 24px rgba(18,29,45,.14)",
+        "purpose": "The Apply bar on Desktop (light)."
+      },
+      {
+        "name": "ring-chosen",
+        "value": "inset 0 0 0 1.5px var(--accent)",
+        "purpose": "Live or chosen among peers; open key."
+      },
+      {
+        "name": "ring-differs",
+        "value": "inset 0 0 0 1.5px var(--warning-text)",
+        "purpose": "A key whose cable value differs."
+      },
+      {
+        "name": "focus",
+        "value": "0 0 0 2px var(--focus-ring)",
+        "purpose": "Keyboard focus."
+      }
+    ],
+    "motion": [
+      {
+        "name": "ease-out",
+        "value": "cubic-bezier(.23,1,.32,1)",
+        "purpose": "Default easing."
+      },
+      {
+        "name": "ease-drawer",
+        "value": "cubic-bezier(.32,.72,0,1)",
+        "purpose": "Drawers and sheets."
+      },
+      {
+        "name": "key-ring",
+        "value": ".14s ease-out",
+        "purpose": "A key's ring appearing."
+      },
+      {
+        "name": "press",
+        "value": "scale(.97)",
+        "purpose": "Buttons, nav keys and pattern buttons while pressed; off under reduced motion."
+      }
+    ],
+    "breakpoints": [
+      {
+        "name": "one-key-row",
+        "value": "359px"
+      },
+      {
+        "name": "wide-keys",
+        "value": "360px-411px"
+      },
+      {
+        "name": "phone",
+        "value": "600px"
+      },
+      {
+        "name": "readout-one-line",
+        "value": "700px"
+      },
+      {
+        "name": "tablet-default",
+        "value": "800px"
+      },
+      {
+        "name": "desktop-short-cut",
+        "value": "1099px"
+      },
+      {
+        "name": "desktop-header-compact",
+        "value": "1199px"
+      },
+      {
+        "name": "desktop-wide",
+        "value": "1400px"
+      }
+    ]
+  },
+  "components": [
+    {
+      "name": "Setting Key",
+      "kind": "custom",
+      "refersTo": "setting-key",
+      "description": "A signal setting with its name inside, its value below and the cable readback under it.",
+      "html": "<div class=\"ds-key\"><span class=\"ds-key-label\">Range<i class=\"ds-dot\"></i></span><span class=\"ds-key-value\">Limited (64-940)</span><span class=\"ds-key-wire\"><svg viewBox=\"0 0 12 12\" width=\"12\" height=\"12\"><path d=\"M2.2 6.4 4.8 9 9.8 3.2\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.9\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/></svg>Limited on the cable</span></div>",
+      "css": ".ds-key{display:grid;gap:2px;width:220px;padding:9px 6px 9px 14px;border-radius:16px;background:var(--meso-key,#1f1f23);font-family:var(--meso, 'PGen Mesopic', 'Avenir Next', 'Segoe UI', system-ui, sans-serif);font-variant-numeric:tabular-nums;transition:box-shadow .14s ease-out}.ds-key:hover{background:var(--meso-key-hi,#38383f);box-shadow:inset 0 0 0 1.5px var(--accent,#8fe0d1)}.ds-key:focus-within{box-shadow:0 0 0 2px var(--focus-ring,#e9fffa)}.ds-key-label{font-size:.8125rem;font-weight:500;line-height:1.3;color:var(--text-muted,#8f8f96)}.ds-dot{display:inline-block;width:6px;height:6px;margin-left:7px;border-radius:50%;background:var(--accent,#8fe0d1);vertical-align:.12em}.ds-key-value{font-size:1rem;font-weight:600;color:var(--meso-lit,#e4e4e8)}.ds-key-wire{display:flex;gap:5px;align-items:center;font-size:.8125rem;font-weight:500;color:var(--text-secondary,#a2a2a8)}"
+    },
+    {
+      "name": "Setting Key, cable differs",
+      "kind": "custom",
+      "refersTo": "setting-key",
+      "description": "The cable carries something else than the setting: amber ring, triangle and text.",
+      "html": "<div class=\"ds-key-d\"><span class=\"ds-kd-label\">Bit Depth</span><span class=\"ds-kd-value\">12-bit</span><span class=\"ds-kd-wire\"><svg viewBox=\"0 0 12 12\" width=\"12\" height=\"12\"><path d=\"M6 1.2 11 10.4H1Z\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.5\" stroke-linejoin=\"round\"/></svg>10-bit on the cable</span></div>",
+      "css": ".ds-key-d{display:grid;gap:2px;width:220px;padding:9px 6px 9px 14px;border-radius:16px;background:var(--meso-key,#1f1f23);box-shadow:inset 0 0 0 1.5px var(--warning-text,#e8a55b);font-family:var(--meso, 'PGen Mesopic', 'Avenir Next', 'Segoe UI', system-ui, sans-serif);font-variant-numeric:tabular-nums}.ds-kd-label{font-size:.8125rem;font-weight:500;color:var(--text-muted,#8f8f96)}.ds-kd-value{font-size:1rem;font-weight:600;color:var(--meso-lit,#e4e4e8)}.ds-kd-wire{display:flex;gap:5px;align-items:center;font-size:.8125rem;font-weight:600;color:var(--warning-text,#e8a55b)}"
+    },
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "The one filled action, e.g. Apply.",
+      "html": "<button class=\"ds-btn-primary\">Apply</button>",
+      "css": ".ds-btn-primary{height:36px;padding:0 18px;border:0;border-radius:999px;background:var(--accent-fill,#6fcfbd);color:var(--on-accent,#05241f);font-family:var(--meso, 'PGen Mesopic', 'Avenir Next', 'Segoe UI', system-ui, sans-serif);font-weight:700;font-size:.875rem;cursor:pointer;transition:transform .14s ease-out}.ds-btn-primary:hover{background:var(--accent-fill2,#8adfce)}.ds-btn-primary:focus-visible{outline:0;box-shadow:0 0 0 2px var(--focus-ring,#e9fffa)}.ds-btn-primary:active{transform:scale(.97)}"
+    },
+    {
+      "name": "Quiet Button",
+      "kind": "button",
+      "refersTo": "button-quiet",
+      "description": "A card reset: transparent until hovered, amber on hover because it undoes work.",
+      "html": "<button class=\"ds-btn-quiet\">Reset Defaults</button>",
+      "css": ".ds-btn-quiet{height:32px;padding:0 14px;border:0;border-radius:999px;background:transparent;color:var(--text-secondary,#a2a2a8);font-family:var(--meso, 'PGen Mesopic', 'Avenir Next', 'Segoe UI', system-ui, sans-serif);font-weight:700;font-size:.8125rem;cursor:pointer}.ds-btn-quiet:hover,.ds-btn-quiet:focus-visible{background:var(--neutral-fill,#2b2b31);color:var(--warning-text,#e8a55b);outline:0}.ds-btn-quiet:active{transform:scale(.97)}"
+    },
+    {
+      "name": "Rail Navigation",
+      "kind": "nav",
+      "refersTo": "nav-item-current",
+      "description": "Desktop workspace rail: the current item lit on the panel tone with an aqua icon.",
+      "html": "<nav class=\"ds-rail\"><a class=\"ds-rail-item\" aria-current=\"page\"><svg viewBox=\"0 0 20 20\" width=\"19\" height=\"19\"><rect x=\"2.5\" y=\"4\" width=\"15\" height=\"10\" rx=\"2\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.6\"/><path d=\"M7 17h6\" stroke=\"currentColor\" stroke-width=\"1.6\" stroke-linecap=\"round\"/></svg>Output</a><a class=\"ds-rail-item\"><svg viewBox=\"0 0 20 20\" width=\"19\" height=\"19\"><rect x=\"3\" y=\"3\" width=\"6\" height=\"6\" rx=\"1.5\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.6\"/><rect x=\"11\" y=\"11\" width=\"6\" height=\"6\" rx=\"1.5\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.6\"/></svg>Patterns</a></nav>",
+      "css": ".ds-rail{display:grid;gap:2px;width:212px;padding:8px;background:var(--surface-sidebar,#0a0a0c);font-family:var(--meso, 'PGen Mesopic', 'Avenir Next', 'Segoe UI', system-ui, sans-serif)}.ds-rail-item{display:flex;align-items:center;gap:12px;min-height:42px;padding:9px 14px;border-radius:14px;font-size:.9375rem;font-weight:500;color:var(--text-secondary,#a2a2a8);cursor:pointer}.ds-rail-item:hover{background:var(--hover-bg,rgba(255,255,255,.06))}.ds-rail-item[aria-current=page]{background:var(--surface-card,#141416);color:var(--meso-lit,#e4e4e8);font-weight:700}.ds-rail-item[aria-current=page] svg{color:var(--accent,#8fe0d1)}"
+    },
+    {
+      "name": "Status Readout",
+      "kind": "custom",
+      "refersTo": "status-readout",
+      "description": "The header capsule: the signal leads, a hairline, then the chain behind it.",
+      "html": "<div class=\"ds-readout\"><span class=\"ds-ro-sig\"><i class=\"ds-ro-dot\"></i>Signal <b>HDR10 3840x2160 10-bit</b></span><span><i class=\"ds-ro-dot\"></i>Pi Connected</span><span>52 °C</span></div>",
+      "css": ".ds-readout{display:inline-flex;align-items:center;gap:16px;min-height:36px;padding:4px 18px;border-radius:18px;background:var(--surface-card,#141416);font-family:var(--meso, 'PGen Mesopic', 'Avenir Next', 'Segoe UI', system-ui, sans-serif);font-size:.8125rem;font-weight:500;color:var(--text-secondary,#a2a2a8);font-variant-numeric:tabular-nums}.ds-ro-sig{padding-right:16px;box-shadow:1px 0 0 var(--border,#2b2b30)}.ds-ro-sig b{margin-left:4px;font-size:.9375rem;font-weight:700;color:var(--meso-lit,#e4e4e8)}.ds-ro-dot{display:inline-block;width:7px;height:7px;margin-right:7px;border-radius:50%;background:var(--status-success,#5fb878)}"
+    },
+    {
+      "name": "Card",
+      "kind": "card",
+      "refersTo": "card",
+      "description": "One soft panel per section, no border, title in the headline size.",
+      "html": "<section class=\"ds-card\"><h2>Signal Self-Test</h2><p>Draws known codes in twelve signal modes and reads the pixels back.</p></section>",
+      "css": ".ds-card{width:320px;padding:22px 24px 24px;border-radius:22px;background:var(--surface-card,#141416);font-family:var(--meso, 'PGen Mesopic', 'Avenir Next', 'Segoe UI', system-ui, sans-serif);color:var(--text-secondary,#a2a2a8)}.ds-card h2{margin:0 0 18px;font-size:1.1875rem;font-weight:700;line-height:1.2;letter-spacing:-.01em;color:var(--meso-lit,#e4e4e8)}.ds-card p{margin:0;font-size:.875rem;line-height:1.45}"
+    },
+    {
+      "name": "Note Well",
+      "kind": "custom",
+      "refersTo": "note-well",
+      "description": "What is read, not pressed: a note or a verdict sunk one tone below the card.",
+      "html": "<div class=\"ds-well\">No meter connected. Plug in a colorimeter over USB.</div>",
+      "css": ".ds-well{width:300px;padding:12px 14px;border-radius:16px;background:var(--meso-well,#0d0d0f);font-family:var(--meso, 'PGen Mesopic', 'Avenir Next', 'Segoe UI', system-ui, sans-serif);font-size:.8125rem;line-height:1.4;color:var(--text-secondary,#a2a2a8)}"
+    }
+  ],
+  "narrative": {
+    "northStar": "Mesopic",
+    "overview": "Mesopic vision is what the eye does between daylight and darkness, and that is\nwhere a calibrator works: in a dimmed room, the display under test the\nbrightest thing in it, the phone or laptop held at arm's length. The interface\nlives in that light. It is dark by default, low in chrome contrast, and lets\nthe picture on the TV be the only bright object. Hierarchy comes from tone\nsteps, not outlines: a well for what is read, a key for what is pressed, a lit\nkey for what is chosen.\n\nThe face is round and geometric (Gabarito, served by the Pi itself as\n\"PGen Mesopic\", OFL 1.1), set bold for what the calibrator reads and medium\nfor labels, with tabular figures everywhere so codes and clocks never jitter.\nControls are soft keys and pills with their name inside. One pale aqua accent\nmarks what is current, chosen or about to be applied; amber, coral and green\nare reserved for state.\n\nThe look is modern and bold, not technical. The rejected first redesign\n(\"Service Manual\") showed what this system is not: no monospace or typewriter\nfaces for UI text, no stencil or lettering faces, nothing retro or\nmanual-like.",
+    "keyCharacteristics": [
+      "Dark default that does not light the room; a working light theme in the same grammar.",
+      "Tone steps instead of 1 px frames: well, key, lit key.",
+      "One accent, used for current, chosen and pending; hue never carries state alone.",
+      "Bold round type with tabular figures; nothing under 12 px.",
+      "Calibration colour is data: nothing tints, blends or lies over it."
+    ],
+    "rules": [
+      {
+        "name": "The One Voice Rule",
+        "body": "Aqua is the only accent. It marks current, chosen or pending, never decoration.",
+        "section": "colors"
+      },
+      {
+        "name": "The Data Colour Rule",
+        "body": "A calibration colour (swatch, preview, chart patch) is shown exactly: no tint, filter, blend, opacity, gradient or translucent layer over it.",
+        "section": "colors"
+      },
+      {
+        "name": "The Palette Override Rule",
+        "body": "The Mesopic tokens apply only without `data-palette`. The other themes (Volt, Natrium, OLED …) set their own colours and inherit the Mesopic shapes, type and tone grammar.",
+        "section": "colors"
+      },
+      {
+        "name": "The No-Mono Rule",
+        "body": "No monospace, typewriter, stencil or lettering face for UI text. Hex dumps in the infoframe decoder are the one place a monospace stack remains.",
+        "section": "typography"
+      },
+      {
+        "name": "The Tabular Rule",
+        "body": "Every number uses tabular figures, so a changing code or clock never shifts its neighbours.",
+        "section": "typography"
+      },
+      {
+        "name": "The Tone-Step Rule",
+        "body": "A boundary is a change of tone, not a 1 px line. What is live or chosen among peers carries a 1.5 px inset ring (aqua, or amber when the cable differs).",
+        "section": "elevation"
+      }
+    ],
+    "dos": [
+      "**Do** build boundaries from the four tone steps (well, key, lit key, panel) before reaching for a line.",
+      "**Do** keep aqua for current, chosen and pending; use amber only for a cable difference or a destructive hover.",
+      "**Do** pair every state hue with a word or a mark, and keep forced-colours rules for new marks.",
+      "**Do** start new lines on the 24 px edge and keep text at 12 px or more.",
+      "**Do** put long explanations behind a help mark, and show what the cable carries in the field it concerns."
+    ],
+    "donts": [
+      "**Don't** use monospace, typewriter, stencil or lettering faces for UI text, or anything retro or manual-like (the rejected \"Service Manual\" direction).",
+      "**Don't** draw 1 px frames around tiles, tabs or panels.",
+      "**Don't** add a second accent colour or a gradient to the chrome.",
+      "**Don't** tint, blend, filter or overlay a calibration colour, and don't put a translucent layer or drop shadow where swatches scroll under it.",
+      "**Don't** load fonts or scripts from the internet; the Pi serves everything itself."
+    ]
+  }
+}

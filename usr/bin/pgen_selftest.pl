@@ -43,6 +43,10 @@ my $JSON=JSON::PP->new->utf8->canonical;
 #
 my @grey10=(["Black",64,64,64],["Black +1",65,65,65],["Grey 50 %",502,502,502],["Grey 75 %",721,721,721],["White",940,940,940]);
 my @grey8=(["8-bit black",16,16,16],["8-bit grey",126,126,126],["8-bit white",235,235,235]);
+# One 8-bit colour on the Y'CbCr links: it reads back the matrix encode of an
+# 8-bit pattern on the 10-bit link, Round[(219 E' + 16) x 4] (BT.709 /
+# BT.2020 at n = 10), which is not the 8-bit code times 4 (PiTPG 2.0.6).
+my @colour8=(["8-bit colour",100,50,120]);
 my @colour10=(["Red 75 %",721,64,64],["Green 50 %",64,502,64],["Blue 50 %",64,64,502]);
 my @grey12=(["12-bit grey",2011,2011,2011]);
 my @scenarios=(
@@ -59,19 +63,19 @@ my @scenarios=(
    codes12=>[["12-bit grey",2050,2050,2050]] },
  { id=>"sdr_ycc422_10", group=>"SDR", label=>"YCbCr 4:2:2", depth=>10,
    config=>{signal_mode=>"sdr",color_format=>"2",max_bpc=>"10",rgb_quant_range=>"1",colorimetry=>"2"},
-   codes=>[@grey10,@colour10], codes8=>[@grey8] },
+   codes=>[@grey10,@colour10], codes8=>[@grey8,@colour8] },
  { id=>"sdr_ycc444_10", group=>"SDR", label=>"YCbCr 4:4:4", depth=>10,
    config=>{signal_mode=>"sdr",color_format=>"1",max_bpc=>"10",rgb_quant_range=>"1",colorimetry=>"2"},
-   codes=>[@grey10,@colour10], codes8=>[@grey8], codes12=>[@grey12] },
+   codes=>[@grey10,@colour10], codes8=>[@grey8,@colour8], codes12=>[@grey12] },
  { id=>"hdr10_rgb_lim_10", group=>"HDR10", label=>"RGB Limited", depth=>10,
    config=>{signal_mode=>"hdr10",color_format=>"0",max_bpc=>"10",rgb_quant_range=>"1"},
    range=>"LIMITED", codes=>[@grey10,["Red 75 %",721,64,64]], codes8=>[@grey8], drm=>1 },
  { id=>"hdr10_ycc422_10", group=>"HDR10", label=>"YCbCr 4:2:2", depth=>10,
    config=>{signal_mode=>"hdr10",color_format=>"2",max_bpc=>"10",rgb_quant_range=>"1"},
-   codes=>[@grey10,@colour10], codes8=>[@grey8], drm=>1 },
+   codes=>[@grey10,@colour10], codes8=>[@grey8,@colour8], drm=>1 },
  { id=>"hdr10_ycc444_10", group=>"HDR10", label=>"YCbCr 4:4:4", depth=>10,
    config=>{signal_mode=>"hdr10",color_format=>"1",max_bpc=>"10",rgb_quant_range=>"1"},
-   codes=>[@grey10,@colour10], codes8=>[@grey8], codes12=>[@grey12], drm=>1 },
+   codes=>[@grey10,@colour10], codes8=>[@grey8,@colour8], codes12=>[@grey12], drm=>1 },
  { id=>"hlg_rgb_lim_10", group=>"HLG", label=>"RGB Limited", depth=>10,
    config=>{signal_mode=>"hlg",color_format=>"0",max_bpc=>"10",rgb_quant_range=>"1"},
    range=>"LIMITED", codes=>[@grey10,["Red 75 %",721,64,64]], drm=>1 },

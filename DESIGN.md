@@ -168,7 +168,12 @@ components:
 <!-- Recorded 2026-11-12 from the Mesopic layer in
      usr/share/PGenerator/webui-layout.css ("Mesopic look"), which the
      maintainer chose and signed off on 2026-11-10. The tokens there are the
-     source of truth; update this file when they change. -->
+     source of truth; update this file when they change.
+     2026-11-13: the maintainer chose "Glow" as the default theme. It is a
+     theme with a layout of its own; its rules are the section "Glow theme"
+     below and the section "Glow look" of the same stylesheet. Everything
+     else in this file describes the Mesopic look, which every other theme
+     keeps. -->
 
 ## Overview
 
@@ -310,6 +315,29 @@ One capsule in the header: the signal leads in bold lit text, set off by the onl
 
 ### Help marks
 A drawn "i" in a ring at 15 px (20 px on touch) that opens a tip on click or hover; long Calman explanations live there, not in the card.
+
+## Glow theme
+
+The default theme (`data-skin="glow"` over the Dark base, no `data-palette`).
+It sets aside three Mesopic rules on purpose and keeps the rest: it draws a
+1 px line round cards and tiles, it puts a soft orange glow in two corners of
+the page ground, and its accent is orange.
+
+- **Ground:** warm near-black #0b0a09 with a dot grid and the corner glow, as a fixed layer behind the page. The glow lies on the ground only; cards are opaque, so no calibration colour is ever under it.
+- **Cards and tiles:** card #191817 with a faint sheen and a line of white at 7 %; a tile is white at 2.5 % with a line at 14 %, radius 16 px, an icon tile top left, the name, then the value.
+- **Type:** Plus Jakarta Sans for text ("PGen Glow"), Sora for titles and values ("PGen Glow Display"), both served by the Pi, OFL 1.1. Tabular figures; nothing under 12 px.
+- **Output is a dashboard on the desktop:** the settings stand on the page as tiles, with ports, presets and the Calman settings above them; the HDR metadata on its ST 2084 curve; Signal Self-Test as a ring with one segment per mode; the playlists as cards.
+
+### Named Rules
+**The Signal Orange Rule.** Orange (#ff6b1a) is the signal: the port in use, the pattern or playlist on screen, a value not applied yet, the action that sends or tests it, the curve of what is sent. An open menu, a usage bar, "Update available" and a chosen option (a theme, a layout, a ticked box) are not orange; they are lit (white line, lighter ground) or green.
+
+**The Shape Before Hue Rule.** A result is never told by colour alone: on the ring a mode not run is a thin line, bit-exact a full segment, a mismatch hatched, not provable dotted, and the legend counts them in words. A result of another output resolution is drawn thin again and says "old result".
+
+**The Real Pieces Rule.** Everything the dashboard adds shows state the page holds or starts an action the page has. No sample control that draws nothing.
+
+**The Card Width Rule.** A layout step asks the card for its width (container queries on the settings, HDR, Self-Test and playlists cards), not the window: the Desktop content is narrower than the window by the rail, the Live Information drawer and Desktop Zoom. Every value is read whole in its field at every such width.
+
+**The Order Rule.** What the dashboard moves on screen it moves in the markup too, so the tab order is the order seen.
 
 ## Do's and Don'ts
 

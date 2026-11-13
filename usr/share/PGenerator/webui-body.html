@@ -217,7 +217,7 @@ __PG_LOGO_DARK__
   <h3 class="calman-group-title"><span id="calmanGroupTitle">During a Calman session</span><span class="calman-group-note" id="calmanGroupNote">Saved on change</span></h3>
   <div class="grid setting-tiles calman-range">
    <div class="field">
-    <label for="calman_range">Range with Calman</label>
+    <label for="calman_range">Range<span class="glow-tail"> with Calman</span></label>
     <span class="meter-help-tip" id="calmanRangeHelp" aria-label="About Range with Calman" title="Follow Calman: the range Calman asks for, from Calman&rsquo;s next range command.&#10;&#10;Always Full or Always Limited: holds for the whole Calman session, whatever range Calman asks for, from Calman&rsquo;s next pattern; set Calman&rsquo;s patterns to the same range.&#10;&#10;YCbCr is Limited on the cable either way: Full there reads Calman&rsquo;s patterns as 0&#8209;255. Dolby Vision keeps the range of its transport.">?</span>
     <select id="calman_range" onchange="calmanRangeChanged(this.value)">
      <option value="">Follow Calman</option>
@@ -226,7 +226,7 @@ __PG_LOGO_DARK__
     </select>
    </div>
    <div class="field">
-    <label for="calman_dv_container">Dolby Vision with Calman</label>
+    <label for="calman_dv_container">Dolby Vision<span class="glow-tail"> with Calman</span></label>
     <span class="meter-help-tip" id="calmanDvContainerHelp" aria-label="About Dolby Vision with Calman" title="The color space Dolby Vision signals for Calman&rsquo;s patches. P3-D65 fits Calman&rsquo;s Dolby Vision workflows, whose patches are P3 colors. With BT.2020 the same patches are BT.2020 colors and measure more saturated than Calman&rsquo;s targets; greys are the same in both.&#10;&#10;It applies from the first picture Calman shows until Calman disconnects, to everything shown in Standard Dolby Vision in that time, the WebUI&rsquo;s own patterns and measurements included.&#10;&#10;Without Calman, Dolby Vision is BT.2020; going back restarts the picture and the last patch is gone.">?</span>
     <select id="calman_dv_container" onchange="calmanDvContainerChanged(this.value)">
      <option value="2">P3-D65</option>
@@ -260,11 +260,11 @@ __PG_LOGO_DARK__
     </select>
    </div>
    <div class="field">
-    <label for="max_luma">Max Luma (nits)</label>
+    <label for="max_luma">Max Luma<span class="glow-unit"> (nits)</span></label>
     <input type="number" id="max_luma" min="0" max="10000" step="1">
    </div>
    <div class="field">
-    <label for="min_luma">Min Luma (nits)</label>
+    <label for="min_luma">Min Luma<span class="glow-unit"> (nits)</span></label>
     <input type="number" id="min_luma" min="0" max="100" step="0.0001">
    </div>
    <div class="field">
@@ -2070,9 +2070,10 @@ __PG_LOGO_DARK__
      <p class="ui-choice-note" id="desktopLayoutUnavailable" role="status">Desktop requires a browser width of at least 1024 pixels.</p>
     </div>
     <div class="ui-settings-group ui-settings-theme">
-     <h3>Theme <span class="meter-help-tip" tabindex="0" title="Colour theme of the WebUI. It only changes this interface, never the patterns sent to the display. This preference is stored in this browser." aria-label="Theme help">?</span></h3>
+     <h3>Theme <span class="meter-help-tip" tabindex="0" title="Theme of the WebUI. Glow also lays out Output as a dashboard. A theme only changes this interface, never the patterns sent to the display. This preference is stored in this browser." aria-label="Theme help">?</span></h3>
      <div class="theme-swatch-grid" role="group" aria-label="Theme">
-      <button type="button" class="theme-swatch-btn theme-switch-btn" data-theme-mode="dark" aria-pressed="true" onclick="pgSetThemeMode('dark')"><span class="theme-swatch" style="--sw-bg:#0a0a0c;--sw-card:#141416;--sw-accent:#8fe0d1"></span><span>Dark</span></button>
+      <button type="button" class="theme-swatch-btn theme-switch-btn" data-theme-mode="glow" aria-pressed="true" onclick="pgSetThemeMode('glow')"><span class="theme-swatch" style="--sw-bg:#0b0a09;--sw-card:#191817;--sw-accent:#ff6b1a"></span><span>Glow</span></button>
+      <button type="button" class="theme-swatch-btn theme-switch-btn" data-theme-mode="dark" aria-pressed="false" onclick="pgSetThemeMode('dark')"><span class="theme-swatch" style="--sw-bg:#0a0a0c;--sw-card:#141416;--sw-accent:#8fe0d1"></span><span>Dark</span></button>
       <button type="button" class="theme-swatch-btn theme-switch-btn" data-theme-mode="light" aria-pressed="false" onclick="pgSetThemeMode('light')"><span class="theme-swatch" style="--sw-bg:#dcdddd;--sw-card:#e9eaea;--sw-accent:#0b5c53"></span><span>Light</span></button>
       <button type="button" class="theme-swatch-btn theme-switch-btn" data-theme-mode="oled" aria-pressed="false" onclick="pgSetThemeMode('oled')"><span class="theme-swatch" style="--sw-bg:#000;--sw-card:#0b0b0b;--sw-accent:#5b7fff"></span><span>OLED Black</span></button>
       <button type="button" class="theme-swatch-btn theme-switch-btn" data-theme-mode="graphite" aria-pressed="false" onclick="pgSetThemeMode('graphite')"><span class="theme-swatch" style="--sw-bg:#121212;--sw-card:#1e1e1e;--sw-accent:#6f86a3"></span><span>Graphite</span></button>

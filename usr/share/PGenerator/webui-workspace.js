@@ -21548,3 +21548,288 @@ function pgInitialRetry(name,fn,delays){
  setInterval(()=>meterCheckStatus(),10000);
  setInterval(()=>meterIccRefreshCompanionStatus(),5000);
 })();
+
+/* ==== Glow look: what the dashboard adds to the Output workspace ============
+   The pieces the Glow theme (data-skin="glow", "Glow look" in
+   webui-layout.css) draws beyond the page's own markup: the ST 2084 curve in
+   HDR Metadata, the ring in Signal Self-Test, the playlists as cards, the
+   port in use as a line of text on a phone. Each shows what the page already
+   holds (the HDR fields, SELFTEST_MODES and selftestState, playlistData, the
+   port drawing) and starts nothing but playlistStart(), under the locks of
+   the page's own list. Every other theme hides them. */
+(function () {
+  'use strict';
+  var $ = function (id) { return document.getElementById(id); };
+  var dash = document.querySelector('.dashboard');
+  var display = $('displaySettingsCard'), hdr = $('hdrCard'), test = $('selftestCard');
+  if (!dash || !display || !hdr || !test) return;
+  var esc = function (s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); };
+  var el = function (html) { var t = document.createElement('template'); t.innerHTML = html.trim(); return t.content.firstChild; };
+
+  /* ---- ST 2084: the page's own functions (webui-colour-math.js) ---- */
+  function pqNits(e) { return meterChartPqDecodeNormalized(e); }
+  function pqSignal(n) { return pqEncodeNormalized(n); }
+  var LO = 0.01, HI = 10000;
+  function nits(id) { var f = $(id), v = f ? parseFloat(f.value) : NaN; return (isFinite(v) && v >= LO && v <= HI) ? v : NaN; }
+  function fmt(n) { return String(Math.round(n * 10000) / 10000); }
+
+  /* ---- HDR Metadata: the curve with the page's own values on it ---- */
+  var pq = el('<div class="glow-x glow-pq" id="glowPq"></div>');
+  var fields = $('hdrSignalFields');
+  if (fields) hdr.insertBefore(pq, fields);
+  // A value the page marks as not applied yet (.is-changed, set with the Apply bar).
+  function unapplied(id) { var f = $(id), b = f && f.closest('.field'); return !!(b && b.classList.contains('is-changed')); }
+  function drawPq() {
+    var W = pq.clientWidth, H = pq.clientHeight;
+    if (!W || !H) return;
+    // The curve shows what the fields say. While that is not on the cable
+    // yet it is drawn as an outline and says so.
+    var pending = unapplied('max_luma') || unapplied('max_fall');
+    pq.classList.toggle('is-pending', pending);
+    var L = 46, R = 14, T = 20, B = 30, lo = -2, hi = 4;
+    var x = function (e) { return L + (W - L - R) * e; };
+    var y = function (n) { return T + (H - T - B) * (1 - (Math.log(n) / Math.LN10 - lo) / (hi - lo)); };
+    var maxLuma = nits('max_luma'), maxFall = nits('max_fall');
+    var e0 = pqSignal(LO), sigMax = isFinite(maxLuma) ? pqSignal(maxLuma) : e0, a = [], b = [], i, e, base = H - B;
+    for (i = 0; i <= 60; i++) { e = e0 + (sigMax - e0) * i / 60; a.push(x(e).toFixed(1) + ',' + y(pqNits(e)).toFixed(1)); }
+    for (i = 0; i <= 40; i++) { e = sigMax + (1 - sigMax) * i / 40; b.push(x(e).toFixed(1) + ',' + y(Math.min(pqNits(e), HI)).toFixed(1)); }
+    var s = '<defs><linearGradient id="glowPqFill" x1="0" y1="0" x2="0" y2="1"><stop offset="0" class="pq-s0"/><stop offset="1" class="pq-s1"/></linearGradient></defs>';
+    [0.1, 10, 1000].forEach(function (n) {
+      s += '<line class="pq-grid" x1="' + L + '" x2="' + (W - R) + '" y1="' + y(n) + '" y2="' + y(n) + '"/><text class="pq-tick" x="' + (L - 10) + '" y="' + (y(n) + 4) + '" text-anchor="end">' + (n >= 1000 ? '1 000' : n) + '</text>';
+    });
+    [0, 0.25, 0.5, 0.75, 1].forEach(function (v) {
+      s += '<text class="pq-tick" x="' + x(v) + '" y="' + (H - 6) + '" text-anchor="' + (v === 0 ? 'start' : v === 1 ? 'end' : 'middle') + '">' + v * 100 + ' %</text>';
+    });
+    s += '<line class="pq-axis" x1="' + L + '" x2="' + (W - R) + '" y1="' + base + '" y2="' + base + '"/>';
+    var label = 'ST 2084 curve';
+    if (isFinite(maxLuma)) {
+      var xM = x(sigMax), yM = y(maxLuma), yF = isFinite(maxFall) ? y(maxFall) : NaN;
+      // The label of the higher line stands above its line, the other below its own.
+      var fallAbove = isFinite(yF) && yF < yM;
+      s += '<polygon fill="url(#glowPqFill)" points="' + x(e0).toFixed(1) + ',' + base + ' ' + a.join(' ') + ' ' + xM.toFixed(1) + ',' + base + '"/>' +
+        '<line class="pq-grid" x1="' + xM + '" x2="' + xM + '" y1="' + yM + '" y2="' + base + '"/>' +
+        '<line class="pq-max" x1="' + L + '" x2="' + xM + '" y1="' + yM + '" y2="' + yM + '"/>';
+      if (isFinite(yF)) s += '<line class="pq-fall" x1="' + L + '" x2="' + x(pqSignal(maxFall)) + '" y1="' + yF + '" y2="' + yF + '"/>';
+      s += '<polyline class="pq-rest" points="' + b.join(' ') + '"/><polyline class="pq-line" points="' + a.join(' ') + '"/>' +
+        '<circle class="pq-halo" cx="' + xM + '" cy="' + yM + '" r="9"/><circle class="pq-dot" cx="' + xM + '" cy="' + yM + '" r="5"/>' +
+        '<text class="pq-lab" x="' + (L + 8) + '" y="' + (fallAbove ? yM + 16 : yM - 8) + '">Max Luma ' + esc(fmt(maxLuma)) + ' nits</text>';
+      if (isFinite(yF)) s += '<text class="pq-lab pq-mut" x="' + (L + 8) + '" y="' + (fallAbove ? yF - 8 : yF + 16) + '">MaxFALL ' + esc(fmt(maxFall)) + ' nits</text>';
+      var right = xM > W - R - (W < 420 ? 52 : 110);
+      s += '<text class="pq-lab" x="' + (right ? xM - 12 : xM + 12) + '" y="' + (right ? yM - 8 : yM + 18) + '"' + (right ? ' text-anchor="end"' : '') + '>' + (sigMax * 100).toFixed(1) + (W < 420 ? ' %' : ' % signal') + '</text>';
+      if (pending) s += '<text class="pq-pend" x="' + Math.min(W - R, xM > W - R - 120 ? xM - 12 : W - R) + '" y="' + (base - 10) + '" text-anchor="end">Not applied yet</text>';
+      label += ': Max Luma ' + fmt(maxLuma) + ' nits at ' + (sigMax * 100).toFixed(1) + ' % signal' + (isFinite(maxFall) ? ', MaxFALL ' + fmt(maxFall) + ' nits' : '') + (pending ? ', not applied yet' : '');
+    } else {
+      s += '<polyline class="pq-rest" points="' + b.join(' ') + '"/>';
+    }
+    pq.innerHTML = '<svg viewBox="0 0 ' + W + ' ' + H + '" width="' + W + '" height="' + H + '" role="img" aria-label="' + esc(label) + '">' + s + '</svg>';
+  }
+
+  /* ---- Signal Self-Test: one ring segment per mode, drawn by its result ----
+     The modes are SELFTEST_MODES, the results the page's own selftestState
+     (/api/selftest/status). A result is never told by colour alone: a mode
+     not run is a thin line, bit-exact a full green segment, a mismatch
+     hatched, not provable dotted; the list beside the ring counts them. */
+  var MODES = (typeof SELFTEST_MODES !== 'undefined' && Array.isArray(SELFTEST_MODES)) ? SELFTEST_MODES : [];
+  var groups = [];
+  MODES.forEach(function (m, i) {
+    var g = groups[groups.length - 1];
+    if (g && g.name === m.group) g.n++; else groups.push({ name: m.group, from: i, n: 1 });
+  });
+  var ring = null, ringSig = '';
+  if (MODES.length && $('selftestVerdict')) {
+    ring = el('<div class="glow-x glow-test"><div class="glow-ring"><svg id="glowRingSvg" viewBox="0 0 132 132" width="132" height="132" role="img"></svg><div class="glow-ring-c" aria-hidden="true"><b id="glowRingN"></b><span id="glowRingW"></span></div></div>' +
+      '<ul class="glow-leg" id="glowLeg"></ul></div>');
+    test.insertBefore(ring, $('selftestVerdict'));
+  }
+  var RS = { pass: 'bit-exact', fail: 'mismatch', skip: 'not provable', running: 'testing', pending: 'not run' };
+  function drawRing() {
+    if (!ring) return;
+    var st = (typeof selftestState !== 'undefined' && selftestState) || {}, res = {};
+    (Array.isArray(st.scenarios) ? st.scenarios : []).forEach(function (r) { if (r) res[r.id] = RS[r.status] ? r.status : 'pending'; });
+    var stat = MODES.map(function (m) { return res[m.id] || 'pending'; });
+    // The page marks a result of another output resolution (selftestMarkStale): the ring must not show it as proven.
+    var stale = $('selftestVerdict').hasAttribute('data-stale');
+    var sig = (st.state || 'idle') + '|' + (st.set || '') + '|' + stat.join(',') + '|' + stale;
+    if (sig === ringSig) return;
+    ringSig = sig;
+    ring.classList.toggle('is-stale', stale);
+    var count = function (list, s) { return list.filter(function (x) { return x === s; }).length; };
+    var cx = 66, r = 54, gapIn = 3, gapGr = 12, span = (360 - groups.length * gapGr - (MODES.length - groups.length) * gapIn) / MODES.length;
+    var pt = function (deg) { var t = deg * Math.PI / 180; return (cx + r * Math.cos(t)).toFixed(2) + ' ' + (cx + r * Math.sin(t)).toFixed(2); };
+    var a = -90 + gapGr / 2, segs = '';
+    MODES.forEach(function (m, i) {
+      segs += '<path class="rs-' + stat[i] + '"' + (stat[i] === 'fail' ? ' stroke="url(#glowHatch)"' : '') + ' d="M' + pt(a) + 'A' + r + ' ' + r + ' 0 0 1 ' + pt(a + span) + '"/>';
+      a += span + (MODES[i + 1] && MODES[i + 1].group === m.group ? gapIn : gapGr);
+    });
+    var pass = count(stat, 'pass'), fail = count(stat, 'fail'), skip = count(stat, 'skip'), tested = pass + fail + skip, running = st.state === 'running';
+    var inSet = st.set === 'quick' ? MODES.filter(function (m) { return m.quick; }).length : MODES.length;
+    var say = !tested && !running ? MODES.length + ' modes, not run yet'
+      : running ? tested + ' of ' + inSet + ' modes tested'
+        : pass + ' of ' + tested + ' tested modes bit-exact' + (fail ? ', ' + fail + ' mismatch' : '') + (skip ? ', ' + skip + ' not provable' : '');
+    var svg = $('glowRingSvg');
+    svg.setAttribute('aria-label', (stale ? 'Self-test, old result (the output now runs another resolution): ' : 'Self-test: ') + say);
+    svg.innerHTML = '<defs><pattern id="glowHatch" width="5" height="5" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="5" height="5" fill="#ee7570"/><rect width="2" height="5" fill="#191817"/></pattern></defs>' + segs;
+    $('glowRingN').textContent = running ? tested + '/' + inSet : tested ? pass + '/' + tested : MODES.length;
+    $('glowRingW').textContent = stale ? 'old result' : running ? 'tested' : tested ? 'bit-exact' : 'modes';
+    var seen = ['pass', 'fail', 'skip'].filter(function (s) { return count(stat, s); });
+    $('glowLeg').innerHTML = groups.map(function (g) {
+      var ss = stat.slice(g.from, g.from + g.n), any = ss.some(function (s) { return s !== 'pending'; }), p = count(ss, 'pass'), f = count(ss, 'fail'), k = count(ss, 'skip');
+      var words = any ? p + ' of ' + g.n + ' bit-exact' + (f ? ', ' + f + ' mismatch' : '') + (k ? ', ' + k + ' not provable' : '') : g.n + (g.n === 1 ? ' mode' : ' modes');
+      return '<li><span class="glow-leg-n">' + esc(g.name) + '</span><span class="glow-pips" aria-hidden="true">' + ss.map(function (s) { return '<i class="rs-' + s + '"></i>'; }).join('') + '</span><b aria-hidden="true">' + (any ? p + '/' + g.n : g.n) + '</b><span class="glow-sr">: ' + esc(words) + (stale && any ? ', old result' : '') + '</span></li>';
+    }).join('') + (seen.length ? '<li class="glow-key" aria-hidden="true">' + seen.map(function (s) { return '<span><i class="rs-' + s + '"></i>' + RS[s] + '</span>'; }).join('') + '</li>' : '');
+  }
+
+  /* ---- Playlists: the lists of /api/playlists, started by the page's own playlistStart ---- */
+  var lists = el('<div class="card glow-x glow-lists" id="glowListsCard" data-desktop-workspace="output" data-desktop-order="38"><h2>Playlists</h2><div class="glow-pls" id="glowPls"></div></div>');
+  test.parentNode.insertBefore(lists, test.nextSibling);
+  // Start goes through the page's own playlistStart, under the same locks as its list (playlistRender).
+  $('glowPls').addEventListener('click', function (ev) {
+    var b = ev.target.closest ? ev.target.closest('button[data-glow-start]') : null;
+    if (!b || b.disabled || typeof playlistStart !== 'function') return;
+    // The card is drawn every 500 ms, the page's state changes at once (playlistStart sets playlistBusy before it asks the Pi):
+    // the locks are read again at the click, so a second click or a second list does not start anything.
+    var id = b.getAttribute('data-glow-start'), pd = (typeof playlistData !== 'undefined' && playlistData) || {}, pl = plList(pd).filter(function (p) { return p.id === id; })[0];
+    if (!pl || (typeof playlistBusy !== 'undefined' && playlistBusy) || (pd.active && pd.active.id === id) || ((pd.signal_mode || 'sdr') !== 'sdr' && plNeedsSdr(pl))) return;
+    // playlistStart looks the list up with the page's own playlistById: where that cannot read the data, nothing is started.
+    try { if (typeof playlistById !== 'function' || !playlistById(id)) return; } catch (e) { return; }
+    playlistStart(id);
+    drawLists();
+  });
+  // What of playlistData can be read: lists and items that are objects. The page's own helpers take them as the Pi sends them.
+  function plList(pd) { return (Array.isArray(pd.playlists) ? pd.playlists : []).filter(function (p) { return p && typeof p === 'object'; }); }
+  function plItems(p) { return (Array.isArray(p.items) ? p.items : []).filter(function (it) { return it && typeof it === 'object'; }); }
+  // The page's own rule (playlistNeedsSdr), asked with the items that can be read.
+  function plNeedsSdr(p) { return typeof playlistNeedsSdr === 'function' && playlistNeedsSdr({ items: plItems(p) }); }
+  var listsHtml = null;
+  function drawLists() {
+    var pd = (typeof playlistData !== 'undefined' && playlistData) || {};
+    var data = plList(pd);
+    // As the page's own list: the one on screen says so, a list of G1 plates waits for SDR, nothing starts while a request runs.
+    var active = pd.active || null, sdr = (pd.signal_mode || 'sdr') === 'sdr', busy = typeof playlistBusy !== 'undefined' && !!playlistBusy;
+    var html = data.map(function (p) {
+      var items = plItems(p), n = items.length, windows = n && items.every(function (it) { return it.type === 'window'; });
+      var isActive = !!(active && active.id === p.id), blocked = !sdr && plNeedsSdr(p);
+      var body = windows
+        ? '<div class="glow-greys" role="img" aria-label="' + esc(items.map(function (it) { return it.level + ' %'; }).join(', ')) + '">' + items.map(function (it) { var g = Math.round(255 * Math.max(0, Math.min(100, Number(it.level) || 0)) / 100); return '<i style="background:rgb(' + g + ',' + g + ',' + g + ')"></i>'; }).join('') + '</div>'
+        : '<p class="glow-pl-first">' + esc(items.slice(0, 2).map(function (it) { return it.label; }).join(' \u00b7 ')) + (n > 2 ? ' <span>+' + (n - 2) + '</span>' : '') + '</p>';
+      return '<article class="glow-pl' + (isActive ? ' is-active' : '') + '" tabindex="-1" data-glow-list="' + esc(p.id) + '"><div class="glow-pl-h"><h3>' + esc(p.name) + '</h3><span class="glow-pill">' + n + (windows ? (n === 1 ? ' window' : ' windows') : (n === 1 ? ' pattern' : ' patterns')) + '</span></div>' +
+        '<p class="glow-pl-d">' + esc(p.description) + '</p>' + body +
+        (blocked ? '<p class="glow-pl-note">Uses G1 plates: switch the output to SDR first.</p>' : '') +
+        (isActive ? '<p class="glow-pl-live"><i aria-hidden="true"></i>On screen</p>'
+          : '<button type="button" class="btn btn-secondary" data-glow-start="' + esc(p.id) + '" aria-label="Start ' + esc(p.name) + '"' + (blocked || busy ? ' disabled' : '') + '><svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M8 5.5v13l10.5-6.5z"/></svg>Start</button>') +
+        '</article>';
+    }).join('');
+    // Drawn on every pass: the card is replaced only when what it shows changed, and the note of that is taken after the drawing.
+    if (html === listsHtml) return;
+    // The card is replaced whole. A Start that had the focus hands it on: to its list's new Start, or to the list itself where Start is locked or gone.
+    var box = $('glowPls'), act = document.activeElement, at = act && box.contains(act) ? act.closest('[data-glow-list]') : null, fid = at ? at.getAttribute('data-glow-list') : null;
+    box.innerHTML = html;
+    listsHtml = html;
+    if (fid !== null) [].some.call(box.querySelectorAll('[data-glow-list]'), function (a) {
+      if (a.getAttribute('data-glow-list') !== fid) return false;
+      (a.querySelector('button:not([disabled])') || a).focus();
+      return true;
+    });
+  }
+
+  /* ---- Pi Ports on a phone: the port in use as one line of text ----
+     The drawing needs 300 px; under 700 px the panel says the same in words
+     (the stylesheet shows one or the other). Read from the drawing the page keeps
+     up to date (pgRenderSignalPort). */
+  var portBox = $('signalPort'), portLine = null, PORT_SAYS = { plugged: 'no output', stray: 'output on the other port', output: 'no display' };
+  if (portBox && $('signalPortTitle')) {
+    portLine = el('<p class="glow-x glow-port-line" id="glowPortLine"></p>');
+    portBox.insertBefore(portLine, $('signalPortTitle').nextSibling);
+  }
+  function drawPort() {
+    if (!portLine) return;
+    var html = Array.prototype.map.call(portBox.querySelectorAll('.sp-port[data-state]:not([data-state="idle"])'), function (g) {
+      var name = (g.querySelector('.sp-label') || {}).textContent || '', cap = (g.querySelector('.sp-cap') || {}).textContent || '', says = PORT_SAYS[g.getAttribute('data-state')];
+      return '<b>' + esc(name) + '</b>' + (cap ? ' · ' + esc(cap) : '') + (says ? ' · ' + says : '');
+    }).join(', ');
+    if (portLine.innerHTML !== html) portLine.innerHTML = html;
+  }
+
+  /* ---- The Calman settings stand where they are read ----
+     Where the settings card is wide enough the dashboard shows them as a
+     third panel beside ports and presets, above the six settings. The
+     stylesheet decides that from the card's width and says so on the group
+     (--glow-third); the group moves there in the markup too, so the tab
+     order is the order on screen. Elsewhere it is back behind the settings,
+     where the page has it. Not while one of them has the focus: moving the
+     node would drop it. */
+  var calman = display.querySelector('.calman-group'), tiles = $('displaySignalFields');
+  // True once the group stands where it belongs.
+  function placeCalman() {
+    if (!calman || !tiles) return true;
+    var top = dash.classList.contains('glow-dash') && getComputedStyle(calman).getPropertyValue('--glow-third').trim() === '1', isTop = calman.nextElementSibling === tiles;
+    if (top === isTop) return true;
+    if (calman.contains(document.activeElement)) return false;
+    if (top) display.insertBefore(calman, tiles); else display.appendChild(calman);
+    return true;
+  }
+
+  /* ---- Glow's own reading of the two Calman settings ----
+     Dolby Vision stands before Range, and the choice the page recommends is
+     marked in the open menu (data-pg-badge, as the page marks its other
+     recommended options). Only in Glow: another theme has the two fields in
+     the page's order and without the marks. Moved in the markup, so the tab
+     order is the order on screen; not while one of them has the focus. */
+  var calRange = $('calman_range'), calDv = $('calman_dv_container');
+  // True once the two fields stand as the theme has them.
+  function dressCalman(on) {
+    if (!calRange || !calDv) return true;
+    [calRange.querySelector('option[value=""]'), calDv.querySelector('option[value="2"]')].forEach(function (o) {
+      if (!o) return;
+      if (on) o.setAttribute('data-pg-badge', 'Recommended'); else o.removeAttribute('data-pg-badge');
+    });
+    var fr = calRange.closest('.field'), fd = calDv.closest('.field');
+    if (!fr || !fd || fr.parentNode !== fd.parentNode) return true;
+    var first = on ? fd : fr, second = on ? fr : fd;
+    if (first.compareDocumentPosition(second) & 4) return true;   // DOCUMENT_POSITION_FOLLOWING: already in this order
+    if (fr.parentNode.contains(document.activeElement)) return false;
+    fr.parentNode.insertBefore(first, second);
+    return true;
+  }
+
+  /* ---- Keep in step with the page: it sets values and layouts without events ---- */
+  var pqSig = '', undone = false, TWO_CARDS = 720;
+  function sync() {
+    var on = document.documentElement.getAttribute('data-skin') === 'glow';
+    // Another theme: put the page back as it was, once, and draw nothing.
+    if (!on && undone) return;
+    // A card the page must not show carries display:none, as its own hidden cards do (pgPanelBelongsToActiveWorkspace).
+    var want = on ? '' : 'none';
+    if (lists.style.display !== want) { lists.style.display = want; if (typeof pgSyncDesktopPanels === 'function' && document.body.classList.contains('layout-desktop')) pgSyncDesktopPanels(); }
+    var desktop = document.body.classList.contains('layout-desktop');
+    dash.classList.toggle('glow-dash', on && desktop && display.getAttribute('data-desktop-active') === 'true');
+    // Self-Test takes a row of its own without an HDR card beside it, once it lists its modes, and where
+    // the dashboard is too narrow for two cards (Live Information open, Desktop Zoom): its width, not the window's.
+    var modes = $('selftestModes');
+    dash.classList.toggle('glow-test-wide', on && (getComputedStyle(hdr).display === 'none' || !!(modes && modes.children.length) || dash.clientWidth < TWO_CARDS));
+    var placed = placeCalman(), dressed = dressCalman(on);
+    if (!on) { undone = placed && dressed; return; }
+    undone = false;
+    var eotf = $('eotf');
+    pq.hidden = !(eotf && eotf.value === '2');
+    var sig = [pq.clientWidth, pq.clientHeight, pq.hidden, ($('max_luma') || {}).value, ($('max_fall') || {}).value, unapplied('max_luma'), unapplied('max_fall')].join('|');
+    if (sig !== pqSig) { pqSig = sig; if (!pq.hidden) drawPq(); }
+    drawPort();
+    drawRing();
+    drawLists();
+  }
+  sync();
+  // The new card takes its place among the page's panels (it was not there when the page laid them out).
+  if (typeof pgSyncDesktopPanels === 'function' && document.body.classList.contains('layout-desktop')) pgSyncDesktopPanels();
+  setInterval(sync, 500);
+  window.addEventListener('resize', sync);
+  // The drawer and Desktop Zoom change the dashboard's width without a resize of the window.
+  // Once per frame, after the observer's own pass: sync() toggles classes that move the dashboard's height, and
+  // doing that inside the callback would raise "ResizeObserver loop completed with undelivered notifications".
+  if (typeof ResizeObserver === 'function') {
+    var framed = 0;
+    new ResizeObserver(function () { if (!framed) framed = requestAnimationFrame(function () { framed = 0; sync(); }); }).observe(dash);
+  }
+  hdr.addEventListener('input', sync);
+  document.addEventListener('pgen:themechange', sync);
+})();

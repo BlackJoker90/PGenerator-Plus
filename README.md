@@ -128,7 +128,7 @@ Without a display, the renderer waits instead of failing. The UI says so in a ba
 <td valign="top">
 
 ### 🖥️ A reworked Web UI
-**13 colour themes** (dark, light, OLED, Natrium, the lime Volt …) and workspace navigation. The look is built for a dim room: the signal settings in Output are large keys with their name inside, each with a line for what the generator actually sends, and Dark and Light step in tone instead of drawing outlines, with a single aqua accent. The typeface is served by the Pi itself, so the page looks the same without internet. Only sending patterns (for example from Calman or HCFR)? Hide the Measure workspaces with one switch in Settings. The UI shows the measured HDMI link depth and clock. It is served compressed with an ETag, pauses polling in hidden tabs and uses its own dialogs instead of browser pop-ups. Toasts appear only for warnings and errors.
+**14 themes** and workspace navigation. The default, **Glow**, lays Output out as a dashboard on warm near-black with one orange accent that is kept for the signal (the port in use, a value not applied yet, the action that sends it): the settings as tiles with an icon, each with a line for what the generator actually sends, the HDR metadata on its ST 2084 curve, and the Signal Self-Test as a ring with one segment per mode. The other themes (dark, light, OLED, Natrium, the lime Volt …) keep the look built for a dim room: large keys with their name inside, Dark and Light stepping in tone instead of drawing outlines, with a single aqua accent. The typefaces are served by the Pi itself, so the page looks the same without internet. Only sending patterns (for example from Calman or HCFR)? Hide the Measure workspaces with one switch in Settings. The UI shows the measured HDMI link depth and clock. It is served compressed with an ETag, pauses polling in hidden tabs and uses its own dialogs instead of browser pop-ups. Toasts appear only for warnings and errors.
 
 </td>
 </tr>
@@ -210,7 +210,7 @@ Signal Mode, Bit Depth, Color Format and Range each have a **Sent** line: what t
 | Display's Dolby Vision block | only "DV supported" | peak, black, interfaces and primaries shown; mismatch warnings; patches above the peak flagged |
 | SPD InfoFrame | always sent ("Broadcom Videocore", media player); can limit a display's LLDV gamut to Rec.709 (ASUS PA32DC, Light Illusion) | **never sent**: removed in the vc4 driver (Pi 4) |
 | Diagnostic video player | – | **8-bit SDR picture**, H.264 via V4L2 hardware decode and zero-copy DRM scanout when available; software fallback and other codecs (limits below) |
-| WebUI themes | dark / light / system | **13 themes** incl. Natrium dark & light and Volt, Scope, Ultraviolet |
+| WebUI themes | dark / light / system | **14 themes**: Glow (the default, with a dashboard layout for Output), Natrium dark & light, Volt, Scope, Ultraviolet … |
 | WebUI look | – | signal settings as keys with their name inside, each with its read-back line, own typeface served by the Pi (works offline); a select's menu opens above or below its key, never over its name |
 | Measurement workspaces | – | **can be hidden** in Settings for pattern-only setups (Calman, HCFR) |
 | HDMI link readout | – | measured link depth and clock |
@@ -237,7 +237,7 @@ Signal Mode, Bit Depth, Color Format and Range each have a **Sent** line: what t
 <td align="center"><sub>Playlists: the deck follows the TV remote; Start, duplicate or edit from the library</sub></td>
 </tr>
 <tr>
-<td valign="top"><img src="screenshots/webui-settings.png" alt="Settings workspace with the theme picker (Volt selected), the Measure switch and settings backup"/><br/><p align="center"><sub>Settings: 13 themes, layout and backup in one place</sub></p></td>
+<td valign="top"><img src="screenshots/webui-settings.png" alt="Settings workspace with the theme picker (Volt selected), the Measure switch and settings backup"/><br/><p align="center"><sub>Settings: themes, layout and backup in one place</sub></p></td>
 </tr>
 <tr>
 <td colspan="2" valign="top"><img src="screenshots/webui-system.png" alt="System workspace: Device Info with CPU, memory and temperature meters and tiles for board, hostname, resolution, uptime, RAM and network, plus the GPU Memory and Scaling Type selects, and Software Update below"/><br/><p align="center"><sub>System: CPU, memory and temperature at a glance, the device facts, GPU memory and CPU Scaling Type set right in their tiles, and the OTA update</sub></p></td>
@@ -402,7 +402,7 @@ Served on **port 80** at `http://pgenerator.local`. It has a **Desktop** layout 
 | **Connectivity** | Wi-Fi client, access point and Bluetooth in one Network card, LG TV control (pairing, AutoCal: greyscale, 3D LUT, HDR tone map, Shadow Fix) and the Resolve client; on Tablet and Phone also HDMI-CEC |
 | **System** | Device info: CPU, memory and temperature with meters, plus board, hostname, resolution, uptime, RAM and the network interfaces; GPU memory (asks before the required reboot) and CPU **Scaling Type** (Performance recommended, applies at once) are set in their tiles. Below the device info: Software Update (with notes, progress, rollback) and Download Logs |
 | **Live Information** (right-hand drawer on Desktop) | Active signal, the infoframe decoder (AVI, DRM and SPD), the measured HDMI link depth and clock, and HDMI-CEC with the TV remote. Updated while open; a failed read says how old the frames on screen are. On Tablet and Phone the infoframe decoder is a card in **System** |
-| **Settings** | Layout, zoom, **13 themes**, Show/Hide for the Measure workspaces, and settings backup and restore |
+| **Settings** | Layout, zoom, **14 themes** (Glow is the default), Show/Hide for the Measure workspaces, and settings backup and restore |
 
 **Custom Diagnostic Video — Pi player limits.** `pg_diag_video_player` uses the Pi 4's bcm2835 H.264 hardware decoder when `/dev/video10` identifies it and `pg_v4l2_player` is installed. ffmpeg only demuxes H.264 and inserts access-unit delimiters; decoded 8-bit YU12/NV12 DMA-BUFs go directly to a DRM overlay. The HVS scales the visible crop, preserves the display aspect ratio for unrotated input and converts YCbCr to RGB, with black borders. Clips with rotation tags or display-matrix side data use software ffmpeg autorotate before aspect fitting. On the hardware path, no decoded pixels are copied by the CPU. Constant frame rate is assumed. Measured on a Pi 4 (kernel 5.10): **1080p24 and 1080p60 H.264 test clips played in real time** (a 1080p60 clip at 3.65 Mbit/s: 60.0 fps; the player used about 2 % CPU at 24p, software decoding about 270 %). A clip far beyond H.264 Level 4.2 (frames of about 800 KB, about 380 Mbit/s) stalled for about 250 ms at times. At a lower output refresh, an older late frame is dropped only when a newer decoded replacement is already available. Decode-ahead continues during a pending flip. A lone late frame is shown and the pacing clock is re-anchored, so a slightly slow decoder keeps presenting instead of freezing while discarding every frame. Decoder-limited playback can still run below real time. Logs report completed flip FPS, `late_drops`, `error_drops` and `reanchors`.
 
@@ -745,7 +745,7 @@ This fork stands on the shoulders of:
 - **[PGenerator](https://github.com/Biasiolo/PGenerator)** by Riccardo Biasiotto: the pattern engine, TCP protocols and renderer (GPLv3).
 - **[BigShoots/PGenerator-Plus](https://github.com/BigShoots/PGenerator-Plus)**: the original PGenerator+, with the Web UI, HDR/DV configuration, meter workflows, LG AutoCal, profile building and OTA. This fork continues from its 2.12.1.
 - **[docdude/ofxRPI4WindowHDR](https://github.com/docdude/ofxRPI4WindowHDR)**, **[ArgyllCMS](https://www.argyllcms.com/)** and **[HCFR](https://github.com/hcfr/hcfr)**.
-- The Web UI's typeface: **[Gabarito](https://github.com/naipefoundry/gabarito)** by The Gabarito Project Authors, under the SIL Open Font License 1.1 ([`usr/share/PGenerator/fonts/meso-OFL.txt`](usr/share/PGenerator/fonts/meso-OFL.txt), also served at `/assets/fonts/meso-OFL.txt`).
+- The Web UI's typefaces, each under the SIL Open Font License 1.1, with its licence next to the font in [`usr/share/PGenerator/fonts/`](usr/share/PGenerator/fonts/) and served at `/assets/fonts/<name>-OFL.txt`: **[Gabarito](https://github.com/naipefoundry/gabarito)** by The Gabarito Project Authors (`meso`), and for the Glow theme **[Plus Jakarta Sans](https://github.com/tokotype/PlusJakartaSans)** by The Plus Jakarta Sans Project Authors (`glow`) and **[Sora](https://github.com/sora-xor/sora-font)** by The Sora Project Authors (`glow-display`).
 
 ## ☕ Support the project
 

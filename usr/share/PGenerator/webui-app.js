@@ -4077,7 +4077,9 @@ async function playlistLoad(){
 }
 function playlistSchedule(){
  if(playlistPollTimer) clearTimeout(playlistPollTimer);
- const visible=!document.hidden&&document.getElementById('playlistCard')&&document.getElementById('playlistCard').offsetParent!==null;
+ // The Glow theme shows the lists a second time, on Output (#glowListsCard): its locks and "On screen" are read at the same pace.
+ const shown=id=>{ const e=document.getElementById(id); return !!e&&e.offsetParent!==null; };
+ const visible=!document.hidden&&(shown('playlistCard')||shown('glowListsCard'));
  const active=playlistActive()||(playlistData&&playlistData.tvmenu&&playlistData.tvmenu.view);
  playlistPollTimer=setTimeout(playlistLoad,active?(visible?1500:5000):(visible?15000:60000));
 }
@@ -5394,13 +5396,18 @@ function pgUpdateLayoutControls(){
 }
 // Theme ids: each one is a palette over one of the two base themes, so the
 // light-mode overrides and data-theme checks keep working for every palette.
-const PG_THEMES={dark:'dark',light:'light',oled:'dark',graphite:'dark',nord:'dark',amber:'dark',contrast:'dark',paper:'light',natrium:'dark','natrium-light':'light',volt:'dark',scope:'dark',ultraviolet:'dark'};
-let pgThemeId='dark';
+// A skin is a look with a layout of its own, drawn over a base theme's own
+// tokens: it is named by data-skin and carries no data-palette. The inline
+// script in webui.html holds the same two lists and the same default.
+const PG_THEMES={glow:'dark',dark:'dark',light:'light',oled:'dark',graphite:'dark',nord:'dark',amber:'dark',contrast:'dark',paper:'light',natrium:'dark','natrium-light':'light',volt:'dark',scope:'dark',ultraviolet:'dark'};
+const PG_THEME_SKINS={glow:1};
+const PG_THEME_DEFAULT='glow';
+let pgThemeId=PG_THEME_DEFAULT;
 function pgReadThemeMode(){
  try{
   const saved=localStorage.getItem(PG_THEME_STORAGE_KEY);
-  return Object.prototype.hasOwnProperty.call(PG_THEMES,saved)?saved:'dark';
- }catch(e){ return 'dark'; }
+  return Object.prototype.hasOwnProperty.call(PG_THEMES,saved)?saved:PG_THEME_DEFAULT;
+ }catch(e){ return PG_THEME_DEFAULT; }
 }
 function pgThemeColor(token,fallback){
  try{
@@ -5438,11 +5445,14 @@ function pgRedrawChartsForTheme(){
  }));
 }
 function pgApplyThemeMode(mode,options){
- pgThemeId=Object.prototype.hasOwnProperty.call(PG_THEMES,mode)?mode:'dark';
+ pgThemeId=Object.prototype.hasOwnProperty.call(PG_THEMES,mode)?mode:PG_THEME_DEFAULT;
  pgThemeMode=PG_THEMES[pgThemeId];
  const root=document.documentElement;
+ const skin=Object.prototype.hasOwnProperty.call(PG_THEME_SKINS,pgThemeId);
  root.setAttribute('data-theme',pgThemeMode);
- if(pgThemeId===pgThemeMode) root.removeAttribute('data-palette');
+ if(skin) root.setAttribute('data-skin',pgThemeId);
+ else root.removeAttribute('data-skin');
+ if(skin||pgThemeId===pgThemeMode) root.removeAttribute('data-palette');
  else root.setAttribute('data-palette',pgThemeId);
  pgUpdateThemeControls();
  if(!(options&&options.initial)){

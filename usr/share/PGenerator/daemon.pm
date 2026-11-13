@@ -35,12 +35,13 @@ sub fork_pattern_daemon (@) {
   # The WebUI first: it answers while the renderer starts (it already runs
   # beside every later renderer restart), so a slow HDMI handshake no
   # longer delays it. The pattern ports open after the boot plate.
+  my $video_clean=&video_playback_startup_cleanup();
   &lg_startup_scan_prepare();
   threads->create(\&webui_http)->detach();
   threads->create(\&webui_mdns)->detach();
-  &pattern_generator_start();
+  &pattern_generator_start() if($video_clean);
   &boot_time_mark("daemon: renderer ".(&pattern_generator_is_running() ? "running" : "not running"));
-  &show_boot_pattern();
+  &show_boot_pattern() if($video_clean && &pattern_generator_is_running());
   &boot_time_mark("daemon: boot plate done");
   threads->create(\&device_info)->detach();
   threads->create(\&discovery_devicecontrol)->detach();
@@ -908,6 +909,9 @@ sub calman_render_g1_pattern (@) {
   $bg=$out->{bg} if($out->{bg});
  }
  my $bg_str=join(",",@$bg);
+ # Shown now: a client's pattern (pattern.pm output_pattern_begin).
+ my $load=(!exists $o->{load} || $o->{load}) ? 1 : 0;
+ my $locked=$load ? &output_pattern_begin("calman") : 0;
  &clean_pattern_files();
  # A PATTERN_NAME marks the plate as chosen in the WebUI, so its idle
  # refresh leaves it on screen.
@@ -917,8 +921,14 @@ sub calman_render_g1_pattern (@) {
   $ps.="DRAW=IMAGE\nDIM=$f->{w},$f->{h}\nRGB=0,0,0\nBG=$bg_str\nPOSITION=$f->{x},$f->{y}\nIMAGE=$f->{file}\nEND=1\n";
   $ps.="FRAME_NAME=G1_${key}_$i\nFRAME=$f->{ms}\n";
  }
- return 0 if(!&create_tmp_file($ps,$source_range));
- &load_new_pattern_file("calman") if(!exists $o->{load} || $o->{load});
+ if(!&create_tmp_file($ps,$source_range)) { &output_pattern_end($locked);return 0; }
+ # Not loaded (a video that cannot be ended): the plate is not shown.
+ my $loaded=$load ? &load_new_pattern_file("calman") : 1;
+ &output_pattern_end($locked);
+ if(!$loaded) {
+  &log("Calman G1: $key not shown, the pattern could not be loaded");
+  return 0;
+ }
  &log("Calman G1: $key ${w}x${h} range=$range bits=$bits frames=".scalar(@frames).(scalar(@frames) > 1 ? " hz=".($opt{hz} || "default") : ""));
  return 1;
 }
@@ -930,12 +940,23 @@ sub calman_render_g1_pattern (@) {
 # ports open, and the watchdog restarted a daemon that was still in it.
 # The next pattern request runs the ladder from its own thread instead.
 sub show_boot_pattern (@) {
+ # The daemon's own plate (boot, hotplug), not a client request for the output.
+ local $output_request_internal=1;
  return if(!&hdmi_sink_connected());
  if(!&pattern_generator_is_running()) {
   &log("Boot: renderer not running, Basic Alignment skipped; the next pattern request starts it");
   return;
  }
+ # Under renderer_lock: a video started meanwhile (the WebUI is already up)
+ # keeps playing; a start that comes later waits for the plate.
+ &renderer_lock();
+ if(&video_record_present() || -e $video_starting_file) {
+  &renderer_unlock();
+  &log("Boot: a video is playing, Basic Alignment skipped");
+  return;
+ }
  &log("Boot: showing Basic Alignment") if(&calman_render_g1_pattern("basic_alignment"));
+ &renderer_unlock();
 }
 
 sub calman_render_specialty_pattern (@) {
@@ -944,7 +965,17 @@ sub calman_render_specialty_pattern (@) {
  my $sp_name=uc($pattern_cmd);
  $sp_name=~s/^\s+|\s+$//g;
  my $g1_key=&g1_pattern_key($sp_name);
- return 1 if(defined $g1_key && &calman_render_g1_pattern($g1_key));
+ if(defined $g1_key) {
+  # The flag tells this plate's write apart from an earlier one.
+  $pattern_write_failed=0;
+  return 1 if(&calman_render_g1_pattern($g1_key));
+  # Written but not shown (a video that cannot be ended, or the write
+  # failed): no stand-in pattern, Calman gets NAK for the plate it asked for.
+  return 1 if($pattern_write_failed);
+ }
+ # A client's pattern (pattern.pm output_pattern_begin), also for the image
+ # patterns written here; the fallback patches nest inside.
+ my $locked=&output_pattern_begin("calman");
  &clean_pattern_files();
  my $source_range=&calman_pattern_source_range();
  my $target_max=&calman_target_max();
@@ -991,6 +1022,7 @@ sub calman_render_specialty_pattern (@) {
   &log("Calman: unknown specialty pattern: $sp_name");
   &create_pattern_file("RECTANGLE","$w_s,$h_s",100,"$gray128_rgb",&calman_current_bg(),"","","",1,"calman",$source_range,$source_max);
  }
+ &output_pattern_end($locked);
  return 1;
 }
 
@@ -1330,10 +1362,11 @@ sub pattern_daemon {
  #                          #
  ############################
  while ($select->count()) {
+  my $video_tick=&video_playback_poll();
   # Commands read but not handled yet (one read carried several) go first,
   # without waiting for their socket to become readable again.
   my @ready = grep { $pending_cmd{$_} && @{$pending_cmd{$_}} } $select->handles();
-  @ready = $select->can_read(5) if(!@ready);
+  @ready = $select->can_read($video_tick ? 1 : 5) if(!@ready);
   if(!@ready) {
    &renderer_start_when_hdmi_connected();
    next;
@@ -1371,7 +1404,7 @@ sub pattern_daemon {
     my $key_framed=0;
     my $http_request=0;
     # A failed pattern write answers the command that made it, not a later one.
-    $pattern_write_failed=0;
+    $pattern_write_failed=0;$pattern_load_video_not_ended=0;
     if($pending_cmd{$connection} && @{$pending_cmd{$connection}}) {
      $key=shift(@{$pending_cmd{$connection}});
      $key_framed=1;
@@ -3762,9 +3795,12 @@ sub send_key_to_client (@) {
  # The pattern this command drew could not be written (pattern.pm
  # pattern_file_write): the previous patch is still on screen, so Calman
  # must not measure it as this one.
+ # The same NAK when it was written but a playing video could not be ended
+ # (load_new_pattern_file); port 85 clients get that cause.
  if($pattern_write_failed) {
-  $pattern_write_failed=0;
-  $response=$calman{$connection} ? $nak_cmd_string : "$error_response:Pattern not written$end_cmd_string";
+  my $why=$pattern_load_video_not_ended ? "Pattern not shown, the video could not be ended" : "Pattern not written";
+  $pattern_write_failed=0;$pattern_load_video_not_ended=0;
+  $response=$calman{$connection} ? $nak_cmd_string : "$error_response:$why$end_cmd_string";
  }
  eval { $connection->send("$response"); };
  if($@) {

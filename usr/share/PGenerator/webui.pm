@@ -1149,6 +1149,9 @@ sub webui_spawn_detached (@) {
   if($pid == 0) {
    $SIG{ALRM}='DEFAULT';
    alarm(1);
+   # Every detached caller (apply, VSIF and PiTPG Granger) must release
+   # inherited flock descriptions before the second fork/workload.
+   &pgen_drop_inherited_locks();
    my $probe=$_webui_fork_probe;
    alarm(0);
    my $worker=fork();
@@ -1168,7 +1171,63 @@ sub webui_spawn_detached (@) {
  return 0;
 }
 
+# A detached worker may have waited while another process started video.
+# Serialize the entire restart and re-read the root record, never forked vars.
 sub webui_complete_renderer_restart (@) {
+ &renderer_lock();
+ if(&video_session_record() ne "") {
+  &webui_renderer_restart_status_write($_[0],"ready","Settings saved. Renderer restart deferred while video owns the output.",0);
+  &renderer_unlock();return 1;
+ }
+ # An ended session whose cleanup root cannot verify keeps the output too:
+ # report that instead of waiting for a renderer start that is refused.
+ if(&video_record_present() && !&video_program_stop()) {
+  &webui_renderer_restart_status_write($_[0],"ready","Settings saved. Renderer restart deferred: the ended video could not be cleaned up yet.",0);
+  &log("WebUI: renderer restart $_[0] deferred (video session cleanup failed)");
+  &renderer_unlock();return 1;
+ }
+ # Held over the record check, the stop and the start only: the readiness
+ # waits after them (up to ~20 s in DV) run without it, so a Calman patch
+ # in the main loop does not wait for the whole apply.
+ local $webui_restart_lock_held=1;
+ my $result=eval { &webui_restart_renderer_locked(@_); };
+ my $error=$@;
+ &renderer_unlock() if($webui_restart_lock_held);
+ $webui_restart_lock_held=0;
+ die $error if($error ne "");
+ return $result;
+}
+
+# A pattern request while root could not end the video session (the video
+# may keep playing, or the output stays off until
+# command.pm video_playback_poll ends it; it retries every 30 s).
+sub webui_video_not_ended_message () {
+ return "The video could not be ended, so the pattern is not shown. If the output stays off, a player stuck in the driver needs a Pi restart.";
+}
+
+sub webui_restart_release_renderer_lock () {
+ return if(!$webui_restart_lock_held);
+ $webui_restart_lock_held=0;
+ &renderer_unlock();
+}
+
+# A video that took the output once the renderer was started is no failed
+# restart: the settings are saved and the video owns the output.
+sub webui_restart_video_took_over (@) {
+ my $restart_id=shift;
+ return 0 if(!&video_record_present() && !-e $video_starting_file);
+ # A start in progress holds renderer_lock until its player answered or
+ # the renderer is back: wait for it, then only a record counts.
+ &renderer_lock();
+ my $video=&video_record_present();
+ &renderer_unlock();
+ return 0 if(!$video);
+ &webui_renderer_restart_status_write($restart_id,"ready","Settings saved. A video now owns the output.",0);
+ &log("WebUI: renderer restart $restart_id: a video took the output during the readiness check");
+ return 1;
+}
+
+sub webui_restart_renderer_locked (@) {
  my $restart_id=shift;
  my $apply_hint=shift;
  # The Range Check draws its EDID check from the AVI infoframe of the new
@@ -1185,6 +1244,7 @@ sub webui_complete_renderer_restart (@) {
    # range defaults (the renderer is running, so this does not restart it).
    &webui_range_check_refresh({check => 0});
    &load_new_pattern_file("webui apply");
+   &webui_restart_release_renderer_lock();
    &webui_renderer_restart_status_write($restart_id,"ready","Applied without restarting the renderer.");
    &log("WebUI: apply $restart_id applied in place (".join(",",sort keys %{$apply_hint->{changed}}).")");
    &webui_range_check_follow_wire($avi_before);
@@ -1195,12 +1255,14 @@ sub webui_complete_renderer_restart (@) {
  &pattern_generator_stop();
  &webui_range_check_refresh({check => 0});
  &load_new_pattern_file("webui apply");
+ &webui_restart_release_renderer_lock();
  if(!&pattern_generator_is_running() && !&hdmi_sink_connected()) {
   &webui_renderer_restart_status_write($restart_id,"ready","Settings saved. No HDMI display is connected; the renderer starts when one is plugged in.",0);
   &log("WebUI: renderer restart $restart_id deferred (no HDMI display connected)");
   return 1;
  }
  if(&webui_wait_for_renderer_ready(12) && !&webui_renderer_stays_up(3)) {
+  return 1 if(&webui_restart_video_took_over($restart_id));
   my $why=&webui_renderer_last_error();
   $why="the HDMI driver hit a kernel error; restart the Pi to get the picture back" if(&renderer_stuck_in_kernel());
   &webui_renderer_restart_status_write($restart_id,"error","The renderer started but exited again".($why ne "" ? ": $why" : "."));
@@ -1223,7 +1285,7 @@ sub webui_complete_renderer_restart (@) {
    if(&webui_wait_for_dovi_wire(15)) {
     &webui_renderer_restart_status_write($restart_id,"ready","The renderer is running and the Dolby Vision infoframe is on the wire.");
     &log("WebUI: renderer restart $restart_id is ready (DV infoframe verified on the connector)");
-   } else {
+   } elsif(!&webui_restart_video_took_over($restart_id)) {
     &webui_renderer_restart_status_write($restart_id,"ready","The renderer is running, but the Dolby Vision infoframe was not confirmed on the connector. If the display stays in SDR, select any pattern to force it.");
     &log("WebUI: renderer restart $restart_id ready, but DOVI_OUTPUT_METADATA never became active on the connector");
    }
@@ -1234,6 +1296,7 @@ sub webui_complete_renderer_restart (@) {
   &webui_range_check_follow_wire($avi_before);
   return 1;
  }
+ return 1 if(&webui_restart_video_took_over($restart_id));
  if(&renderer_stuck_in_kernel()) {
   &webui_renderer_restart_status_write($restart_id,"error","The HDMI driver hit a kernel error and the renderer is stuck. Restart the Pi to get the picture back.");
   &log("WebUI: renderer restart $restart_id failed: renderer stuck in the HDMI driver");
@@ -1787,7 +1850,6 @@ sub webui_handle_request (@) {
          # splash framebuffer.
          close($client);
          $SIG{CHLD}='DEFAULT';
-         &pgen_drop_inherited_locks();
          # Serialize apply workers: a failed retry ladder can run for
          # 30-40s, and a second apply's pattern_generator_stop() would
          # kill the renderer the first worker just started - the two
@@ -14835,6 +14897,18 @@ sub webui_pattern_uploaded_diag_video_sequence_pattern (@) {
  return &webui_pattern_frame_sequence_pattern($dir,$w,$h);
 }
 
+# The renderer-frame sequence of the uploaded video a pattern request names
+# ("" when it has none: the request goes to the Pi player or is refused).
+# Decided once per request: the range step and the drawing use the same answer.
+sub webui_uploaded_diag_video_request_sequence (@) {
+ my $body=shift;
+ my $filename="";
+ $filename=$1 if($body =~ /"filename"\s*:\s*"([^"]{1,240})"/);
+ my ($name,undef)=&_webui_diag_asset_resolve_path("video",$filename);
+ return "" if($name eq "");
+ return &webui_pattern_uploaded_diag_video_sequence_pattern($name,$w_s || 1920,$h_s || 1080);
+}
+
 # vc4 with the RGB Limited passthrough patch: the renderer's
 # rgbLimitedPassthroughSupported test (RQ3V1 in the module's srcversion).
 our $webui_vc4_srcversion_file="/sys/module/vc4/srcversion";
@@ -14961,8 +15035,17 @@ sub webui_range_check_follow_wire (@) {
   last if($before ne "unread" && $now ne "unread" && $now ne $before);
   Time::HiRes::sleep(0.25);
  }
- return 0 if(!&webui_range_check_refresh());
+ # Under renderer_lock: a video started meanwhile is a newer request and
+ # keeps the output; this redraw is the daemon's own and gives way.
+ &renderer_lock();
+ if(&video_record_present() || -e $video_starting_file) {
+  &renderer_unlock();
+  &log("WebUI: Range Check not redrawn, a video owns the output");
+  return 0;
+ }
+ if(!&webui_range_check_refresh()) { &renderer_unlock();return 0; }
  &load_new_pattern_file("range check");
+ &renderer_unlock();
  return 1;
 }
 
@@ -14988,6 +15071,8 @@ sub webui_pattern (@) {
    return '{"status":"ok","pattern":"'.$current.'","unchanged":true}';
   }
  }
+ # A request for the output: a video start still in its checks gives up.
+ &output_request_claim() if(defined(&output_request_claim));
  if($name eq "patch" && &webui_pattern_stop_guard_active()) {
   if(&webui_pattern_stop_guard_allows_patch($body)) {
    &webui_pattern_stop_guard_clear();
@@ -15016,7 +15101,12 @@ sub webui_pattern (@) {
  $transport_signal_range=&webui_preferred_rgb_quant_range() if(!defined $transport_signal_range || $transport_signal_range eq "");
  $pattern_signal_range=$signal_range if(!defined $pattern_signal_range || $pattern_signal_range eq "");
  $pattern_signal_range=$transport_signal_range if(!defined $pattern_signal_range || $pattern_signal_range eq "");
- &apply_source_rgb_quant_range("webui",$transport_signal_range);
+ # A clip for the Pi player takes the range only once play_video has
+ # accepted it: a range change restarts the renderer, which ends a playing
+ # video, and a refused clip leaves the output as it is.
+ my $diag_video_sequence=($name eq "uploaded_diag_video") ? &webui_uploaded_diag_video_request_sequence($body) : "";
+ my $pi_video_request=($name eq "uploaded_diag_video" && $diag_video_sequence eq "") ? 1 : 0;
+ &apply_source_rgb_quant_range("webui",$transport_signal_range) if(!$pi_video_request);
  my ($color_format_body)=$body=~/"color_format"\s*:\s*"?(\d+)"?/;
  my $pattern_color_format=defined($color_format_body) ? int($color_format_body) : int($pgenerator_conf{"color_format"} || 0);
  # Backgrounds, named colours, APL and the stabilization code follow the range of
@@ -15047,7 +15137,11 @@ sub webui_pattern (@) {
   return '{"status":"error","message":"Unknown pattern: '.$name.'"}' if(!grep { $_ eq $g1_key } &PGG1Patterns::g1_pattern_keys());
   return '{"status":"error","message":"G1 patterns are available only in SDR"}' if($signal_mode ne "sdr");
   local $calman_rgb_quant_range=(int($transport_signal_range || 0) == 1) ? 1 : 2;
-  return '{"status":"error","message":"Failed to render G1 pattern"}' if(!&calman_render_g1_pattern($g1_key,$name));
+  $pattern_load_video_not_ended=0;
+  if(!&calman_render_g1_pattern($g1_key,$name)) {
+   return '{"status":"error","message":"'.&webui_video_not_ended_message().'"}' if($pattern_load_video_not_ended);
+   return '{"status":"error","message":"Failed to render G1 pattern"}';
+  }
   return '{"status":"ok","pattern":"'.$name.'"}';
  }
  # Range Check: drawn like the G1 plates (raw codes, no normalisation), for
@@ -15058,7 +15152,11 @@ sub webui_pattern (@) {
   return '{"status":"error","message":"'.&_webui_json_escape($why).'"}' if($why ne "");
   require PGSignalCheck;
   my $e=&webui_range_expectation($source_range eq "LIMITED" ? 1 : 2);
-  return '{"status":"error","message":"Failed to render the Range Check"}' if(!&calman_render_g1_pattern("range_check",$name,{source_range => $source_range,check => PGSignalCheck::signal_range_plate_lines($e)}));
+  $pattern_load_video_not_ended=0;
+  if(!&calman_render_g1_pattern("range_check",$name,{source_range => $source_range,check => PGSignalCheck::signal_range_plate_lines($e)})) {
+   return '{"status":"error","message":"'.&webui_video_not_ended_message().'"}' if($pattern_load_video_not_ended);
+   return '{"status":"error","message":"Failed to render the Range Check"}';
+  }
   return '{"status":"ok","pattern":"'.$name.'","range_check":'.&webui_range_expectation_json($e).'}';
  }
  my $white_rgb=($signal_mode eq "dv") ? "3760,3760,3760" : &webui_pattern_named_triplet(255,255,255,$pat_bits,$source_range eq "LIMITED");
@@ -15135,7 +15233,7 @@ elsif($pat eq "" && $name eq "uploaded_diag_video") {
  $requested_filename=$1 if($body =~ /"filename"\s*:\s*"([^"]{1,240})"/);
  my ($requested_name,undef)=&_webui_diag_asset_resolve_path("video",$requested_filename);
  return '{"status":"error","message":"Diagnostic video not found"}' if($requested_name eq "");
- my $diag_sequence=&webui_pattern_uploaded_diag_video_sequence_pattern($requested_name,$w,$h);
+ my $diag_sequence=$diag_video_sequence;
  if($diag_sequence ne "") {
   &log("WebUI: uploaded diagnostic video using renderer sequence for $requested_name");
   $pat=$diag_sequence;
@@ -15143,8 +15241,12 @@ elsif($pat eq "" && $name eq "uploaded_diag_video") {
  }
  else {
   my $video_result="";
-  &video_program_stop("$program_video_to_kill");
-  $video_result=&play_video("pg_diag_video_player",$requested_name,"1h-1",$w,$h);
+  # play_video stops a running session itself, under the renderer lock and
+  # only after the source and timing checks: a refused request leaves the
+  # playing video (or the pattern) on the output. The WebUI range is applied
+  # there too, after the checks.
+  $video_result=&play_video("pg_diag_video_player",$requested_name,"1h-1",$w,$h,
+   sub { &apply_source_rgb_quant_range("webui",$transport_signal_range); });
   return '{"status":"error","message":"'.&_webui_json_escape($video_result).'"}' if($video_result ne "OK");
   return '{"status":"ok","pattern":"'.$name.'"}';
  }
@@ -15203,7 +15305,10 @@ elsif($pat eq "" && $name eq "uploaded_diag_video") {
  elsif($pat eq "") {
   return '{"status":"error","message":"Unknown pattern: '.$name.'"}';
  }
- &video_program_stop("$program_video_to_kill");
+ if(!&video_program_stop()) {
+  &log("WebUI: pattern $name not shown, the video could not be ended");
+  return '{"status":"error","message":"'.&webui_video_not_ended_message().'"}';
+ }
  # Ensure the C renderer binary is running (auto-start on first pattern)
  if(!&pattern_generator_is_running()) {
   &pattern_generator_start(1);

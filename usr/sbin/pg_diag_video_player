@@ -1,48 +1,270 @@
 #!/bin/sh
-
+# CFR diagnostic playback. H.264 uses V4L2 DMA-BUF scanout when available;
+# the other codecs and failed hardware starts retain the software path.
+check_source=no
+if [ "$1" = --check-source ]; then check_source=yes; shift; fi
 video="$1"
 width="${2:-1920}"
 height="${3:-1080}"
-
-case "$width" in
- *[!0-9]*|"") width=1920 ;;
-esac
-case "$height" in
- *[!0-9]*|"") height=1080 ;;
-esac
-
+connector="${4:-0}"
+refresh="${5:-0}"
+timing="${6:--}"
+software_matrix=bt601
+case "$width" in *[!0-9]*|"") width=1920 ;; esac
+case "$height" in *[!0-9]*|"") height=1080 ;; esac
+case "$connector" in *[!0-9]*|"") connector=0 ;; esac
 if [ ! -f "$video" ]; then
  echo "Diagnostic video file not found" >&2
  exit 1
 fi
 
-play_with_ffmpeg() {
+refuse_source() {
+ echo "Diagnostic video: $*" >&2
+ [ "$check_source" != yes ] || printf 'ERR:%s\n' "$*"
+ exit 1
+}
+producer=
+consumer=
+probe=
+probe_file=
+work=
+cleanup() {
+ # Track every child explicitly: killing this wrapper alone must restore KMS.
+ [ -z "$probe" ] || kill -TERM "$probe" 2>/dev/null
+ [ -z "$consumer" ] || kill -TERM "$consumer" 2>/dev/null
+ [ -z "$producer" ] || kill -TERM "$producer" 2>/dev/null
+ [ -z "$consumer" ] || wait "$consumer" 2>/dev/null
+ [ -z "$producer" ] || wait "$producer" 2>/dev/null
+ [ -z "$probe" ] || wait "$probe" 2>/dev/null
+ consumer= producer= probe=
+ [ -z "$probe_file" ] || rm -f "$probe_file"
+ probe_file=
+ [ -z "$work" ] || rm -rf "$work"
+ work=
+}
+trap 'exit 0' TERM INT
+trap cleanup 0
+find_player() {
+ command -v "$1" 2>/dev/null || { [ ! -x "/usr/sbin/$1" ] || printf '%s\n' "/usr/sbin/$1"; }
+}
+has_drm() {
+ for card in /dev/dri/card[0-9]*; do
+  [ ! -e "$card" ] || return 0
+ done
+ return 1
+}
+# A FIFO makes each pipeline child individually waitable and terminable in
+# POSIX sh. A private first-frame marker distinguishes startup from playback.
+start_pipe() {
+ work=$(mktemp -d "${TMPDIR:-/tmp}/pg-diag-video.XXXXXX") || return 1
+ mkfifo "$work/input" || { cleanup; return 1; }
+}
+play_software() {
  pixel_format="$1"
  player="$2"
- shift 2
+ # fps runs before expensive conversion, and never duplicates a slower clip.
+ # source_fps comes from ffmpeg itself, rather than a rounded probe rate.
+ rate_filter=
+ output_rate=$(awk -v rate="$refresh" 'BEGIN {
+  if (rate ~ /^[0-9]+([.][0-9]+)?$/ && rate+0>0) print rate;
+  else if (rate ~ /^[0-9]+\/[0-9]+$/) {
+   split(rate,a,"/");if(a[1]+0>0 && a[2]+0>0) print rate;
+  }
+ }')
+ if [ -n "$output_rate" ]; then
+  rate_filter="fps=fps=min(source_fps\\,${output_rate}),"
+ else
+  echo "Diagnostic video: output refresh unknown; software frame-rate cap unavailable" >&2
+ fi
+ start_pipe || return 1
+ echo "Diagnostic video: software ffmpeg -> $player (8-bit SDR picture)" >&2
+ "$player" "$width" "$height" "$connector" "$timing" < "$work/input" &
+ consumer=$!
  ffmpeg -hide_banner -loglevel warning -re -stream_loop -1 -i "$video" \
-  -vf "scale=${width}:${height}:force_original_aspect_ratio=decrease,pad=${width}:${height}:(ow-iw)/2:(oh-ih)/2,format=${pixel_format}" \
-  -pix_fmt "$pixel_format" -f rawvideo - | "$player" "$width" "$height" "$@"
+  -map 0:v:0 -vf "${rate_filter}scale=${width}:${height}:in_color_matrix=${software_matrix}:force_original_aspect_ratio=decrease,pad=${width}:${height}:(ow-iw)/2:(oh-ih)/2,format=${pixel_format}" \
+  -pix_fmt "$pixel_format" -f rawvideo - > "$work/input" &
+ producer=$!
+ wait "$consumer"
+ result=$?
+ cleanup
+ return "$result"
+}
+play_hardware() {
+ start_pipe || return 125
+ "$hw_player" "$width" "$height" "$connector" "$fps" "$space" "$range" "$work/ready" "$sar" "$refresh" "$timing" < "$work/input" &
+ consumer=$!
+ ffmpeg -hide_banner -loglevel warning -stream_loop -1 -i "$video" \
+  -map 0:v:0 -c:v copy -bsf:v h264_mp4toannexb,h264_metadata=aud=insert -f h264 - > "$work/input" &
+ producer=$!
+ # The C deadline includes setup (5 s); allow another 10 s for exit/restore.
+ seconds=0
+ while [ ! -s "$work/ready" ] && kill -0 "$consumer" 2>/dev/null && [ "$seconds" -lt 15 ]; do
+  sleep 1
+  seconds=$((seconds+1))
+ done
+ if [ -s "$work/ready" ]; then
+  echo "Diagnostic video: zero-copy H.264 V4L2 -> DRM (8-bit SDR picture; CFR $fps)" >&2
+  wait "$consumer"
+  result=$?
+  cleanup
+  # A later failure is reported, never silently restarted using another path.
+  return "$result"
+ fi
+ if kill -0 "$consumer" 2>/dev/null; then
+  echo "Diagnostic video: zero-copy startup watchdog expired; stopping playback" >&2
+  cleanup
+  return 3
+ fi
+ wait "$consumer"
+ result=$?
+ consumer=
+ cleanup
+ case "$result" in
+  1|2)
+   echo "Diagnostic video: zero-copy start failed (exit $result); falling back to software" >&2
+   return 125 ;;
+  *)
+   echo "Diagnostic video: zero-copy ended before first frame (exit $result); no fallback" >&2
+   return "$result" ;;
+ esac
 }
 
 if command -v ffmpeg >/dev/null 2>&1; then
- if [ -x /usr/sbin/drm_player ] && [ -e /dev/dri/card0 ]; then
-  play_with_ffmpeg bgr0 /usr/sbin/drm_player
+ hw_player=$(find_player pg_v4l2_player)
+ metadata=
+ source_height=0
+ codec= fps= profile= pix_fmt= field_order= primaries= transfer= rotated=no space=auto range=tv sar=1/1
+ if ! command -v ffprobe >/dev/null 2>&1; then
+  refuse_source "ffprobe is required for SDR source admission"
+ fi
+ if command -v ffprobe >/dev/null 2>&1; then
+  # No eval: metadata and paths always remain arguments. The C parser checks
+  # rationals and colour enums. Unknown/unsupported tagging falls back safely.
+  # Wait on a background probe, so TERM interrupts wait and cleanup can
+  # stop it immediately. A command substitution delays sh's TERM trap.
+  probe_file=$(mktemp "${TMPDIR:-/tmp}/pg-diag-probe.XXXXXX") || refuse_source "ffprobe metadata temporary file failed"
+  metadata=
+  if [ -n "$probe_file" ]; then
+   ffprobe -v error -select_streams v:0 \
+    -show_entries stream=codec_name,height,profile,pix_fmt,field_order,avg_frame_rate,color_space,color_range,color_primaries,color_transfer,sample_aspect_ratio:stream_tags=rotate:stream_side_data=side_data_type,rotation \
+    -of default=noprint_wrappers=1 "$video" > "$probe_file" 2>/dev/null &
+   probe=$!
+   probe_result=0
+   wait "$probe" || probe_result=$?
+   probe=
+   # A killed probe is a stop, not a reason to launch another player.
+   if [ "$probe_result" -ge 128 ]; then exit "$probe_result"; fi
+   [ "$probe_result" -eq 0 ] || refuse_source "ffprobe source probe failed (exit $probe_result)"
+   metadata=$(cat "$probe_file") || refuse_source "ffprobe metadata read failed"
+   rm -f "$probe_file"
+   probe_file=
+  fi
+ fi
+ while IFS='=' read -r key value; do
+  case "$key" in
+   codec_name) codec=$value ;;
+   height) case "$value" in *[!0-9]*|"") ;; *) source_height=$value ;; esac ;;
+   profile) profile=$value ;;
+   pix_fmt) pix_fmt=$value ;;
+   field_order) field_order=$value ;;
+   avg_frame_rate) fps=$value ;;
+   color_space) case "$value" in unknown|"") space=auto ;; *) space=$value ;; esac ;;
+   color_primaries) primaries=$value ;;
+   color_transfer) transfer=$value ;;
+   side_data_type)
+    case "$value" in
+     "Display Matrix") rotated=yes ;;
+     "DOVI configuration record"|"Mastering display metadata"|"Content light level metadata"|*HDR*|*DOVI*|*"Dolby Vision"*)
+      refuse_source "side data $value unsupported for SDR playback" ;;
+    esac ;;
+   TAG:rotate|rotation)
+    # Any nonzero/unrecognised rotation needs ffmpeg's autorotate. Keep an
+    # earlier nonzero tag even if a later side-data entry reports zero.
+    if ! awk -v rotation="$value" 'BEGIN {exit !(rotation ~ /^-?[0-9]+([.][0-9]+)?$/ && rotation+0==0)}'; then rotated=yes; fi ;;
+   color_range) case "$value" in pc) range=pc ;; esac ;;
+   sample_aspect_ratio) case "$value" in N/A|0:1|"") ;; *) sar=$(printf '%s' "$value" | tr ':' '/') ;; esac ;;
+  esac
+ done <<EOF
+$metadata
+EOF
+ [ -n "$codec" ] || refuse_source "ffprobe returned no selected video stream"
+ # FFmpeg libavutil/pixfmt.h and av_color_*_name() define these names.
+ # Matrix conversion does not map primaries or tone-map a transfer function.
+ case "$primaries" in
+  bt709|bt470bg|smpte170m|smpte240m|unknown|"") ;;
+  bt2020) refuse_source "BT.2020 primaries unsupported; no gamut conversion to Default RGB output" ;;
+  *) refuse_source "primaries $primaries unsupported; no gamut conversion to Default RGB output" ;;
+ esac
+ case "$transfer" in
+  bt709|gamma22|gamma28|bt470m|bt470bg|smpte170m|smpte240m|iec61966-2-1|bt2020-10|bt2020-12|unknown|"") ;;
+  *) refuse_source "transfer $transfer unsupported; only SDR transfer functions are accepted (no tone mapping)" ;;
+ esac
+ # Both backends implement these YCbCr matrices; never ask swscale to
+ # substitute an unsupported explicit matrix through its auto fallback.
+ case "$space" in
+  bt709|bt470bg|smpte170m|bt2020nc|auto|unknown|"") ;;
+  *) refuse_source "matrix $space unsupported for diagnostic video" ;;
+ esac
+ # A BT.2020 matrix is not evidence of BT.709 primaries or SDR transfer.
+ # Never apply the untagged SD/HD assumptions to this explicit matrix.
+ if [ "$space" = bt2020nc ]; then
+  for tag in "$primaries" "$transfer"; do
+   case "$tag" in unknown|"") refuse_source "bt2020nc requires known supported primaries and transfer colour tags" ;; esac
+  done
+ fi
+ # Container/stream side data alone cannot exclude bitstream-only HDR/DV.
+ # A first-frame sample cannot prove later frames SDR either. Require all
+ # HEVC colour tags; untagged H.264 retains the documented SD/HD default.
+ if [ "$codec" = hevc ]; then
+  for tag in "$space" "$primaries" "$transfer"; do
+   case "$tag" in auto|unknown|"") refuse_source "HEVC requires known matrix, primaries and transfer colour tags" ;; esac
+  done
+ fi
+ if [ "$source_height" -eq 0 ]; then
+  echo "Diagnostic video: source height unknown (incomplete ffprobe metadata); untagged input defaults to BT.601; source gamut unverified" >&2
+ fi
+ # swscale's auto matrix defaults to BT.601 for untagged HD. Match the
+ # hardware rule using SOURCE height before scaling; explicit tags win.
+ case "$space" in
+  bt709) software_matrix=bt709 ;;
+  bt470bg|smpte170m) software_matrix=bt601 ;;
+  bt2020nc) software_matrix=bt2020 ;;
+  auto|unknown|"")
+   if [ "$source_height" -gt 576 ]; then software_matrix=bt709
+   else software_matrix=bt601; fi ;;
+  *) refuse_source "matrix $space unsupported by software conversion" ;;
+ esac
+ if [ "$check_source" = yes ]; then
+  printf 'OK\n'
+  exit 0
+ fi
+ if [ -n "$hw_player" ] && [ "$(cat /sys/class/video4linux/video10/name 2>/dev/null)" = bcm2835-codec-decode ] &&
+    [ "$codec" = h264 ] && [ "$source_height" -gt 0 ] && [ -n "$fps" ] && [ "$fps" != 0/0 ]; then
+  # Admit only known progressive 8-bit 4:2:0 profiles. Unknown metadata,
+  # High 10/4:2:2/4:4:4 and interlaced streams have no verified hardware path.
+  supported=no
+  case "$profile" in Baseline|"Constrained Baseline"|Main|High|"Constrained High") supported=yes ;; esac
+  case "$pix_fmt" in yuv420p|yuvj420p) ;; *) supported=no ;; esac
+  [ "$field_order" = progressive ] || supported=no
+  [ "$rotated" = no ] || supported=no
+  if [ "$supported" = yes ]; then
+   play_hardware
+   result=$?
+   [ "$result" -eq 125 ] || exit "$result"
+  elif [ "$rotated" = yes ]; then
+   echo "Diagnostic video: H.264 rotation/display-matrix metadata; using software autorotate" >&2
+  else
+   echo "Diagnostic video: H.264 profile/pixel format/field order unsupported or unknown; using software ($profile / $pix_fmt / $field_order)" >&2
+  fi
+ fi
+ drm_player=$(find_player drm_player)
+ if [ -n "$drm_player" ] && has_drm; then
+  play_software bgr0 "$drm_player"
   exit $?
  fi
- if [ -x /usr/sbin/fb_player ] && [ -e /dev/fb0 ]; then
-  play_with_ffmpeg bgra /usr/sbin/fb_player
-  exit $?
- fi
 fi
-
-if [ -x /usr/bin/omxplayer ]; then
- exec /usr/bin/omxplayer "$video"
-fi
-
-if [ -x /usr/bin/omxplayer.bin ]; then
- exec /usr/bin/omxplayer.bin "$video"
-fi
-
-echo "No diagnostic video playback backend is available" >&2
+[ "$check_source" != yes ] || refuse_source "ffmpeg is unavailable; cannot play diagnostic video"
+# fb/OMX do not expose a connector that this wrapper can verify. Do not
+# bypass a refused SDR precondition via an unguarded legacy backend.
+echo "No SDR-verified diagnostic video playback backend is available" >&2
 exit 127

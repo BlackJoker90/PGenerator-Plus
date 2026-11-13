@@ -141,8 +141,10 @@ sub create_pattern_file (@) {
                             bg=>$bg,
                             meta=>"draw=$draw;position=$position;simple=$simple;resolution=$resolution",
                             pattern=>$pattern_string);
- return 0 if(!&pattern_file_write($pattern_string));
+ my $locked=&output_pattern_begin($requested_by);
+ if(!&pattern_file_write($pattern_string)) { &output_pattern_end($locked);return 0; }
  &load_new_pattern_file("$requested_by");
+ &output_pattern_end($locked);
  &stats("patterns",1);
 }
 
@@ -214,6 +216,46 @@ sub execute_functions (@) {
 }
 
 ###############################################
+#           Output Request Generation         #
+###############################################
+# Each client request for the output (a pattern, a stop, a video) takes the
+# next number. A video start runs its checks before renderer_lock; when a
+# later request took a number meanwhile, the newer request wins (also when
+# it is then refused: the start gives up and the output stays as it was).
+# The number orders video starts only: a pattern still being rendered when
+# a newer video has started ends that video once it is written, as any
+# pattern ends a playing video.
+sub output_request_claim () { lock($output_request_generation); return ++$output_request_generation; }
+sub output_request_latest () { lock($output_request_generation); return $output_request_generation; }
+# The daemon's own pattern loads do not count: restarts, the boot plate, the
+# renderer's start pattern, the Range Check redrawn after a signal change
+# (also from a forked apply worker, where a lock on the shared counter could
+# wait forever), a video start's own steps. Code running such a
+# step on behalf of the daemon sets "local $output_request_internal=1".
+sub output_request_counts (@) {
+ my $requested_by=shift // "";
+ return 0 if(!defined(&output_request_claim) || $output_request_internal);
+ return ($requested_by=~/^(?:play_video|pattern_generator_start|video failed|video ended|hdmi port change|hdmi hotplug|webui apply|Dolby Vision container|range check)\z/) ? 0 : 1;
+}
+# A client puts a pattern on the output: begin before writing the pattern
+# file, end after loading it. Its number is taken first, so a video start
+# still in its checks gives up. While a video starts or plays, or the
+# renderer is down, the write waits for renderer_lock: a start's clean_files
+# and placeholder would replace a file written meanwhile, and the renderer
+# that load_new_pattern_file starts must draw this pattern. A start writes
+# its mark before it checks for a newer number, so a client numbered after
+# that check sees the mark here. Returns whether the lock is held.
+sub output_pattern_begin (@) {
+ my $requested_by=shift;
+ return 0 if(!&output_request_counts($requested_by));
+ &output_request_claim();
+ return 0 if(!-e $root_video_pid_file && !-e $video_starting_file && &pattern_generator_is_running());
+ &renderer_lock();
+ return 1;
+}
+sub output_pattern_end (@) { &renderer_unlock() if(shift); }
+
+###############################################
 #            Pattern Video Function           #
 ###############################################
 sub play_video(@) {
@@ -222,6 +264,9 @@ sub play_video(@) {
  my ($duration,$repeat) = split("-",shift);
  my $width = int(shift || 0);
  my $height = int(shift || 0);
+ # Optional: the caller's step that can restart the renderer (the WebUI
+ # range), run only for an accepted clip, before the session takes over.
+ my $before_stop = shift;
  my $response="OK";
  $repeat=(defined($repeat) && $repeat eq "1") ? 1 : 0;
  # Player, file and duration come from a port 85 client. Only the players
@@ -234,15 +279,71 @@ sub play_video(@) {
   &log("Video: request refused (player, file or duration not accepted)");
   return "Video request refused";
  }
+ # Its number, taken once the request is valid: a later request wins.
+ my $generation = defined(&output_request_claim) ? &output_request_claim() : undef;
+ my $superseded = sub { return defined($generation) && &output_request_latest()!=$generation; };
+ # Capture the configured mode's refresh before stopping the renderer.
+ # Exit resets colour properties and fbdev may restore a different timing.
+ # Keep the configured size/refresh together, including a port-85 VIDEO call.
+ my $video_refresh=0;my $video_timing="-";
+ if($program =~ /(?:^|\/)pg_diag_video_player\z/ && ($width<=0 || $height<=0)) {
+  ($width,$height)=(int($w_s || 0),int($h_s || 0));
+ }
+ if($program =~ /(?:^|\/)pg_diag_video_player\z/ && defined(&signal_mode_info)) {
+  my $mode=&signal_mode_info($pgenerator_conf{"mode_idx"});
+  my $hz=defined($mode->{video_refresh}) ? $mode->{video_refresh} : $mode->{refresh};
+  $video_refresh=0+sprintf("%.6f",$hz) if(defined($hz) && $hz =~ /^\d+(?:\.\d+)?\z/);
+  return "Configured video timing is unavailable" if(!defined($mode->{timing}));
+  $video_timing=$mode->{timing};
+ }
+ # Reject unsupported source colour metadata before releasing the renderer.
+ # Connector/timing checks require DRM master and run in the player later.
+ if($program =~ /(?:^|\/)pg_diag_video_player\z/) {
+  my $check=&sudo("CHECK_VIDEO_SOURCE",$video);
+  chomp($check) if(defined($check));
+  if(!defined($check) || $check ne "OK") {
+   $check="Video source check failed" if(!defined($check) || $check eq "");
+   $check=~s/^ERR://;
+   $check="Video source check failed" if($check eq "OK");
+   return $check;
+  }
+ }
+ # A later pattern or stop request (answered while the checks ran) wins.
+ if($superseded->()) { &log("Video: start superseded by a later pattern request");return "Video start superseded by a later pattern request"; }
+ if(ref($before_stop) eq "CODE") { local $output_request_internal=1;$before_stop->(); }
+ &renderer_lock();
+ # The start mark, before the check: a client numbered after the check
+ # sees it (output_pattern_begin, video_program_stop) and waits for the
+ # lock; the main loop does not wait for the lock while it exists.
+ if(open(my $starting,">",$video_starting_file)) { close($starting); }
+ if($superseded->()) { unlink($video_starting_file);&renderer_unlock();&log("Video: start superseded by a later pattern request");return "Video start superseded by a later pattern request"; }
+ if(!&video_program_stop()) { unlink($video_starting_file);&renderer_unlock();return "Previous video cleanup failed"; }
  &pattern_generator_stop();
+ # Its clean_files removed every file in $var_dir, the mark too.
+ if(open(my $starting,">",$video_starting_file)) { close($starting); }
  &create_pattern_file("$draw_default","$w_s,$h_s",$res_default,"$rgb_default","$bg_default","$position_default","","","","play_video");
- $program_video_to_kill=$program;
- $response=&sudo("PLAY_VIDEO","$program","$video","$duration","$repeat","$width","$height");
- chomp($response);
- $response=~s/^ERR://;
- $response="Video playback failed to start" if($response eq "");
+ my @video_args=("PLAY_VIDEO",$program,$video,$duration,$repeat,$width,$height);
+ push(@video_args,$video_refresh,$video_timing) if($program =~ /(?:^|\/)pg_diag_video_player\z/);
+ $response=&sudo(@video_args);
+ chomp($response) if(defined($response));
+ if($program =~ /(?:^|\/)pg_diag_video_player\z/ && defined($response)) {
+  if($response =~ /^OK:([1-9]\d*:\d+)\z/) {
+   $response="OK";
+  } elsif($response eq "OK") {
+   $response="Video session identity is missing";
+  }
+ }
+ if(!defined($response) || $response ne "OK") {
+  # Stop any partially started child before the renderer takes DRM again.
+  &video_program_stop();
+  &load_new_pattern_file("video failed") if(!-e $root_video_pid_file);
+  $response="Video playback failed to start" if(!defined($response) || $response eq "");
+  $response=~s/^ERR://;
+  $response="Video playback failed to start" if($response eq "OK");
+ }
+ unlink($video_starting_file);
+ &renderer_unlock();
  return $response;
- #&pattern_generator_start();
 }
 
 ###############################################
@@ -397,7 +498,22 @@ sub load_new_pattern_file (@) {
   $last_pattern_requested_by=$requested_by;
   return;
  }
- &video_program_stop("$program_video_to_kill");
+ # A client's pattern counts as a request for the output (writers that do
+ # not use output_pattern_begin take their number here).
+ &output_request_claim() if(&output_request_counts($requested_by));
+ # Take renderer_lock only when a video record exists or the renderer is
+ # down: a running renderer must keep drawing Calman patches while an apply
+ # worker holds the lock across a restart's readiness waits. A video start
+ # in progress counts as a record: its mark covers the window until the
+ # renderer has stopped, a stopped renderer the rest.
+ my $locked=0;
+ if(-e $root_video_pid_file || -e $video_starting_file || !&pattern_generator_is_running()) {
+  &renderer_lock();$locked=1;
+  # A video that cannot be ended keeps the renderer stopped: the pattern
+  # just written is not drawn, so the command that wrote it is answered as
+  # a failed write (send_key_to_client: NAK to Calman).
+  if(!&video_program_stop()) { $pattern_write_failed=1;$pattern_load_video_not_ended=1;&renderer_unlock();return 0; }
+ }
  # Ensure the renderer is alive. pattern_generator_start can fail
  # transiently due to the documented DRM-master race (a helper
  # such as pgsethdr holds DRM master while the renderer calls
@@ -449,6 +565,7 @@ sub load_new_pattern_file (@) {
  }
  &create_return_file();
  $last_pattern_requested_by=$requested_by;
+ &renderer_unlock() if($locked);return 1;
 }
 
 
@@ -728,8 +845,10 @@ sub get_pattern (@) {
  my $head="";
  $head.="PATTERN_NAME=$pattern\n" if($str !~/^PATTERN_NAME=/m);
  $head.="BITS=$bits\n"   if($str !~/\n^BITS=/m);
- return &error("pattern not written") if(!&pattern_file_write($head.$str));
+ my $locked=&output_pattern_begin($requested_by);
+ if(!&pattern_file_write($head.$str)) { &output_pattern_end($locked);return &error("pattern not written"); }
  &load_new_pattern_file("$requested_by");
+ &output_pattern_end($locked);
  unlink("$var_dir/running/$pattern.tmp") if(-f "$var_dir/running/$pattern.tmp");
  #
  # Stats and Return

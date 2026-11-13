@@ -23,6 +23,12 @@
 $pwd = getcwd;
 $program_name="/usr/sbin/PGeneratord.pl";
 $pid_file="/var/run/PGenerator/PGeneratord.pl.pid";
+# Root's video session record (pid:start). Only root can create entries
+# below /run, so no other user can plant, swap, link or block it.
+$root_video_pid_file="/run/PGenerator_video/session";
+# The record of versions up to 2.13.51 (bare PID in world-writable /tmp):
+# root takes a plain root-owned file there over once, anything else is ignored.
+$legacy_video_pid_file="/tmp/PGenerator_video.pid";
 
 $debug="file";
 $log_file="/tmp/pgenerator_debug.log";
@@ -209,6 +215,13 @@ $is_kms=0;
 $tvservice_is_working=0;
 
 $var_dir="/var/lib/PGenerator/";
+# Set by play_video under renderer_lock before it stops the renderer, so a
+# pattern request in that window waits for the lock and then stops the
+# starting session. pattern_generator_stop's clean_files removes it; from
+# then on the stopped renderer sends pattern requests through the lock (a
+# renderer stuck in the HDMI driver stays "running", but then no player can
+# take DRM either).
+$video_starting_file="${var_dir}video_starting";
 $pattern_templates="$var_dir/tmp";
 $pattern_video="$var_dir/video";
 $pattern_images="$var_dir/images";
@@ -398,7 +411,7 @@ share($hdmi_info);
 share($preferred_mode);
 share(%pgenerator_conf);
 
-share($program_video_to_kill);
+
 
 share($last_pattern_requested_by);
 
@@ -429,6 +442,18 @@ share($external_rgb_quant_range_active);
 $webui_rgb_quant_range_preferred="";
 $rgb_quant_range_source="";
 $external_rgb_quant_range_active=0;
+# Output request generation (pattern.pm output_request_claim), counted by
+# the main loop and the WebUI/Calman threads alike.
+share($output_request_generation);
+$output_request_generation=0;
+# Thread-local: set with "local" while the daemon loads a pattern of its own.
+$output_request_internal=0;
+# Thread-local: a WebUI renderer restart still holds renderer_lock
+# (webui.pm webui_complete_renderer_restart).
+$webui_restart_lock_held=0;
+# Thread-local: load_new_pattern_file could not end a video (the WebUI
+# names that cause instead of a render failure).
+$pattern_load_video_not_ended=0;
 share(%rpc_client);
 share(%hcfr_client);
 # PiTPG clients connected (pitpg.pm). %pitpg_conn lives in the main thread

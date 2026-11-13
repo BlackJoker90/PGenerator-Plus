@@ -1266,17 +1266,32 @@ sub pitpg_source_range (@) {
  return &legacy_external_dv_active() ? "" : "LIMITED";
 }
 
+# Why pitpg_show drew nothing: a video root could not end, the pattern file
+# could not be written (create_tmp_file sets $pattern_write_failed on every
+# write), or no flip came.
+sub pitpg_not_shown (@) {
+ my $what=shift;
+ return "$what could not be shown: the video could not be ended." if($pattern_load_video_not_ended);
+ return "$what could not be shown: the pattern could not be written." if($pattern_write_failed);
+ return "$what could not be shown: the renderer reported no new frame.";
+}
+
 # Draws the frames and waits for the flip that shows them: that flip's
 # {seq,time_us,period_us}, undef when none came (pitpgd: "could not be
 # shown").
 sub pitpg_show (@) {
  my ($fb,$frames)=@_;
+ $pattern_load_video_not_ended=0;
  my $ps=&pitpg_pattern_string($fb,$frames);
  my @before=&pitpg_presented();
  my $written=&pitpg_monotonic_us();
+ my $locked=&output_pattern_begin("PiTPG");
  &clean_pattern_files();
- return undef if(!&create_tmp_file($ps,&pitpg_source_range()));
- &load_new_pattern_file("PiTPG");
+ if(!&create_tmp_file($ps,&pitpg_source_range())) { &output_pattern_end($locked);return undef; }
+ my $loaded=&load_new_pattern_file("PiTPG");
+ &output_pattern_end($locked);
+ # Not loaded (a video that cannot be ended): no flip will come.
+ return undef if(!$loaded);
  my ($frame,$shown)=&pitpg_wait_presented($written,@before);
  return $shown ? $frame : undef;
 }
@@ -1303,7 +1318,7 @@ sub pitpg_patch (@) {
  # Standard DV: the patch's own codes at its own depth.
  my $fb=&pitpg_dv_tv_led() ? $p->{bits} : &pitpg_fb_bits();
  my $frame=&pitpg_show($fb,[&pitpg_patch_frame($W,$H,$fb)]);
- return ("failed","The patch could not be shown: the renderer reported no new frame.") if(!$frame);
+ return ("failed",&pitpg_not_shown("The patch")) if(!$frame);
  &log("PiTPG: patch ".join(",",@{$p->{rgb}})." bg ".join(",",@{$p->{bg}})." $p->{bits}-bit at $x,$y ${w}x$h");
  return ("",$frame,&pitpg_peak_note($p));
 }
@@ -1399,7 +1414,7 @@ sub pitpg_test_pattern (@) {
   &log("PiTPG: test pattern off - patches again");
   my $pfb=&pitpg_dv_tv_led() ? ($pitpg_last_patch{bits} || 8) : $fb;
   my $frame=&pitpg_show($pfb,[&pitpg_patch_frame($W,$H,$pfb)]);
-  return $frame ? ("",$frame) : ("failed","The patch could not be shown: the renderer reported no new frame.");
+  return $frame ? ("",$frame) : ("failed",&pitpg_not_shown("The patch"));
  }
  return ("failed","Unknown test pattern '$p->{name}'.") if(!$pitpg_test_pattern_known{$name});
  my $bits=$p->{bits} // 8;
@@ -1446,7 +1461,7 @@ sub pitpg_test_pattern (@) {
  }
  &log("PiTPG: test pattern $name (levels $min-$max at $bits-bit)");
  my $frame=&pitpg_show($fb,\@frames);
- return $frame ? ("",$frame) : ("failed","The test pattern could not be shown: the renderer reported no new frame.");
+ return $frame ? ("",$frame) : ("failed",&pitpg_not_shown("The test pattern"));
 }
 
 # (background L, [x,y,w,h,r,g,b]...) in window coordinates, codes from

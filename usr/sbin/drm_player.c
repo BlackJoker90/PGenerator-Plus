@@ -37,6 +37,8 @@
  */
 #include <drm.h>
 #include <drm_mode.h>
+#include "pg_drm_mode.h"
+#include "pg_drm_sdr.h"
 
 /* DRM ioctl helpers — define only if not already in drm.h */
 #ifndef DRM_IOCTL_SET_MASTER
@@ -377,12 +379,11 @@ int main(int argc, char *argv[]) {
  for (i = 0; i < (int)res.count_connectors; i++) {
   if (get_connector(res.connector_ids[i], &conn) < 0) continue;
 
-  if (want_conn_id && conn.connector_id == want_conn_id) { found_conn = 1; break; }
-  if (!want_conn_id) {
-   if (conn.connection == DRM_MODE_CONNECTED) { found_conn = 1; break; }
-   if (conn.connector_type == DRM_MODE_CONNECTOR_HDMIA ||
-     conn.connector_type == DRM_MODE_CONNECTOR_HDMIB) { found_conn = 1; break; }
-  }
+  /* Never select a disconnected/EDID-less HDMI port ahead of the display. */
+  if (conn.connection == DRM_MODE_CONNECTED && conn.count_modes > 0 &&
+    (want_conn_id ? conn.connector_id == want_conn_id :
+     (conn.connector_type == DRM_MODE_CONNECTOR_HDMIA ||
+      conn.connector_type == DRM_MODE_CONNECTOR_HDMIB))) { found_conn = 1; break; }
   free(conn.modes); free(conn.encoders);
  }
 
@@ -391,14 +392,26 @@ int main(int argc, char *argv[]) {
   return 1;
  }
 
+ if (pg_drm_require_sdr(drm_fd,conn.connector_id)<0) return 1;
+
  fprintf(stderr, "drm_player: connector %u type=%u %s, %d modes\n",
      conn.connector_id, conn.connector_type,
      conn.connection == DRM_MODE_CONNECTED ? "connected" : "disconnected",
      conn.count_modes);
 
- /* Find matching mode */
+ /* Normal diagnostic calls carry an exact mode so software fallback
+  * cannot silently replace 1080i60 with 1080p30 or change the AVI VIC. */
+ if(argc>=5 && strcmp(argv[4],"-")) {
+  struct drm_mode_modeinfo want;
+  if(pg_drm_mode_parse(argv[4],&want) || want.hdisplay!=width || want.vdisplay!=height) {
+   fprintf(stderr,"drm_player: invalid configured timing\n");return 1;
+  }
+  for(i=0;i<conn.count_modes;i++)if(pg_drm_same_mode(&conn.modes[i],&want)){mode=&conn.modes[i];break;}
+  if(!mode){fprintf(stderr,"drm_player: configured timing not advertised\n");return 1;}
+ }
+ /* Legacy direct invocation without a configured mode. */
  for (i = 0; i < conn.count_modes; i++) {
-  if ((int)conn.modes[i].hdisplay == width &&
+  if (!mode && (int)conn.modes[i].hdisplay == width &&
     (int)conn.modes[i].vdisplay == height) {
    mode = &conn.modes[i];
    break;
@@ -412,40 +425,6 @@ int main(int argc, char *argv[]) {
   height = mode->vdisplay;
   fprintf(stderr, "drm_player: no %dx%d mode, using %dx%d\n",
       width, height, mode->hdisplay, mode->vdisplay);
- }
-
- /* Synthetic mode for disconnected connector with no modes */
- static struct drm_mode_modeinfo synth;
- if (!mode) {
-  memset(&synth, 0, sizeof(synth));
-  synth.hdisplay = width;
-  synth.vdisplay = height;
-  if (width == 3840 && height == 2160) {
-   /* 4K@30 mode timings */
-   synth.clock = 297000;
-   synth.hsync_start = 3840 + 176;
-   synth.hsync_end = 3840 + 176 + 88;
-   synth.htotal = 3840 + 176 + 88 + 296;
-   synth.vsync_start = 2160 + 8;
-   synth.vsync_end = 2160 + 8 + 10;
-   synth.vtotal = 2160 + 8 + 10 + 72;
-   synth.vrefresh = 30;
-  } else {
-   /* 1080p@60 timings */
-   synth.clock = 148500;
-   synth.hsync_start = width + 88;
-   synth.hsync_end = width + 88 + 44;
-   synth.htotal = width + 88 + 44 + 148;
-   synth.vsync_start = height + 4;
-   synth.vsync_end = height + 4 + 5;
-   synth.vtotal = height + 4 + 5 + 36;
-   synth.vrefresh = 60;
-  }
-  synth.type = DRM_MODE_TYPE_DRIVER;
-  snprintf(synth.name, sizeof(synth.name), "%dx%d", width, height);
-  mode = &synth;
-  fprintf(stderr, "drm_player: using synthetic mode %s@%dHz\n",
-      synth.name, synth.vrefresh);
  }
 
  /* Find CRTC */

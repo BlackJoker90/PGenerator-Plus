@@ -3262,9 +3262,9 @@ void ofxRPI4Window::ReloadSignalConf()
 	const char *reason = nullptr;
 	const char *preload = getenv("LD_PRELOAD");
 
-	/* drm_override.so re-reads the conf on change since it exports
-	 * drm_override_set_suspended; an older build caches the conf at
-	 * startup and would keep forcing the old values. */
+	/* drm_override.so takes a changed conf (handed over by main.cpp, or
+	 * read on change) since it exports drm_override_set_suspended; an older
+	 * build caches the conf at startup and keeps forcing the old values. */
 	if (preload && strstr(preload, "drm_override") && !dlsym(RTLD_DEFAULT, "drm_override_set_suspended"))
 		reason = "drm_override";
 	else if (!reloadConf)

@@ -21,6 +21,8 @@
 #include "ofMain.h"
 #include "ofApp.h"
 #include "dovi_metadata.h"
+#include <dlfcn.h>
+#include <sstream>
 #define TEST_BUILD
 #ifdef TEST_BUILD
  const char * pgenCodeVersion = "V02.00T";
@@ -66,11 +68,26 @@ static bool usesPGeneratorKmsWindow(const std::string &model) {
         model.find("BCM2712") != string::npos;
 }
 
+/* The text of the conf as readPGeneratorConf last read it (handed to
+   drm_override.so at the start). */
+static std::string pgconf_text;
+
 /* Read PGenerator.conf into the variables above. Keys missing from the
-   file keep their current value. */
-static void readPGeneratorConf() {
+   file keep their current value. The file is read once, whole, then
+   parsed from that text. Returns false, and changes nothing (variables
+   and pgconf_text), when the file is missing, unreadable or empty. */
+static bool readPGeneratorConf() {
  std::string str;
- std::ifstream file(PGenerator_conf);
+ std::ifstream in(PGenerator_conf);
+ if(!in) return false;
+ std::ostringstream whole;
+ whole << in.rdbuf();
+ if(!whole || in.bad()) return false;
+ in.close();
+ std::string text=whole.str();
+ if(text.empty()) return false;
+ pgconf_text=text;
+ std::istringstream file(pgconf_text);
  while (std::getline(file, str)) {
   std::vector<std::string> el;
   boost::split(el, str, boost::is_any_of("="));
@@ -99,7 +116,7 @@ static void readPGeneratorConf() {
   if(el[0] == "dv_signal_range") dv_signal_range=el[1];
   if(el[0] == "dv_pq_source")    dv_pq_source=el[1];
  }
- file.close();
+ return true;
 }
 
 /* Signal keys that can change without restarting the renderer (startup
@@ -141,11 +158,25 @@ static void applySignalConf() {
    change it. */
 static int startup_is_hdr=0;
 
+/* Hands the conf text this renderer runs with to drm_override.so
+   (LD_PRELOAD; looked up, absent without the library): at the start, a
+   moment after the library's constructor read the file, and after an
+   in-place reload this renderer applied. The library takes the conf only
+   from here, so a conf the daemon writes before this renderer takes it
+   (restart or SIGHUP) never reaches the cable under its pixels (#35). */
+static void handConfToOverride() {
+ void (*set_conf)(const char *,size_t)=(void (*)(const char *,size_t))dlsym(RTLD_DEFAULT,"drm_override_set_conf");
+ if(set_conf) set_conf(pgconf_text.data(),pgconf_text.size());
+}
+
 /* SIGHUP hook, called from ofxRPI4Window::update(). Returns nullptr when
    the new signal keys were applied, else the reject reason (nothing is
    applied then and the daemon restarts the renderer). */
 static const char *reloadSignalConf() {
- readPGeneratorConf();
+ /* A conf not read whole changes nothing here; the daemon restarts the
+    renderer, which reads it again. */
+ if(!readPGeneratorConf())
+  return "conf_unreadable";
  /* Dolby Vision needs the .dv binary and different surfaces */
  if(atoi(dv_status.c_str()) || atoi(is_ll_dovi.c_str()) || atoi(is_std_dovi.c_str()))
   return "dovi";
@@ -161,6 +192,7 @@ static const char *reloadSignalConf() {
     ofxRPI4Window::wireRgbQuantRange(ofxRPI4Window::avi_info.rgb_quant_range,ofxRPI4Window::avi_info.output_format))
   return "rgb_quant_range";
  applySignalConf();
+ handConfToOverride();
  return nullptr;
 }
 
@@ -217,7 +249,7 @@ int main(int argc, char **argv){
  } else {
 // Start Patch RPI KMS
   /* Get var from PGenerator Conf */
-  readPGeneratorConf();
+  bool conf_read=readPGeneratorConf();
 
   /* Set var from PGenerator Conf */
   applySignalConf();
@@ -228,6 +260,11 @@ int main(int argc, char **argv){
   ofxRPI4Window::mode_idx=atoi(mode_idx.c_str());
   ofxRPI4Window::dv_status=atoi(dv_status.c_str());
   ofxRPI4Window::dv_interface=atoi(dv_interface.c_str());
+  /* Before any DRM call: this renderer's DOVI blob, created before its
+     first commit, is normalized from these values. A conf this renderer
+     could not read is not handed over: the library keeps what its
+     constructor read (and its own reload, as with an older renderer). */
+  if(conf_read) handConfToOverride();
   /* Standard Dolby Vision metadata as PiTPG 2.0.3 apply_now@0x40e370 sets
      it: an explicit dv_profile picks the container (1: BT.2020, else
      P3-D65), without one the primaries do (1 is BT.2020); explicit

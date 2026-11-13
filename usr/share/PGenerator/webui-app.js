@@ -2559,6 +2559,12 @@ function pgSignalTipText(){
  if(w&&w.port) lines.push('Port: '+w.port.label+' (up to '+w.port.max_mode+')'+(w.port.renderer_elsewhere?', output still on '+(w.port.renderer_label||w.port.renderer):''));
  if(w&&w.sending) lines.push('Sent'+(w.wire_read===false?' (last reading)':'')+': '+w.sending);
  else if(w&&w.connected) lines.push('Sent: not readable here');
+ // Dolby Vision without a verdict on its vendor frame: the header does not
+ // pass for checked (the Signal Mode field says the same). An unread vendor
+ // frame (wire.dv null) leaves the signal text empty: not a condition here.
+ const wf=w&&w.sending&&w.wire;
+ if(wf&&wf.compared&&String(wf.compared.signal_mode||'')==='dv'&&!(wf.fields||{}).signal)
+  lines.push(wf.dv===null?'Dolby Vision frame: not compared yet (read a few seconds after a mode change)':wf.dv_unknown==='port'?'Dolby Vision frame: not compared (the port the output drives could not be read)':'Dolby Vision frame: not compared (the display’s EDID was not read whole)');
  const adj=pgSignalAdjustmentsShown();
  if(adj.length) lines.push('Adjusted: '+adj.join(' '));
  const r=pgSignalState&&pgSignalState.refused;
@@ -2777,6 +2783,12 @@ function pgRenderFieldWire(){
   // name/depth split the format; older daemons send only format.
   const v=!live?'':key==='signal'?(p.signal||'')
    :key==='format'?(p.name!==undefined?p.name:p.format):key==='depth'?(p.name!==undefined?p.depth:''):p.range;
+  // Dolby Vision whose vendor frame is not read yet (wire.dv null): the
+  // daemon leaves the signal text empty; the field says why, not nothing.
+  if(!v&&key==='signal'&&live&&wire.dv===null&&compared&&String(compared.signal_mode||'')==='dv'){
+   pgFieldWireSet(el,'checking','Checking…','Not compared yet: the Dolby Vision vendor frame is read a few seconds after a mode change.');
+   return;
+  }
   if(!v){ pgFieldWireSet(el,''); return; }
   const edited=conf.some(k=>pgFieldWireKeyApplies(k,now)&&String(saved[k]??'')!==String(now[k]??''));
   // An unapplied edit: what goes out until Apply.
@@ -2805,7 +2817,9 @@ function pgRenderFieldWire(){
    :key==='range'&&cf!=='0'?'not compared: only RGB has its range compared'
    :(key==='depth'||key==='range')&&fields.format==='differs'&&!fields[key]?'not compared: the format sent differs from the setting'
    :fields[key]||!sameAs(deps)?'not compared: the output runs with other settings than the ones shown here (being applied, or set by a calibration program)'
-   :key==='signal'&&!dv&&wire.dv===null?'not compared yet: the Dolby Vision vendor frame is read a few seconds after a mode change'
+   :key==='signal'&&wire.dv===null?'not compared yet: the Dolby Vision vendor frame is read a few seconds after a mode change'
+   :key==='signal'&&dv&&wire.dv_unknown==='port'?'not compared: the port the output drives could not be read, so the display whose Dolby Vision block applies is not known'
+   :key==='signal'&&dv?'not compared: the display’s EDID was not read whole, so the Dolby Vision frame its block asks for is not known'
    :key==='range'&&String(saved.rgb_quant_range??'0')==='0'?'not compared: Default range, and the renderer has not recorded what it resolved Default to'
    :'not compared with this setting';
   pgFieldWireSet(el,'read','Sent: '+v,'Read inside the Pi from its HDMI output, '+why+'.'+oldTitle);

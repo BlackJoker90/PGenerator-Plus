@@ -353,18 +353,64 @@ sub signal_check {
 # Low_Latency set (PB4 bits 1 and 0); "" = no Dolby Vision signal (slot
 # off or another vendor frame); undef = not readable.
 sub signal_vsif_dv {
+ my $f=signal_vsif_frame(@_);
+ return $f unless(ref($f));
+ my ($oui,$len,$pb4)=($f->{oui},$f->{length},$f->{pb4});
+ return "lldv" if($oui eq "00:d0:46" && $len == 0x1b && ($pb4 & 0x03) == 0x03);
+ return "standard" if($oui eq "00:d0:46" && $len == 0x1b && ($pb4 & 0x03) == 0x02);
+ return "standard" if($oui eq "00:0c:03" && $len == 0x18);
+ return "";
+}
+
+# The vendor infoframe line of signal_vsif_dv as a frame: {oui (MSB first,
+# "00:d0:46"), length, pb4, pb5, pb=>[PB1..PB<length>]} in the form of the
+# self-test's vendor_infoframe (PGSelfTestCheck::dv_vsif_payload compares
+# against pb). "" when the slot is off, not a valid vendor frame or its
+# checksum is wrong; undef when the line is not readable.
+sub signal_vsif_frame {
  my ($line)=@_;
  return undef if(!defined $line || $line!~/^slot=1 enabled=(\d) type=([0-9a-f]{2}) version=([0-9a-f]{2}) length=([0-9a-f]{2}) bytes=([0-9a-f:]*)/m);
  my ($on,$type,$ver,$len,@b)=($1,hex($2),hex($3),hex($4),map { hex($_) } split(/:/,$5));
- return "" if($on ne "1" || $type != 0x81 || $ver != 1 || $len < 4 || @b < $len+1);
+ return "" if($on ne "1" || $type != 0x81 || $ver != 1 || $len < 5 || @b < $len+1);
  my $sum=$type+$ver+$len;
  $sum+=$b[$_] for(0..$len);
  return "" if($sum & 0xff);
- my $oui=sprintf("%02x:%02x:%02x",$b[3],$b[2],$b[1]);
- return "lldv" if($oui eq "00:d0:46" && $len == 0x1b && ($b[4] & 0x03) == 0x03);
- return "standard" if($oui eq "00:d0:46" && $len == 0x1b && ($b[4] & 0x03) == 0x02);
- return "standard" if($oui eq "00:0c:03" && $len == 0x18);
- return "";
+ return {oui=>sprintf("%02x:%02x:%02x",$b[3],$b[2],$b[1]),length=>$len,pb4=>$b[4],pb5=>$b[5],pb=>[@b[1..$len]]};
+}
+
+# A name for the Dolby Vision frame on the cable, in dv_vsif_expect's words
+# ("Dolby form", "kernel HDMI 1.4b form", ...); when it reads like the
+# expected one ($want) but differs in a byte: "<form>, other bytes".
+sub signal_vsif_form_name {
+ my ($f,$want)=@_;
+ my ($oui,$len,$pb4,$pb5)=($f->{oui},$f->{length},$f->{pb4},$f->{pb5} // 0);
+ my $n;
+ if($oui eq "00:0c:03" && $len == 0x18) { $n=($pb4 == 0x20 && $pb5 == 0x01) ? "kernel HDMI 1.4b form" : "HDMI 1.4b form"; }
+ elsif($oui eq "00:d0:46" && $len == 0x1b && ($pb4 & 0x03) == 0x03) { $n="low latency".(($pb5 & 0x10) ? ", BT.2020 container" : ""); }
+ elsif($oui eq "00:d0:46" && $len == 0x1b) { $n="Dolby form"; }
+ else { $n="another form"; }
+ $n.=", other bytes" if($want && $n eq ($want->{form} =~ s/, kernel form$//r));
+ return $n;
+}
+
+# The Dolby Vision vendor frame on the cable against the one the display's
+# Dolby Vision block asks for ($want: PGSelfTestCheck::dv_vsif_expect with
+# the form PGEdidDolby::dolby_vsif_form reads from the block, the same rule
+# as the self-test's "Dolby Vision VSIF form" check): the whole payload,
+# PB6 and up 0. Returns "" when they match, else the sentence for the field.
+# $module_forms 0: the loaded vc4.ko cannot send the form (no VSIF patch);
+# undef: its version was not read (nothing said about it).
+sub signal_dv_vsif_form_difference {
+ my ($frame,$want,$module_forms)=@_;
+ require PGSelfTestCheck;
+ my @exp=PGSelfTestCheck::dv_vsif_payload($want);
+ my @pb=@{$frame->{pb} || []};
+ my ($i)=grep { !defined($pb[$_]) || $pb[$_] != $exp[$_] } (0..$#exp);
+ return "" if($frame->{oui} eq $want->{oui} && $frame->{length} == $want->{length} && @pb == @exp && !defined($i));
+ my $got=PGSelfTestCheck::dv_vsif_describe($frame);
+ $got.=sprintf(", PB%d 0x%02x instead of 0x%02x",$i+1,$pb[$i] // 0,$exp[$i]) if(defined($i) && $i > 4);
+ return "Dolby Vision is sent with the vendor infoframe $got; the display's Dolby Vision block asks for the $want->{form} (".PGSelfTestCheck::dv_vsif_describe($want).", PB6 and up 0)."
+  .((defined($module_forms) && !$module_forms) ? " The loaded vc4 driver cannot send it: reboot after the update." : "");
 }
 
 # What is on the cable, from the AVI and DRM infoframes of the last modeset
@@ -376,6 +422,8 @@ sub signal_wire_from_infoframes {
  my ($avi,$drm,$link,$vsif)=@_;
  my %w=(format=>undef,range=>undef,eotf=>undef,bpc=>undef,tmds_mhz=>undef,dv=>undef,drm=>0);
  $w{dv}=signal_vsif_dv($vsif) if(defined $vsif);
+ # The Dolby Vision frame itself, for the form check in signal_wire_compare.
+ $w{dv_frame}=signal_vsif_frame($vsif) if($w{dv});
  my @a=map {hex($_)} grep {/^[0-9a-fA-F]{1,2}$/} split(/:/,$avi || "");
  if(@a >= 9 && $a[0] == 0x82) {
   my %fmt=(0=>0,1=>2,2=>1,3=>3);     # AVI Y1Y0 -> conf color_format
@@ -455,21 +503,34 @@ sub signal_wire_adjustments {
 # format, depth, range) for the WebUI's field marks: {checked=>{field=>1}}
 # for each field the cable was compared on, {adjustments=>[[field,text]]}
 # for each difference. A field that was not compared gets no mark either
-# way (4:2:2 depth, YCbCr range, format and depth under Dolby Vision).
+# way (4:2:2 depth, YCbCr range, format and depth under Dolby Vision, the
+# Dolby Vision frame without the display's block). dv_form: the name of
+# the Dolby Vision frame on the cable when its form differs (for the label).
 sub signal_wire_compare {
  my ($req,$w)=@_;
- my (@adj,%checked);
+ my (@adj,%checked,$dv_form);
  my $mode=lc($req->{signal_mode} || "sdr");
  if(defined $w->{dv}) {
   my $want=($mode ne "dv") ? "" : ((lc($req->{dv_transport} || "") eq "lldv") ? "lldv" : "standard");
   # In Dolby Vision the vendor frame is the signal; outside it only a stray
   # DV frame decides on its own ("the same" needs the EOTF too, below).
-  $checked{signal}=1 if($mode eq "dv" || $w->{dv} ne $want);
   if($w->{dv} ne $want) {
+   $checked{signal}=1;
    push(@adj,[signal=>signal_hdr_label($req)." setting is sent ".($w->{dv} eq "" ? "without Dolby Vision signalling." : "with ".($mode eq "dv" ? "the $DV_WIRE_NAME{$w->{dv}} signal." : "Dolby Vision signalling."))]);
+  } elsif($mode eq "dv" && ref($req->{dv_vsif_expect}) eq "HASH" && ref($w->{dv_frame}) eq "HASH") {
+   # The right transport: then the whole frame against the one the
+   # display's Dolby Vision block asks for (dv_vsif_expect from the caller).
+   # Without it (the display's EDID not read whole) the frame is not
+   # compared: the transport alone does not make it the right one.
+   $checked{signal}=1;
+   my $d=signal_dv_vsif_form_difference($w->{dv_frame},$req->{dv_vsif_expect},$req->{dv_vsif_module});
+   if($d ne "") {
+    push(@adj,[signal=>$d]);
+    $dv_form=signal_vsif_form_name($w->{dv_frame},$req->{dv_vsif_expect});
+   }
   }
  }
- return {adjustments=>\@adj,checked=>\%checked} if($mode eq "dv" || !defined $w->{format});
+ return {adjustments=>\@adj,checked=>\%checked,dv_form=>$dv_form} if($mode eq "dv" || !defined $w->{format});
  my $format=int($req->{color_format} || 0);
  my $bpc=int($req->{max_bpc} || 8);
  $checked{format}=1;

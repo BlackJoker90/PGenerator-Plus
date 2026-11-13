@@ -2107,8 +2107,9 @@ sub pattern_daemon {
 	      # 109% pattern commands (DV Autocal stuck on alignment).
 	      # HDR10/HLG/DV are BT.2020 signals: a gamut or colour-space
 	      # command (PRIM, CLSP, CONF_HDR with BT.709 primaries) does not
-	      # turn the colorimetry to BT.709 while HDR is on. drm_override
-	      # reads the conf on every commit, so it would reach the wire.
+	      # turn the colorimetry to BT.709 while HDR is on. The renderer
+	      # takes it with the next in-place reload or restart (and hands
+	      # it to drm_override), so it would reach the wire.
 	      # Calman's mode switches write is_hdr before the colorimetry.
 	      $conf_val="9" if($conf_key eq "colorimetry" && int($pgenerator_conf{"is_hdr"} || 0) == 1);
 	      my $new_val=defined($conf_val) ? "$conf_val" : "";
@@ -2268,10 +2269,11 @@ sub pattern_daemon {
      # successful stop/start apply. If the current conf matches
      # this snapshot, no renderer restart is needed — the
      # renderer's updateHDR_Infoframe() reads min/max luminance,
-     # CLL and FALL from the conf on every page flip, and
-     # drm_override.so re-applies connector properties (Colorimetry,
-     # output_format, max_bpc, rgb_quant_range) on every atomic
-     # commit. Skipping the stop+start cycle for non-mode changes
+     # CLL and FALL from the conf on every page flip. Connector
+     # properties (Colorimetry, output_format, max_bpc,
+     # rgb_quant_range) reach the cable only through an in-place
+     # reconfigure (SIGHUP) or a restart: drm_override.so takes the
+     # conf the renderer hands over, not the file (#35). Skipping the stop+start cycle for non-mode changes
      # (the common case: reference adjusting luminance, or
      # rgb_quant_range during a calibration pass) avoids the
      # documented DRM-master race that was killing the renderer

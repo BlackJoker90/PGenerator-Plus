@@ -15432,6 +15432,11 @@ sub webui_asset (@) {
 my %_webui_font_assets = (
  "meso.woff2" => "font/woff2",
  "meso-OFL.txt" => "text/plain; charset=utf-8",
+ # The Glow theme: Plus Jakarta Sans for text, Sora for titles and values.
+ "glow.woff2" => "font/woff2",
+ "glow-OFL.txt" => "text/plain; charset=utf-8",
+ "glow-display.woff2" => "font/woff2",
+ "glow-display-OFL.txt" => "text/plain; charset=utf-8",
 );
 
 # Returns (media type, bytes), or an empty list for an unknown name or a file

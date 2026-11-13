@@ -956,3 +956,489 @@ body.layout-desktop .status-bar:has(.status-diff) :is(#meterStatusWrap,#calStatu
 /* Below 1200 px always: the header keeps one height whether or not a difference shows. */
 @media(max-width:1199px){body.layout-desktop .status-bar :is(#meterStatusWrap,#calStatusWrap).is-absent{display:none}}
 body.layout-desktop .status-bar:has(.status-diff){column-gap:12px}
+
+/* ==== Glow look ============================================================
+   A theme with a layout of its own (data-skin="glow", the default), drawn
+   over the Dark theme: warm near-black, one orange accent, cards with a
+   sheen and a 1 px line, an orange corner glow behind everything. Orange is
+   the signal: the port in use, a value not applied yet, the action that
+   sends it. Calibration colours are never under a tint: the glow lies on
+   the page ground only, behind opaque cards.
+
+   Every other theme keeps the Mesopic look above. The rules of this look
+   start with :root[data-skin="glow"][data-theme="dark"]; a rule without it
+   addresses only what the Glow script (end of webui-workspace.js) adds,
+   which every other theme hides.
+
+   Widths are asked of the card, not of the window (container queries on
+   #displaySettingsCard, #hdrCard, #selftestCard): the Desktop layout's
+   content is narrower than the window by the rail, the Live Information
+   drawer and Desktop Zoom. The window is asked only for what belongs to a
+   phone or a tablet as a device.
+
+   Faces, served like meso.woff2: Plus Jakarta Sans for text (fonts/glow.woff2,
+   fonts/glow-OFL.txt), Sora for titles and values (fonts/glow-display.woff2,
+   fonts/glow-display-OFL.txt), both SIL Open Font License 1.1. */
+
+@font-face{font-family:"PGen Glow";font-style:normal;font-weight:300 800;font-display:swap;src:url("fonts/glow.woff2") format("woff2")}
+@font-face{font-family:"PGen Glow Display";font-style:normal;font-weight:300 800;font-display:swap;src:url("fonts/glow-display.woff2") format("woff2")}
+
+:root[data-skin="glow"][data-theme="dark"]{
+ --meso:"PGen Glow","Avenir Next","Segoe UI",system-ui,sans-serif;
+ --glow-display:"PGen Glow Display","PGen Glow","Avenir Next","Segoe UI",system-ui,sans-serif;
+ --r-xs:6px;--r-sm:10px;--r-md:14px;--r-lg:20px;
+ --control-h:38px;
+ --bg:#0b0a09;--card:#191817;--panel:#1d1c1a;--border:#2f2c2a;--divider:#272523;
+ --accent:#ff6b1a;--accent2:#ff8b45;--accent-fill:#ff6b1a;--accent-fill2:#ff8b45;--on-accent:#1c0a00;--text-inverse:#1c0a00;
+ --text:#c9c5c0;--text2:#a09b95;--text-primary:#c9c5c0;--text-secondary:#a09b95;--text-muted:#a09b95;--text-disabled:#6b6661;
+ --surface-page:#0b0a09;--surface-header:#0b0a09;--surface-sidebar:#0b0a09;--surface-card:#191817;--surface-drawer:#151413;--surface-modal:#1d1c1a;--surface-popover:#242220;--surface-inset:#100f0e;--surface-field:#232120;
+ --focus-ring:#ffd9c2;--selected-bg:#2e2b29;--hover-bg:rgba(255,255,255,.06);
+ --status-calibration:#ff6b1a;--neutral-fill:#272523;
+ --field-border:#34312e;--field-border-hover:#6a645e;
+ --tile-bg:#201f1d;--tile-border:transparent;
+ --chart-bg:#121110;--chart-grid:#272523;--chart-axis:#45413d;--chart-label:#a09b95;--chart-tooltip:#2a2826;--meter-bar-track:#121110;
+ --scroll-track:#0b0a09;--scroll-thumb:#38342f;--scroll-thumb-border:#38342f;--scroll-thumb-hover:#55504a;
+ --meso-lit:#ffffff;--meso-well:#121110;--meso-key:#201f1d;--meso-key-hi:#2e2b29;
+ --control-disabled-bg:#1c1b19;--control-disabled-text:#8d8882;
+ --glow-line:rgba(255,255,255,.07);--glow-line2:rgba(255,255,255,.14);
+ --glow-sheen:linear-gradient(150deg,#201f1d 0%,#171615 55%,#1b1a19 100%);
+ --glow-ground:radial-gradient(900px 520px at 0% 0%,rgba(255,107,26,.20),transparent 62%),radial-gradient(900px 620px at 100% 100%,rgba(255,107,26,.16),transparent 60%),radial-gradient(rgba(255,140,70,.16) 1px,transparent 1.5px) 0 0/14px 14px,#0b0a09;
+ /* The same ground for a box that starts at the window's top left corner (the header): the corner glow and the dots, without the far corner. */
+ --glow-ground-top:radial-gradient(900px 520px at 0 0,rgba(255,107,26,.20),transparent 62%),radial-gradient(rgba(255,140,70,.16) 1px,transparent 1.5px) 0 0/14px 14px,#0b0a09;
+ /* What is read off a ring or a pip: not run, bit-exact, mismatch. Each at least 3:1 on a card. */
+ --glow-idle:#77726c;--glow-pass:#3fdc85;--glow-fail:#ee7570;
+}
+
+/* Everything below is the dark Glow look only. */
+/* The ground is a fixed layer of its own behind the page (background-attachment:fixed is not painted fixed on iOS). */
+:root[data-skin="glow"][data-theme="dark"] body{background:#0b0a09}
+:root[data-skin="glow"][data-theme="dark"] body::before{content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;background:var(--glow-ground)}
+:root[data-skin="glow"][data-theme="dark"] :is(.header,.desktop-sidebar,.desktop-content,.dashboard,.desktop-shell,main){background:transparent}
+/* The header stays opaque where content scrolls under it. It starts at the window's corner, so the corner glow drawn in its own box meets the ground's. */
+:root[data-skin="glow"][data-theme="dark"] .header{background:var(--glow-ground-top);box-shadow:0 1px 0 var(--glow-line)}
+
+:root[data-skin="glow"][data-theme="dark"] :is(.desktop-workspace-title,.dashboard > .card > h2,.selftest-title){font-family:var(--glow-display);font-weight:600;letter-spacing:-.015em}
+:root[data-skin="glow"][data-theme="dark"] body.layout-desktop .desktop-workspace-title{font-size:1.875rem;font-weight:500}
+/* One left edge on every workspace: the title and what stands under it start together. */
+:root[data-skin="glow"][data-theme="dark"] body.layout-desktop .dashboard{padding-left:24px}
+:root[data-skin="glow"][data-theme="dark"] body.layout-desktop .desktop-workspace-title{margin-left:0}
+
+/* ---- Header ---- */
+:root[data-skin="glow"][data-theme="dark"] .status-bar{background:rgba(255,255,255,.03);box-shadow:inset 0 0 0 1px var(--glow-line2)}
+:root[data-skin="glow"][data-theme="dark"] .hdr-power .icon-btn{background:rgba(255,255,255,.03);box-shadow:inset 0 0 0 1px var(--glow-line2)}
+
+/* ---- Rail ---- */
+:root[data-skin="glow"][data-theme="dark"] body.layout-desktop .desktop-sidebar{background:transparent;box-shadow:1px 0 0 var(--glow-line)}
+:root[data-skin="glow"][data-theme="dark"] .desktop-nav-btn{border-radius:12px}
+:root[data-skin="glow"][data-theme="dark"] .desktop-nav-btn[aria-current="page"]{background:#262422;font-weight:600;box-shadow:inset 0 0 0 1px var(--glow-line)}
+
+/* ---- Cards: sheen and a line ---- */
+:root[data-skin="glow"][data-theme="dark"] body:is(.layout-desktop,.layout-tablet) .dashboard > .card{background:var(--glow-sheen);box-shadow:inset 0 0 0 1px var(--glow-line)}
+
+/* ---- Setting tiles: icon tile, name, value, cable line ---- */
+:root[data-skin="glow"][data-theme="dark"] .setting-tiles > .field{grid-template-rows:auto auto auto auto;row-gap:0;background:rgba(255,255,255,.025);border-radius:16px;padding:14px 8px 8px 16px;box-shadow:inset 0 0 0 1px var(--glow-line2)}
+:root[data-skin="glow"][data-theme="dark"] .setting-tiles > .field::before{content:"";grid-column:1;grid-row:1;justify-self:start;width:34px;height:34px;margin-bottom:14px;border-radius:10px;background:var(--glow-ic,none) center/18px 18px no-repeat,#2b2927;box-shadow:inset 0 0 0 1px var(--glow-line)}
+:root[data-skin="glow"][data-theme="dark"] .setting-tiles > .field > label{grid-row:2}
+:root[data-skin="glow"][data-theme="dark"] .setting-tiles > .field > :is(select,.mode-select-wrap){grid-row:3}
+:root[data-skin="glow"][data-theme="dark"] .setting-tiles > .field > .field-wire{grid-row:4;margin:-2px 0 6px}
+:root[data-skin="glow"][data-theme="dark"] .setting-tiles > .field > :is(.meter-help-tip,.mode-retry){grid-row:1;align-self:start;margin-top:8px}
+:root[data-skin="glow"][data-theme="dark"] .setting-tiles > .field :is(select,input:not([type=checkbox]):not([type=radio]),.mode-select-value){font-family:var(--glow-display);font-size:1.0625rem;font-weight:600;letter-spacing:-.01em;font-variant-numeric:tabular-nums}
+/* An open menu is lit, not orange: orange is the signal (the port in use, a value not applied yet, the action that sends it). */
+:root[data-skin="glow"][data-theme="dark"] .setting-tiles > .field:has(select[data-pg-dd-open]){background:rgba(255,255,255,.05);box-shadow:inset 0 0 0 1.5px rgba(255,255,255,.5)}
+/* A changed value: the tile carries the accent line, as the Apply bar names it. */
+:root[data-skin="glow"][data-theme="dark"] .setting-tiles > .field:is(.is-changed,.is-wire-pending){box-shadow:inset 0 0 0 1.5px var(--accent)}
+/* Keyboard focus: a ring outside the tile's own line, so it shows on a changed and on an open tile alike. */
+:root[data-skin="glow"][data-theme="dark"] .setting-tiles > .field:has(:focus-visible:not(.meter-help-tip)){outline:2px solid var(--focus-ring);outline-offset:2px}
+:root[data-skin="glow"][data-theme="dark"] .setting-tiles > .field:has(#mode_idx){--glow-ic:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23fff' stroke-width='1.7' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='3' y='4.5' width='18' height='12' rx='2'/%3E%3Cpath d='M8.5 20h7M12 16.5V20'/%3E%3C/svg%3E")}
+:root[data-skin="glow"][data-theme="dark"] .setting-tiles > .field:has(#signal_mode){--glow-ic:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23fff' stroke-width='1.7' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='12' cy='12' r='3.6'/%3E%3Cpath d='M12 3v2M12 19v2M3 12h2M19 12h2M5.6 5.6 7 7M17 17l1.4 1.4M5.6 18.4 7 17M17 7l1.4-1.4'/%3E%3C/svg%3E")}
+:root[data-skin="glow"][data-theme="dark"] .setting-tiles > .field:has(#max_bpc){--glow-ic:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23fff' stroke-width='1.7' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m12 3.5 8.5 4.5-8.5 4.5L3.5 8z'/%3E%3Cpath d='m3.5 12 8.5 4.5 8.5-4.5M3.5 16l8.5 4.5 8.5-4.5'/%3E%3C/svg%3E")}
+:root[data-skin="glow"][data-theme="dark"] .setting-tiles > .field:has(#color_format){--glow-ic:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23fff' stroke-width='1.7'%3E%3Ccircle cx='12' cy='8.6' r='4.6'/%3E%3Ccircle cx='8' cy='14.8' r='4.6'/%3E%3Ccircle cx='16' cy='14.8' r='4.6'/%3E%3C/svg%3E")}
+:root[data-skin="glow"][data-theme="dark"] .setting-tiles > .field:has(#colorimetry){--glow-ic:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23fff' stroke-width='1.7' stroke-linejoin='round'%3E%3Cpath d='M12 4 20.5 19.5h-17z'/%3E%3Ccircle cx='12' cy='14.2' r='1.3' fill='%23fff' stroke='none'/%3E%3C/svg%3E")}
+:root[data-skin="glow"][data-theme="dark"] .setting-tiles > .field:has(#rgb_quant_range){--glow-ic:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23fff' stroke-width='1.7' stroke-linecap='round'%3E%3Ccircle cx='12' cy='12' r='8.5'/%3E%3Cpath d='M12 3.5v17M12 8h7.4M12 12h8.5M12 16h7.4'/%3E%3C/svg%3E")}
+:root[data-skin="glow"][data-theme="dark"] .setting-tiles > .field:has(#calman_range){--glow-ic:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23fff' stroke-width='1.7' stroke-linecap='round'%3E%3Cpath d='M4 7.5h8M18 7.5h2M4 16.5h2M12 16.5h8'/%3E%3Ccircle cx='15' cy='7.5' r='2.6'/%3E%3Ccircle cx='9' cy='16.5' r='2.6'/%3E%3C/svg%3E")}
+:root[data-skin="glow"][data-theme="dark"] .setting-tiles > .field:has(#calman_dv_container){--glow-ic:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23fff' stroke-width='1.7' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3.5 12s3.2-6 8.5-6 8.5 6 8.5 6-3.2 6-8.5 6-8.5-6-8.5-6z'/%3E%3Ccircle cx='12' cy='12' r='2.6'/%3E%3C/svg%3E")}
+/* The cable line: a pass is said in green. */
+:root[data-skin="glow"][data-theme="dark"] .setting-tiles > .field > .field-wire[data-state="matches"]{color:#3fdc85}
+
+/* ---- What is pressed ---- */
+:root[data-skin="glow"][data-theme="dark"] .btn{border-radius:10px;font-weight:600}
+:root[data-skin="glow"][data-theme="dark"] .btn-secondary{background:#272523;color:#fff;box-shadow:inset 0 0 0 1px var(--glow-line)}
+:root[data-skin="glow"][data-theme="dark"] .btn-secondary:hover{background:#322f2c}
+/* A button that cannot be pressed says so (these rules outweigh the page's own .btn:disabled). */
+:root[data-skin="glow"][data-theme="dark"] .btn-secondary:disabled,:root[data-skin="glow"][data-theme="dark"] .btn-secondary:disabled:hover{background:var(--control-disabled-bg);color:var(--control-disabled-text);box-shadow:inset 0 0 0 1px var(--glow-line)}
+:root[data-skin="glow"][data-theme="dark"] .btn-primary{background:linear-gradient(180deg,#ff8b45,#ff6412);color:#1c0a00;font-weight:700;box-shadow:inset 0 1px 0 rgba(255,255,255,.45),inset 0 0 0 1px rgba(255,255,255,.14)}
+:root[data-skin="glow"][data-theme="dark"] .btn-primary:hover{background:linear-gradient(180deg,#ff9a5c,#ff711f)}
+:root[data-skin="glow"][data-theme="dark"] .btn-primary:disabled{background:#272523;color:var(--control-disabled-text);box-shadow:inset 0 0 0 1px var(--glow-line)}
+/* The one action that changes the signal carries the glow. */
+:root[data-skin="glow"][data-theme="dark"] #applyBar .btn-primary{box-shadow:inset 0 1px 0 rgba(255,255,255,.45),inset 0 0 0 1px rgba(255,255,255,.14),0 8px 24px rgba(255,100,18,.38)}
+/* While a change waits for Apply, that is the one orange action: Run Full Test steps back. */
+:root[data-skin="glow"][data-theme="dark"] body:has(#applyBar:not([style*="none"])) #selftestRunBtn{background:#272523;color:#fff;font-weight:600;box-shadow:inset 0 0 0 1px var(--glow-line)}
+:root[data-skin="glow"][data-theme="dark"] body:has(#applyBar:not([style*="none"])) #selftestRunBtn:hover{background:#322f2c}
+:root[data-skin="glow"][data-theme="dark"] #applyBar,
+:root[data-skin="glow"][data-theme="dark"] #applyBar[data-desktop-active="true"]{background:#1d1c1a;border:0;border-radius:18px;box-shadow:inset 0 0 0 1px var(--glow-line2),0 14px 0 6px var(--surface-page)}
+:root[data-skin="glow"][data-theme="dark"] #applyBar[data-desktop-active="true"]{box-shadow:inset 0 0 0 1px var(--glow-line2)}
+
+/* ---- Nested panels: outlined, a shade under the card ---- */
+:root[data-skin="glow"][data-theme="dark"] :is(.selftest-verdict,.diag-now,.ccss-editor-panel,.meter-icc-panel,.meter-3dlut-workspace-section,#meterNoMeterBanner){background:rgba(255,255,255,.025)!important;box-shadow:inset 0 0 0 1px var(--glow-line2)}
+/* The pattern on screen is the signal: its panel keeps the accent line. */
+:root[data-skin="glow"][data-theme="dark"] #diagNow[data-state="live"]{box-shadow:inset 0 0 0 1.5px var(--accent)}
+:root[data-skin="glow"][data-theme="dark"] .selftest-mark{width:38px;height:38px;border-radius:11px;background:#2b2927;box-shadow:inset 0 0 0 1px var(--glow-line);display:inline-flex;align-items:center;justify-content:center;color:#fff}
+:root[data-skin="glow"][data-theme="dark"] :is(.pat-btn,.theme-swatch-btn){box-shadow:inset 0 0 0 1px var(--glow-line)}
+/* The pattern on screen is the signal: orange. A chosen option (layout, theme, the Measure switch) is lit, not orange. */
+:root[data-skin="glow"][data-theme="dark"] .pat-btn.active{box-shadow:inset 0 0 0 1.5px var(--accent)}
+:root[data-skin="glow"][data-theme="dark"] :is(.layout-switch-btn,.theme-swatch-btn)[aria-pressed="true"],
+:root[data-skin="glow"][data-theme="dark"] .layout-switch-btn[aria-pressed="true"]:hover{background:#3a3633;color:#fff;box-shadow:inset 0 0 0 1.5px #c9c5c0}
+
+/* A ticked box is a chosen option too (two radios carry the accent inline, hence !important). */
+:root[data-skin="glow"][data-theme="dark"] input:is([type=checkbox],[type=radio]){accent-color:#c9c5c0!important}
+
+/* ---- Phone and tablet dock ---- */
+:root[data-skin="glow"][data-theme="dark"] body.layout-tablet .tablet-jump-nav:not([hidden]){background:#1d1c1a;border-radius:22px;box-shadow:inset 0 0 0 1px var(--glow-line2),0 34px 0 12px var(--surface-page)}
+:root[data-skin="glow"][data-theme="dark"] .tablet-nav-btn{border-radius:17px}
+:root[data-skin="glow"][data-theme="dark"] .tablet-nav-btn[aria-current="page"]{background:#2e2b29;font-weight:600}
+
+/* ---- From tablet width: the cable line reads top right, beside the icon tile ---- */
+@media(min-width:700px){:root[data-skin="glow"][data-theme="dark"] .setting-tiles > .field > .field-wire{grid-row:1;justify-self:end;align-self:start;justify-content:flex-end;max-width:calc(100% - 50px);margin:8px 10px 0 0;text-align:right}
+:root[data-skin="glow"][data-theme="dark"] .setting-tiles > .field::before{margin-bottom:12px}
+:root[data-skin="glow"][data-theme="dark"] .setting-tiles > .field{padding-bottom:6px}
+}
+/* ---- Phone: the icon stands beside the name, so a tile is as low as its name, value and cable line ---- */
+@media(max-width:699px){
+ :root[data-skin="glow"][data-theme="dark"] .setting-tiles > .field{grid-template-rows:auto auto auto;padding:11px 4px 4px 13px}
+ :root[data-skin="glow"][data-theme="dark"] .setting-tiles > .field::before{content:none}
+ :root[data-skin="glow"][data-theme="dark"] .setting-tiles > .field > label{grid-row:1;display:flex;align-items:center;gap:8px;min-height:24px}
+ :root[data-skin="glow"][data-theme="dark"] .setting-tiles > .field > label::before{content:"";flex:0 0 auto;width:24px;height:24px;border-radius:7px;background:var(--glow-ic,none) center/15px 15px no-repeat,#2b2927;box-shadow:inset 0 0 0 1px var(--glow-line)}
+ :root[data-skin="glow"][data-theme="dark"] .setting-tiles > .field > :is(select,.mode-select-wrap){grid-row:2}
+ :root[data-skin="glow"][data-theme="dark"] .setting-tiles > .field > .field-wire{grid-row:3}
+ :root[data-skin="glow"][data-theme="dark"] .setting-tiles > .field > :is(.meter-help-tip,.mode-retry){grid-row:1;align-self:center;margin-top:0}
+}
+
+/* ---- Plain fields: a line, as the cards have ---- */
+:root[data-skin="glow"][data-theme="dark"] .setting-tiles > .field :is(select,input){border-color:transparent}
+:root[data-skin="glow"][data-theme="dark"] #applyBar,:root[data-skin="glow"][data-theme="dark"] #applyBar[data-desktop-active="true"]{padding:14px 16px 14px 20px}
+
+/* ---- "Recommended" ----
+   Only in the open menu: the option carries data-pg-badge and
+   the dropdown draws its own badge. The closed tile shows no chip. */
+
+/* ---- Ports and presets: two panels on the tiles' columns ----
+   Each is a panel like a tile, its name inside. The ports take the first
+   column; the presets the other two, so Save as Preset has a place of its
+   own and the row is as wide as the tiles under it. */
+/* The ports keep their drawn size (captions at 12 px): the first column is a tile's width, and never under 312 px (300 px of drawing). */
+:root[data-skin="glow"][data-theme="dark"] .signal-overview{display:grid;grid-template-columns:max(312px,calc((100% - 20px) / 3)) minmax(0,1fr);gap:10px;align-items:stretch;margin:0 0 10px}
+:root[data-skin="glow"][data-theme="dark"] .signal-overview > :is(.signal-port,.preset-bar){max-width:none;min-width:0;margin:0;padding:14px 16px;border-radius:16px;background:rgba(255,255,255,.025);box-shadow:inset 0 0 0 1px var(--glow-line2);align-self:stretch}
+:root[data-skin="glow"][data-theme="dark"] .signal-overview > .signal-port{grid-column:1;gap:8px}
+:root[data-skin="glow"][data-theme="dark"] .signal-overview > .preset-bar{grid-column:2}
+:root[data-skin="glow"][data-theme="dark"] .signal-overview > .signal-port[hidden] + .preset-bar{grid-column:1 / -1}
+:root[data-skin="glow"][data-theme="dark"] .signal-port:not([data-tone="elsewhere"]) .signal-port-box{margin:0 -10px;padding:0;border:0;background:none;box-shadow:none}
+:root[data-skin="glow"][data-theme="dark"] .signal-port .signal-port-board{max-width:300px;margin:0 auto}
+/* No presets yet: what the bar is for on the left, its one action on the right. */
+:root[data-skin="glow"][data-theme="dark"] .signal-overview > .preset-bar.is-empty{display:flex;flex-wrap:wrap;align-items:flex-start;justify-content:space-between;gap:10px 20px}
+:root[data-skin="glow"][data-theme="dark"] .preset-bar.is-empty .preset-bar-head{flex:1 1 260px;flex-direction:column;align-items:flex-start;gap:5px;margin:0}
+:root[data-skin="glow"][data-theme="dark"] .preset-bar.is-empty .preset-bar-head::after{content:"Set the fields below and save them under a name. Loading a preset fills the fields.";max-width:56ch;font-size:var(--fs-xs);line-height:1.45;color:var(--text-secondary)}
+:root[data-skin="glow"][data-theme="dark"] .preset-bar.is-empty .preset-row{align-self:center}
+:root[data-skin="glow"][data-theme="dark"] .preset-bar.is-empty .preset-save{flex-basis:100%;margin-top:4px}
+/* With presets: the list takes the room, the two actions close the row. */
+:root[data-skin="glow"][data-theme="dark"] .signal-overview > .preset-bar:not(.is-empty){display:flex;flex-direction:column}
+:root[data-skin="glow"][data-theme="dark"] .preset-bar:not(.is-empty) .preset-row{margin-top:auto}
+:root[data-skin="glow"][data-theme="dark"] .preset-bar:not(.is-empty) .preset-row > select{max-width:none}
+/* A wide card: the name beside the drawing, the panel as low as the presets. */
+@container glowset (min-width:1312px){
+ :root[data-skin="glow"][data-theme="dark"] .signal-overview > .signal-port{flex-direction:row;align-items:center;gap:16px}
+ :root[data-skin="glow"][data-theme="dark"] .signal-port .signal-port-title{align-self:flex-start}
+ :root[data-skin="glow"][data-theme="dark"] .signal-port:not([data-tone="elsewhere"]) .signal-port-box{margin:0}
+ :root[data-skin="glow"][data-theme="dark"] .signal-port .signal-port-board{margin:0 0 0 auto}
+}
+/* Narrow tiles on the desktop (two in a row of a narrow card): the cable line under the value, as in the row of six. */
+@container glowset (max-width:479px){
+ :root[data-skin="glow"][data-theme="dark"] body.layout-desktop .setting-tiles > .field > .field-wire{grid-row:4;justify-self:start;justify-content:flex-start;max-width:none;margin:-2px 0 6px;text-align:left}
+}
+/* A narrow card (drawer open, Desktop Zoom): ports above presets. Under 340 px the drawing (300 px) does not fit: the port in use in words, as on a phone. */
+@container glowset (max-width:599px){
+ :root[data-skin="glow"][data-theme="dark"] .signal-overview{grid-template-columns:minmax(0,1fr)}
+ :root[data-skin="glow"][data-theme="dark"] .signal-overview > :is(.signal-port,.preset-bar){grid-column:1}
+}
+@container glowset (max-width:339px){
+ /* No room for Reset Defaults beside the workspace title: it stands under it. */
+ :root[data-skin="glow"][data-theme="dark"] body.layout-desktop .dashboard.glow-dash > #displaySettingsCard > h2{justify-content:flex-start;margin-top:54px}
+ :root[data-skin="glow"][data-theme="dark"] .signal-overview > .signal-port[data-tone=""]{flex-direction:row;align-items:center;justify-content:space-between;gap:12px;min-height:48px;padding:8px 16px}
+ :root[data-skin="glow"][data-theme="dark"] .signal-port[data-tone=""] .signal-port-box{display:none}
+ :root[data-skin="glow"][data-theme="dark"] .signal-port[data-tone=""] .glow-port-line{display:block}
+}
+.glow-port-line{margin:0;min-width:0;font-size:.875rem;font-weight:600;color:#fff;font-variant-numeric:tabular-nums;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.glow-port-line b{font-weight:700;color:#ff6b1a}
+@media(max-width:699px){
+ :root[data-skin="glow"][data-theme="dark"] .signal-overview{grid-template-columns:minmax(0,1fr);gap:8px;margin-bottom:8px}
+ :root[data-skin="glow"][data-theme="dark"] .signal-overview > :is(.signal-port,.preset-bar){grid-column:1}
+ /* One line each. The port in use in words (#glowPortLine, webui-workspace.js); the drawing comes back when the panel has something to say (data-tone). */
+ :root[data-skin="glow"][data-theme="dark"] .signal-overview > .signal-port[data-tone=""]{flex-direction:row;align-items:center;justify-content:space-between;gap:12px;min-height:48px;padding:8px 16px}
+ :root[data-skin="glow"][data-theme="dark"] .signal-port[data-tone=""] .signal-port-box{display:none}
+ :root[data-skin="glow"][data-theme="dark"] .signal-port[data-tone=""] .glow-port-line{display:block}
+ /* No presets yet: the name and the one action; what a preset is stays behind the (i). */
+ :root[data-skin="glow"][data-theme="dark"] .signal-overview > .preset-bar.is-empty{align-items:center;gap:8px 12px;padding:6px 6px 6px 16px}
+ :root[data-skin="glow"][data-theme="dark"] .preset-bar.is-empty .preset-bar-head{flex:1 1 120px}
+ :root[data-skin="glow"][data-theme="dark"] .preset-bar.is-empty .preset-bar-head::after{content:none}
+}
+
+/* ---- Dashboard ----
+   The Glow script at the end of webui-workspace.js adds the curve, the ring
+   and the playlists card; these rules lay the
+   Output workspace out as a dashboard on the desktop: the settings stand on
+   the page, the HDR card beside Self-Test, the playlists below. */
+.glow-x:not(.card){display:none}
+
+/* ---- Desktop grid ---- */
+:root[data-skin="glow"][data-theme="dark"] body.layout-desktop .dashboard.glow-dash{display:grid;grid-template-columns:minmax(0,1fr) minmax(320px,calc(26% + 90px));grid-auto-flow:row dense;align-content:start;gap:12px;padding:14px 24px 32px}
+:root[data-skin="glow"][data-theme="dark"] body.layout-desktop .dashboard.glow-dash > *{grid-column:1 / -1}
+:root[data-skin="glow"][data-theme="dark"] body.layout-desktop .dashboard.glow-dash > .desktop-workspace-title{grid-row:1;align-self:start;margin:6px 0 0}
+/* Self-Test stands beside the HDR card while it is a summary (ring and verdict). With its mode list, without an HDR card, or where the dashboard is too narrow for two cards side by side, it takes a row of its own (.glow-test-wide, set by the Glow script). */
+:root[data-skin="glow"][data-theme="dark"] body.layout-desktop .dashboard.glow-dash > #hdrCard{display:flex;flex-direction:column}
+/* Every card on a row of its own: one column, so the second one's 320 px are not asked of a dashboard that is narrower. */
+:root[data-skin="glow"][data-theme="dark"] body.layout-desktop .dashboard.glow-dash.glow-test-wide{grid-template-columns:minmax(0,1fr)}
+:root[data-skin="glow"][data-theme="dark"] body.layout-desktop .dashboard.glow-dash:not(.glow-test-wide) > #hdrCard{grid-column:1}
+:root[data-skin="glow"][data-theme="dark"] body.layout-desktop .dashboard.glow-dash:not(.glow-test-wide) > #selftestCard{grid-column:2}
+
+/* ---- The settings stand on the page: no card around them ---- */
+:root[data-skin="glow"][data-theme="dark"] body.layout-desktop .dashboard.glow-dash > #displaySettingsCard{grid-row:1;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;background:none;box-shadow:none;border-radius:0;padding:0}
+:root[data-skin="glow"][data-theme="dark"] body.layout-desktop .dashboard.glow-dash > #displaySettingsCard > *{grid-column:1 / -1;margin:0;order:4}
+/* Its title is the workspace's ("Output" beside it); Reset Defaults closes that row. */
+:root[data-skin="glow"][data-theme="dark"] body.layout-desktop .dashboard.glow-dash > #displaySettingsCard > h2{order:0;min-height:54px;margin:0 0 4px;justify-content:flex-end;align-items:center;font-size:0}
+:root[data-skin="glow"][data-theme="dark"] body.layout-desktop .dashboard.glow-dash > #displaySettingsCard > h2 .btn-reset{font-size:var(--fs-sm);background:#272523;color:#fff;box-shadow:inset 0 0 0 1px var(--glow-line);min-height:38px;padding:8px 14px}
+:root[data-skin="glow"][data-theme="dark"] body.layout-desktop .dashboard.glow-dash > #displaySettingsCard > :is(.signal-alert,#displayNoHdmiBanner){order:0}
+:root[data-skin="glow"][data-theme="dark"] body.layout-desktop .dashboard.glow-dash > #displaySettingsCard > .signal-overview{order:1}
+:root[data-skin="glow"][data-theme="dark"] body.layout-desktop .dashboard.glow-dash > #displaySettingsCard > fieldset.signal-fields{order:3}
+:root[data-skin="glow"][data-theme="dark"] body.layout-desktop .dashboard.glow-dash > #displaySettingsCard > .calman-group{order:5;border:0;padding:0}
+/* The settings card is the page's own container (webui-theme.css); here it has a name. On the dashboard it has no padding, so its width is the dashboard's content width. */
+:root[data-skin="glow"][data-theme="dark"] #displaySettingsCard{container-name:glowset}
+@container glowset (min-width:952px){
+ /* Three panels on the tiles' columns: ports, presets, the Calman settings. The Glow script moves the group before the settings in the markup at this width (it reads --glow-third), so order only repeats what the markup says. */
+ :root[data-skin="glow"][data-theme="dark"] body.layout-desktop .dashboard.glow-dash > #displaySettingsCard > .signal-overview{grid-column:1 / span 2;grid-template-columns:repeat(2,minmax(0,1fr))}
+ :root[data-skin="glow"][data-theme="dark"] body.layout-desktop .dashboard.glow-dash > #displaySettingsCard > .calman-group{--glow-third:1;grid-column:3;order:2;display:flex;flex-direction:column;gap:8px;padding:14px 16px;border-radius:16px;background:rgba(255,255,255,.025);box-shadow:inset 0 0 0 1px var(--glow-line2)}
+ :root[data-skin="glow"][data-theme="dark"] body.layout-desktop .dashboard.glow-dash > #displaySettingsCard .calman-group-title{display:flex;justify-content:space-between;gap:12px;margin:0}
+ :root[data-skin="glow"][data-theme="dark"] body.layout-desktop .dashboard.glow-dash > #displaySettingsCard .calman-group-note::before{content:none}
+ :root[data-skin="glow"][data-theme="dark"] body.layout-desktop .dashboard.glow-dash > #displaySettingsCard .calman-range{grid-template-columns:minmax(0,1fr);gap:10px;margin-top:auto}
+ :root[data-skin="glow"][data-theme="dark"] body.layout-desktop .dashboard.glow-dash > #displaySettingsCard .calman-range > .field{grid-template-rows:auto auto;row-gap:5px;padding:0;border-radius:0;background:none;box-shadow:none}
+ :root[data-skin="glow"][data-theme="dark"] body.layout-desktop .dashboard.glow-dash > #displaySettingsCard .calman-range > .field::before{content:none}
+ :root[data-skin="glow"][data-theme="dark"] body.layout-desktop .dashboard.glow-dash > #displaySettingsCard .calman-range > .field > label{grid-row:1}
+ :root[data-skin="glow"][data-theme="dark"] body.layout-desktop .dashboard.glow-dash > #displaySettingsCard .calman-range > .field > .meter-help-tip{grid-row:1;align-self:center;margin:0}
+ :root[data-skin="glow"][data-theme="dark"] body.layout-desktop .dashboard.glow-dash > #displaySettingsCard .calman-range > .field > select{grid-row:2;height:38px;padding-left:11px;border:1px solid var(--field-border);border-radius:10px;background-color:var(--surface-field);font-family:var(--meso);font-size:.9375rem;letter-spacing:0}
+ :root[data-skin="glow"][data-theme="dark"] body.layout-desktop .dashboard.glow-dash > #displaySettingsCard .calman-range > .field:has(select[data-pg-dd-open]){background:none;box-shadow:none}
+ :root[data-skin="glow"][data-theme="dark"] body.layout-desktop .dashboard.glow-dash > #displaySettingsCard .calman-range > .field:has(select[data-pg-dd-open]) > select{border-color:#c9c5c0!important}
+ /* These two are fields with a border, not tiles: the focus ring goes round the field itself. */
+ :root[data-skin="glow"][data-theme="dark"] body.layout-desktop .dashboard.glow-dash > #displaySettingsCard .calman-range > .field:has(:focus-visible:not(.meter-help-tip)){outline:0}
+ :root[data-skin="glow"][data-theme="dark"] body.layout-desktop .dashboard.glow-dash > #displaySettingsCard .calman-range > .field > select:focus-visible{outline:2px solid var(--focus-ring);outline-offset:2px}
+}
+@container glowset (min-width:1272px){
+ /* Wide: the two Calman settings side by side, the six settings in one row. */
+ :root[data-skin="glow"][data-theme="dark"] body.layout-desktop .dashboard.glow-dash > #displaySettingsCard .calman-range{grid-template-columns:repeat(2,minmax(0,1fr))}
+ :root[data-skin="glow"][data-theme="dark"] body.layout-desktop .dashboard.glow-dash > #displaySettingsCard > fieldset.signal-fields{grid-template-columns:repeat(6,minmax(0,1fr))}
+ /* A narrow tile: the cable line under the value. */
+ :root[data-skin="glow"][data-theme="dark"] body.layout-desktop .dashboard.glow-dash > #displaySettingsCard .signal-fields > .field > .field-wire{grid-row:4;justify-self:start;justify-content:flex-start;max-width:none;margin:-2px 0 6px;text-align:left}
+ :root[data-skin="glow"][data-theme="dark"] body.layout-desktop .dashboard.glow-dash > #displaySettingsCard .signal-fields > .field :is(select,.mode-select-value){font-size:1rem}
+}
+
+/* ---- HDR Metadata: the curve, then its four values as tiles ---- */
+:root[data-skin="glow"][data-theme="dark"] .glow-pq{display:block;position:relative;min-height:280px;margin:0 0 14px}
+:root[data-skin="glow"][data-theme="dark"] .glow-pq[hidden]{display:none}
+:root[data-skin="glow"][data-theme="dark"] body.layout-desktop .glow-dash .glow-pq{flex:1 1 280px}
+:root[data-skin="glow"][data-theme="dark"] .glow-pq svg{position:absolute;inset:0;display:block;overflow:visible}
+:root[data-skin="glow"][data-theme="dark"] .glow-pq text{font-family:var(--meso);font-size:12px;font-variant-numeric:tabular-nums}
+.glow-pq .pq-tick{fill:#a09b95}
+.glow-pq .pq-lab{fill:#fff;font-weight:600}
+.glow-pq .pq-lab.pq-mut{fill:#a09b95}
+.glow-pq :is(.pq-grid,.pq-axis){stroke:rgba(255,255,255,.12)}
+.glow-pq .pq-grid{stroke-dasharray:3 4}
+.glow-pq .pq-max{stroke:#fff;stroke-width:1.5;stroke-dasharray:5 5}
+.glow-pq .pq-fall{stroke:#a09b95;stroke-width:1.5;stroke-dasharray:2 5}
+.glow-pq .pq-rest{fill:none;stroke:#5b5753;stroke-width:2;stroke-linecap:round}
+.glow-pq .pq-line{fill:none;stroke:#ff6b1a;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}
+.glow-pq .pq-halo{fill:#ff6b1a;fill-opacity:.25}
+.glow-pq .pq-dot{fill:#ff6b1a;stroke:#191817;stroke-width:2}
+.glow-pq .pq-s0{stop-color:#ff6b1a;stop-opacity:.34}
+.glow-pq .pq-s1{stop-color:#ff6b1a;stop-opacity:0}
+/* The card is asked for its width. A value field holds "0.0001" whole (64 px in the display face) at 128 px: four in a row, and the two fields in the card's head (Primaries holds "Custom / BT.709" whole at 236 px), from 576 px; under that two values in a row and EOTF and Primaries a row each; one value per row under 270 px. */
+:root[data-skin="glow"][data-theme="dark"] #hdrCard{container:glowhdr / inline-size}
+:root[data-skin="glow"][data-theme="dark"] #hdrSignalFields{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}
+:root[data-skin="glow"][data-theme="dark"] #hdrSignalFields > .field{position:relative;min-width:0;padding:10px 12px 6px;border-radius:12px;background:rgba(255,255,255,.025);box-shadow:inset 0 0 0 1px var(--glow-line2)}
+:root[data-skin="glow"][data-theme="dark"] #hdrSignalFields > .field > label{display:flex;align-items:center;gap:8px;white-space:nowrap}
+/* A key only where the curve draws the value, and as the line it is drawn with: Max Luma dashed white, MaxFALL dotted grey.
+   A changed value keeps the page's own dot behind the name, so the two marks cannot be taken for each other.
+   The fields stand in the order of the markup (Max Luma, Min Luma, MaxCLL, MaxFALL): the tab order is the order on screen. */
+:root[data-skin="glow"][data-theme="dark"] #hdrSignalFields > .field:is(:has(#max_luma),:has(#max_fall)) > label::before{content:"";flex:0 0 auto;width:14px;height:0;border-top:2px dashed #fff}
+:root[data-skin="glow"][data-theme="dark"] #hdrSignalFields > .field:has(#max_fall) > label::before{border-top:2px dotted #a09b95}
+:root[data-skin="glow"][data-theme="dark"] #hdrSignalFields > .field > input{width:100%;height:32px;min-height:0;padding:0 40px 0 0;border:0;border-radius:6px;background:none;color:#fff;font-family:var(--glow-display);font-size:1.0625rem;font-weight:600;font-variant-numeric:tabular-nums}
+:root[data-skin="glow"][data-theme="dark"] #hdrSignalFields > .field > input:focus{box-shadow:none;outline:0}
+:root[data-skin="glow"][data-theme="dark"] #hdrSignalFields > .field:has(:focus-visible){outline:2px solid var(--focus-ring);outline-offset:2px}
+/* The unit stands beside the value. The two luminances keep it in their label for a screen reader (.glow-unit in webui-body.html).
+   The two Calman settings stand under "During a Calman session": their names keep "with Calman" for a screen reader (.glow-tail), which also tells this Range from the signal's. */
+:root[data-skin="glow"][data-theme="dark"] :is(#hdrSignalFields .glow-unit,.calman-range .glow-tail){position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
+:root[data-skin="glow"][data-theme="dark"] #hdrSignalFields > .field:has(> input)::after{content:"nits";position:absolute;right:12px;bottom:6px;height:32px;display:flex;align-items:center;font-size:var(--fs-xs);color:var(--text-secondary);pointer-events:none}
+:root[data-skin="glow"][data-theme="dark"] #hdrSignalFields > .field:is(:has(#eotf),:has(#primaries)){grid-column:span 2}
+/* EOTF and Primaries are tiles like the four values: the value in the display face, no field inside the tile. */
+:root[data-skin="glow"][data-theme="dark"] #hdrSignalFields > .field > select{width:100%;height:32px;min-height:0;padding:0 26px 0 0;border:0;border-radius:6px;background-color:transparent;color:#fff;font-family:var(--glow-display);font-size:1.0625rem;font-weight:600;letter-spacing:-.01em;background-position:100% 50%}
+:root[data-skin="glow"][data-theme="dark"] #hdrSignalFields > .field > select:focus{box-shadow:none;outline:0}
+:root[data-skin="glow"][data-theme="dark"] #hdrSignalFields > .field:has(select[data-pg-dd-open]){box-shadow:inset 0 0 0 1.5px rgba(255,255,255,.5)}
+/* The curve while its values are not applied: an outline, and it says so. */
+.glow-pq.is-pending .pq-line{stroke-width:2;stroke-dasharray:1 7}
+.glow-pq.is-pending polygon{display:none}
+.glow-pq.is-pending .pq-dot{fill:#191817;stroke:#ff6b1a}
+.glow-pq.is-pending .pq-halo{display:none}
+.glow-pq .pq-pend{fill:#ff9a5c;font-weight:600}
+/* A wide card on the desktop: what the curve is drawn for stands in the card's head, as two fields of one kind, each with its name. */
+:root[data-skin="glow"][data-theme="dark"] body.layout-desktop #hdrCard{position:relative}
+@container glowhdr (min-width:576px){
+ :root[data-skin="glow"][data-theme="dark"] body.layout-desktop #hdrSignalFields > .field:is(:has(#eotf),:has(#primaries)){position:absolute;top:20px;display:flex;flex-direction:row;align-items:center;gap:0;height:34px;padding:0 0 0 14px;border-radius:999px;background:none;box-shadow:inset 0 0 0 1px var(--glow-line2)}
+ :root[data-skin="glow"][data-theme="dark"] body.layout-desktop #hdrSignalFields > .field:has(#eotf){right:268px;width:176px}
+ :root[data-skin="glow"][data-theme="dark"] body.layout-desktop #hdrSignalFields > .field:has(#primaries){right:24px;width:236px}
+ :root[data-skin="glow"][data-theme="dark"] body.layout-desktop #hdrSignalFields > .field:is(:has(#eotf),:has(#primaries)) > label{flex:0 0 auto;margin:0;font-size:var(--fs-xs);color:var(--text-secondary)}
+ :root[data-skin="glow"][data-theme="dark"] body.layout-desktop #hdrSignalFields > .field:is(:has(#eotf),:has(#primaries)) > select{flex:1 1 auto;width:auto;min-width:0;height:34px;min-height:0;padding:0 26px 0 8px;border:0;border-radius:999px;background-color:transparent;box-shadow:none;color:#fff;font-size:var(--fs-xs);font-weight:600}
+ :root[data-skin="glow"][data-theme="dark"] body.layout-desktop #hdrSignalFields > .field:is(:has(#eotf),:has(#primaries)):has(select[data-pg-dd-open]){box-shadow:inset 0 0 0 1.5px rgba(255,255,255,.5)}
+}
+/* A narrow card (phone, the column beside Self-Test at 1024 px, drawer open): two values in a row, so each is read whole. */
+@container glowhdr (max-width:575px){:root[data-skin="glow"][data-theme="dark"] #hdrSignalFields{grid-template-columns:repeat(2,minmax(0,1fr))}:root[data-skin="glow"][data-theme="dark"] #hdrSignalFields > .field:is(:has(#eotf),:has(#primaries)){grid-column:1 / -1}:root[data-skin="glow"][data-theme="dark"] #hdrSignalFields > .field > select{font-size:.9375rem}}
+@container glowhdr (max-width:269px){:root[data-skin="glow"][data-theme="dark"] #hdrSignalFields{grid-template-columns:minmax(0,1fr)}:root[data-skin="glow"][data-theme="dark"] #hdrSignalFields > .field > select{font-size:.8125rem;padding-right:22px}}
+@media(max-width:600px){:root[data-skin="glow"][data-theme="dark"] .glow-pq{min-height:190px}}
+
+/* ---- Signal Self-Test: the ring ---- */
+:root[data-skin="glow"][data-theme="dark"] .glow-test{display:flex;align-items:center;gap:20px;margin:0 0 16px}
+/* Beside the HDR card the Self-Test card is as tall as that one: the ring takes the room that is left. */
+:root[data-skin="glow"][data-theme="dark"] body.layout-desktop .dashboard.glow-dash:not(.glow-test-wide) > #selftestCard{display:flex;flex-direction:column}
+:root[data-skin="glow"][data-theme="dark"] body.layout-desktop .dashboard.glow-dash:not(.glow-test-wide) > #selftestCard > .glow-test{flex:1 0 auto}
+.glow-ring{position:relative;flex:0 0 auto;width:132px;height:132px}
+.glow-ring svg{display:block}
+.glow-ring path{fill:none;stroke-width:18}
+.glow-ring-c{position:absolute;inset:0;display:grid;place-content:center;text-align:center}
+.glow-ring-c b{font-family:var(--glow-display);font-size:1.375rem;font-weight:600;line-height:1.1;color:#fff;font-variant-numeric:tabular-nums}
+.glow-ring-c span{font-size:var(--fs-xs);color:#a09b95}
+/* A mode by its result, on the ring and as a pip: shape first, colour second. */
+.glow-ring path.rs-pending{stroke:var(--glow-idle);stroke-width:5}
+.glow-ring path.rs-pass{stroke:var(--glow-pass)}
+.glow-ring path.rs-skip{stroke:#a09b95;stroke-dasharray:2 3}
+.glow-ring path.rs-running{stroke:#fff;animation:glowRun 1.1s ease-in-out infinite alternate}
+@keyframes glowRun{to{opacity:.35}}
+@media(prefers-reduced-motion:reduce){.glow-ring path.rs-running{animation:none}}
+/* A result of another output resolution proves nothing about this one: thin, as a mode not run, and the list steps back. */
+.glow-test.is-stale .glow-ring path{stroke-width:5}
+.glow-test.is-stale .glow-leg :is(i,b){opacity:.5}
+.glow-leg{flex:1 1 auto;min-width:0;max-width:260px;margin:0;padding:0;list-style:none;display:grid;gap:9px;font-size:.875rem;color:#c9c5c0}
+.glow-leg li{display:flex;align-items:center;gap:10px;white-space:nowrap}
+.glow-leg-n{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis}
+.glow-leg b{flex:0 0 auto;min-width:2.2em;text-align:right;font-weight:600;color:#fff;font-variant-numeric:tabular-nums}
+.glow-pips{display:flex;gap:3px;flex:0 0 auto}
+.glow-leg i{flex:0 0 auto;width:7px;height:14px;border-radius:2px}
+.glow-leg i.rs-pending{box-shadow:inset 0 0 0 1.5px var(--glow-idle)}
+.glow-leg i.rs-pass{background:var(--glow-pass)}
+.glow-leg i.rs-fail{background:repeating-linear-gradient(135deg,var(--glow-fail) 0 2px,transparent 2px 4px);box-shadow:inset 0 0 0 1px var(--glow-fail)}
+.glow-leg i.rs-skip{background:repeating-linear-gradient(0deg,#a09b95 0 2px,transparent 2px 4px)}
+.glow-leg i.rs-running{background:#fff}
+.glow-leg .glow-key{flex-wrap:wrap;gap:4px 12px;margin-top:2px;font-size:var(--fs-xs);color:#a09b95;white-space:normal}
+.glow-key span{display:inline-flex;align-items:center;gap:6px}
+.glow-key i{height:10px}
+.glow-sr{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
+/* A narrow card (the page's own container, .selftest-card): the list stands under the ring, at the card's width, so every name and count is read whole. */
+@container (max-width:379px){
+ :root[data-skin="glow"][data-theme="dark"] .glow-test{flex-direction:column;align-items:stretch;justify-content:center;gap:16px}
+ .glow-test > .glow-ring{align-self:center}
+ .glow-test > .glow-leg{flex:0 0 auto;max-width:none}
+}
+/* In the narrow column the verdict stacks: words, then the two actions. */
+:root[data-skin="glow"][data-theme="dark"] body.layout-desktop .dashboard.glow-dash > #selftestCard .selftest-verdict{grid-template-columns:auto minmax(0,1fr);gap:12px 14px;padding:14px 16px}
+:root[data-skin="glow"][data-theme="dark"] body.layout-desktop .dashboard.glow-dash > #selftestCard .selftest-actions{grid-column:1 / -1;justify-content:stretch}
+:root[data-skin="glow"][data-theme="dark"] body.layout-desktop .dashboard.glow-dash > #selftestCard .selftest-actions .btn{flex:1 1 0;justify-content:center}
+/* On a row of its own the two actions stand beside the words, where the card has the room for both. */
+@container (min-width:520px){
+ :root[data-skin="glow"][data-theme="dark"] body.layout-desktop .dashboard.glow-dash.glow-test-wide > #selftestCard .selftest-verdict{grid-template-columns:auto minmax(0,1fr) auto}
+ :root[data-skin="glow"][data-theme="dark"] body.layout-desktop .dashboard.glow-dash.glow-test-wide > #selftestCard .selftest-actions{grid-column:auto}
+}
+
+/* Beside the HDR card the Self-Test card is as narrow as a phone's. Its mode list is not shown there (.glow-test-wide), but a run can start
+   before the Glow script has seen the first row: for that moment the list takes the page's own narrow layout
+   (webui-theme.css, its max-width:900px block, which asks the window and not the card). */
+:root[data-skin="glow"][data-theme="dark"] body.layout-desktop .dashboard.glow-dash:not(.glow-test-wide) > #selftestCard :is(.selftest-modes,.selftest-mode-head){grid-template-columns:auto minmax(10px,1fr) auto minmax(10px,1fr) auto minmax(10px,1fr) auto;column-gap:0}
+:root[data-skin="glow"][data-theme="dark"] body.layout-desktop .dashboard.glow-dash:not(.glow-test-wide) > #selftestCard .selftest-modes .selftest-group{grid-column:1;grid-row:1;white-space:nowrap}
+:root[data-skin="glow"][data-theme="dark"] body.layout-desktop .dashboard.glow-dash:not(.glow-test-wide) > #selftestCard .selftest-modes .selftest-mode-name{grid-column:3;grid-row:1;white-space:normal}
+:root[data-skin="glow"][data-theme="dark"] body.layout-desktop .dashboard.glow-dash:not(.glow-test-wide) > #selftestCard .selftest-modes .selftest-bits{grid-column:5;grid-row:1}
+:root[data-skin="glow"][data-theme="dark"] body.layout-desktop .dashboard.glow-dash:not(.glow-test-wide) > #selftestCard .selftest-modes .selftest-state{grid-column:7;grid-row:1;justify-self:end;white-space:normal;text-align:right}
+:root[data-skin="glow"][data-theme="dark"] body.layout-desktop .dashboard.glow-dash:not(.glow-test-wide) > #selftestCard .selftest-modes .selftest-mode-link{grid-column:1/-1;grid-row:2;margin-top:6px;contain:inline-size}
+:root[data-skin="glow"][data-theme="dark"] body.layout-desktop .dashboard.glow-dash:not(.glow-test-wide) > #selftestCard .selftest-modes .selftest-strip{grid-column:1/6;grid-row:3;margin-top:6px;justify-content:flex-start}
+:root[data-skin="glow"][data-theme="dark"] body.layout-desktop .dashboard.glow-dash:not(.glow-test-wide) > #selftestCard .selftest-modes .selftest-score{grid-column:7;grid-row:3;margin-top:6px;justify-self:end}
+:root[data-skin="glow"][data-theme="dark"] body.layout-desktop .dashboard.glow-dash:not(.glow-test-wide) > #selftestCard .selftest-modes :is(.selftest-mode-link,.selftest-strip,.selftest-score):empty{display:none}
+:root[data-skin="glow"][data-theme="dark"] body.layout-desktop .dashboard.glow-dash:not(.glow-test-wide) > #selftestCard .selftest-table{display:block;overflow-x:auto}
+
+:root[data-skin="glow"][data-theme="dark"] .dashboard > .card.glow-x > h2{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.glow-pill{flex:0 0 auto;padding:3px 10px;border-radius:8px;background:#272523;box-shadow:inset 0 0 0 1px rgba(255,255,255,.07);color:#c9c5c0;font-family:var(--meso);font-size:var(--fs-xs);font-weight:600;letter-spacing:0;line-height:1.5;white-space:nowrap}
+:root[data-skin="glow"][data-theme="dark"] body.layout-tablet #hdrSignalFields > .field > :is(input,select){height:44px}
+:root[data-skin="glow"][data-theme="dark"] body.layout-tablet #hdrSignalFields > .field:has(> input)::after{height:44px}
+/* A mouse: the (i) keeps its drawn size and gets 24 px to hit (the Tablet layout has 44 px of its own). */
+@media(pointer:fine){:root[data-skin="glow"][data-theme="dark"] body.layout-desktop .meter-help-tip::before{content:"";position:absolute;left:50%;top:50%;width:24px;height:24px;transform:translate(-50%,-50%)}}
+
+/* ---- Playlists ---- */
+.glow-pls{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+.glow-pl{display:flex;flex-direction:column;gap:10px;min-width:0;padding:18px 18px 16px;border-radius:16px;background:rgba(255,255,255,.025);box-shadow:inset 0 0 0 1px rgba(255,255,255,.14)}
+.glow-pl-h{display:flex;align-items:baseline;justify-content:space-between;gap:10px}
+.glow-pl h3{margin:0;font-family:var(--glow-display);font-size:1.0625rem;font-weight:600;letter-spacing:-.01em;color:#fff}
+.glow-pl-d{margin:0;font-size:.875rem;line-height:1.45;color:#a09b95}
+.glow-pl-first{margin:auto 0 0;font-size:.875rem;color:#c9c5c0}
+.glow-pl-first span{color:#a09b95}
+.glow-greys{display:flex;height:26px;margin-top:auto;border-radius:8px;overflow:hidden}
+.glow-greys i{flex:1 1 0}
+.glow-pl .btn{width:100%;justify-content:center;gap:8px;min-height:38px}
+/* The list on screen is the signal: the accent line, and it says so where Start stood. A list that waits for SDR says why. */
+.glow-pl.is-active{box-shadow:inset 0 0 0 1.5px #ff6b1a}
+.glow-pl-live{display:flex;align-items:center;justify-content:center;gap:8px;min-height:38px;margin:0;font-size:.875rem;font-weight:600;color:#ff8b45}
+.glow-pl-live i{width:8px;height:8px;border-radius:50%;background:#ff6b1a}
+.glow-pl-note{margin:0;font-size:var(--fs-xs);line-height:1.45;color:#c9c5c0}
+@media(max-width:900px){.glow-pls{grid-template-columns:minmax(0,1fr)}}
+/* A narrow card (phone, drawer open, Desktop Zoom): a list is a row (name, what it holds, Start); the description stays on the wider ones. */
+.glow-lists{container:glowlists / inline-size}
+@container glowlists (max-width:599px){
+ .glow-pls{grid-template-columns:minmax(0,1fr);gap:8px}
+ .glow-pl{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:8px 12px;padding:12px 12px 12px 16px}
+ .glow-pl-h{grid-column:1;flex-wrap:wrap;gap:4px 10px}
+ .glow-pl-d{display:none}
+ .glow-pl :is(.glow-greys,.glow-pl-first){grid-column:1;grid-row:2;margin:0}
+ .glow-pl .glow-greys{height:14px}
+ .glow-pl-note{grid-column:1 / -1;grid-row:3}
+ .glow-pl :is(.btn,.glow-pl-live){grid-column:2;grid-row:1 / span 2;width:auto;min-width:96px;min-height:44px}
+}
+
+/* ---- Software Update: one 3 x 2 grid on the columns of Device Info ----
+   The four facts and the two actions are six equal cells (Current, Latest,
+   Published / Check for Updates, Download Logs, Package). A third action
+   (Install Update) shares the two action cells. Status, release notes and
+   the previous versions keep a full row under the grid. */
+:root[data-skin="glow"][data-theme="dark"] #updateContent{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+:root[data-skin="glow"][data-theme="dark"] #updateContent > .update-facts{display:contents}
+:root[data-skin="glow"][data-theme="dark"] #updateContent > .btn-grid{grid-column:1 / span 2;grid-row:2;display:flex;gap:10px;margin:0!important}
+/* Package stands under Published; the actions start under Current. */
+:root[data-skin="glow"][data-theme="dark"] #updateContent > .update-facts > .info-item:has(#updateTarget){grid-column:3;grid-row:2}
+:root[data-skin="glow"][data-theme="dark"] #updateContent > .btn-grid > .btn{flex:1 1 0;min-width:0;height:auto;min-height:38px;border-radius:var(--r-md);font-size:.9375rem}
+:root[data-skin="glow"][data-theme="dark"] #updateContent > :is(.update-status,.update-notes,.update-section){grid-column:1 / -1}
+:root[data-skin="glow"][data-theme="dark"] #updateContent > :is(.update-status,.update-notes){margin-top:0}
+/* Narrow card (phone, half-width column): two columns, three rows. */
+@container facts (max-width:560px){
+ :root[data-skin="glow"][data-theme="dark"] #updateContent{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+ :root[data-skin="glow"][data-theme="dark"] #updateContent > .update-facts > .info-item:has(#updateTarget){grid-column:auto;grid-row:auto}
+ /* Install Update, when there is one, takes the full width above the other two. */
+ :root[data-skin="glow"][data-theme="dark"] #updateContent > .btn-grid{grid-column:1 / -1;grid-row:3;gap:8px;flex-wrap:wrap}
+ :root[data-skin="glow"][data-theme="dark"] #updateContent > .btn-grid > #applyUpdateBtn{flex-basis:100%}
+ /* The actions have a row of their own here: as tall as a fact tile. */
+ :root[data-skin="glow"][data-theme="dark"] #updateContent > .btn-grid > .btn{min-height:58px;padding-left:8px;padding-right:8px}
+}
+
+/* ---- System: the same tiles as Output ----
+   A fact stands in the tile the settings stand in (ground, line), its value
+   in the display face. The usage bars are grey: orange is the signal. */
+:root[data-skin="glow"][data-theme="dark"] :is(.devinfo-card,.facts-host) .info-item{background:rgba(255,255,255,.025);border-color:transparent;box-shadow:inset 0 0 0 1px var(--glow-line2)}
+:root[data-skin="glow"][data-theme="dark"] :is(.devinfo-card,.facts-host) .info-item > .value{font-family:var(--glow-display);font-weight:600;letter-spacing:-.01em;font-variant-numeric:tabular-nums}
+:root[data-skin="glow"][data-theme="dark"] .meter-fill{background:#c9c5c0}
+/* "Update available" reads the same in the card as in the header: green and outlined, no pulse. Install Update is the orange thing. */
+:root[data-skin="glow"][data-theme="dark"] .fact-chip[data-state="available"]{color:color-mix(in oklab,var(--green) 78%,#fff);background:color-mix(in srgb,var(--green) 14%,transparent);box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--green) 55%,transparent);animation:none}
+
+/* ---- Forced colours: the lines here are shadows, which that mode drops ---- */
+@media(forced-colors:active){
+ :root[data-skin="glow"][data-theme="dark"] :is(.setting-tiles > .field,.dashboard > .card,.signal-overview > *,#hdrSignalFields > .field,.glow-pl,.info-item){outline:1px solid ButtonBorder;outline-offset:-1px}
+ :root[data-skin="glow"][data-theme="dark"] :is(.setting-tiles > .field:has(:focus-visible:not(.meter-help-tip)),#hdrSignalFields > .field:has(:focus-visible)){outline:2px solid Highlight;outline-offset:2px}
+ .glow-ring path{forced-color-adjust:none}
+}

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build display ICC profiles from PGenerator+ RGB/XYZ measurements.
+"""Build display ICC profiles from rampecho RGB/XYZ measurements.
 
 The normal and KDE profiles are created by the bundled ArgyllCMS colprof.
 Windows Advanced Color profiles add Microsoft's documented MHC2 tag to that
@@ -289,7 +289,7 @@ def cgats_quote(value):
 
 
 def profile_description(payload):
-    description = str(payload.get("name", "PGenerator+ display profile"))
+    description = str(payload.get("name", "rampecho display profile"))
     if payload.get("profile_type") in ("sdr", "windows-sdr") and str(payload.get("calibration_mode", "vcgt")).lower() != "none":
         transfer = str(payload.get("target_transfer", "srgb")).lower()
         label = WINDOWS_SDR_TRANSFER_LABELS.get(transfer, "sRGB")
@@ -306,14 +306,14 @@ def make_ti3(payload, rows):
     black, white, _ = profile_measurement_summary(rows)
     white_xyz = white["xyz"]
     white_y = white_xyz[1]
-    instrument = cgats_quote(payload.get("meter_name", "PGenerator+ meter"))
+    instrument = cgats_quote(payload.get("meter_name", "rampecho meter"))
     description = cgats_quote(profile_description(payload))
     created = datetime.datetime.now().strftime("%a %b %d %H:%M:%S %Y")
     lines = [
         "CTI3",
         "",
-        'DESCRIPTOR "PGenerator+ measured display profile"',
-        'ORIGINATOR "PGenerator+"',
+        'DESCRIPTOR "rampecho measured display profile"',
+        'ORIGINATOR "rampecho"',
         'CREATED "{}"'.format(created),
         'DEVICE_CLASS "DISPLAY"',
         'COLOR_REP "RGB_XYZ"',
@@ -584,7 +584,7 @@ def calibration_file_text(curves):
     entries = min(len(curve) for curve in curves)
     lines = [
         "CAL", "", 'DESCRIPTOR "Argyll Device Calibration Curves"',
-        'ORIGINATOR "PGenerator+"',
+        'ORIGINATOR "rampecho"',
         'CREATED "{}"'.format(datetime.datetime.now().strftime("%a %b %d %H:%M:%S %Y")),
         'DEVICE_CLASS "DISPLAY"', 'COLOR_REP "RGB"', "",
         "NUMBER_OF_FIELDS 4", "BEGIN_DATA_FORMAT", "RGB_I RGB_R RGB_G RGB_B",
@@ -623,13 +623,13 @@ def apply_profile_calibration(profile_path, curves):
             # applycal requires a profile description even though it cannot
             # parse the v4 multi-localized form. Supply a disposable v2 desc
             # tag and restore the original mluc payload after calibration.
-            description = b"PGenerator+ display profile\0"
+            description = b"rampecho display profile\0"
             replacements[b"desc"] = (
                 b"desc\0\0\0\0" + struct.pack(">I", len(description)) + description
                 + struct.pack(">IIHB", 0, 0, 0, 0) + b"\0" * 67
             )
         if b"cprt" in mluc_tags:
-            replacements[b"cprt"] = b"text\0\0\0\0PGenerator+\0"
+            replacements[b"cprt"] = b"text\0\0\0\0rampecho\0"
         applycal_profile = rebuild_icc(source_profile, replacements) if mluc_tags else source_profile
         source_version = source_profile[8:12]
         if source_version[0] >= 4:
@@ -5626,7 +5626,7 @@ def validate_mhc2_profile(profile, expected_payload, physical, wire, expected_me
 def safe_basename(name):
     cleaned = SAFE_NAME.sub("_", str(name)).strip(" ._-").replace(" ", "_")
     if not cleaned:
-        cleaned = "PGenerator+ display profile"
+        cleaned = "rampecho display profile"
     return cleaned[:80]
 
 
@@ -5923,7 +5923,7 @@ def argyll_version():
 
 
 def colprof_supports_icc44(colprof):
-    """Return whether colprof provides the PGenerator+ ICC v4.4/CICP path."""
+    """Return whether colprof provides the rampecho ICC v4.4/CICP path."""
     try:
         process = subprocess.Popen([colprof, "-?"], stdout=subprocess.PIPE,
                                    stderr=subprocess.STDOUT, universal_newlines=True)
@@ -5950,8 +5950,8 @@ def run_colprof(payload, ti3, output_path, profile_model, patch_set, icc_version
         algorithm = PROFILE_MODELS[profile_model]["argyll"]
         temporary_output = base + ".icc"
         command = [
-            colprof, "-q" + quality, "-a" + algorithm, "-A", "PGenerator+", "-M", PROFILE_TYPES[payload["profile_type"]],
-            "-D", description, "-C", "Created from user measurements by PGenerator+", "-O", temporary_output, base,
+            colprof, "-q" + quality, "-a" + algorithm, "-A", "rampecho", "-M", PROFILE_TYPES[payload["profile_type"]],
+            "-D", description, "-C", "Created from user measurements by rampecho", "-O", temporary_output, base,
         ]
         if icc_version == "4.4":
             if not colprof_supports_icc44(colprof):
@@ -6532,7 +6532,7 @@ def build(payload, output_dir):
     ti3, _, _ = make_ti3(payload, fit_rows)
     if not os.path.isdir(output_dir):
         os.makedirs(output_dir, 0o755)
-    stem = safe_basename(payload.get("name", "PGenerator+ display profile"))
+    stem = safe_basename(payload.get("name", "rampecho display profile"))
     suffix = {
         "sdr": "SDR",
         "windows-sdr": "SDR-MHC2",

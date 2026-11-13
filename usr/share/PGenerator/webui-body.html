@@ -16,7 +16,7 @@
 <div class="header">
  <div class="logo">
 __PG_LOGO_DARK__
-  <img class="logo-light" src="/pgen-logo-light.png" alt="PGenerator+ logo">
+  <img class="logo-light" src="/pgen-logo-light.png?v=rampecho" alt="rampecho logo">
   <div><div class="ver" id="verDisplay"></div></div>
  </div>
  <div class="hdr-right">
@@ -24,15 +24,15 @@ __PG_LOGO_DARK__
    <button class="btn btn-sm update-btn" id="updateBtn" style="display:none" aria-label="Update available" onclick="showUpdateCard()"><svg viewBox="0 0 24 24" width="13" height="13" aria-hidden="true"><path d="M12 4v11M7 10.5l5 5 5-5M5 20h14" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg>Update<span class="update-btn-more">&nbsp;Available</span></button>
   </div>
   <div class="status-bar" id="statusBar">
-   <span title="Checking the connection to PGenerator+" id="statusWrap"><span class="status-dot" id="statusDot"></span><span id="statusText">Connecting…</span></span>
+   <span title="Checking the connection to rampecho" id="statusWrap"><span class="status-dot" id="statusDot"></span><span id="statusText">Connecting…</span></span>
    <span id="tempDisplay"></span>
    <span id="signalStatusWrap" class="status-signal" title="Output signal (applied settings)" hidden><span class="status-dot" id="signalDot"></span><span class="status-label" id="signalStatusText"></span></span>
    <span id="patternStatusWrap" class="status-pattern" title="Pattern started from this page" hidden><span class="status-dot status-dot-accent"></span><span class="status-label" id="patternStatusText"></span></span>
    <span id="calStatusWrap" title="No calibration software connected"><span class="status-dot" id="calDot" style="background:var(--text2)"></span><span id="calStatusText" style="color:var(--text2)">No calibration software</span></span>
-   <span id="meterDisplayStatusStack" class="status-stack" title="Meter, display and PGenerator+ Patch Companion">
+   <span id="meterDisplayStatusStack" class="status-stack" title="Meter, display and Patch Companion">
     <span id="meterStatusWrap" class="status-line" style="display:none" title="Colorimeter"><span class="status-dot" id="meterDot" style="background:var(--text2)"></span><span class="status-label" id="meterStatusText" style="color:var(--text2)">Meter</span></span>
     <span id="lgTopStatusWrap" class="status-line status-line-sub" style="display:none" title="Display"><span class="status-dot" id="lgTopDot" style="background:var(--text2)"></span><span class="status-label" id="lgTopStatusText" style="color:var(--text2)">Display</span></span>
-    <span id="iccCompanionTopStatusWrap" class="status-line status-line-sub" style="display:none" title="PGenerator+ Patch Companion connected"><span class="status-dot" id="iccCompanionTopDot" style="background:var(--green)"></span><span class="status-label" id="iccCompanionTopStatusText" style="color:var(--text)">PGenerator+ Patch Companion</span></span>
+    <span id="iccCompanionTopStatusWrap" class="status-line status-line-sub" style="display:none" title="Patch Companion connected"><span class="status-dot" id="iccCompanionTopDot" style="background:var(--green)"></span><span class="status-label" id="iccCompanionTopStatusText" style="color:var(--text)">Patch Companion</span></span>
    </span>
    <button type="button" id="hdmiWarnBadge" class="hdmi-port-badge" onclick="hdmiShowOverlay()"></button>
    <span id="meterUsbWarnBadge" title="USB link unstable">USB unstable</span>
@@ -54,7 +54,7 @@ __PG_LOGO_DARK__
 <div class="main-content" id="mainContent">
 <div class="desktop-shell">
 <aside class="desktop-sidebar" aria-label="Desktop workspace navigation">
- <nav class="desktop-nav" aria-label="PGenerator+ workspaces">
+ <nav class="desktop-nav" aria-label="rampecho workspaces">
   <div class="desktop-nav-head">
    <div class="desktop-nav-title">Workspaces</div>
    <button type="button" class="desktop-sidebar-toggle" id="desktopSidebarToggle" aria-label="Collapse workspace menu" aria-expanded="true" title="Collapse workspace menu" onclick="pgToggleDesktopSidebar()">
@@ -331,7 +331,7 @@ __PG_LOGO_DARK__
    <ul class="dv-hints-list">
     <li>Turn off Dolby Vision IQ, ambient light sensing and dynamic contrast or tone mapping on the TV. They change what the meter reads.</li>
     <li>Confirm Dolby Vision by the TV&rsquo;s DV picture mode or badge. Some TVs show &ldquo;HDR OFF&rdquo; in their info overlay while DV is active.</li>
-    <li>Target curve: PGenerator+ calibrates Relative to gamma 2.2 and Absolute to ST 2084 (PQ). To verify, or with other calibration software, use the target that workflow expects.</li>
+    <li>Target curve: rampecho calibrates Relative to gamma 2.2 and Absolute to ST 2084 (PQ). To verify, or with other calibration software, use the target that workflow expects.</li>
    </ul>
   </div>
  </div>
@@ -554,14 +554,14 @@ __PG_LOGO_DARK__
     </div>
    </div>
    <div class="meter-card-header-col meter-card-header-col-generator" id="meterPatternProviderCol">
-    <label class="meter-header-label">Patch Generator <span class="meter-help-tip" title="PGenerator+ output sends calibration patches through the Pi HDMI output. PGenerator+ Patch Companion sends full-window patches through the target computer so measurements include its operating-system color pipeline and installed ICC profile. Run the paired companion on that computer before reading. PGenerator+ Windows SDR MHC2 profiles default to sRGB but can use another selected target transfer. Choose the matching Target Gamma when validating one." aria-label="Patch generator help">?</span></label>
+    <label class="meter-header-label">Patch Generator <span class="meter-help-tip" title="rampecho output sends calibration patches through the Pi HDMI output. Patch Companion sends full-window patches through the target computer so measurements include its operating-system color pipeline and installed ICC profile. Run the paired companion on that computer before reading. rampecho Windows SDR MHC2 profiles default to sRGB but can use another selected target transfer. Choose the matching Target Gamma when validating one." aria-label="Patch generator help">?</span></label>
     <div class="meter-generator-control-row">
      <select id="meterPatternProvider" aria-label="Patch generator" class="meter-card-header-select" onchange="meterCalibrationPatternProviderChanged()">
-      <option value="local">PGenerator+ output</option>
-      <option value="companion" disabled title="Run PGenerator+ Patch Companion on the target computer to enable this option">PGenerator+ Patch Companion</option>
+      <option value="local">rampecho output</option>
+      <option value="companion" disabled title="Run Patch Companion on the target computer to enable this option">Patch Companion</option>
      </select>
-     <span id="meterCompanionGearWrap" class="meter-xyz-gear-wrap is-hidden"><button type="button" id="meterCompanionGear" class="meter-xyz-gear" aria-label="PGenerator+ Patch Companion settings" aria-expanded="false" title="PGenerator+ Patch Companion settings"><svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1Z"/></svg></button><div class="meter-xyz-gear-popover" id="meterCompanionGearPopover" role="dialog" aria-label="PGenerator+ Patch Companion settings">
-      <div class="meter-profile-title">PGenerator+ Patch Companion Settings</div>
+     <span id="meterCompanionGearWrap" class="meter-xyz-gear-wrap is-hidden"><button type="button" id="meterCompanionGear" class="meter-xyz-gear" aria-label="Patch Companion settings" aria-expanded="false" title="Patch Companion settings"><svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1Z"/></svg></button><div class="meter-xyz-gear-popover" id="meterCompanionGearPopover" role="dialog" aria-label="Patch Companion settings">
+      <div class="meter-profile-title">Patch Companion Settings</div>
       <div class="field">
        <label for="meterCalibrationCompanionWindowMode">Display mode</label>
        <select id="meterCalibrationCompanionWindowMode" class="meter-card-header-select" onchange="meterCalibrationCompanionDisplaySettingsChanged()">
@@ -576,7 +576,7 @@ __PG_LOGO_DARK__
       <div class="meter-companion-settings-note" id="meterCalibrationCompanionDisplayModeNote">Each patch fills the movable Companion window.</div>
       <div class="field">
        <label for="meterCalibrationCompanionCorrectionMode">Profile correction</label>
-       <select id="meterCalibrationCompanionCorrectionMode" class="meter-card-header-select" onchange="meterIccCompanionCorrectionChanged('calibration')" title="Choose how the PGenerator+ Patch Companion handles the display profile: leave it to the operating system or compositor, apply no correction at all, or apply the active profile cLUT or matrix/TRC fallback itself">
+       <select id="meterCalibrationCompanionCorrectionMode" class="meter-card-header-select" onchange="meterIccCompanionCorrectionChanged('calibration')" title="Choose how the Patch Companion handles the display profile: leave it to the operating system or compositor, apply no correction at all, or apply the active profile cLUT or matrix/TRC fallback itself">
         <option value="system">Windows profile handling</option>
         <option value="none">No correction (raw output)</option>
         <option value="clut">Active profile cLUT in Companion</option>
@@ -584,7 +584,7 @@ __PG_LOGO_DARK__
        </select>
       </div>
       <div class="meter-companion-settings-note" id="meterCalibrationCompanionCorrectionNote">The Companion submits native HDR patches and can explicitly apply the active profile cLUT or matrix/TRC fallback.</div>
-      <div class="meter-companion-downloads"><button type="button" class="btn btn-sm btn-primary" onclick="meterIccOpenGithubRelease()">Download ICC Tools</button><span class="meter-companion-downloads-hint" id="meterIccReleaseHint"></span><span class="meter-help-tip" title="Opens the latest release page on GitHub in a new tab, where you can pick the download for your computer. Those copies are unpaired -- the Companion finds this PGenerator+ on the network by itself and asks you to approve it below the first time it connects." aria-label="Patch Companion download help">?</span></div>
+      <div class="meter-companion-downloads"><button type="button" class="btn btn-sm btn-primary" onclick="meterIccOpenGithubRelease()">Download ICC Tools</button><span class="meter-companion-downloads-hint" id="meterIccReleaseHint"></span><span class="meter-help-tip" title="Opens the latest release page on GitHub in a new tab, where you can pick the download for your computer. Those copies are unpaired -- the Companion finds this rampecho on the network by itself and asks you to approve it below the first time it connects." aria-label="Patch Companion download help">?</span></div>
      </div></span>
     </div>
     <div id="meterCalibrationCompanionStatus" class="meter-companion-status"></div>
@@ -728,7 +728,7 @@ __PG_LOGO_DARK__
      </select>
     </div>
    <div class="field field-chromaticity">
-    <label>Observer <span class="meter-help-tip" title="Selects the observer ArgyllCMS uses for new measurements and the coordinate view used by the chart. Existing readings made with another observer are not converted.&#10;&#10;CIE 1931 xy (2&deg;): Standard display-calibration view. Works with any supported meter and may use a CCMX.&#10;CIE 1976 u&#8242;v&#8242; (2&deg;): A more uniform coordinate view of the same CIE 1931 measurements. It has the same meter requirements.&#10;CIE 1964 xy (10&deg;): Intended for a larger visual field. Requires a selected spectrophotometer.&#10;CIE 1976 u&#8242;v&#8242; (10&deg;): A more uniform coordinate view of CIE 1964 measurements. It requires a selected spectrophotometer.&#10;CIE 170-2 xF yF (2&deg; and 10&deg;): Modern physiologically based observers for observer-metamerism analysis. Requires a selected spectrophotometer.&#10;MacLeod-Boynton (2&deg; and 10&deg;): Cone-response views derived from CIE 170-2 measurements. They require a selected spectrophotometer.&#10;Cone-Opponent Polar (2&deg;): Polar cone-response view dedicated to the MacLeod-Boynton Hue Circle series. It requires a selected spectrophotometer.&#10;&#10;A colorimeter and CCMX contain only tristimulus or 3x3 matrix data and cannot supply the spectra needed for these alternate observers. ArgyllCMS can derive alternate observers from certain CCSS-capable colorimeters, but PGenerator enables them only with a spectrophotometer selected to prevent unsupported meter modes. Gamut specifications and target-only presets use a stable reference projection when source spectra are unavailable." aria-label="Observer help">?</span></label>
+    <label>Observer <span class="meter-help-tip" title="Selects the observer ArgyllCMS uses for new measurements and the coordinate view used by the chart. Existing readings made with another observer are not converted.&#10;&#10;CIE 1931 xy (2&deg;): Standard display-calibration view. Works with any supported meter and may use a CCMX.&#10;CIE 1976 u&#8242;v&#8242; (2&deg;): A more uniform coordinate view of the same CIE 1931 measurements. It has the same meter requirements.&#10;CIE 1964 xy (10&deg;): Intended for a larger visual field. Requires a selected spectrophotometer.&#10;CIE 1976 u&#8242;v&#8242; (10&deg;): A more uniform coordinate view of CIE 1964 measurements. It requires a selected spectrophotometer.&#10;CIE 170-2 xF yF (2&deg; and 10&deg;): Modern physiologically based observers for observer-metamerism analysis. Requires a selected spectrophotometer.&#10;MacLeod-Boynton (2&deg; and 10&deg;): Cone-response views derived from CIE 170-2 measurements. They require a selected spectrophotometer.&#10;Cone-Opponent Polar (2&deg;): Polar cone-response view dedicated to the MacLeod-Boynton Hue Circle series. It requires a selected spectrophotometer.&#10;&#10;A colorimeter and CCMX contain only tristimulus or 3x3 matrix data and cannot supply the spectra needed for these alternate observers. ArgyllCMS can derive alternate observers from certain CCSS-capable colorimeters, but rampecho enables them only with a spectrophotometer selected to prevent unsupported meter modes. Gamut specifications and target-only presets use a stable reference projection when source spectra are unavailable." aria-label="Observer help">?</span></label>
     <select id="meterChromaticityChart" aria-label="Observer" onchange="meterOnChromaticityChartChange()">
      <option value="cie1931_2" selected>CIE 1931 xy (2&deg;)</option>
      <option value="cie1964_10">CIE 1964 xy (10&deg;)</option>
@@ -774,9 +774,9 @@ __PG_LOGO_DARK__
     </label>
    </div>
   <div class="field field-hdr" id="meterHdrDiffuseConfig" style="display:none">
-    <label>Diffuse White <span class="meter-help-tip" title="HDR reference white used to scale PGenerator+'s PQ chart targets, including ColorChecker and saturation luminance targets. Auto follows the target luminance of PGenerator+'s encoded 50% PQ patch at the active bit depth and limited/full range. For example, 10-bit Limited resolves to about 92.25 cd/m² while 8-bit Limited resolves to about 94.38 cd/m² because the midpoint is quantized differently. HCFR export receives the same resolved value." aria-label="HDR diffuse white help">?</span></label>
+    <label>Diffuse White <span class="meter-help-tip" title="HDR reference white used to scale rampecho's PQ chart targets, including ColorChecker and saturation luminance targets. Auto follows the target luminance of rampecho's encoded 50% PQ patch at the active bit depth and limited/full range. For example, 10-bit Limited resolves to about 92.25 cd/m² while 8-bit Limited resolves to about 94.38 cd/m² because the midpoint is quantized differently. HCFR export receives the same resolved value." aria-label="HDR diffuse white help">?</span></label>
     <div class="meter-inline-value">
-     <input type="number" id="meterHdrDiffuseWhite" min="1" max="200" step="0.1" value="92.2457" inputmode="decimal" title="HDR diffuse-white target in cd/m²; Auto follows PGenerator+'s encoded 50% PQ target at the active bit depth and range" onchange="meterOnHdrDiffuseWhiteChange()" onkeydown="if(event.key==='Enter')this.blur()" disabled>
+     <input type="number" id="meterHdrDiffuseWhite" min="1" max="200" step="0.1" value="92.2457" inputmode="decimal" title="HDR diffuse-white target in cd/m²; Auto follows rampecho's encoded 50% PQ target at the active bit depth and range" onchange="meterOnHdrDiffuseWhiteChange()" onkeydown="if(event.key==='Enter')this.blur()" disabled>
      <span class="meter-inline-unit">cd/m&sup2;</span>
      <input type="checkbox" id="meterHdrDiffuseWhiteAuto" onchange="meterOnHdrDiffuseWhiteAutoChange()" checked>
      <label for="meterHdrDiffuseWhiteAuto" class="meter-toggle-label">Auto</label>
@@ -1844,7 +1844,7 @@ __PG_LOGO_DARK__
   <!-- Live selects: loadInfo() keeps these nodes when it rebuilds the facts -->
   <div class="info-grid devinfo-facts" id="infoGrid">
    <div class="info-item devinfo-fact devinfo-control" id="gpuMemField">
-    <label class="label" for="gpu_mem">GPU Memory <span class="meter-help-tip" id="gpuMemTip" tabindex="0" title="The VideoCore firmware's share of the RAM. The renderer draws through the kernel driver, whose display and 3D buffers come from the separate CMA pool. 64 MB is right for PGenerator+; more only takes RAM from Linux. Changes require a reboot." aria-label="GPU memory help">?</span></label>
+    <label class="label" for="gpu_mem">GPU Memory <span class="meter-help-tip" id="gpuMemTip" tabindex="0" title="The VideoCore firmware's share of the RAM. The renderer draws through the kernel driver, whose display and 3D buffers come from the separate CMA pool. 64 MB is right for rampecho; more only takes RAM from Linux. Changes require a reboot." aria-label="GPU memory help">?</span></label>
     <select id="gpu_mem" onchange="applyMemory()">
      <option value="64" data-pg-badge="Recommended">64 MB</option>
      <option value="128">128 MB</option>
@@ -1965,9 +1965,9 @@ __PG_LOGO_DARK__
    <span id="cecStatus" style="font-size:var(--fs-md);color:var(--text2)">Checking...</span>
   </div>
   <div class="cec-remote" role="group" aria-label="TV remote">
-   <button class="btn btn-sm btn-primary" type="button" onclick="cecCmd('on')" title="Wake TV and switch to PGenerator+ input"><svg class="btn-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v8"/><path d="M6.6 6.6a8 8 0 1 0 10.8 0"/></svg>Power On</button>
+   <button class="btn btn-sm btn-primary" type="button" onclick="cecCmd('on')" title="Wake TV and switch to rampecho input"><svg class="btn-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v8"/><path d="M6.6 6.6a8 8 0 1 0 10.8 0"/></svg>Power On</button>
    <button class="btn btn-sm btn-secondary" type="button" onclick="cecCmd('off')" title="Put TV in standby"><svg class="btn-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z"/></svg>Standby</button>
-   <button class="btn btn-sm btn-secondary" type="button" onclick="cecCmd('active')" title="Switch TV to PGenerator+ HDMI input"><svg class="btn-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M14 4h4a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-4"/><path d="M3 12h11"/><path d="M10 8l4 4-4 4"/></svg>Switch Input</button>
+   <button class="btn btn-sm btn-secondary" type="button" onclick="cecCmd('active')" title="Switch TV to rampecho HDMI input"><svg class="btn-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M14 4h4a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-4"/><path d="M3 12h11"/><path d="M10 8l4 4-4 4"/></svg>Switch Input</button>
    <button class="btn btn-sm btn-secondary" type="button" onclick="cecCmd('volup')" title="Volume Up" aria-label="Volume up"><svg class="btn-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 9.5h3.5L11 5.5v13l-4.5-4H3z"/><path d="M15 12h6M18 9v6"/></svg>Volume +</button>
    <button class="btn btn-sm btn-secondary" type="button" onclick="cecCmd('voldown')" title="Volume Down" aria-label="Volume down"><svg class="btn-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 9.5h3.5L11 5.5v13l-4.5-4H3z"/><path d="M15 12h6"/></svg>Volume −</button>
    <button class="btn btn-sm btn-secondary" type="button" onclick="cecCmd('mute')" title="Toggle Mute"><svg class="btn-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 9.5h3.5L11 5.5v13l-4.5-4H3z"/><path d="M15.5 9.5l5 5M20.5 9.5l-5 5"/></svg>Mute</button>
@@ -2101,12 +2101,12 @@ __PG_LOGO_DARK__
   <section class="card-section" id="backupCard" aria-labelledby="setTitle_backup">
    <div class="card-section-head"><h3 class="card-section-title" id="setTitle_backup"><svg class="card-section-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="4.5" rx="1" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><path d="M5 8.5V18a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8.5M10 12.5h4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>Backup</h3></div>
     <div class="btn-grid btn-grid-lg">
-     <button class="btn btn-sm btn-secondary ico-export" id="exportSystemSettingsBtn" onclick="exportSystemSettings()" title="Download PGenerator+ settings, playlists, profiles, calibration history and custom diagnostic media">Export System Settings</button>
-     <button class="btn btn-sm btn-secondary ico-import" id="importSystemSettingsBtn" onclick="selectSystemSettingsImport()" title="Restore PGenerator+ settings, playlists, profiles, calibration history and custom diagnostic media">Import System Settings</button>
+     <button class="btn btn-sm btn-secondary ico-export" id="exportSystemSettingsBtn" onclick="exportSystemSettings()" title="Download rampecho settings, playlists, profiles, calibration history and custom diagnostic media">Export System Settings</button>
+     <button class="btn btn-sm btn-secondary ico-import" id="importSystemSettingsBtn" onclick="selectSystemSettingsImport()" title="Restore rampecho settings, playlists, profiles, calibration history and custom diagnostic media">Import System Settings</button>
      <input type="file" id="systemSettingsImportFile" accept=".pgbackup,application/gzip" style="display:none" onchange="importSystemSettingsFile(this.files&&this.files[0])">
     </div>
     <div id="systemBackupStatus" style="margin-top:6px;font-size:var(--fs-2xs);color:var(--text2)"></div>
-    <div class="update-hint">System exports include PGenerator+ configuration, playlists, signal presets, TV menu settings, the TV start screen theme, custom series, custom meter and ICC profiles, calibration history, LUTs, Dolby Vision configurations, reports, and user-added diagnostic images and videos. Built-in media, caches, logs, hardware identity, and Companion pairing data are excluded.</div>
+    <div class="update-hint">System exports include rampecho configuration, playlists, signal presets, TV menu settings, the TV start screen theme, custom series, custom meter and ICC profiles, calibration history, LUTs, Dolby Vision configurations, reports, and user-added diagnostic images and videos. Built-in media, caches, logs, hardware identity, and Companion pairing data are excluded.</div>
   </section>
  </section>
 
@@ -2114,9 +2114,9 @@ __PG_LOGO_DARK__
 
 <div class="site-footer">
  <div class="site-footer-inner">
-  <div class="site-footer-note">PGenerator+ is free software released under the GNU GPL. Provided as-is, without warranty. Support helps ongoing development.</div>
+  <div class="site-footer-note">rampecho is free software released under the GNU GPL. Provided as-is, without warranty. Support helps ongoing development.</div>
   <div class="site-footer-links">
-   <a class="site-footer-icon" href="https://github.com/BlackJoker90/PGenerator-Plus" target="_blank" rel="noopener noreferrer" aria-label="PGenerator+ on GitHub" title="GitHub"><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 .297c-6.63 0-12 5.373-12 12 0 5.303 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61C4.422 18.07 3.633 17.7 3.633 17.7c-1.087-.744.084-.729.084-.729 1.205.084 1.838 1.236 1.838 1.236 1.07 1.835 2.809 1.305 3.495.998.108-.776.417-1.305.76-1.605-2.665-.3-5.466-1.332-5.466-5.93 0-1.31.465-2.38 1.235-3.22-.135-.303-.54-1.523.105-3.176 0 0 1.005-.322 3.3 1.23.96-.267 1.98-.399 3-.405 1.02.006 2.04.138 3 .405 2.28-1.552 3.285-1.23 3.285-1.23.645 1.653.24 2.873.12 3.176.765.84 1.23 1.91 1.23 3.22 0 4.61-2.805 5.625-5.475 5.92.42.36.81 1.096.81 2.22 0 1.606-.015 2.896-.015 3.286 0 .315.21.69.825.57C20.565 22.092 24 17.592 24 12.297c0-6.627-5.373-12-12-12"/></svg></a>
+   <a class="site-footer-icon" href="https://github.com/BlackJoker90/rampecho" target="_blank" rel="noopener noreferrer" aria-label="rampecho on GitHub" title="GitHub"><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 .297c-6.63 0-12 5.373-12 12 0 5.303 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61C4.422 18.07 3.633 17.7 3.633 17.7c-1.087-.744.084-.729.084-.729 1.205.084 1.838 1.236 1.838 1.236 1.07 1.835 2.809 1.305 3.495.998.108-.776.417-1.305.76-1.605-2.665-.3-5.466-1.332-5.466-5.93 0-1.31.465-2.38 1.235-3.22-.135-.303-.54-1.523.105-3.176 0 0 1.005-.322 3.3 1.23.96-.267 1.98-.399 3-.405 1.02.006 2.04.138 3 .405 2.28-1.552 3.285-1.23 3.285-1.23.645 1.653.24 2.873.12 3.176.765.84 1.23 1.91 1.23 3.22 0 4.61-2.805 5.625-5.475 5.92.42.36.81 1.096.81 2.22 0 1.606-.015 2.896-.015 3.286 0 .315.21.69.825.57C20.565 22.092 24 17.592 24 12.297c0-6.627-5.373-12-12-12"/></svg></a>
    <a class="site-footer-icon" href="https://buymeacoffee.com/fabioelia9r" target="_blank" rel="noopener noreferrer" aria-label="Buy Me a Coffee" title="Buy Me a Coffee"><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M20.216 6.415l-.132-.666c-.119-.598-.388-1.163-1.001-1.379-.197-.069-.42-.098-.57-.241-.152-.143-.196-.366-.231-.572-.065-.378-.125-.756-.192-1.133-.057-.325-.102-.69-.25-.987-.195-.4-.597-.634-.996-.788a5.723 5.723 0 00-.626-.194c-1-.263-2.05-.36-3.077-.416a25.834 25.834 0 00-3.7.062c-.915.083-1.88.184-2.75.5-.318.116-.646.256-.888.501-.297.302-.393.77-.177 1.146.154.267.415.456.692.58.36.162.737.284 1.123.366 1.075.238 2.189.331 3.287.37 1.218.05 2.437.01 3.65-.118.299-.033.598-.073.896-.119.352-.054.578-.513.474-.834-.124-.383-.457-.531-.834-.473-.466.074-.96.108-1.382.146-1.177.08-2.358.082-3.536.006a22.228 22.228 0 01-1.157-.107c-.086-.01-.18-.025-.258-.036-.243-.036-.484-.08-.724-.13-.111-.027-.111-.185 0-.212h.005c.277-.06.557-.108.838-.147h.002c.131-.009.263-.032.394-.048a25.076 25.076 0 013.426-.12c.674.019 1.347.067 2.017.144l.228.031c.267.04.533.088.798.145.392.085.895.113 1.07.542.055.137.08.288.111.431l.319 1.484a.237.237 0 01-.199.284h-.003c-.037.006-.075.01-.112.015a36.704 36.704 0 01-4.743.295 37.059 37.059 0 01-4.699-.304c-.14-.017-.293-.042-.417-.06-.326-.048-.649-.108-.973-.161-.393-.065-.768-.032-1.123.161-.29.16-.527.404-.675.701-.154.316-.199.66-.267 1-.069.34-.176.707-.135 1.056.087.753.613 1.365 1.37 1.502a39.69 39.69 0 0011.343.376.483.483 0 01.535.53l-.071.697-1.018 9.907c-.041.41-.047.832-.125 1.237-.122.637-.553 1.028-1.182 1.171-.577.131-1.165.2-1.756.205-.656.004-1.31-.025-1.966-.022-.699.004-1.556-.06-2.095-.58-.475-.458-.54-1.174-.605-1.793l-.731-7.013-.322-3.094c-.037-.351-.286-.695-.678-.678-.336.015-.718.3-.678.679l.228 2.185.949 9.112c.147 1.344 1.174 2.068 2.446 2.272.742.12 1.503.144 2.257.156.966.016 1.942.053 2.892-.122 1.408-.258 2.465-1.198 2.616-2.657.34-3.332.683-6.663 1.024-9.995l.215-2.087a.484.484 0 01.39-.426c.402-.078.787-.212 1.074-.518.455-.488.546-1.124.385-1.766zm-1.478.772c-.145.137-.363.201-.578.233-2.416.359-4.866.54-7.308.46-1.748-.06-3.477-.254-5.207-.498-.17-.024-.353-.055-.47-.18-.22-.236-.111-.71-.054-.995.052-.26.152-.609.463-.646.484-.057 1.046.148 1.526.22.577.088 1.156.159 1.737.212 2.48.226 5.002.19 7.472-.14.45-.06.899-.13 1.345-.21.399-.072.84-.206 1.08.206.166.281.188.657.162.974a.544.544 0 01-.169.364zm-6.159 3.9c-.862.37-1.84.788-3.109.788a5.884 5.884 0 01-1.569-.217l.877 9.004c.065.78.717 1.38 1.5 1.38 0 0 1.243.065 1.658.065.447 0 1.786-.065 1.786-.065.783 0 1.434-.6 1.499-1.38l.94-9.95a3.996 3.996 0 00-1.322-.238c-.826 0-1.491.284-2.26.613z"/></svg></a>
   </div>
  </div>
@@ -2153,9 +2153,9 @@ __PG_LOGO_DARK__
    <h3>HDMI-CEC</h3>
    <div class="desktop-utility-cec-status" id="desktopUtilityCecStatus">Checking...</div>
    <div class="desktop-utility-cec-actions cec-remote" role="group" aria-label="TV remote">
-    <button class="btn btn-sm btn-primary" type="button" onclick="cecCmd('on')" title="Wake TV and switch to PGenerator+ input"><svg class="btn-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v8"/><path d="M6.6 6.6a8 8 0 1 0 10.8 0"/></svg>Power On</button>
+    <button class="btn btn-sm btn-primary" type="button" onclick="cecCmd('on')" title="Wake TV and switch to rampecho input"><svg class="btn-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v8"/><path d="M6.6 6.6a8 8 0 1 0 10.8 0"/></svg>Power On</button>
     <button class="btn btn-sm btn-secondary" type="button" onclick="cecCmd('off')" title="Put TV in standby"><svg class="btn-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z"/></svg>Standby</button>
-    <button class="btn btn-sm btn-secondary" type="button" onclick="cecCmd('active')" title="Switch TV to PGenerator+ HDMI input"><svg class="btn-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M14 4h4a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-4"/><path d="M3 12h11"/><path d="M10 8l4 4-4 4"/></svg>Switch Input</button>
+    <button class="btn btn-sm btn-secondary" type="button" onclick="cecCmd('active')" title="Switch TV to rampecho HDMI input"><svg class="btn-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M14 4h4a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-4"/><path d="M3 12h11"/><path d="M10 8l4 4-4 4"/></svg>Switch Input</button>
     <button class="btn btn-sm btn-secondary" type="button" onclick="cecCmd('volup')" title="Volume Up" aria-label="Volume up"><svg class="btn-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 9.5h3.5L11 5.5v13l-4.5-4H3z"/><path d="M15 12h6M18 9v6"/></svg>Volume +</button>
     <button class="btn btn-sm btn-secondary" type="button" onclick="cecCmd('voldown')" title="Volume Down" aria-label="Volume down"><svg class="btn-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 9.5h3.5L11 5.5v13l-4.5-4H3z"/><path d="M15 12h6"/></svg>Volume −</button>
     <button class="btn btn-sm btn-secondary" type="button" onclick="cecCmd('mute')" title="Toggle Mute"><svg class="btn-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 9.5h3.5L11 5.5v13l-4.5-4H3z"/><path d="M15.5 9.5l5 5M20.5 9.5l-5 5"/></svg>Mute</button>
@@ -2173,7 +2173,7 @@ __PG_LOGO_DARK__
 <div class="offline-mask" id="offlineMask" aria-hidden="true">
  <div class="offline-mask-card">
   <div class="offline-mask-title">Device Offline</div>
-  <div class="offline-mask-text">PGenerator+ is not responding. Settings are temporarily locked and this page will refresh automatically when the device comes back online.</div>
+  <div class="offline-mask-text">rampecho is not responding. Settings are temporarily locked and this page will refresh automatically when the device comes back online.</div>
  </div>
 </div>
 </div>

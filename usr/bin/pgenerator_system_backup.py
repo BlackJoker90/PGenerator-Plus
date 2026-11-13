@@ -1,7 +1,7 @@
 #!/usr/bin/python3
-"""Create and restore versioned PGenerator+ user-data backups.
+"""Create and restore versioned rampecho user-data backups.
 
-The archive is intentionally limited to persistent PGenerator+ configuration,
+The archive is intentionally limited to persistent rampecho configuration,
 profiles and calibration history. Runtime state, device identity, caches,
 logs and pairing tokens are never included.
 """
@@ -33,7 +33,7 @@ MAX_MEMBERS = 100000
 
 # kind, source/destination, component label
 BACKUP_SPECS = (
-    ("file", "/etc/PGenerator/PGenerator.conf", "PGenerator+ configuration"),
+    ("file", "/etc/PGenerator/PGenerator.conf", "rampecho configuration"),
     ("file", "/etc/PGenerator/hdr20_postcal_shadow_matrix.json", "HDR calibration configuration"),
     ("file", "/var/lib/PGenerator/meter_settings.json", "meter and calibration settings"),
     ("dir", "/var/lib/PGenerator/custom-series", "custom measurement series"),
@@ -133,7 +133,7 @@ def collect_backup_files():
 def create_archive(output_path, software_version):
     files, components, total_bytes = collect_backup_files()
     if not files:
-        raise BackupError("No PGenerator+ settings or profile data were found")
+        raise BackupError("No rampecho settings or profile data were found")
     manifest = {
         "format": FORMAT,
         "schema_version": SCHEMA_VERSION,
@@ -234,7 +234,7 @@ def inspect_archive(archive_path):
         raise BackupError("Backup manifest is invalid: %s" % error)
     if manifest.get("format") != FORMAT or int(manifest.get("schema_version", 0)) != SCHEMA_VERSION:
         archive.close()
-        raise BackupError("This is not a supported PGenerator+ system backup")
+        raise BackupError("This is not a supported rampecho system backup")
     listed = manifest.get("files")
     if not isinstance(listed, list) or len(listed) > MAX_MEMBERS:
         archive.close()
@@ -429,7 +429,7 @@ def restore_archive(archive_path, software_version):
 
 
 def main():
-    parser = argparse.ArgumentParser(description="PGenerator+ system backup")
+    parser = argparse.ArgumentParser(description="rampecho system backup")
     subparsers = parser.add_subparsers(dest="command")
     export_parser = subparsers.add_parser("export")
     export_parser.add_argument("--output", required=True)

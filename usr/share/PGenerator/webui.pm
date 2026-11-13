@@ -2213,7 +2213,7 @@ sub webui_handle_request (@) {
     # again); no version means the latest.
     my ($version)=$body=~/"version"\s*:\s*"(\d+(?:\.\d+)+)"/;
     $version="" if(!defined($version));
-    my $r='{"status":"ok","message":"Update started. PGenerator+ will restart shortly.","now":'.time().'}';
+    my $r='{"status":"ok","message":"Update started. rampecho will restart shortly.","now":'.time().'}';
     my $len=length($r);
     print $client "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: $len\r\n$cors\r\n$r";
     close($client);
@@ -8271,7 +8271,7 @@ sub webui_system_backup_import_chunk (@) {
  my $content_b64="";
  $content_b64=$1 if($body=~/"content"\s*:\s*"([A-Za-z0-9+\/=]+)"/);
  return '{"status":"error","message":"Backup upload metadata is incomplete"}' if($upload_id eq "" || $filename eq "" || $offset < 0 || $total_size <= 0 || $content_b64 eq "");
- return '{"status":"error","message":"Select a PGenerator+ .pgbackup file"}' if($filename!~/\.pgbackup$/i);
+ return '{"status":"error","message":"Select a rampecho .pgbackup file"}' if($filename!~/\.pgbackup$/i);
  return '{"status":"error","message":"System backup exceeds the 512 MB size limit"}' if($total_size > $_system_backup_max_bytes);
  mkdir($_system_backup_upload_dir,0700) if(!-d $_system_backup_upload_dir);
  return '{"status":"error","message":"Backup upload storage is unavailable"}' if(!-d $_system_backup_upload_dir);
@@ -9788,7 +9788,7 @@ sub webui_ccss_validate (@) {
 
    my $desc=$parsed->{descriptor} ne "" ? $parsed->{descriptor} : ($parsed->{display} ne "" ? $parsed->{display} : $parsed->{safe_name});
    my $display=$parsed->{display} ne "" ? $parsed->{display} : $parsed->{safe_name};
-   my $creation_tool="PGenerator+ CCSS export";
+   my $creation_tool="rampecho CCSS export";
    $creation_tool.=" - ".$parsed->{originator} if($parsed->{originator});
    my $tech_type=&_webui_ccss_edr_tech_type($parsed->{technology},$parsed->{display},$parsed->{safe_name});
    my $norm=($parsed->{norm}||0)+0;
@@ -11293,7 +11293,7 @@ sub webui_create_logs_bundle (@) {
  my $hostname=`hostname 2>/dev/null`; chomp($hostname);
  my @out;
  push @out, "=" x 72;
- push @out, "  PGenerator+ Diagnostic Report";
+ push @out, "  rampecho Diagnostic Report";
  push @out, "  Host: $hostname   Version: $version   Date: ".`date -u '+%Y-%m-%d %H:%M:%S UTC'`;
  chomp($out[$#out]);
  push @out, "  PRIVACY: Network addresses retain only their address class and stable alias.";
@@ -13130,7 +13130,11 @@ sub webui_tvmenu_base (@) {
   push(@sig,"$e->{kind}:$e->{label}:".($thumb ne "" ? (stat($thumb))[9] : 0));
  }
  require Digest::MD5;
- my $hash=substr(Digest::MD5::md5_hex(join("|","v2",$lay->{height},@sig)),0,12);
+ # The header text is part of the key: the cache lives in tmpfs and survives
+ # a daemon restart (OTA updates do not reboot), so a renamed header would
+ # otherwise keep showing the old name until the next reboot.
+ my $brand="rampecho";
+ my $hash=substr(Digest::MD5::md5_hex(join("|","v2",$brand,$lay->{height},@sig)),0,12);
  # MPC is ImageMagick's own pixel cache: read back without decoding, which
  # takes a menu step from 0.65 s to 0.2 s on the Pi.
  my $file="$_tvmenu_view_dir/base-$hash.mpc";
@@ -13141,7 +13145,7 @@ sub webui_tvmenu_base (@) {
  my $part="$_tvmenu_view_dir/base-$hash.tmp";
  system($convert,"-size","${PGTVMenu::W}x$lay->{height}","xc:$_tvmenu_bg","-font",$_tvmenu_font,
   "-fill","#e3e6ea","-pointsize","46","-annotate","+$PGTVMenu::MARGIN_X+84","Patterns",
-  "-fill","#7d8590","-pointsize","24","-annotate","+".($PGTVMenu::MARGIN_X+214)."+84","PGenerator+",
+  "-fill","#7d8590","-pointsize","24","-annotate","+".($PGTVMenu::MARGIN_X+214)."+84",$brand,
   @args,"-depth","8","MPC:$part.mpc");
  return ("","") if(!-f "$part.mpc" || !-f "$part.cache" || !rename("$part.cache","$_tvmenu_view_dir/base-$hash.cache") || !rename("$part.mpc",$file));
  return ($file,$hash);
@@ -13639,7 +13643,7 @@ sub webui_last_infoframes (@) {
 sub webui_infoframes_json (@) {
  my ($connected,$avi_hex,$drm_hex,$spd_hex,$read_ok)=&webui_last_infoframes();
  return "{\"status\":\"error\",\"message\":\"Kernel log not readable\"}" if(!$read_ok);
- # The PGenerator+ vc4 module never writes SPD, so "spd" stays empty there;
+ # The rampecho vc4 module never writes SPD, so "spd" stays empty there;
  # "spd_sent" in the link block reads the packet enable bit back.
  return "{\"status\":\"ok\",\"connected\":".($connected ? "true" : "false").",\"avi\":\"$avi_hex\",\"drm\":\"$drm_hex\",\"spd\":\"$spd_hex\"".&webui_hdmi_link_json()."}";
 }
@@ -15409,7 +15413,7 @@ sub webui_recovery_html (@) {
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>PGenerator+ Web UI recovery</title>
+<title>rampecho Web UI recovery</title>
 <style>
 html{background:#0a0a0f;color:#e0e0e8;font-family:system-ui,sans-serif}
 body{max-width:680px;margin:12vh auto;padding:24px;line-height:1.5}
@@ -15424,7 +15428,7 @@ button:hover{background:#718fff}
 </head>
 <body>
 <main>
-<h1>PGenerator+ needs a Web UI repair</h1>
+<h1>rampecho needs a Web UI repair</h1>
 <p>The server is running, but a required UI file is missing or empty.</p>
 <dl>
 <dt>Missing fragment</dt><dd>__PG_RECOVERY_MISSING__</dd>

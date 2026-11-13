@@ -240,7 +240,7 @@
     writeSparseColorArray(writer, groups.colorCheckerMaster, 5000);
     writeColorArray(writer, groups.freeMeasurements || []);
     ['redPrimary','greenPrimary','bluePrimary','yellowSecondary','cyanSecondary','magentaSecondary','onOffBlack','onOffWhite','ansiBlack','ansiWhite','primeWhite'].forEach(k=>writeColor(writer, fixed[k]));
-    writeMfcString(writer, model.notes || 'Calibration by: \r\nDisplay: \r\nNote: Exported from PGenerator+\r\n');
+    writeMfcString(writer, model.notes || 'Calibration by: \r\nDisplay: \r\nNote: Exported from rampecho\r\n');
     writer.i32(model.ireScaleMode?1:0);
     const tailSource = options.documentTail || base64Bytes(V17_DOCUMENT_TAIL_BASE64);
     const generatorRange = options.generatorRange || (model.generator && model.generator.rgbRange) || null;

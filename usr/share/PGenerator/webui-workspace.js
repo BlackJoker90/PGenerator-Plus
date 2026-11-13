@@ -6235,7 +6235,7 @@ function meterFullAutoCalPromptDefaults(){
 	     'Greyscale AutoCal, 26-point pass.',
 	     'Colour-only 3D LUT AutoCal, with probe-gated upload to the TV.',
 	     'Optional cleanup, after the 3D LUT.'];
-	 const lead='Switches PGenerator+ to the '+(transport?transport+' ':'')+'AutoCal video transport, then runs the calibration in one pass:';
+	 const lead='Switches rampecho to the '+(transport?transport+' ':'')+'AutoCal video transport, then runs the calibration in one pass:';
  return {
   title:'Full Auto Cal',
 	  lead:lead,
@@ -7729,7 +7729,7 @@ async function meterFullAutoCalDownloadReport(filename){
  const entries=meterFullAutoCalReportEntries();
  const sectionHtml=await meterFullAutoCalBuildSnapshotReportSections(entries);
  if(!sectionHtml){toast('No reportable Full AutoCal data found',true);return false;}
- const html=meterBuildReportDocument(sectionHtml,'PGenerator+ Full AutoCal Report');
+ const html=meterBuildReportDocument(sectionHtml,'rampecho Full AutoCal Report');
  meterDownloadBlob(new Blob([html],{type:'text/html'}),filename);
  return true;
 }
@@ -7955,7 +7955,7 @@ async function meterStartFullAutoCal(){
 		 );
  const preChoice=await meterFullAutoCalConfirmDialog({
   title:'Pre-Cal Report Measurements',
-  message:'Before calibration, PGenerator+ will measure '+meterFullAutoCalReportSeries().map(item=>item.label).join(', ')+' and save those readings as the before side of the Full AutoCal report. Make any final pre-cal picture adjustments now, then continue to start the reads.',
+  message:'Before calibration, rampecho will measure '+meterFullAutoCalReportSeries().map(item=>item.label).join(', ')+' and save those readings as the before side of the Full AutoCal report. Make any final pre-cal picture adjustments now, then continue to start the reads.',
   continueText:'\u25B6 Measure Pre-Cal',
   skipText:'Skip Pre-Cal',
   statusText:'Capture the before measurements for the Full AutoCal report.'
@@ -11589,7 +11589,7 @@ async function meterDaemonSeriesSteps(body){
  }
 }
 
-const METER_NO_DAEMON_CODES_MESSAGE='Couldn\u2019t get the patch codes from PGenerator+. Nothing was sent.';
+const METER_NO_DAEMON_CODES_MESSAGE='Couldn\u2019t get the patch codes from rampecho. Nothing was sent.';
 
 // The codes a run of the active series would send for this one patch. Asked
 // each time, never cached: the daemon's codes follow the applied bit depth and
@@ -18499,7 +18499,7 @@ function meterBuildCurrentSeriesReportSection(title){
 }
 
 function meterBuildReportDocument(sectionHtml,documentTitle){
- const title=String(documentTitle||'PGenerator+ Measurement Report');
+ const title=String(documentTitle||'rampecho Measurement Report');
  return '<!DOCTYPE html><html><head><meta charset="utf-8"><title>'+title+'</title>'
  +'<style>'
  +':root{color-scheme:light;} '
@@ -18774,7 +18774,7 @@ function meterBuildHcfrExportModel(){
  const free=[];
  entries.filter(e=>e.snap.source_format==='hcfr-chc'&&e.snap.source_group==='freeMeasurements').forEach(e=>free.push(...valid(e.snap)));
  const now=new Date().toISOString();
- const warnings=[];if(mode==='dv') warnings.push('Dolby Vision transport is not representable in CHC; analyze this session as PQ.');if(grey.some(rd=>!rd)) warnings.push('Grayscale has '+grey.filter(Boolean).length+' of '+grey.length+' readings; empty stimulus slots are preserved and will appear blank in HCFR.');if(satEntry&&satEntry.snap.source_format!=='hcfr-chc'&&Number(satEntry.snap.points)!==25) warnings.push('This PGenerator+ saturation sweep uses variable luminance; use the HCFR Constant Luminance Sat Sweep series for directly comparable intermediate Delta E values.');
+ const warnings=[];if(mode==='dv') warnings.push('Dolby Vision transport is not representable in CHC; analyze this session as PQ.');if(grey.some(rd=>!rd)) warnings.push('Grayscale has '+grey.filter(Boolean).length+' of '+grey.length+' readings; empty stimulus slots are preserved and will appear blank in HCFR.');if(satEntry&&satEntry.snap.source_format!=='hcfr-chc'&&Number(satEntry.snap.points)!==25) warnings.push('This rampecho saturation sweep uses variable luminance; use the HCFR Constant Luminance Sat Sweep series for directly comparable intermediate Delta E values.');
  // HCFR SDR GCD aligns the 18 chromatic patches plus PGenerator's full black
  // and white anchors. The native SDR neutral chips use different stimuli from
  // fixed GCD's named grays, so preserve those as free measurements. HDR-class
@@ -18822,7 +18822,7 @@ function meterBuildHcfrExportModel(){
  preferences.colorCheckerMode=colorCheckerMode;
  const importedRangeEntry=entries.find(e=>e.snap.source_format==='hcfr-chc'&&e.snap.source_session_id===activeImportedSession&&['limited','full'].includes(e.snap.source_rgb_range));
  const rgbRange=importedRangeEntry?importedRangeEntry.snap.source_rgb_range:((typeof meterPatchUsesVideoRange==='function'&&meterPatchUsesVideoRange())?'limited':'full');
- return {model:{preferences:preferences,generator:{type:'gdi',rgbRange:rgbRange},groups:{grayscale:grey,nearBlack:nearBlack.length?nearBlack:Array(5).fill(null),nearWhite:nearWhite.length?nearWhite:Array(5).fill(null),...satGroups,colorChecker:{declaredCount:1000,items:colorCheckerItems},colorCheckerMaster:{declaredCount:5000,items:colorCheckerItems.map(item=>({...item}))},freeMeasurements:free},fixed,notes:'Calibration by: \r\nDisplay: \r\nNote: Exported from PGenerator+ '+now+'; '+mode.toUpperCase()+'; RGB '+rgbRange+'.'+(warnings.length?' '+warnings.join(' '):'')+'\r\n',ireScaleMode:false},summary:{mode,rgbRange,grayscale:grey.length,nearBlack:nearBlack.length,nearWhite:nearWhite.length,saturations:Object.values(satGroups).reduce((n,a)=>n+a.filter(Boolean).length,0),colorChecker:colorCheckerItems.length,free:free.length,warnings}};
+ return {model:{preferences:preferences,generator:{type:'gdi',rgbRange:rgbRange},groups:{grayscale:grey,nearBlack:nearBlack.length?nearBlack:Array(5).fill(null),nearWhite:nearWhite.length?nearWhite:Array(5).fill(null),...satGroups,colorChecker:{declaredCount:1000,items:colorCheckerItems},colorCheckerMaster:{declaredCount:5000,items:colorCheckerItems.map(item=>({...item}))},freeMeasurements:free},fixed,notes:'Calibration by: \r\nDisplay: \r\nNote: Exported from rampecho '+now+'; '+mode.toUpperCase()+'; RGB '+rgbRange+'.'+(warnings.length?' '+warnings.join(' '):'')+'\r\n',ireScaleMode:false},summary:{mode,rgbRange,grayscale:grey.length,nearBlack:nearBlack.length,nearWhite:nearWhite.length,saturations:Object.values(satGroups).reduce((n,a)=>n+a.filter(Boolean).length,0),colorChecker:colorCheckerItems.length,free:free.length,warnings}};
 }
 
 let meterHcfrChcLoadPromise=null;
@@ -19856,7 +19856,7 @@ async function ccssExportSelected(){
    toast('Downloaded '+filename);
   }else{
    const payload=await res.json().catch(()=>null);
-   const message=pgFailMsg('Couldn\u2019t export the meter profile',payload,'PGenerator+ answered HTTP '+res.status+'. Try again.');
+   const message=pgFailMsg('Couldn\u2019t export the meter profile',payload,'rampecho answered HTTP '+res.status+'. Try again.');
    ccssExportSetStatus(message,true);
    toast(message,true);
   }

@@ -1,5 +1,5 @@
 ---
-name: PGenerator+ WebUI
+name: rampecho WebUI
 description: The control surface of a Raspberry Pi 4 HDMI pattern generator, built for the calibration dark room.
 colors:
   pale-aqua: "#8fe0d1"
@@ -163,7 +163,7 @@ components:
     rounded: "{rounded.md}"
 ---
 
-# Design System: PGenerator+ WebUI
+# Design System: rampecho WebUI
 
 <!-- Recorded 2026-11-12 from the Mesopic layer in
      usr/share/PGenerator/webui-layout.css ("Mesopic look"), which the

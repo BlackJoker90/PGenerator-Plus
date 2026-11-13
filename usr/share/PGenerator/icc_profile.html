@@ -4,7 +4,7 @@
     <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:14px">
      <div>
       <div class="meter-icc-dialog-title" style="font-size:var(--fs-lg);font-weight:700;color:var(--text);margin-bottom:4px">Display Profiler</div>
-      <div class="meter-icc-note">Create a display profile from Patch Companion or PGenerator+ HDMI measurements, then download the finished file.</div>
+      <div class="meter-icc-note">Create a display profile from Patch Companion or rampecho HDMI measurements, then download the finished file.</div>
      </div>
      <button type="button" class="btn btn-sm btn-secondary meter-icc-close" onclick="meterCloseIccProfileBuilder()">Close</button>
     </div>
@@ -144,12 +144,12 @@
       </div>
       <div class="meter-icc-panel meter-icc-generator-panel">
        <h3><span class="meter-icc-step">2</span>Patch generator</h3>
-       <p class="meter-icc-section-intro">Choose whether patches come from the profiled computer or PGenerator+ HDMI.</p>
+       <p class="meter-icc-section-intro">Choose whether patches come from the profiled computer or rampecho HDMI.</p>
        <div class="meter-icc-field" style="margin-bottom:10px">
-        <label for="meterIccPatternProvider">Patch generator <span class="meter-icc-help" data-tip="Companion measures through the target computer's GPU and OS color path. HDMI measures the PGenerator+ output path only and does not include that computer's color pipeline.">?</span></label>
+        <label for="meterIccPatternProvider">Patch generator <span class="meter-icc-help" data-tip="Companion measures through the target computer's GPU and OS color path. HDMI measures the rampecho output path only and does not include that computer's color pipeline.">?</span></label>
         <select id="meterIccPatternProvider" onchange="meterIccPatternProviderChanged()">
-         <option value="companion" selected>PGenerator+ Patch Companion on the target computer</option>
-         <option value="local">PGenerator+ HDMI output</option>
+         <option value="companion" selected>Patch Companion on the target computer</option>
+         <option value="local">rampecho HDMI output</option>
         </select>
        </div>
        <div id="meterIccCompanionSetup">
@@ -165,13 +165,13 @@
         <div class="btn-row" style="margin:0 0 10px">
          <button type="button" class="btn btn-sm btn-primary" onclick="meterIccOpenGithubRelease()">Download ICC Tools</button>
          <span class="meter-icc-note" id="meterIccReleaseHint" style="margin-left:8px"></span>
-         <span class="meter-icc-help" style="margin-left:2px" data-tip="Opens the latest release page on GitHub in a new tab, where you can pick the download for your computer. Those copies are unpaired: the Companion finds this PGenerator+ on the network by itself and asks you to approve it the first time it connects.">?</span>
+         <span class="meter-icc-help" style="margin-left:2px" data-tip="Opens the latest release page on GitHub in a new tab, where you can pick the download for your computer. Those copies are unpaired: the Companion finds this rampecho on the network by itself and asks you to approve it the first time it connects.">?</span>
         </div>
         <div id="meterIccCompanionStatus" class="meter-icc-note" style="color:var(--red)"><span style="color:var(--red)">&#9679;</span> Companion not connected</div>
         <div id="meterIccPairRequests"></div>
        </div>
        <div id="meterIccLocalSetup" style="display:none">
-        <div class="meter-icc-note" style="margin-bottom:8px">Connect PGenerator+ HDMI to the display being profiled and switch to that input. Patches use this unit's output mode, range and patch size.</div>
+        <div class="meter-icc-note" style="margin-bottom:8px">Connect rampecho HDMI to the display being profiled and switch to that input. Patches use this unit's output mode, range and patch size.</div>
        </div>
        <div class="meter-icc-field" id="meterIccCompanionPatchSizeField" style="display:none">
         <label for="meterIccCompanionPatchSize">Patch size <span id="meterIccPatchSizeHelp" class="meter-icc-help" data-tip="Linked to Patch Size in the Calibration workspace.">?</span></label>
@@ -227,7 +227,7 @@
          <label for="meterIccPreconditionProfile">Optional device ICC / pre-conditioning profile <span class="meter-icc-help" data-tip="A representative existing profile can guide OFPS placement toward the display gamut and nonlinear regions.">?</span></label>
          <select id="meterIccPreconditionProfile" onchange="meterIccPatchControlChanged()"><option value="">None</option></select>
         </div>
-        <label style="display:flex;align-items:center;gap:7px;margin:8px 0;color:var(--text);font-size:var(--fs-xs)"><input id="meterIccAutoPrecondition" type="checkbox" checked onchange="meterIccPatchControlChanged()"> Auto-optimize from a 34-patch display pre-read <span class="meter-icc-help" data-tip="PGenerator+ first builds a temporary matrix characterization, then places the final patches using the measured response. Skipped when a known display profile is selected.">?</span></label>
+        <label style="display:flex;align-items:center;gap:7px;margin:8px 0;color:var(--text);font-size:var(--fs-xs)"><input id="meterIccAutoPrecondition" type="checkbox" checked onchange="meterIccPatchControlChanged()"> Auto-optimize from a 34-patch display pre-read <span class="meter-icc-help" data-tip="rampecho first builds a temporary matrix characterization, then places the final patches using the measured response. Skipped when a known display profile is selected.">?</span></label>
        </details>
       </div>
       <div class="meter-icc-panel">
@@ -267,7 +267,7 @@
     <div class="meter-icc-finish-grid">
      <div class="meter-icc-panel">
       <h3>Profile History</h3>
-      <p class="meter-icc-section-intro">Download, inspect or delete profiles stored on this PGenerator+.</p>
+      <p class="meter-icc-section-intro">Download, inspect or delete profiles stored on this rampecho.</p>
       <div id="meterIccProfileList" class="meter-icc-note">Loading profiles...</div>
      </div>
     </div>

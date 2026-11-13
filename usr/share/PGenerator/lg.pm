@@ -1355,7 +1355,7 @@ sub lg_status_data (@) {
     } elsif($detected) {
      $message="CEC currently looks like an LG TV. Enter the TV IP to start WebOS pairing.";
   } else {
-     $message="Enter the LG TV IP, or let PGenerator try lgwebostv.local on your network.";
+     $message="Enter the LG TV IP, or let rampecho try lgwebostv.local on your network.";
   }
   if(!$detected && $auto_ip eq "") {
      $message.=" CEC auto-detection is still limited to the local OSD name until vendor/model data is exposed.";

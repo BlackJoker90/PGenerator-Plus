@@ -12012,7 +12012,9 @@ sub webui_signal_state_json (@) {
 # detached worker reads it and leaves "key\ntime\nline" in
 # $signal_state_dir/vsif; the request reads that file and asks for a new
 # read after a modeset (renderer pid or infoframes changed) or after 15 s.
-# At most one worker runs at a time (vsif.pending, 30 s).
+# At most one worker runs at a time (vsif.pending, 30 s). The file keeps the
+# port the reader read (its "port=" line, the connected one) as a fourth
+# line: a frame is only the renderer's when that is the port it drives.
 our $webui_vsif_reader=sub { return &sudo("HDMI_PACKET",1); };
 our $webui_vsif_worker_limit=30;
 our $webui_vsif_spawn=sub {
@@ -12035,8 +12037,9 @@ sub webui_vsif_read_into (@) {
  my ($f,$pending)=&webui_vsif_files();
  my $out=eval { $webui_vsif_reader->() } // "";
  my ($line)=$out=~/^(slot=1 .*)$/m;
+ my ($port)=$out=~/^port=(HDMI-A-\d+)\b/m;
  if(open(my $fh,">","$f.tmp.$$")) {
-  print $fh "$key\n".time()."\n".($line // "")."\n";
+  print $fh "$key\n".time()."\n".($line // "")."\n".($port // "")."\n";
   close($fh);
   rename("$f.tmp.$$",$f) || unlink("$f.tmp.$$");
  }
@@ -12049,9 +12052,9 @@ sub webui_signal_vsif_line (@) {
  my $key="$pid|".($avi // "")."|".($drm // "");
  $key=~s/[\r\n]//g;
  my ($f,$pending)=&webui_vsif_files();
- my ($fkey,$ftime,$line)=("",0,"");
+ my ($fkey,$ftime,$line,$port)=("",0,"","");
  if(open(my $fh,"<",$f)) {
-  ($fkey,$ftime,$line)=map { my $v=$_ // ""; chomp($v); $v } (scalar(<$fh>),scalar(<$fh>),scalar(<$fh>));
+  ($fkey,$ftime,$line,$port)=map { my $v=$_ // ""; chomp($v); $v } (scalar(<$fh>),scalar(<$fh>),scalar(<$fh>),scalar(<$fh>));
   close($fh);
  }
  my $same=($fkey eq $key);
@@ -12066,7 +12069,8 @@ sub webui_signal_vsif_line (@) {
   }
  }
  return undef if(!$same || $line!~/^slot=1 /);
- return $line;
+ # In list context also the port the frame was read from ("" unknown).
+ return wantarray ? ($line,$port) : $line;
 }
 
 # The record of the renderer the cable is compared with ({pid, conf, avi}:
@@ -12123,6 +12127,35 @@ sub webui_signal_compare_request (@) {
  return \%c;
 }
 
+# The Dolby Vision vendor frame the connected display's Dolby Vision block
+# asks for (PGEdidDolby::dolby_vsif_form, the self-test's rule), into
+# $creq for signal_wire_compare. Nothing (no frame verdict) unless the EDID
+# was read whole, base block and every extension it announces: a missing
+# extension is not "the display has no Dolby Vision block".
+# dv_vsif_module: 1/0 the loaded vc4.ko can/cannot send the form, undef
+# when its version is not readable.
+sub webui_signal_dv_vsif_expect (@) {
+ my ($creq,$driving)=@_;
+ require PGEdidDolby;
+ require PGSelfTestCheck;
+ my ($ecaps,$dv,$eport,$raw)=eval { &signal_display_caps() };
+ # The EDID of the connector the renderer drives, the one whose frame was
+ # read: a port that changed since (or an unknown one) judges nothing.
+ # Without an expectation the reason goes with the request (the page says
+ # why the frame was not compared).
+ $creq->{dv_vsif_unknown}="port";
+ return if(!defined($driving) || $driving eq "" || !defined($eport) || $eport ne $driving);
+ $creq->{dv_vsif_unknown}="edid";
+ return if(ref($ecaps) ne "HASH" || !$ecaps->{known} || !defined($raw) || length($raw) < 128);
+ return if(length($raw) < 128*(1+ord(substr($raw,126,1))));
+ delete $creq->{dv_vsif_unknown};
+ my ($form,$bt2020)=PGEdidDolby::dolby_vsif_form($dv);
+ $creq->{dv_vsif_expect}=PGSelfTestCheck::dv_vsif_expect($creq->{dv_transport},$form,$bt2020,1);
+ my $v;
+ if(open(my $fh,"<",$webui_vc4_srcversion_file)) { $v=<$fh>; close($fh); }
+ $creq->{dv_vsif_module}=(defined($v) && $v ne "") ? (($v=~/HMVS/) ? 1 : 0) : undef;
+}
+
 # What the settings ask for and what is on the cable (AVI/DRM infoframes of
 # the last modeset, the encoder's depth and TMDS readback, the vendor frame
 # for Dolby Vision), with the quiet adjustments where the two differ.
@@ -12141,11 +12174,21 @@ sub webui_signal_json (@) {
  # vendor frame, Default range note): a renderer that changed in between
  # leaves no verdict.
  my $rec=&webui_signal_verdict_record();
+ # The ports before anything of the cable is read, compared with the ports
+ # after its last input below: a display that moved or went away in
+ # between leaves no verdict (the frames could be either port's).
+ my ($port_before)=eval { &signal_connected_port() };
+ $port_before="" if(!defined $port_before);
+ my $driving=eval { &signal_renderer_port() } || "";
  my ($connected,$avi,$drm,undef,$read_ok)=&webui_last_infoframes();
  my $run=$rec ? $rec->{conf} : undef;
  my $link=$connected ? &webui_hdmi_link_info() : undef;
  $link=undef if($link && !$link->{renderer});
- my $vsif=($connected && $link) ? &webui_signal_vsif_line($avi,$drm) : undef;
+ my ($vsif,$vsif_port)=($connected && $link) ? &webui_signal_vsif_line($avi,$drm) : (undef,"");
+ # The reader reads the packet RAM of the connected port: a frame of
+ # another port than the one the renderer drives (or of an unknown one) is
+ # not this renderer's.
+ $vsif=undef if(defined($vsif) && $driving ne "" && ($vsif_port // "") ne $driving);
  my $w=PGSignalCheck::signal_wire_from_infoframes($connected ? $avi : "",$connected ? $drm : "",$link,$vsif);
  # Verdicts and their sentences only from frames of the renderer that runs
  # now, against the settings it runs with: while it restarts (no link
@@ -12153,13 +12196,23 @@ sub webui_signal_json (@) {
  # frames and the conf on disk can belong to different settings.
  # The output still on another port than the display (the cable moved):
  # the frames and the link registers belong to different connectors.
- my $elsewhere=0;
- if($link && $run) {
-  my ($port)=eval { &signal_connected_port() };
-  my $driving=eval { &signal_renderer_port() } || "";
-  $elsewhere=1 if(defined($port) && $port ne "" && $driving ne "" && $driving ne $port);
- }
+ my $elsewhere=($link && $run && $port_before ne "" && $driving ne "" && $driving ne $port_before) ? 1 : 0;
  my $creq=($link && $run && !$elsewhere) ? &webui_signal_compare_request($req,$run) : undef;
+ # The display's Dolby Vision block is an input too: read before the
+ # renderer is checked again.
+ &webui_signal_dv_vsif_expect($creq,$driving) if($creq && $creq->{signal_mode} eq "dv");
+ # The EDID read from another port than the one the renderer drives: the
+ # display moved, nothing of this reading is compared.
+ $creq=undef if($creq && ($creq->{dv_vsif_unknown} || "") eq "port" && $driving ne "");
+ # And the ports again after the last read: a display that moved or was
+ # unplugged while the cable was read leaves no verdict (the port block
+ # below is read later).
+ if($creq) {
+  my ($port_after)=eval { &signal_connected_port() };
+  $port_after="" if(!defined $port_after);
+  my $driving_after=eval { &signal_renderer_port() } || "";
+  $creq=undef if($driving_after ne $driving || $port_after ne $port_before);
+ }
  $creq=undef if($creq && !&webui_signal_same_record($rec,eval { &renderer_running_record() }));
  my $cmp=$creq ? PGSignalCheck::signal_wire_compare($creq,$w) : {adjustments=>[],checked=>{}};
  my @adj=map {$_->[1]} @{$cmp->{adjustments}};
@@ -12196,6 +12249,12 @@ sub webui_signal_json (@) {
  my $mode=PGSignalCheck::signal_mode_label($label_req);
  my $wire=PGSignalCheck::signal_wire_label($w,$mode,$label_req);
  my $parts=PGSignalCheck::signal_wire_parts($w,$mode,$label_req);
+ # A Dolby Vision frame in another form than the display's block asks for:
+ # the label names the form, so "sent" does not read like the setting.
+ if($cmp->{dv_form} && $parts && $parts->{signal} ne "") {
+  $wire=~s/\Q$parts->{signal}\E$/$parts->{signal} ($cmp->{dv_form})/;
+  $parts->{signal}.=" ($cmp->{dv_form})";
+ }
  my $num=sub { my $v=shift; return defined($v) ? $v+0 : "null"; };
  return "{\"status\":\"ok\",\"connected\":".($connected ? "true" : "false")
   .",\"requested\":\"".&_webui_json_escape(&signal_request_label($label_req))."\""
@@ -12205,7 +12264,8 @@ sub webui_signal_json (@) {
   .",\"tmds_mhz\":".(defined $w->{tmds_mhz} ? sprintf("%.3f",$w->{tmds_mhz}) : "null")
   .",\"dv\":".(defined $w->{dv} ? "\"".($w->{dv} eq "" ? "none" : $w->{dv})."\"" : "null")
   .",\"parts\":".($parts ? "{".join(",",map {"\"$_\":\"".&_webui_json_escape($parts->{$_})."\""} qw(format name depth range mode signal))."}" : "null")
-  .",\"fields\":{$fields},\"differences\":{$differences},\"compared\":$compared}"
+  .",\"fields\":{$fields},\"differences\":{$differences},\"compared\":$compared"
+  .(($creq && $creq->{dv_vsif_unknown}) ? ",\"dv_unknown\":\"$creq->{dv_vsif_unknown}\"" : "")."}"
   .",\"check\":".($r ? "{\"ok\":".($r->{ok} ? "true" : "false").",\"reason\":\"".&_webui_json_escape($r->{reason})."\"}" : "null")
   .",\"adjustments\":[".join(",",map {"\"".&_webui_json_escape($_)."\""} @adj)."]"
   .((defined($read_ok) && !$read_ok) ? ",\"wire_read\":false" : "")

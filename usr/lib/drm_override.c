@@ -44,14 +44,18 @@
  * PGeneratord handles RGB-to-YCbCr conversion in its OpenGL fragment
  * shader, producing bit-perfect limited-range YCbCr output.
  *
- * CONF RELOAD:
- * The renderer applies signal-mode changes in place on SIGHUP, so the conf
- * is no longer read only once: every intercepted atomic commit (and legacy
- * SETPROPERTY) checks the conf's mtime/ctime/size/inode via a raw statx
- * syscall (no stat@GLIBC_2.33 dependency) and re-parses it when anything
- * changed. Without statx (ENOSYS / unknown syscall number) the file content
- * is hashed instead. Property IDs are discovered from GETPROPERTY and are
- * unaffected by a reload.
+ * CONF:
+ * The renderer hands over the conf text it runs with
+ * (drm_override_set_conf): at its start, before any DRM call, and after
+ * each in-place reload (SIGHUP) it applied. From then on the file is not
+ * read: a conf the daemon writes reaches the cable only once the renderer
+ * took it (#35). A renderer without that call (older build) keeps the file
+ * reload: every intercepted atomic commit (and legacy SETPROPERTY) checks
+ * the conf's mtime/ctime/size/inode via a raw statx syscall (no
+ * stat@GLIBC_2.33 dependency) and re-parses it when anything changed
+ * (without statx the content is hashed), gated by the Dolby Vision
+ * transport the process started with (reload_config_if_changed). Property
+ * IDs are discovered from GETPROPERTY and are unaffected by a reload.
  *
  * SUSPEND:
  * drm_override_set_suspended(1) (looked up by the renderer via dlsym) lets
@@ -183,6 +187,15 @@ static int dv_map_mode = -1;
 static int dv_vsif_form = 0;
 static int dv_ll_bt2020 = 0;     /* 1: low latency with PB5 0x10 */
 static int conf_read = 0;
+/* The Dolby Vision transport this renderer started in (dv_transport_of):
+ * 0 none, 1 standard, 2 low latency. From the conf read in the constructor
+ * (read_config, before the renderer's main() reads the same conf; an
+ * unreadable conf counts as 0), then from the renderer itself
+ * (drm_override_set_conf). */
+static int dv_start_transport = 0;
+/* 1 once the renderer hands its conf over (drm_override_set_conf): the
+ * file is then not read on its own any more. */
+static int renderer_feeds_conf = 0;
 static volatile int overrides_suspended = 0;
 
 /* DOVI blob injection state */
@@ -550,7 +563,15 @@ static int stat_conf(struct conf_stamp *st) {
 #endif
 }
 
-/* Initial load (first intercepted ioctl). */
+/* 0 no Dolby Vision, 1 standard, 2 low latency: the rule of the overrides
+ * below (dv_status 1; LLDV is is_ll_dovi 1 without is_std_dovi 1). */
+static int dv_transport_of(int status, int ll, int std) {
+    if (status != 1) return 0;
+    return (ll == 1 && std != 1) ? 2 : 1;
+}
+
+/* Initial load: from the constructor below, else the first intercepted
+ * ioctl. Fixes dv_start_transport: an unreadable conf counts as none. */
 static void read_config(void) {
     char buf[CONF_BUF_SIZE];
     if (conf_read) return;
@@ -560,6 +581,31 @@ static void read_config(void) {
     if (n <= 0) return;
     conf_hash = hash_buf(buf, n);
     parse_config(buf);
+    dv_start_transport = dv_transport_of(dv_status, is_ll_dovi, is_std_dovi);
+}
+
+/* The conf as the process starts, before the renderer's main() reads it
+ * (main.cpp readPGeneratorConf): the first ioctl comes only after the
+ * window and EGL setup, and a conf written in between would make this
+ * library and the renderer disagree on whether it runs in Dolby Vision. */
+__attribute__((constructor))
+static void drm_override_read_config_at_start(void) {
+    read_config();
+}
+
+/* The Dolby Vision transport of a conf text, by parse_config's rules (a
+ * line starting with the key, the last one counts, one digit). */
+static int conf_dv_transport(const char *buf) {
+    const char *p = buf;
+    int st = 0, ll = 0, std = 0;
+    while (*p) {
+        if (strncmp(p, "dv_status=", 10) == 0) st = p[10] - '0';
+        else if (strncmp(p, "is_ll_dovi=", 11) == 0) ll = p[11] - '0';
+        else if (strncmp(p, "is_std_dovi=", 12) == 0) std = p[12] - '0';
+        while (*p && *p != '\n') p++;
+        if (*p == '\n') p++;
+    }
+    return dv_transport_of(st, ll, std);
 }
 
 /*
@@ -571,6 +617,9 @@ static void reload_config_if_changed(void) {
     char buf[CONF_BUF_SIZE];
     struct conf_stamp now;
     int n;
+
+    /* The renderer hands over what it runs with (drm_override_set_conf). */
+    if (renderer_feeds_conf) return;
 
     memset(&now, 0, sizeof(now));
     if (stat_conf(&now)) {
@@ -595,12 +644,58 @@ static void reload_config_if_changed(void) {
         conf_hash = h;
     }
 
+    /* A Dolby Vision transport only in a renderer that started in it. The
+     * daemon never switches into, out of or between DV transports in place
+     * (renderer_reconfigure_in_place and the renderer's reloadSignalConf
+     * refuse it; the renderer is restarted), but it writes the conf before
+     * that restart, and this reload saw it in the renderer still drawing
+     * the old signal: entering DV, the fallback DOVI blob (without the
+     * VSIF form written a moment later), the DV format, range and link
+     * depth went out with its pixels for about 2 s (issue #35); standard
+     * DV to LLDV turned the 8-bit tunnel into 12-bit 4:2:2; leaving DV
+     * sent the tunnel at 10 bpc. None of such a conf is taken; the
+     * restarted renderer reads it. */
+    int want = conf_dv_transport(buf);
+    if (want != dv_start_transport) {
+        write_log(dv_start_transport == 0 ? "DRM_OVERRIDE: conf asks for Dolby Vision, this renderer did not start in it: conf not taken until its restart\n"
+                  : want == 0 ? "DRM_OVERRIDE: conf leaves Dolby Vision, this renderer started in it: conf not taken until its restart\n"
+                  : "DRM_OVERRIDE: conf asks for another Dolby Vision transport than this renderer started in: conf not taken until its restart\n");
+        return;
+    }
+
     int old_dv_status = dv_status, old_ll = is_ll_dovi, old_std = is_std_dovi;
     int old_iface = dv_interface, old_map = dv_map_mode;
     int old_form = dv_vsif_form, old_bt2020 = dv_ll_bt2020;
 
+    uint64_t keep_bpc = max_bpc_override, keep_fmt = output_fmt_override;
+    uint64_t keep_col = colorimetry_override, keep_qr = rgb_qr_override;
+    int keep_fmt_found = output_fmt_found, keep_col_found = colorimetry_found;
+    int keep_qr_found = rgb_qr_found;
+
     write_log("DRM_OVERRIDE: conf changed, reloading\n");
     parse_config(buf);
+
+    /* A renderer in Dolby Vision keeps the link it started with: format,
+     * range, depth and colorimetry change only with its restart
+     * (renderer_reconfigure_in_place and reloadSignalConf refuse them in
+     * DV), so a conf written before that restart must not put them on the
+     * cable under its pixels, e.g. LLDV 4:2:2 12-bit Limited under an LLDV
+     * RGB renderer (review of #35). The DV metadata keys (map mode, VSIF
+     * form) are still taken. */
+    if (dv_start_transport != 0 &&
+        (max_bpc_override != keep_bpc || output_fmt_override != keep_fmt ||
+         output_fmt_found != keep_fmt_found || colorimetry_override != keep_col ||
+         colorimetry_found != keep_col_found || rgb_qr_override != keep_qr ||
+         rgb_qr_found != keep_qr_found)) {
+        write_log("DRM_OVERRIDE: Dolby Vision renderer: format, range, depth and colorimetry kept until its restart\n");
+        max_bpc_override = keep_bpc;
+        output_fmt_override = keep_fmt;
+        output_fmt_found = keep_fmt_found;
+        colorimetry_override = keep_col;
+        colorimetry_found = keep_col_found;
+        rgb_qr_override = keep_qr;
+        rgb_qr_found = keep_qr_found;
+    }
 
     /* The fallback DOVI blob was built from the old DV transport settings;
      * let the next DV commit build a fresh one. */
@@ -611,6 +706,44 @@ static void reload_config_if_changed(void) {
         dovi_blob_id = 0;
         dovi_injected = 0;
     }
+}
+
+/* Exported for the renderer (dlsym(RTLD_DEFAULT, ...)): the conf text it
+ * runs with, handed over right after it read the conf at its start and
+ * after each in-place reload it applied (main.cpp). From the first call on
+ * this library takes the conf only from here, never from the file on its
+ * own: the daemon writes the conf before the renderer takes it (restart or
+ * SIGHUP), and a reload of the file in between put the new link (format,
+ * range, depth, DOVI) on the cable under the old pixels (#35 and its
+ * reviews: DV entry and exit, a DV transport or link change, also RGB Full
+ * to YCbCr 4:2:2 Limited outside DV). It also arrives before the renderer
+ * creates its DOVI blob, which is normalized from these values. A renderer
+ * without this call keeps the file reload below, gated as described there. */
+__attribute__((visibility("default")))
+void drm_override_set_conf(const char *text, size_t len) {
+    char buf[CONF_BUF_SIZE];
+    if (!text) len = 0;
+    if (len > CONF_BUF_SIZE - 1) {
+        write_log("DRM_OVERRIDE: conf longer than the buffer, the rest is not read\n");
+        len = CONF_BUF_SIZE - 1;
+    }
+    if (len) memcpy(buf, text, len);
+    buf[len] = 0;
+    conf_read = 1;   /* a first ioctl must not read the file over it */
+    renderer_feeds_conf = 1;
+    int old_dv_status = dv_status, old_ll = is_ll_dovi, old_std = is_std_dovi;
+    int old_iface = dv_interface, old_map = dv_map_mode;
+    int old_form = dv_vsif_form, old_bt2020 = dv_ll_bt2020;
+    parse_config(buf);
+    dv_start_transport = dv_transport_of(dv_status, is_ll_dovi, is_std_dovi);
+    if (dv_status != old_dv_status || is_ll_dovi != old_ll ||
+        is_std_dovi != old_std || dv_interface != old_iface ||
+        dv_map_mode != old_map || dv_vsif_form != old_form ||
+        dv_ll_bt2020 != old_bt2020) {
+        dovi_blob_id = 0;
+        dovi_injected = 0;
+    }
+    write_log("DRM_OVERRIDE: conf taken from the renderer\n");
 }
 
 /* Exported for the renderer (dlsym(RTLD_DEFAULT, ...)): while suspended,

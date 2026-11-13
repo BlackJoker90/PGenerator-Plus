@@ -68,7 +68,6 @@ $i=0;
 for(split(" ",$ENV{$pg_cmd_env})) { $ARGV[$i++]=decode_base64($_); }
 $action=$ARGV[0];
 $0=basename($0)." $action";
-$root_video_pid_file="/tmp/PGenerator_video.pid";
 
 #
 # main
@@ -104,6 +103,7 @@ $root_video_pid_file="/tmp/PGenerator_video.pid";
 &set_pgenerator_conf_multi() if($action eq "SET_PGENERATOR_CONF_MULTI");
 &set_plugin()             if($action eq "SET_PLUGIN");
 &bash_cmd()               if($action eq "BASH_CMD");
+&check_video_source_root() if($action eq "CHECK_VIDEO_SOURCE");
 &play_video_root()        if($action eq "PLAY_VIDEO");
 &stop_video_root()        if($action eq "STOP_VIDEO");
 &bt_status()              if($action eq "BT_STATUS");
@@ -1482,38 +1482,234 @@ sub bash_cmd(@) {
 ###############################################
 #             Root Video Functions            #
 ###############################################
+# Members of a verified live POSIX session are owned even before exec().
+# If its leader has ended, inherited exec-time tagging identifies orphans;
+# a recycled session/PID without that tag is never selected.
+sub root_video_session_members (@) {
+ my $session=shift;my $cache=shift;my $legacy=$session =~ /^[1-9]\d*\z/;
+ my($leader)=$session =~ /^([1-9]\d*)(?::\d+)?\z/;
+ return undef if(!defined($leader));
+ my($leader_id,$leader_state)=&video_process_identity($leader);
+ return undef if($leader_state eq "unknown");
+ my $anchored=!$legacy && $leader_state eq "alive" && $leader_id eq $session;
+ # A legacy record has no birth identity. A live PID anchors it only when it
+ # is the old repeat helper itself ($0 "PGenerator_cmd.pl PLAY_VIDEO", comm
+ # cut to 15 bytes); any other live process owns that SID now: nothing of it
+ # is ours. With the PID gone, only player programs are eligible.
+ # The caller's passes share one verdict: a helper that ends after TERM in
+ # pass 0 keeps its just-forked timeout/helper children eligible.
+ my $legacy_leader=0;
+ if($legacy && ref($cache) eq "HASH" && defined($cache->{legacy_leader})) {
+  return [] if($cache->{legacy_leader}<0);
+  $legacy_leader=$cache->{legacy_leader};
+ } elsif($legacy && $leader_state eq "alive") {
+  my($comm,$cmdline)=("","");
+  if(open(my $fh,"<","/proc/$leader/comm")) { $comm=<$fh> // "";close($fh); }
+  if(open(my $fh,"<","/proc/$leader/cmdline")) { local $/;$cmdline=<$fh> // "";close($fh); }
+  chomp($comm);$cmdline=~s/\0/ /g;
+  if($comm eq "" || ($comm eq "PGenerator_cmd." && $cmdline eq "")) {
+   # Unreadable, or the old helper exiting (cmdline is empty after
+   # exit_mm): no verdict. Gone by now: players only, decided again next
+   # pass; else not yet. Any other readable name (a kernel thread has an
+   # empty cmdline too) is not ours.
+   my(undef,$now)=&video_process_identity($leader);
+   return undef if($now ne "gone");
+  } else {
+   my $ours=$comm eq "PGenerator_cmd." && $cmdline =~ /^\S*PGenerator_cmd\.pl PLAY_VIDEO\b/;
+   $cache->{legacy_leader}=$ours ? 1 : -1 if(ref($cache) eq "HASH");
+   return [] if(!$ours);
+   $legacy_leader=1;
+  }
+ } elsif($legacy && ref($cache) eq "HASH") {
+  $cache->{legacy_leader}=0;
+ }
+ # Never this helper or its callers (the daemon's sudo chain shares a session).
+ my %self;
+ for(my($p,$n)=($$,0);$p>1 && $n<64;$n++) {
+  $self{$p}=1;
+  open(my $fh,"<","/proc/$p/stat") or last;my $st=<$fh>;close($fh);
+  ($p)=defined($st) ? $st=~/\) \S+ (\d+)/ : (0);$p//=0;
+ }
+ opendir(my $proc,"/proc") or return undef;
+ my @pid=grep {/^[1-9]\d*\z/}readdir($proc);closedir($proc);
+ my @owned;
+ for my $pid (@pid) {
+  my $fh;
+  if(!open($fh,"<","/proc/$pid/stat")) {
+   my $error=0+$!;require Errno;
+   next if($error==Errno::ENOENT() || $error==Errno::ESRCH());
+   return undef;
+  }
+  my $line;{local $/;$line=<$fh>;}my $closed=close($fh);
+  if(!$closed || !defined($line) || $line eq "") {
+   my(undef,$state)=&video_process_identity($pid);
+   next if($state eq "gone");
+   return undef;
+  }
+  my($comm,$tail)=$line=~/^\Q$pid\E \((.*)\) (.*)$/s;
+  return undef if(!defined($tail));
+  my @field=split(/\s+/,$tail);
+  return undef if(@field<20 || $field[3]!~/^\d+\z/ || $field[19]!~/^\d+\z/);
+  next if($field[3]!=$leader || $field[0]=~/^[ZXx]\z/ || $self{$pid});
+  my $identity="$pid:$field[19]";
+  # Legacy members: known player comm values in SID=recorded PID; the old
+  # helper and its timeout wrappers only below the verified old helper
+  # (fb_player was the old framebuffer path).
+  next if($legacy && $comm !~ /^(?:pg_diag_video_p|ffmpeg|ffprobe|drm_player|fb_player|pg_v4l2_player|omxplayer(?:\.bin)?)\z/ &&
+   !($legacy_leader && $comm =~ /^(?:PGenerator_cmd\.|timeout)\z/));
+  next if(!$legacy && $pid==$leader && !$anchored);
+  if(!$legacy && !$anchored) {
+   if(!open($fh,"<","/proc/$pid/environ")) {
+    my $error=0+$!;require Errno;
+    next if($error==Errno::ENOENT() || $error==Errno::ESRCH());
+    return undef;
+   }
+   my $env;{local $/;$env=<$fh>;}my $ok=close($fh);
+   if(!$ok || !defined($env)) {
+    my(undef,$state)=&video_process_identity($pid);
+    next if($state eq "gone");
+    return undef;
+   }
+   next if($env!~/(?:^|\0)PGEN_VIDEO_SESSION=\Q$session\E(?:\0|\z)/);
+  }
+  my($current,$state)=&video_process_identity($pid);
+  return undef if($state eq "unknown");
+  push(@owned,[$pid,$identity]) if($state eq "alive" && $current eq $identity);
+ }
+ return \@owned;
+}
+
+# The record lives in a directory only root can write (below /run): no other
+# user can plant, swap, link or block it. Written via temp file + rename, so
+# a reader sees the old or the new record. Returns 1 when written.
+sub root_video_record_write (@) {
+ my $content=shift;
+ my($dir)=$root_video_pid_file =~ m{^(.+)/[^/]+\z};
+ return 0 if(!defined($dir));
+ # Modes are set explicitly: the daemon user must read both whatever
+ # umask root runs with (sudo, init).
+ chmod(0755,$dir) if(!-e $dir && !-l $dir && mkdir($dir,0755));
+ my @st=lstat($dir);
+ return 0 if(!@st || !-d _ || ($st[4]!=0 && $st[4]!=$>) || ($st[2] & 022));
+ my $tmp="$root_video_pid_file.$$";
+ unlink($tmp) if(-e $tmp || -l $tmp);
+ open(my $pf,">",$tmp) or return 0;
+ my $ok=print $pf $content;
+ $ok=0 if(!close($pf));
+ $ok=0 if($ok && !chmod(0644,$tmp));
+ $ok=0 if($ok && !rename($tmp,$root_video_pid_file));
+ unlink($tmp) if(!$ok);
+ return $ok ? 1 : 0;
+}
+
 sub stop_video_root_process (@) {
- my $program = shift;
- my $program_name=basename($program || "");
- my $pid="";
- if(-f $root_video_pid_file) {
-  open(PID,"$root_video_pid_file");
-  $pid=<PID>;
-  close(PID);
-  chomp($pid);
-  if($pid =~ /^\d+$/) {
-   kill("TERM",-$pid);
-   usleep(250000);
-   kill("KILL",-$pid);
+ my($program,$expected,$direct,$again,$only_ended)=@_;my $session="";
+ # Asked to stop only an ended session: a read failing before any verdict is
+ # "unknown" (no verdict), not a failed cleanup of an ended one.
+ my $unread=$only_ended ? "unknown" : 0;
+ # Every successful non-direct return goes through $done: a hard link at
+ # the old path to a record this request removed has one link afterwards
+ # and counts as an old record, so take it over in this same request
+ # (once); the daemon then finds no record after a clean stop.
+ my $done=sub {
+  return 1 if($direct || $again || -e $root_video_pid_file || -l $root_video_pid_file || !defined($legacy_video_pid_file));
+  my @st=lstat($legacy_video_pid_file);
+  return (@st && -f _ && $st[3]==1 && ($st[4]==0 || $st[4]==$>)) ? &stop_video_root_process($program,undef,0,1) : 1;
+ };
+ if($direct) {
+  # The freshly acknowledged child is trusted independently of a failed,
+  # empty or partial record write. Never re-read that file as its identity.
+  $session=$expected // "";
+ } else {
+  # A record of versions up to 2.13.51 (bare PID in world-writable /tmp;
+  # a pid:start there is anchored like a current record) is theirs only as
+  # a plain file of root's with one link (in sticky /tmp no other user can
+  # swap it); read without following links
+  # or blocking, checked to be the file just looked at, and taken over into
+  # the root-only record by the next STOP_VIDEO (daemon start, poll, Stop,
+  # pattern) or PLAY_VIDEO. Anything else there is no record of ours.
+  if(!-e $root_video_pid_file && !-l $root_video_pid_file && defined($legacy_video_pid_file)) {
+   my @st=lstat($legacy_video_pid_file);
+   if(@st && -f _ && $st[3]==1 && ($st[4]==0 || $st[4]==$>)) {
+    require Fcntl;my $old;
+    if(sysopen(my $lf,$legacy_video_pid_file,Fcntl::O_RDONLY()|Fcntl::O_NOFOLLOW()|Fcntl::O_NONBLOCK())) {
+     my @fs=stat($lf);
+     if(@fs && $fs[0]==$st[0] && $fs[1]==$st[1]) { local $/;$old=<$lf>;$old="" if(!defined($old)); }
+     close($lf);
+    }
+    return $unread if(!defined($old));
+    $old=~s/\n\z//;
+    return $unread if($old =~ /^[1-9]\d*(?::\d+)?\z/ && !&root_video_record_write($old));
+    unlink($legacy_video_pid_file) or return $unread;
+   }
   }
-  unlink($root_video_pid_file);
+  return $done->() if(!-e $root_video_pid_file && !-l $root_video_pid_file);
+  # Only root writes in the record's directory; still read only a plain file.
+  my @st=lstat($root_video_pid_file);
+  return $unread if(!@st);
+  return unlink($root_video_pid_file) ? $done->() : 0 if(!-f _);
+  open(my $fh,"<",$root_video_pid_file) or return $unread;
+  {local $/;$session=<$fh>;}my $closed=close($fh);
+  return $unread if(!$closed);$session="" if(!defined($session));
+  $session=~s/\n\z//;
  }
- if($program_name =~ /^omxplayer(\.bin)?$/) {
-    system("/usr/bin/pkill","-TERM","-x","omxplayer");
-    system("/usr/bin/pkill","-TERM","-x","omxplayer.bin");
-  usleep(250000);
-    system("/usr/bin/pkill","-KILL","-x","omxplayer");
-    system("/usr/bin/pkill","-KILL","-x","omxplayer.bin");
+ return 0 if($direct && $session !~ /^[1-9]\d*:\d+\z/);
+ my $legacy=$session =~ /^[1-9]\d*\z/;
+ if(!$legacy && $session !~ /^[1-9]\d*:\d+\z/) {
+  return $done->() if(!-e $root_video_pid_file);
+  return unlink($root_video_pid_file) ? $done->() : 0;
  }
- if($program_name eq "pg_diag_video_player") {
-  for my $name ("pg_diag_video_player","ffmpeg","drm_player","fb_player","omxplayer","omxplayer.bin") {
-   system("/usr/bin/pkill","-TERM","-x",$name);
+ return 0 if(!$direct && !$legacy && defined($expected) && $expected ne "" && $session ne $expected);
+ my($leader)=$session =~ /^([1-9]\d*)/;
+ my($identity,$state)=$legacy ? ("","gone") : &video_process_identity($leader);
+ my $frozen=$state eq "alive" && $identity eq $session;
+ # A stale or reused leader cannot anchor ownership or signals: the sweep
+ # below then selects only processes carrying this session's exec-time tag
+ # (orphans of an ended session), and the record goes only once none is left.
+ # Asked to stop only an ended session (stop_video_root "ended"), say which:
+ # no verdict ("unknown") or a playing video ("live": a leader alive with
+ # this record's identity); nothing signalled, record kept.
+ return $unread if(!$legacy && !$frozen && $state eq "unknown");
+ return "live" if($only_ended && $frozen);
+ # Freeze repeat/fork activity while collecting all timeout groups in this
+ # session. The separate CHECK_VIDEO_SOURCE session is never name-matched.
+ kill("STOP",$leader) if($frozen);
+ my %term;my $ok=0;my $quiet=0;my %legacy_verdict;
+ for my $pass (0..24) {
+  my $members=&root_video_session_members($session,\%legacy_verdict);last if(!defined($members));
+  # A legacy leader (old repeat loop) is stopped with its children.
+  my @children=grep {$legacy || $_->[0]!=$leader}@$members;
+  # A child can appear after the previous /proc directory snapshot while
+  # its parent exits. Require two quiet snapshots with the leader frozen.
+  if(!@children){if(++$quiet>=2){$ok=1;last;}usleep(50000);next;}
+  $quiet=0;
+  for my $member (@children) {
+   my($current,$alive)=&video_process_identity($member->[0]);
+   next if($alive ne "alive" || $current ne $member->[1]);
+   kill($pass>=20 ? "KILL" : "TERM",$member->[0]) if($pass>=20 || !$term{$current}++);
   }
-  usleep(250000);
-  for my $name ("pg_diag_video_player","ffmpeg","drm_player","fb_player","omxplayer","omxplayer.bin") {
-   system("/usr/bin/pkill","-KILL","-x",$name);
-  }
+  usleep(50000);
  }
+ if($ok && $frozen) {
+  my($current,$alive)=&video_process_identity($leader);
+  kill("KILL",$leader) if($alive eq "alive" && $current eq $session);
+ }
+ if(!$ok) {
+  my($current,$alive)=&video_process_identity($leader);
+  kill("CONT",$leader) if($frozen && $alive eq "alive" && $current eq $session);
+  return 0;
+ }
+ # Remove only our still-current record; a caller holding the renderer lock
+ # serializes normal play/stop requests. Expected identity guards stale work.
+ if(-e $root_video_pid_file) {
+  open(my $fh,"<",$root_video_pid_file) or return 0;
+  my $current=<$fh>;my $closed=close($fh);chomp($current) if(defined($current));
+  return 0 if(!$closed);
+  $current="" if(!defined($current));
+  unlink($root_video_pid_file) or return 0 if($current eq $session ||
+   ($direct && $current !~ /^[1-9]\d*:\d+\z/));
+ }
+ return $done->();
 }
 
 sub root_video_error_message (@) {
@@ -1524,6 +1720,36 @@ sub root_video_error_message (@) {
  return "Video playback backend unavailable on this image (OpenMAX init failed)" if($log_content =~ /OMXCore failed to init|OMX\.broadcom\.clock/i);
  return $1 if($log_content =~ /([^\r\n]+)\s*$/ && $1 !~ /^have a nice day/i);
  return "Video playback failed to start";
+}
+
+# GNU timeout returns 124 on a normal duration expiry. Every other
+# diagnostic-player completion (stop, signal, fatal error) is final: never
+# turn a failed decode into an endless modeset/restore loop.
+sub root_video_should_repeat (@) {
+ my ($program,$status,$repeat)=@_;
+ return 0 if(!$repeat || ($status & 127) || (($status >> 8) == 143));
+ return (($status >> 8) == 124) ? 1 : 0 if($program eq "pg_diag_video_player");
+ return 1;
+}
+
+# Read-only metadata admission while the renderer still owns DRM. The wrapper
+# repeats this check at launch, so replacing a file cannot bypass admission.
+sub check_video_source_root (@) {
+ local $ENV{PGEN_VIDEO_SESSION};delete $ENV{PGEN_VIDEO_SESSION};
+ my $video=$ARGV[1];my $player="/usr/sbin/pg_diag_video_player";
+ return print "ERR:Video request refused" if(!defined($video) || $video eq "" ||
+  $video =~ /(^\/|\.\.|[\r\n\0])/ || $video !~ /^[A-Za-z0-9 _.\-\/()]+\z/);
+ my $path="$video_dir/$video";
+ return print "ERR:Diagnostic video source check unavailable" if(!-f $path || !-x $player);
+ my $pid=open(my $check,"-|",$timeout,"-k","2s","8s",$player,"--check-source",$path);
+ return print "ERR:Diagnostic video source check failed" if(!defined($pid));
+ my $response=<$check>;
+ my $closed=close($check);
+ chomp($response) if(defined($response));
+ return print "OK" if($closed && defined($response) && $response eq "OK");
+ $response="ERR:Diagnostic video source check failed" if(!defined($response) || $response !~ /^ERR:.+/);
+ $response =~ s/[\r\n]/ /g;
+ print $response;
 }
 
 sub play_video_root (@) {
@@ -1552,17 +1778,23 @@ sub play_video_root (@) {
  $video_path="$video_dir/$video";
  return print "ERR:Video playback failed to start" if(!-f $video_path);
  return print "ERR:Video playback failed to start" if(!pipe($status_read,$status_write));
- &stop_video_root_process($program_name);
+ return print "ERR:Previous video cleanup failed" if(!&stop_video_root_process($program_name));
  unlink($log_file);
  $pid=fork();
  return print "ERR:Video playback failed to start" if(!defined $pid);
  if($pid == 0) {
   my $status_sent=0;
+  my $finished=0;
+  my($session,$session_state)=&video_process_identity($$);
   my $play_pid=0;
   my $wait_pid=0;
   close($status_read);
-  eval { setsid(); };
+  my $sid=eval { setsid(); };
   $SIG{"TERM"}=sub { exit 0; };
+  if(!defined($sid) || $sid<0 || $session_state ne "alive") {
+   print $status_write "ERR:Video session identity unavailable\n";close($status_write);exit 1;
+  }
+  $ENV{PGEN_VIDEO_SESSION}=$session;
   open(STDIN,"</dev/null");
     open(STDOUT,">>$log_file");
     open(STDERR,">&STDOUT");
@@ -1577,7 +1809,11 @@ sub play_video_root (@) {
     if($program_name eq "pg_diag_video_player") {
      my $width=$ARGV[5] || "";
      my $height=$ARGV[6] || "";
-     exec($timeout,"-k","$duration","$duration","$program_path","$video_path","$width","$height");
+     my $refresh=$ARGV[7] || "0";
+     exit 2 if($refresh !~ /^(?:\d+(?:\.\d{1,6})?|\d+\/\d+)\z/);
+     my $timing=$ARGV[8] || "-";
+     exit 2 if($timing ne "-" && $timing !~ /^\d+(?::\d+){11}\z/);
+     exec($timeout,"-k","$duration","$duration","$program_path","$video_path","$width","$height","0","$refresh","$timing");
     }
     exec($timeout,"-k","$duration","$duration","$program_path","$video_path");
     exit 127;
@@ -1586,7 +1822,7 @@ sub play_video_root (@) {
    $wait_pid=waitpid($play_pid,WNOHANG);
    if($wait_pid == 0) {
     if(!$status_sent) {
-     print $status_write "OK\n";
+     print $status_write ($program_name eq "pg_diag_video_player" ? "OK:$session\n" : "OK\n");
      close($status_write);
      $status_sent=1;
     }
@@ -1598,16 +1834,16 @@ sub play_video_root (@) {
     }
     exit 1 if(!$status_sent);
    }
-   last if((($? >> 8) == 143) || !$repeat);
+   $finished=$?;
+   last if(!&root_video_should_repeat($program_name,$finished,$repeat));
   }
   close($status_write) if(!$status_sent);
-  exit 0;
+  exit(($finished & 127) ? 128+($finished & 127) : ($finished >> 8));
  }
  close($status_write);
- if(open(PID,">$root_video_pid_file")) {
-  print PID $pid;
-  close(PID);
- }
+ my($record_id)=&video_process_identity($pid);
+ my $recorded=($record_id =~ /^\Q$pid\E:\d+\z/) ? &root_video_record_write($record_id) : 0;
+
  eval {
   local $SIG{ALRM}=sub { die "status timeout\n"; };
   alarm(5);
@@ -1617,18 +1853,31 @@ sub play_video_root (@) {
  alarm(0);
  close($status_read);
  chomp($status) if(defined $status);
- if(!defined $status || $status eq "" || $status !~ /^OK$/) {
-  &stop_video_root_process($program_name);
+ if(!defined $status || $status eq "" || $status !~ /^OK(?::[1-9]\d*:\d+)?$/) {
+  &stop_video_root_process($program_name,$record_id,1) if($record_id =~ /^[1-9]\d*:\d+\z/);
   $status=~s/^ERR:// if(defined $status);
   $status="Video playback failed to start" if(!defined $status || $status eq "");
   return print "ERR:$status";
  }
- print "OK";
+ if(!$recorded) {
+  # Never acknowledge an unrecorded live session: a daemon restart would
+  # lose it. The child's acknowledgement supplies an identity even when
+  # the parent's initial /proc read failed.
+  my($ack_id)=$status =~ /^OK:([1-9]\d*:\d+)\z/;
+  &stop_video_root_process($program_name,$ack_id || $record_id,1);
+  return print "ERR:Video session record unavailable";
+ }
+ print $status;
 }
 
 sub stop_video_root (@) {
- &stop_video_root_process($ARGV[1]);
- print "OK";
+ # A fourth argument "ended" (the daemon's poll after it could not read the
+ # session itself): stop it only if root sees it ended; a live session
+ # answers LIVE and keeps playing, one root cannot read either answers
+ # "state unknown" (apart from an ended one whose cleanup failed).
+ my $only_ended=defined($ARGV[3]) && $ARGV[3] eq "ended";
+ my $result=&stop_video_root_process($ARGV[1],$ARGV[2],0,0,$only_ended);
+ print($result eq "live" ? "LIVE" : $result eq "unknown" ? "ERR:Video session state unknown" : $result ? "OK" : "ERR:Video session cleanup failed");
 }
 
 ###############################################

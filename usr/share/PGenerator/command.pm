@@ -1512,9 +1512,23 @@ sub signal_mode_info (@) {
  $out=`timeout 3 $modetest -c 2>/dev/null` if(!defined $out);
  $out="" if(!defined $out);
  my ($first,$preferred,$hit);
- while($out=~/^\s*#(\d+)\s+(\d+)x(\d+)(i?)\s+([\d.]+)\s+(?:\d+\s+){8}(\d+)\s+flags:[^;\n]*;\s*type:\s*([^\n]*)/gm) {
-  my $m={idx=>$1,width=>int($2),height=>int($3),interlaced=>($4 eq "i") ? 1 : 0,
-         refresh=>$5+0,clock_khz=>int($6),type=>$7};
+ while($out=~/^\s*#(\d+)\s+(\d+)x(\d+)(i?)\s+([\d.]+)\s+((?:\d+\s+){8})(\d+)\s+flags:([^;\n]*);\s*type:\s*([^\n]*)/gm) {
+  my ($n,$w,$h,$interlace,$refresh,$numbers,$clock,$flags_text,$type)=($1,$2,$3,$4,$5,$6,$7,$8,$9);
+  my @t=split(/\s+/,$numbers);my $flags=0;my $known=1;
+  my %flag_bits=(phsync=>1,nhsync=>2,pvsync=>4,nvsync=>8,interlace=>16,dblscan=>32,
+   csync=>64,pcsync=>128,ncsync=>256,hskew=>512,bcast=>1024,pixmux=>2048,dblclk=>4096,clkdiv2=>8192);
+  for my $f (split(/,\s*/,$flags_text)) {
+   $f=~s/^\s+|\s+$//g;next if($f eq "");
+   if(exists $flag_bits{$f}) { $flags|=$flag_bits{$f}; } else { $known=0; }
+  }
+  $flags|=16 if($interlace eq "i");
+  my $m={idx=>$n,width=>int($w),height=>int($h),interlaced=>($flags & 16) ? 1 : 0,
+         refresh=>$refresh+0,clock_khz=>int($clock),type=>$type};
+  if($known && @t==8 && $t[3]>0 && $t[7]>0) {
+   $m->{timing}=join(":",int($clock),@t[0..3],0,@t[4..7],0,$flags);
+   my $hz=$clock*1000/$t[3]/$t[7];$hz*=2 if($flags & 16);$hz/=2 if($flags & 32);
+   $m->{video_refresh}=$hz;
+  }
   $first=$m if(!$first);
   $preferred=$m if(!$preferred && $m->{type}=~/preferred/);
   if(defined $idx && $idx ne "" && $idx ne "-1" && $m->{idx} eq "$idx") {
@@ -1926,8 +1940,23 @@ sub renderer_follow_connected_port (@) {
  return 1;
 }
 
+# A video session record on disk owns the output. A plain root-owned
+# record of versions up to 2.13.51 in /tmp counts until root has taken it
+# over: only with one link, so a hard link another user made to a root file
+# is ignored while its other name exists (root takes it over in the same
+# STOP_VIDEO that removes that name). lstat, so a link is never followed.
+sub video_record_present () {
+ return 1 if(-e $root_video_pid_file);
+ return (defined($legacy_video_pid_file) && (lstat($legacy_video_pid_file))[4] eq "0" && -f _ && (stat(_))[3]==1) ? 1 : 0;
+}
+
 # Called from the daemon's idle tick (every 5s without socket traffic).
+# The checks run without renderer_lock: the mainloop that calls this also
+# serves ports 85/2100 and must not wait behind a renderer restart that an
+# apply worker holds the lock for. The lock is taken only to start.
 sub renderer_start_when_hdmi_connected (@) {
+ # Any record owns the output; the poll consumes a stale one.
+ return if(&video_record_present());
  if(!&hdmi_sink_connected()) {
   # The display went away (the renderer exits on its page-flip timeout):
   # remember it so the renderer comes back when the display does.
@@ -1945,13 +1974,19 @@ sub renderer_start_when_hdmi_connected (@) {
   unlink(&renderer_waiting_for_hdmi_path());
   return;
  }
+ &renderer_lock();
+ # Re-check under the lock: a video or another start may have won meanwhile.
+ if(&video_record_present() || &pattern_generator_is_running()) {
+  &renderer_unlock();return;
+ }
  &log("Renderer: HDMI display connected; starting the deferred renderer");
  # Same start as at boot: shows PatternStart (black) instead of an empty
  # renderer. The retry ladder takes over if that start loses the DRM race.
  &pattern_generator_start();
  &load_new_pattern_file("hdmi hotplug") if(!&pattern_generator_is_running());
  # The boot start was deferred until now, so show the boot pattern here.
- &show_boot_pattern() if(defined &show_boot_pattern);
+ &show_boot_pattern() if(defined(&show_boot_pattern) && &pattern_generator_is_running());
+ &renderer_unlock();
 }
 
 ###############################################
@@ -1984,6 +2019,21 @@ sub renderer_lock () {
   &log("Renderer: cannot open the renderer lock: $!");
   undef $renderer_lock_fh;
  }
+}
+
+# renderer_lock without waiting: 1 when this thread holds it now (call
+# renderer_unlock then), 0 when someone else holds it.
+sub renderer_try_lock () {
+ if($renderer_lock_depth) { $renderer_lock_depth++;return 1; }
+ require Fcntl;
+ my $fh;
+ if(!open($fh,'>',&pgen_lock_path("renderer.lock"))) {
+  &log("Renderer: cannot open the renderer lock: $!");
+  $renderer_lock_depth=1;undef $renderer_lock_fh;return 1;
+ }
+ if(!flock($fh,Fcntl::LOCK_EX()|Fcntl::LOCK_NB())) { close($fh);return 0; }
+ $renderer_lock_fh=$fh;$renderer_lock_depth=1;
+ return 1;
 }
 
 sub renderer_unlock () {
@@ -2020,10 +2070,17 @@ sub pattern_generator_start(@) {
  my $use_drm_override=1;
  my $has_dovi_metadata=1;
  &renderer_lock();
+ # A record on disk owns the output until root cleanup removes it (callers
+ # that take over call video_program_stop first).
+ if(&video_record_present()) {
+  &log("Renderer: start deferred while video owns the output");
+  &renderer_unlock();return;
+ }
  # Another caller (Calman thread, apply worker, hotplug) may have started
  # one while this one waited: a second renderer on the same CRTC is what
  # crashed vc4.
  if(&pattern_generator_is_running()) {
+  &video_recovery_notice_clear();
   &log("Renderer: start skipped, a renderer is already running");
   &renderer_unlock();
   return;
@@ -2181,6 +2238,7 @@ sub pattern_generator_start(@) {
   my ($start_black,$start_range,$start_max)=defined(&pattern_start_black) ? &pattern_start_black() : ("0,0,0","",0);
   &get_pattern($test_template_command,"$pattern_start","$start_black;$start_black","pattern_generator_start",$start_range,$start_max);
  }
+ &video_recovery_notice_clear() if(&pattern_generator_is_running());
  &renderer_unlock();
 }
 
@@ -2192,7 +2250,7 @@ sub pattern_generator_stop {
  # Wait for a start in progress: killing a renderer before it holds DRM
  # master is the window the start path protects.
  &renderer_lock();
- &video_program_stop("$program_video_to_kill");
+ if(!&video_program_stop()) { &renderer_unlock();return 0; }
  &process_pid("$pattern_generator","kill");
  # Also kill the .dv variant in case we're switching modes
  &process_pid("${pattern_generator}.dv","kill") if(-x "${pattern_generator}.dv");
@@ -2213,19 +2271,210 @@ sub pattern_generator_stop {
   &process_pid("${pattern_generator}.dv","kill") if(-x "${pattern_generator}.dv");
  }
  &clean_files();
- &renderer_unlock();
+ &renderer_unlock();return 1;
 }
 
 ###############################################
 #          Video Program Stop Function        #
 ###############################################
-sub video_program_stop {
- my $program = shift;
- if($program ne "") {
-  &sudo("STOP_VIDEO","$program") if($program =~ /(^|\/)(?:omxplayer(?:\.bin)?|pg_diag_video_player)$/);
-  &process_pid("$program","kill");
-  &pattern_generator_start(1) if(!&pattern_generator_is_running());
+# Linux /proc/<pid>/stat, field 22 is the process start time in clock ticks.
+# Pair it with PID so a reused PID cannot keep an ended video session alive.
+sub video_process_identity (@) {
+ my $pid=shift;
+ return ("","unknown") if(!defined($pid) || $pid !~ /^[1-9]\d*\z/);
+ my $fh;
+ if(!open($fh,"<","/proc/$pid/stat")) {
+  my $open_error=0+$!;
+  require Errno;
+  return ("","gone") if($open_error == Errno::ENOENT() || $open_error == Errno::ESRCH());
+  return ("","unknown");
  }
+ my $line=<$fh>;my $closed=close($fh);
+ return ("","unknown") if(!$closed || !defined($line));
+ my($tail)=$line=~/^\Q$pid\E \(.*\) (.*)$/;
+ return ("","unknown") if(!defined($tail));
+ my @field=split(/\s+/,$tail);
+ return ("","unknown") if(@field<20 || $field[0]!~/^[A-Za-z]\z/ || $field[19]!~/^\d+\z/);
+ return ("$pid:$field[19]",$field[0]=~/^[ZXx]\z/ ? "gone" : "alive");
+}
+
+# The root record is the sole output-ownership authority, including in
+# forked apply workers. It only reads; a caller that acts on the answer
+# re-reads it under renderer_lock. Never cache ownership.
+sub video_session_record (@) {
+ # Only root writes the record's directory (below /run); still open only a
+ # plain file (never a FIFO that would block the mainloop).
+ # A read that fails for any reason but "gone" (the record, or the leader's
+ # /proc entry: EMFILE, EACCES, a short read) is no verdict, as for root's
+ # STOP_VIDEO: the answer is "unknown" (never a record, those are pid:start),
+ # which every caller testing ne "" takes as a live session, so none ends a
+ # playing video on it. video_playback_poll asks root after 30 s and tells
+ # the user when neither side can judge it for minutes.
+ my @st=lstat($root_video_pid_file);
+ return "" if(!@st || !-f _);
+ my $fh;
+ if(!open($fh,"<",$root_video_pid_file)) { return $!{ENOENT} ? "" : "unknown"; }
+ my $record;{local $/;$record=<$fh>;}my $closed=close($fh);
+ return "unknown" if(!$closed || !defined($record));
+ $record=~s/\n\z//;
+ my($pid)=$record =~ /^([1-9]\d*):\d+\z/;
+ return "" if(!defined($pid));
+ my($current,$state)=&video_process_identity($pid);
+ return "unknown" if($state eq "unknown");
+ return $state eq "alive" && $current eq $record ? $record : "";
+}
+
+sub video_recovery_notice_clear (@) {
+ return if(!defined($webui_notice_file) || !open(my $fh,"<",$webui_notice_file));
+ my @stat=stat($fh);my $id=<$fh>;my $title=<$fh>;close($fh);
+ return if(!defined($title) || $title ne "Video recovery stopped\n");
+ my @now=stat($webui_notice_file);
+ unlink($webui_notice_file) if(@now && $now[0]==$stat[0] && $now[1]==$stat[1] && $now[9]==$stat[9]);
+}
+
+# Clean once on every daemon start, even if an old live session cannot yet
+# be stopped. Reuse the existing deferred-boot/hotplug marker for its plate.
+sub video_playback_startup_cleanup (@) {
+ &renderer_lock();
+ &clean_files();
+ # A plain root-owned record of versions up to 2.13.51 in /tmp: root takes
+ # it over into the current record and stops that session.
+ &video_program_stop() if(&video_record_present());
+ # Clear only when root removed the record: a legacy or stale record that
+ # could not be cleaned keeps the output (and the boot start) deferred.
+ my $clear=!&video_record_present();
+ if(!$clear && open(my $fh,">",&renderer_waiting_for_hdmi_path())) { close($fh); }
+ &renderer_unlock();return $clear;
+}
+
+# A stale record is a completion event. Consume it once, then use the
+# existing bounded pattern-start ladder; there is no separate retry state.
+# No sink is a normal deferment, handled by the existing hotplug marker.
+my $video_stop_retry_after=0;
+my $video_unknown_since=0;
+# Consecutive root answers without a verdict, and whether this streak told
+# the user (its notice goes when any verdict ends the streak; the cleanup
+# timer is reset with it, so a cleanup that still fails is told again).
+my $video_no_verdict=0;
+my $video_no_verdict_told=0;
+my $video_poll_record="";
+sub video_playback_poll (@) {
+ # Runs at the top of every mainloop iteration: without a record there is
+ # nothing to do, so do not wait for renderer_lock (a renderer restart can
+ # hold it for seconds while ports 85/2100 wait).
+ if(!&video_record_present()) { $video_stop_retry_after=0;$video_unknown_since=0;$video_no_verdict=0;if($video_no_verdict_told) { &video_recovery_notice_clear() if(defined &video_recovery_notice_clear);$video_no_verdict_told=0; }return 0; }
+ # A video start holds the lock until its player answered (seconds): the
+ # record exists already, but there is nothing to clean up yet. Look again
+ # on the next iteration instead of stalling the loop.
+ return 1 if(-e $video_starting_file);
+ # Someone else holds the lock (a pattern from another thread ending the
+ # video and starting the renderer, an apply): that owner works on the
+ # output now; look again on the next iteration.
+ return 1 if(!&renderer_try_lock());
+ if(!&video_record_present()) { &renderer_unlock();return 0; }
+ # The two timers belong to one record file (path, device, inode, mtime;
+ # root writes each record by rename): another session's record starts
+ # with fresh timers, and an earlier session's cleanup notice no longer
+ # applies.
+ my $record_id="";
+ for my $f (grep { defined } ($root_video_pid_file,$legacy_video_pid_file)) {
+  my @st=lstat($f);
+  if(@st) { $record_id="$f:$st[0]:$st[1]:$st[9]";last; }
+ }
+ if($record_id ne $video_poll_record) {
+  &video_recovery_notice_clear() if(($video_stop_retry_after || $video_no_verdict_told) && defined &video_recovery_notice_clear);
+  $video_poll_record=$record_id;$video_stop_retry_after=0;$video_unknown_since=0;$video_no_verdict=0;$video_no_verdict_told=0;
+ }
+ my $session=&video_session_record();
+ # A session read here is a verdict: it ends a no-verdict streak.
+ if($session ne "unknown") { $video_no_verdict=0;if($video_no_verdict_told) { &video_recovery_notice_clear() if(defined &video_recovery_notice_clear);$video_no_verdict_told=0;$video_stop_retry_after=0; } }
+ if($session ne "" && $session ne "unknown") { $video_unknown_since=0;&renderer_unlock();return 1; }
+ if($session eq "unknown") {
+  # The session could not be read here (no verdict): a transient failure
+  # must not end a playing video, so wait. After 30 s of nothing but
+  # "unknown" root, which reads /proc itself, stops it only if it sees it
+  # ended (LIVE: a playing video stays, asked again in 30 s), so an
+  # unreadable record does not end a video, and one root sees ended does not
+  # keep the output off for good. When root cannot judge it either for about
+  # 5 minutes, the user is told once (the output stays off meanwhile).
+  $video_unknown_since=time() if(!$video_unknown_since);
+  if(time()-$video_unknown_since<30) { &renderer_unlock();return 1; }
+  my $answer=&sudo("STOP_VIDEO","pg_diag_video_player","","ended");
+  $answer="" if(!defined($answer));
+  # LIVE, OK and "cleanup failed" are root's verdicts: they end a streak.
+  if($answer =~ /^(?:LIVE|OK)\n?\z/ || $answer =~ /^ERR:Video session cleanup failed/) { $video_no_verdict=0;if($video_no_verdict_told) { &video_recovery_notice_clear() if(defined &video_recovery_notice_clear);$video_no_verdict_told=0;$video_stop_retry_after=0; } }
+  if($answer !~ /^OK\n?\z/ && $answer !~ /^ERR:Video session cleanup failed/) {
+   # LIVE, "state unknown", or no answer at all (sudo failed): no verdict
+   # that the video ended.
+   &log($answer =~ /^LIVE\n?\z/ ? "Video: the session cannot be read here, root sees it playing; asked again in 30 s" : "Video: the session cannot be read here and root could not judge it either; asked again in 30 s");
+   if($answer !~ /^LIVE\n?\z/ && ++$video_no_verdict == 10) {
+    my $why="The video's state cannot be read, so the output stays with it. Stop the video, or restart the Pi if the output stays off.";
+    &log("Video: $why");
+    &webui_notice("Video recovery stopped",$why) if(defined &webui_notice);
+    $video_no_verdict_told=1;
+   }
+   $video_unknown_since=time();&renderer_unlock();return 1;
+  }
+  if($answer !~ /^OK\n?\z/) {
+   # Root sees it ended but could not clean it up: as for any ended video,
+   # the output stays off; tell the user once per streak.
+   if(!$video_stop_retry_after) {
+    my $why="The ended video could not be cleaned up, so the output stays off. It is retried every 30 seconds; a player stuck in the driver needs a Pi restart.";
+    &log("Video: $why");
+    &webui_notice("Video recovery stopped",$why) if(defined &webui_notice);
+   }
+   $video_stop_retry_after=time()+30;
+   $video_unknown_since=time();&renderer_unlock();return 0;
+  }
+  $video_unknown_since=0;
+  if(&video_record_present()) { &renderer_unlock();return 0; }
+ } else {
+  # The session ended (or the record is legacy/unparsable). If root cannot
+  # clean it, the output stays deferred; retry at most every 30 seconds.
+  if(time()<$video_stop_retry_after) { &renderer_unlock();return 0; }
+  if(!&video_program_stop()) {
+   # Tell the user once per failure streak: the output stays off meanwhile.
+   if(!$video_stop_retry_after) {
+    my $why="The ended video could not be cleaned up, so the output stays off. It is retried every 30 seconds; a player stuck in the driver needs a Pi restart.";
+    &log("Video: $why");
+    &webui_notice("Video recovery stopped",$why) if(defined &webui_notice);
+   }
+   $video_stop_retry_after=time()+30;
+   &renderer_unlock();return 0;
+  }
+ }
+ $video_stop_retry_after=0;
+ if(!&pattern_generator_is_running()) {
+  if(&renderer_waiting_for_hdmi()) { &renderer_start_when_hdmi_connected(); }
+  else { &load_new_pattern_file("video ended"); }
+ }
+ my $running=&pattern_generator_is_running();
+ if(!$running && &hdmi_sink_connected()) {
+  my $why=&renderer_stuck_in_kernel() ? "The HDMI driver has a stuck renderer; restart the Pi." : "The renderer did not start. Check the output, then use Stop or request a pattern.";
+  &log("Video: renderer restoration failed; $why");
+  &webui_notice("Video recovery stopped",$why) if(defined &webui_notice);
+ }
+ &renderer_unlock();return $running;
+}
+
+sub video_program_stop {
+ # Nothing to stop and the renderer is up: do not wait for renderer_lock
+ # (an apply worker holds it across a whole restart). Without a renderer,
+ # take the lock: a play_video in progress may be about to write a record.
+ # A video start in progress (its mark, written under the lock before the
+ # renderer is stopped) counts as a record, as in load_new_pattern_file: the
+ # caller waits for the start and then ends that session.
+ return 1 if(!&video_record_present() && !-e $video_starting_file && &pattern_generator_is_running());
+ &renderer_lock();
+ # No record means no video owner and no privileged cleanup to fail.
+ if(&video_record_present()) {
+  my $answer=&sudo("STOP_VIDEO","pg_diag_video_player");
+  &log("Video: session cleanup failed") if(!defined($answer) || $answer !~ /^OK\n?\z/);
+ }
+ # Only root removes the record, and only after the session's processes
+ # are verified gone. Any record left over keeps the output deferred.
+ my $clear=!&video_record_present();
+ &renderer_unlock();return $clear;
 }
 
 # Pid of a renderer that is stuck in the DRM driver (state D, waiting in a

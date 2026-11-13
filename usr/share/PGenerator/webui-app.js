@@ -3159,7 +3159,7 @@ function diagAssetPatternToken(kind,filename){return (kind==='video'?'uploaded_d
 function diagBlurElement(el){if(el&&typeof el.blur==='function')el.blur();}
 function diagAssetInfoHtml(kind,filename){
  const label=diagAssetDisplayLabel(filename);
- if(kind==='video') return '<b>Custom Diagnostic Video</b> &mdash; '+label+'.';
+ if(kind==='video') return '<b>Custom Diagnostic Video</b> &mdash; '+label+'. Browser-prepared preview, or Pi player (8-bit SDR picture; no HDR playback). See Pi video player limits below the file selector.';
  return '<b>Custom Diagnostic Image</b> &mdash; '+label+'.';
 }
 function diagUpdateUploadStatus(message,isError){
@@ -3478,7 +3478,7 @@ async function diagHandleAssetUpload(kind,evt){
      const seq=await diagUploadVideoSequence(r&&r.filename?r.filename:file.name,file,range);
      statusMessage='Uploaded diagnostic video and '+seq.frameCount+' renderer frames ('+(range==='full'?'full':'limited')+' range)';
    }catch(seqErr){
-    const seqMessage='Uploaded diagnostic video; using Pi video player';
+    const seqMessage='Uploaded diagnostic video; Pi player available (8-bit SDR picture, no HDR playback)';
     await diagLoadAssetCatalog(kind,r.filename||file.name);
     const sel=document.getElementById(diagAssetSelectId(kind));
     if(sel && r && r.filename){

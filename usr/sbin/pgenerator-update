@@ -46,6 +46,7 @@ UPDATE_TARGET=""
 GITHUB_API=""
 VERSION_FILE="${VERSION_FILE:-/usr/share/PGenerator/version.pm}"
 UPDATE_MIGRATIONS_DIR="${UPDATE_MIGRATIONS_DIR:-/usr/share/PGenerator/update-migrations.d}"
+INSTALL_TREE_CHECK_DIR="${INSTALL_TREE_CHECK_DIR:-/usr/share/PGenerator}"  # writable-check before the download (tests point it elsewhere)
 EXEC_MANIFEST_FILE="${EXEC_MANIFEST_FILE:-/usr/share/PGenerator/release-exec-manifest.txt}"
 UPDATE_DIR="${UPDATE_DIR:-/var/lib/PGenerator/updates}"
 UPDATE_LOG="${UPDATE_LOG:-/var/log/PGenerator/update.log}"
@@ -480,6 +481,49 @@ get_latest_release() {
  github_get "$GITHUB_API" || true
 }
 
+# The release "check" and "apply" work with, set in release_json (and the
+# newest release this device cannot reach in OUTSIDE_VERSION, "" if none).
+# It is the newest installable release this device may take over the air
+# (ota_update_allowed, an OTA tarball for this target, no drafts or betas),
+# read from the release list, not only GitHub's "latest": a bridge target
+# (3.0.0) can stay out of "latest" while devices on a version without the
+# bridge (<= 2.13.51, whose updater only reads "latest") move to 2.13.52
+# first. When the list cannot be read or holds nothing reachable, the answer
+# is "latest" as before.
+pick_update_release() {
+ local current="$1" list line ver json first_any=""
+ OUTSIDE_VERSION=""
+ release_json=""
+ if list=$(github_get "https://api.github.com/repos/${UPDATE_REPO}/releases?per_page=50") && [ -n "$list" ]; then
+  while IFS=$'\t' read -r ver json; do
+   [ -n "$ver" ] && [ -n "$json" ] || continue
+   release_json="$json"
+   [ -n "$(release_field asset_url 2>/dev/null || true)" ] || continue
+   if ota_update_allowed "$current" "$ver"; then
+    OUTSIDE_VERSION="$first_any"
+    return 0
+   fi
+   [ -n "$first_any" ] || first_any="$ver"
+  done < <(printf '%s' "$list" | perl -MJSON::PP -e '
+   local $/;
+   my $rels=eval { JSON::PP::decode_json(<STDIN>) };
+   exit 0 if(ref($rels) ne "ARRAY");
+   my $vk=sub { join(".",map { sprintf("%06d",$_) } split(/\./,$_[0])) };
+   my @r;
+   for my $rel (@$rels) {
+    next if(ref($rel) ne "HASH" || $rel->{draft} || $rel->{prerelease});
+    my $ver=($rel->{tag_name}//"")=~s/^v//r;
+    next if($ver!~/^\d+(?:\.\d+)+$/);
+    push @r,[$ver,$rel];
+   }
+   for my $e (sort { $vk->($b->[0]) cmp $vk->($a->[0]) } @r) {
+    print $e->[0],"\t",JSON::PP->new->canonical->encode($e->[1]),"\n";
+   }')
+  [ -z "$first_any" ] || OUTSIDE_VERSION="$first_any"
+ fi
+ release_json=$(get_latest_release)
+}
+
 # One release by version, for installing an older (or the same) release.
 get_release_by_version() {
  local version="$1" json
@@ -488,8 +532,18 @@ get_release_by_version() {
  printf '%s' "$json"
 }
 
-# The newest installable releases as JSON for the WebUI: same OTA family as
-# the running version, an OTA tarball for this target, no drafts or betas.
+# The families an OTA update from CURRENT may reach besides its own (bridges).
+reachable_families() {
+ local from bridge
+ from=$(major_version "${1:-0}")
+ for bridge in $OTA_BRIDGES; do
+  [ "${bridge%%>*}" = "$from" ] && printf '%s ' "${bridge#*>}"
+ done
+ return 0
+}
+
+# The newest installable releases as JSON for the WebUI: the OTA family of
+# the running version and the families it may bridge to, an OTA tarball for this target, no drafts or betas.
 list_releases() {
  local current="$1" limit="${2:-10}" json
  if ! json=$(github_get "https://api.github.com/repos/${UPDATE_REPO}/releases?per_page=50"); then
@@ -497,7 +551,8 @@ list_releases() {
   return 1
  fi
  printf '%s' "$json" | perl -MJSON::PP -e '
-  my ($current,$family,$target,$limit)=@ARGV;
+  my ($current,$family,$target,$limit,@reach)=@ARGV;
+  my %families=map { $_=>1 } ($family,@reach);
   local $/;
   my $rels=eval { JSON::PP::decode_json(<STDIN>) };
   if(ref($rels) ne "ARRAY") { print "{\"status\":\"error\",\"message\":\"Cannot parse the release list\"}"; exit 1; }
@@ -507,7 +562,7 @@ list_releases() {
    my $ver=($rel->{tag_name}//"")=~s/^v//r;
    next if($ver!~/^\d+(?:\.\d+)+$/);
    my @p=split(/\./,$ver);
-   next if("$p[0].$p[1]" ne $family);
+   next if(!$families{"$p[0].$p[1]"});
    my $has=0;
    for my $a (@{$rel->{assets}||[]}) {
     my $n=$a->{name}//"";
@@ -524,7 +579,7 @@ list_releases() {
   @out=sort { $vk->($b->{version}) cmp $vk->($a->{version}) } @out;
   splice(@out,$limit) if(@out>$limit);
   print JSON::PP->new->canonical->encode({status=>"ok",current=>$current,family=>$family,releases=>\@out});
- ' "$current" "$(major_version "$current")" "${UPDATE_TARGET:-pi4-biasi}" "$limit"
+ ' "$current" "$(major_version "$current")" "${UPDATE_TARGET:-pi4-biasi}" "$limit" $(reachable_families "$current")
 }
 
 # ── JSON-escape a scalar for Web UI / API responses ──
@@ -608,9 +663,27 @@ major_version() {
  printf '%s.%s' "$major" "$minor"
 }
 
-# True if current and target share the same MAJOR.MINOR OTA family.
-same_ota_family() {
- [ "$(major_version "${1:-0}")" = "$(major_version "${2:-0}")" ]
+# OTA bridges: family pairs "FROM>TO" an OTA update may cross, because the
+# target family needs no new image (same kernel, boot files and base system).
+# 2.13>3.0: 3.0.0 is the rampecho rename of 2.13.x, an overlay like any
+# 2.13.x update; 2.13.x devices take it over the air instead of re-flashing.
+# 3.0>2.13 is the way back ("Previous versions": a 3.0.x device may install
+# 2.13.52 or newer by hand). The update check always takes the newest
+# reachable release, so a 3.0.x device is never offered a 2.13.x release
+# while a 3.0.x one exists.
+OTA_BRIDGES="2.13>3.0 3.0>2.13"
+
+# True if an OTA update from current to target is allowed: the same family,
+# or a bridge listed above.
+ota_update_allowed() {
+ local from to bridge
+ from=$(major_version "${1:-0}")
+ to=$(major_version "${2:-0}")
+ [ "$from" = "$to" ] && return 0
+ for bridge in $OTA_BRIDGES; do
+  [ "$bridge" = "$from>$to" ] && return 0
+ done
+ return 1
 }
 
 is_prerelease_version() {
@@ -757,7 +830,7 @@ case "$cmd" in
   current=$(get_current_version)
   rm -f "$GITHUB_CACHE_DIR/stale.$$"
   find "$GITHUB_CACHE_DIR" -maxdepth 1 -name 'stale.*' -mmin +10 -delete 2>/dev/null || true
-  release_json=$(get_latest_release)
+  pick_update_release "$current"
   if [ -z "$release_json" ]; then
    printf '{"status":"error","repo":%s,"target":%s,"message":%s}\n' "$repo_json" "$target_json" "$(json_escape "Cannot reach GitHub")"
    exit 1
@@ -803,10 +876,19 @@ case "$cmd" in
   # OTA family gate: only offer OTA updates within the same MAJOR.MINOR
   # family (e.g. 2.7.x -> 2.7.x). Crossing to a new family (2.7.x -> 2.8.x)
   # requires re-flashing because the release may ship a new kernel driver
-  # or other changes that cannot be expressed as a tar overlay.
-  if ! same_ota_family "$current" "$latest"; then
+  # or other changes that cannot be expressed as a tar overlay. Bridges
+  # (OTA_BRIDGES) are the exceptions.
+  # The message only names a release that is newer than this device and out
+  # of reach (never an older one, e.g. a 2.13.x release after 3.0.0).
+  outside=""
+  if ! ota_update_allowed "$current" "$latest"; then
    update_available=false
-   changelog="A newer image release ($latest) is available, but it is outside the OTA family of your current version ($current). OTA updates only apply within the same major.minor series (e.g. 2.7.x -> 2.7.x). To move to $latest, download the full image and re-flash your SD card."
+   outside="$latest"
+  elif [ "$update_available" != true ]; then
+   outside="$OUTSIDE_VERSION"
+  fi
+  if [ -n "$outside" ] && version_gt "$outside" "$current"; then
+   changelog="A newer image release ($outside) is available, but it is outside the OTA family of your current version ($current). OTA updates only apply within the same major.minor series (e.g. 2.7.x -> 2.7.x). To move to $outside, download the full image and re-flash your SD card."
   fi
 
   # A newer release that carries no tarball for this device target is not an
@@ -883,7 +965,7 @@ case "$cmd" in
   if [ -n "$requested" ]; then
    release_json=$(get_release_by_version "$requested")
   else
-   release_json=$(get_latest_release)
+   pick_update_release "$current"
   fi
   if [ -z "$release_json" ]; then
    if [ -n "$requested" ]; then
@@ -928,7 +1010,8 @@ case "$cmd" in
   # OTA family gate: refuse to apply an update that crosses a MAJOR.MINOR
   # boundary. Such releases may ship a new kernel driver or other changes
   # that cannot be delivered as a tar overlay; the user must re-flash.
-  if ! same_ota_family "$current" "$latest"; then
+  # Bridges (OTA_BRIDGES) are the exceptions.
+  if ! ota_update_allowed "$current" "$latest"; then
    log_msg "ERROR: $latest is outside the OTA family of $current -- re-flash the image"
    echo "ERROR: Release $latest is outside the OTA family of your current version $current."
    echo "OTA updates only apply within the same major.minor series (e.g. 2.7.x -> 2.7.x)."
@@ -943,7 +1026,7 @@ case "$cmd" in
   fi
 
     require_writable_path "$UPDATE_DIR" "update directory"
-    require_writable_path "/usr/share/PGenerator" "PGenerator install tree"
+    require_writable_path "$INSTALL_TREE_CHECK_DIR" "PGenerator install tree"
 
   log_msg "Downloading $latest from $asset_url"
   mkdir -p "$UPDATE_DIR"

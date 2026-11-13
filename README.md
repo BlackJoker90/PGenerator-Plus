@@ -429,7 +429,8 @@ The header shows the connection, HDMI display, calibration software, meter and t
 - **Charts:** luminance, CCT, chromaticity, RGB balance, luminance tracking, CIELUV and CIEDE2000 ΔE. The greyscale ΔE average and maximum leave out the 0% step, as HCFR does; its bar and report row stay.
 - **Supported meters:** Calibrite/X-Rite i1Display Pro Plus, i1 Pro, i1 Display Pro / ColorMunki Display, Datacolor Spyder 5 / SpyderX, ColorVision Spyder, Sequel Chroma 5.
 - **Runtime:** bundled ArgyllCMS `spotread` 3.5.0 (armhf) at `/usr/bin/spotread`, with `spotread_wrapper.sh`, `spotread_measure.py`, `meter_session.sh` and `meter_series.sh`. Plain Linux USB/HID plus bundled udev rules; no proprietary drivers.
-- **CCSS:** a bundled library in `/usr/share/PGenerator/ccss/`, display-type presets, and `.ccss` or spectral `.csv` uploads (stored in `ccss/custom/`).
+- **CCSS:** a bundled library in `/usr/share/PGenerator/ccss/`, display-type presets, and `.ccss` or spectral `.csv` uploads (stored in `ccss/custom/`). Import and `/api/ccss/validate` check the ArgyllCMS 3.5.0 file structure and spectral data before use; refusals name the field and value. CCSS files are limited to 1 MiB and 633 format fields. PGenerator additionally requires at least three spectral bands and three distinct nonzero spectra as admission policies. Distinctness is not a rank or linear-independence check. NUL bytes are allowed only as trailing zero padding outside an unfinished comment. Negative spectral samples remain valid. Legacy profiles are validated before and after optional keyword normalization, which must preserve all parsed header values; if normalization or saving fails, the valid original remains usable. Format/data blocks remain byte-identical, including files using lone-CR logical lines. Concurrent repair preserves a newer successful upload and cannot recreate a successfully deleted profile. File checks do not compute or certify the meter's correction matrix; even finite input values can overflow its numerical computation.
+- **Projector base mode:** all five projector display types use the selected meter's generic Refresh mode on i1Display Pro/ColorMunki Display and Spyder 3/4/5, including reads without a Meter Profile, reads with a CCMX, and CCMX creation. ColorHug keeps its native Projector mode. Meters with neither selector report an unsupported display type; SpyderX keeps its General fallback for reads and series, projectors included. A SpyderX projector CCMX target retains the unsupported display-type refusal.
 
 </details>
 
@@ -623,7 +624,8 @@ All endpoints are on port 80 and return JSON.
 | POST | `/api/meter/stop` · `/clear` · `/reset` | Stop, clear results, force a meter reset |
 | GET / POST | `/api/meter/settings` | Load / save meter settings (POST changes the keys it carries and keeps the others; a body that is not a JSON object is refused) |
 | GET | `/api/ccss/list` · `/api/ccss/all` | Custom / all CCSS profiles |
-| POST | `/api/ccss/upload` | Upload a `.ccss` or spectral `.csv` |
+| POST | `/api/ccss/upload` | Validate and import a meter profile; invalid CCSS returns the field and value without replacing a saved profile |
+| POST | `/api/ccss/validate` | Check an existing profile without changing it; returns `ok` or the field and value in `error` |
 | POST | `/api/ccss/delete/{filename}` | Delete a custom profile |
 
 </details>

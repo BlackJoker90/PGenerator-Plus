@@ -18,6 +18,8 @@ BEGIN {
  unshift @INC,$module_dir if($module_dir ne "" && !grep { $_ eq $module_dir } @INC);
 }
 use PGMath ();
+use PGCCSS ();
+use File::Temp ();
 use PGPlaylists ();
 use PGTVMenu ();
 use PGCalibrationMath qw(
@@ -44,6 +46,7 @@ use POSIX ();
 # IO::Select for the bounded read deadlines, Errno for %! on non-blocking reads.
 use Socket ();
 use IO::Select ();
+use IO::Handle ();
 use Errno ();
  
 ###############################################
@@ -628,63 +631,125 @@ sub _resolve_ccss_yflag (@) {
 }
 
 sub _webui_ccss_normalize_keywords (@) {
- my ($text)=@_;
- return $text if(!defined($text) || $text eq "" || $text!~/BEGIN_DATA_FORMAT/m);
- my @lines=split(/\n/,$text,-1);
- my @header_fields=qw(DISPLAY TECHNOLOGY DISPLAY_TYPE_REFRESH REFERENCE SPECTRAL_BANDS SPECTRAL_START_NM SPECTRAL_END_NM SPECTRAL_NORM);
- my %have_keyword;
- my @format_fields;
- my $in_data_format=0;
- foreach my $line (@lines) {
-  $have_keyword{$1}=1 if($line=~/^KEYWORD\s+"([^"]+)"/);
-  if($line=~/^BEGIN_DATA_FORMAT/) { $in_data_format=1; next; }
-  if($line=~/^END_DATA_FORMAT/) { $in_data_format=0; next; }
-  next unless($in_data_format);
-  foreach my $tok (split(/\s+/,$line)) {
-   next unless($tok=~/^(?:SAMPLE_ID|SPEC_\d+)$/);
-   push @format_fields, $tok if(!$have_keyword{$tok});
-  }
+ my ($text,$original_header,$original_structure)=@_;
+ return $text if(!defined($text) || $text eq "");
+ if(ref($original_header) ne "HASH" || ref($original_structure) ne "HASH") {
+  my ($valid,$error,$header,$structure)=PGCCSS::validate($text);
+  return $text if(!$valid);
+  $original_header=$header; $original_structure=$structure;
  }
- my @out;
+ # Use the parser's logical boundary, including lone CR and implicit format
+ # entry. Freeze everything from the first format token through EOF.
+ return $text if(!defined($original_structure->{format_offset}) || !defined($original_structure->{data_offset}));
+ my $at=$original_structure->{format_offset};
+ my $data=substr($text,$at); my $header=substr($text,0,$at);
+ my $header_field=qr/^(DISPLAY|TECHNOLOGY|DISPLAY_TYPE_REFRESH|REFERENCE|SPECTRAL_BANDS|SPECTRAL_START_NM|SPECTRAL_END_NM|SPECTRAL_NORM)\s/;
+ my (%have_keyword,%format_seen);
+ while($header=~/([^\n]*\n|[^\n]+\z)/g) {
+  my $line=$1; $line=~s/\n\z//;
+  $have_keyword{$1}=1 if($line=~/^KEYWORD\s+"([^"]+)"/);
+  return $text if(keys(%have_keyword)>PGCCSS::MAX_FIELDS()+8);
+ }
+ my @format_fields=grep { /^(?:SAMPLE_ID|SPEC_\d+)$/ && !$have_keyword{$_} && !$format_seen{$_}++ } @{$original_structure->{fields}};
+ my $out="";
  my $format_keywords_added=0;
- foreach my $line (@lines) {
+ pos($header)=0;
+ while($header=~/([^\n]*\n|[^\n]+\z)/g) {
+  my $line=$1; $line=~s/\n\z//;
   if(!$format_keywords_added && $line=~/^NUMBER_OF_FIELDS\s/ && @format_fields) {
    foreach my $field (@format_fields) {
     next if($have_keyword{$field});
-    push @out, 'KEYWORD "'.$field.'"';
+    $out.='KEYWORD "'.$field.'"'."\n";
     $have_keyword{$field}=1;
    }
    $format_keywords_added=1;
   }
-  my $matched="";
-  foreach my $field (@header_fields) {
-   if($line=~/^\Q$field\E\s/) {
-    $matched=$field;
-    last;
-   }
-  }
+  my $matched=$line=~$header_field ? $1 : "";
   if($matched ne "" && !$have_keyword{$matched}) {
-   push @out, 'KEYWORD "'.$matched.'"';
+   $out.='KEYWORD "'.$matched.'"'."\n";
    $have_keyword{$matched}=1;
   }
-  push @out, $line;
+  $out.=$line."\n";
  }
- return join("\n",@out);
+ # Do not let optional metadata push a valid boundary-size file over its cap.
+ return $text if(length($out)+length($data)>PGCCSS::MAX_BYTES());
+ my $fixed=$out.$data;
+ return $text if($fixed eq $text);
+ my ($valid,$error,$fixed_header,$fixed_structure)=PGCCSS::validate($fixed);
+ if(!$valid) { &log("WebUI: skipped invalid optional CCSS normalization: $error"); return $text; }
+ # Physical header-looking lines may be a previous keyword's value or part
+ # of a quoted multiline value. Valid syntax alone does not preserve meaning.
+ # Only KEYWORD/NUMBER_OF_FIELDS are ignored by CGATS (cgats.c:593-610).
+ my %keys=map { $_=>1 } (keys %$original_header,keys %$fixed_header);
+ delete @keys{qw(KEYWORD NUMBER_OF_FIELDS)};
+ foreach my $key (sort keys %keys) {
+  if(exists($original_header->{$key}) != exists($fixed_header->{$key})
+     || (exists($original_header->{$key}) && $original_header->{$key} ne $fixed_header->{$key})) {
+   &log("WebUI: skipped optional CCSS normalization: parsed header changed (".substr($key,0,80).")");
+   return $text;
+  }
+ }
+ my $same_fields=@{$original_structure->{fields}}==@{$fixed_structure->{fields}};
+ if($same_fields) {
+  for(my $i=0;$i<@{$original_structure->{fields}};$i++) {
+   if($original_structure->{fields}[$i] ne $fixed_structure->{fields}[$i]) { $same_fields=0; last; }
+  }
+ }
+ if(!$same_fields || $original_structure->{sets}!=$fixed_structure->{sets}
+    || !defined($fixed_structure->{format_offset}) || !defined($fixed_structure->{data_offset})
+    || substr($fixed,$fixed_structure->{format_offset}) ne $data
+    || substr($fixed,$fixed_structure->{data_offset}) ne substr($text,$original_structure->{data_offset})) {
+  &log("WebUI: skipped optional CCSS normalization: parsed format/data changed");
+  return $text;
+ }
+ return $fixed;
 }
 
+sub _webui_profile_identity (@) {
+ my @s=stat($_[0]);
+ return @s ? join(':',@s[0,1,7,9,10]) : "";
+}
+
+# 0 = unchanged (also optional write failure), 1 = repaired, -1 = unreadable/invalid.
 sub _webui_ccss_repair_file (@) {
- my ($path)=@_;
+ my ($path,$error_ref)=@_;
+ $$error_ref="" if(ref($error_ref) eq "SCALAR");
  return 0 if(!$path || !-f $path);
- my $raw=&read_from_file($path);
- return 0 if(!defined($raw) || $raw eq "");
- my $fixed=&_webui_ccss_normalize_keywords($raw);
- return 0 if($fixed eq $raw);
- if(open(my $fh,">",$path)) {
-  print $fh $fixed;
-  close($fh);
-  return 1;
+ my ($name)=$path=~m{([^/]+)$};
+ my $error="Failed to read CCSS file '$name'";
+ for my $attempt (1..3) {
+  my ($raw,$identity);
+  my $read=eval {
+   open(my $fh,"<:raw",$path) or die "open: $!";
+   local $/; $raw=<$fh>;
+   defined($raw) or die "read: $!";
+   $identity=&_webui_profile_identity($fh);
+   $identity ne "" or die "stat: $!";
+   close($fh) or die "close: $!";
+   1;
+  };
+  last if(!$read);
+  # Validate on every path, before optional normalization or replacement.
+  my ($valid,$validation_error,$header,$structure)=PGCCSS::validate($raw);
+  if(!$valid) { $error=$validation_error; last; }
+  my $fixed=&_webui_ccss_normalize_keywords($raw,$header,$structure);
+  return 0 if($fixed eq $raw);
+  my ($fixed_valid,$fixed_error)=PGCCSS::validate($fixed);
+  if(!$fixed_valid) {
+   &log("WebUI: skipped invalid optional CCSS normalization ($path): $fixed_error");
+   return 0;
+  }
+  my $result=&_webui_profile_write_atomic($fixed,$path,$identity);
+  return 1 if($result==1);
+  if($result==2) { $error="CCSS file '$name' changed during repair; retry"; next; }
+  # cgats.c:593-610: KEYWORD declarations are optional. Preserve valid
+  # read-only legacy files when an optional repair cannot be written.
+  &log("WebUI: optional CCSS keyword repair failed; using unchanged valid file $path");
+  return 0;
  }
- return 0;
+ $$error_ref=$error if(ref($error_ref) eq "SCALAR");
+ &log("WebUI: $error");
+ return -1;
 }
 
 # True-black emissive technology: OLED family, plasma, CRT. The spotread -y flag
@@ -737,8 +802,12 @@ sub resolve_display_type (@) {
   my $cust="$_custom_ccss_dir/$fname";
   my $legacy="$_custom_ccss_legacy_dir/$fname";
   if(-f $sys)    { return (&_resolve_ccss_yflag($sys),$sys); }
-  if(-f $cust)   { &_webui_ccss_repair_file($cust) if($cust=~/\.ccss$/i); return (&_resolve_ccss_yflag($cust),$cust); }
-  if(-f $legacy) { &_webui_ccss_repair_file($legacy) if($legacy=~/\.ccss$/i); return (&_resolve_ccss_yflag($legacy),$legacy); }
+  foreach my $path ($cust,$legacy) {
+   next unless(-f $path);
+   my $error="";
+   return ("","",$error) if($path=~/\.ccss$/i && &_webui_ccss_repair_file($path,\$error)<0);
+   return (&_resolve_ccss_yflag($path),$path);
+  }
   return ("l","");
  }
  my $info=$_dtype_info->{lc($key)}||["l",""];
@@ -759,7 +828,8 @@ sub resolve_display_type (@) {
 # the panel-technology parse so the meter session can use a real tech key for
 # the spotread -y flag AND a separate CCSS file for the correction matrix.
 sub resolve_ccss_override (@) {
- my ($token)=@_;
+ my ($token,$error_ref)=@_;
+ $$error_ref="" if(ref($error_ref) eq "SCALAR");
  $token="" if(!defined($token));
  $token=~s/^\s+|\s+$//g;
  return "" if($token eq "");
@@ -776,8 +846,11 @@ sub resolve_ccss_override (@) {
  my $cust="$_custom_ccss_dir/$fname";
  my $legacy="$_custom_ccss_legacy_dir/$fname";
  if(-f $sys)    { return $sys; }
- if(-f $cust)   { &_webui_ccss_repair_file($cust) if($cust=~/\.ccss$/i); return (-f $cust) ? $cust : ""; }
- if(-f $legacy) { &_webui_ccss_repair_file($legacy) if($legacy=~/\.ccss$/i); return (-f $legacy) ? $legacy : ""; }
+ foreach my $path ($cust,$legacy) {
+  next unless(-f $path);
+  return "" if($path=~/\.ccss$/i && &_webui_ccss_repair_file($path,$error_ref)<0);
+  return (-f $path) ? $path : "";
+ }
  return "";
 }
 
@@ -3263,6 +3336,25 @@ sub webui_spyderx_native_display_type (@) {
  return "l";
 }
 
+# Projector base selectors, per the selected meter (issue #21). ArgyllCMS
+# 3.5.0: i1d3.c:4030-4047 and spyd2.c:3627-3704 expose generic refresh "r";
+# insttypes.c:439-473 identifies their USB IDs. ColorHug has "p"
+# (colorhug.c:945-952). Do not substitute CRT "c" or General "l" for a
+# meter with neither selector: retain "p" and its existing refusal message.
+# SpyderX keeps what it had: its own General fallback
+# (webui_spyderx_native_display_type), projectors included.
+# Actual CCSS corrections keep the existing metadata/worker selector path.
+sub webui_meter_projector_display_type (@) {
+ my ($key,$resolved,$profile,$usb_id,$port)=@_;
+ return $resolved if(lc($key||"")!~/^(?:projector(?:_ccss|_rgb|_rgbw|_rgbcmy)?|p)$/);
+ return $resolved if(defined($profile) && $profile ne "" && $profile!~/\.ccmx$/i);
+ $usb_id=lc($usb_id||"");
+ $usb_id=&webui_meter_usb_id_for_port($port) if($usb_id eq "");
+ return $resolved if($usb_id eq "085c:0a00");
+ return "r" if($usb_id=~/^(?:0765:5020|085c:0[345]00)$/);
+ return "p";
+}
+
 sub webui_meter_session_alive (@) {
 	 return 0 unless(-f $_meter_session_pid_file);
 	 my $pid="";
@@ -3803,7 +3895,8 @@ sub webui_meter_read (@) {
 
  my $display_type_key="lcd";
  $display_type_key=$1 if($body=~/"display_type"\s*:\s*"([^"\\]{1,160})"/);
- my ($display_type,$ccss_file)=&resolve_display_type($display_type_key);
+ my ($display_type,$ccss_file,$profile_error)=&resolve_display_type($display_type_key);
+ return '{"status":"error","message":"'.&_webui_json_escape($profile_error).'"}' if($profile_error);
  # ccss_override: an explicit CCSS token (ccss_<file>/custom_<file>) the
  # operator picked instead of the technology default. Maps to an absolute path
  # via resolve_ccss_override(); empty token => fall back to the technology's
@@ -3815,7 +3908,8 @@ sub webui_meter_read (@) {
   if(lc($ccss_override_token) eq "none") {
    $ccss_file="";
   } else {
-   my $override_path=&resolve_ccss_override($ccss_override_token);
+   my $override_path=&resolve_ccss_override($ccss_override_token,\$profile_error);
+   return '{"status":"error","message":"'.&_webui_json_escape($profile_error).'"}' if($profile_error);
    $ccss_file=$override_path if($override_path ne "");
   }
  }
@@ -3891,6 +3985,7 @@ sub webui_meter_read (@) {
        && $measurement_meter_port eq $live_port);
   }
  }
+ $display_type=&webui_meter_projector_display_type($display_type_key,$display_type,$ccss_file,$measurement_meter_usb_id,$measurement_meter_port);
  my $require_device_ready=0;
  $require_device_ready=1 if($body=~/"require_device_ready"\s*:\s*true/i);
  $require_device_ready=1 if(!$require_device_ready && &webui_meter_port_is_spectro($measurement_meter_port));
@@ -4019,10 +4114,10 @@ sub webui_meter_read (@) {
      &webui_meter_spotread_settled(4000);
   }
   &webui_meter_read_state_write('{"status":"starting"}');
-  # The refresh-display (-y c) startup path can ask for an 80% white patch
+  # The refresh-display (-y c/r) startup path can ask for an 80% white patch
   # during initialization. Pre-show it here so the background session helper
   # does not need to call back into the active HTTP request path.
-  if($display_type eq "c") {
+  if($display_type eq "c" || $display_type eq "r") {
    my $startup_level=&webui_range_is_limited($signal_range,$pgenerator_conf{"color_format"}) ? int(16 + 0.8 * 219 + .5) : int(0.8 * 255 + .5);
    my $startup_patch='{"name":"patch","r":'.$startup_level.',"g":'.$startup_level.',"b":'.$startup_level.',"size":100,"input_max":255,"signal_mode":"'.$signal_mode.'","max_luma":'.$max_luma.',"signal_range":"'.$signal_range.'","transport_signal_range":"'.$transport_signal_range.'"}';
    if($pattern_provider eq "companion") { &webui_icc_companion_pattern($startup_patch); }
@@ -4519,7 +4614,8 @@ sub webui_meter_series_start (@) {
  my $display_type_key="lcd";
  $display_type_key=$1 if($body=~/"display_type"\s*:\s*"([^"\\]{1,160})"/);
  # A preview has no meter to set up, and resolving a profile can repair its file.
- my ($display_type,$ccss_file)=$preview ? ($display_type_key,"") : &resolve_display_type($display_type_key);
+ my ($display_type,$ccss_file,$profile_error)=$preview ? ($display_type_key,"") : &resolve_display_type($display_type_key);
+ return '{"status":"error","message":"'.&_webui_json_escape($profile_error).'"}' if($profile_error);
  # ccss_override: same parsing rule as webui_meter_read. The single-read and
  # series paths now share the same override-token contract so the worker can
  # always derive y_flag from display_type and the correction matrix from the
@@ -4530,7 +4626,8 @@ sub webui_meter_series_start (@) {
   if(lc($ccss_override_token) eq "none") {
    $ccss_file="";
   } else {
-   my $override_path=&resolve_ccss_override($ccss_override_token);
+   my $override_path=&resolve_ccss_override($ccss_override_token,\$profile_error);
+   return '{"status":"error","message":"'.&_webui_json_escape($profile_error).'"}' if($profile_error);
    $ccss_file=$override_path if($override_path ne "");
   }
  }
@@ -4626,6 +4723,7 @@ $patch_insert_time_level=100 if($patch_insert_time_level > 100);
  # The meter checks here and above ask the meter itself (spotread --detect,
  # which can claim an i1Display3). The steps do not depend on them, and a
  # preview runs on every click on a tile.
+ $display_type=&webui_meter_projector_display_type($display_type_key,$display_type,$ccss_file,$measurement_meter_usb_id,$measurement_meter_port) if(!$preview);
  $observer="1931_2" if(!$preview && !&webui_meter_port_is_spectro($measurement_meter_port));
  my $require_device_ready=0;
  $require_device_ready=1 if($body=~/"require_device_ready"\s*:\s*true/i);
@@ -8647,10 +8745,10 @@ sub _webui_ccss_ccxxmake_disptech (@) {
 }
 
 sub _webui_ccmx_base_yflag (@) {
- my ($display_type_key)=@_;
+ my ($display_type_key,$usb_id,$port)=@_;
  $display_type_key=lc($display_type_key||"");
  return "c" if($display_type_key=~/^(?:refresh|plasma|crt)$/);
- return "p" if($display_type_key=~/^projector/);
+ return &webui_meter_projector_display_type($display_type_key,"p","",$usb_id,$port) if($display_type_key=~/^(?:projector|p$)/);
  return "l";
 }
 
@@ -8931,7 +9029,8 @@ sub _webui_ccss_from_ti3 (@) {
   my ($base,$resolved_source)=@$candidate;
   my $path="$base/$fname";
   next unless(-f $path);
-  &_webui_ccss_repair_file($path) if($resolved_source eq "custom" && $path=~/\.ccss$/i);
+  my $error="";
+  return ("",$resolved_source,$fname,$error) if($resolved_source eq "custom" && $path=~/\.ccss$/i && &_webui_ccss_repair_file($path,\$error)<0);
   return ($path,$resolved_source,$fname);
  }
  return ("","",$fname);
@@ -9037,6 +9136,57 @@ sub _webui_ccmx_validate_content (@) {
  return (1,"");
 }
 
+# Serialize profile installation between the meter and general HTTP lanes.
+# The shared scalar has no descriptor that a detached child can inherit.
+my $_webui_profile_install_lock :shared = 0;
+# 0 = write failed, 1 = installed, 2 = stale repair snapshot (retry read).
+sub _webui_profile_write_atomic (@) {
+ my ($raw,$path,$expected)=@_;
+ lock($_webui_profile_install_lock);
+ my $dir=$path; $dir=~s{/[^/]+$}{};
+ my ($fh,$tmp,$changed);
+ my $written=eval {
+  if(defined($expected) && &_webui_profile_identity($path) ne $expected) {
+   $changed=1; die "profile changed before repair write";
+  }
+  ($fh,$tmp)=File::Temp::tempfile('.ccss-XXXXXXXX',DIR=>$dir,UNLINK=>0);
+  binmode($fh) or die "binmode: $!";
+  $fh->print($raw) or die "write: $!";
+  $fh->flush() or die "flush: $!";
+  $fh->sync() or die "fsync: $!";
+  $fh->close() or die "close: $!";
+  if(defined($expected) && &_webui_profile_identity($path) ne $expected) {
+   $changed=1; die "profile changed before repair rename";
+  }
+  rename($tmp,$path) or die "rename: $!";
+  1;
+ };
+ if(!$written) {
+  my $error=$@;
+  close($fh) if($fh && defined(fileno($fh)));
+  if(defined($tmp) && -f $tmp) {
+   unlink($tmp) or &log("WebUI: failed to remove profile temporary file $tmp: $!");
+  }
+  &log("WebUI: profile write failed ($path): $error");
+  return $changed ? 2 : 0;
+ }
+ return 1;
+}
+
+# Check raw bytes before optional normalization can allocate header state.
+sub _webui_ccss_save_content (@) {
+ my ($raw,$dir,$name,$message)=@_;
+ my ($valid,$error,$header,$structure)=PGCCSS::validate($raw);
+ return '{"status":"error","message":"'.&_webui_json_escape($error).'"}' if(!$valid);
+ my $fixed=&_webui_ccss_normalize_keywords($raw,$header,$structure);
+ ($valid,$error)=PGCCSS::validate($fixed);
+ if($valid) { $raw=$fixed; }
+ else { &log("WebUI: saving valid raw CCSS after invalid optional normalization ($name): $error"); }
+ return '{"status":"error","message":"Failed to write CCSS file"}' if(!&_webui_profile_write_atomic($raw,"$dir/$name"));
+ &log("WebUI: custom CCSS saved: $name");
+ return '{"status":"ok","filename":"'.$name.'","message":"'.$message.'"}';
+}
+
 sub webui_ccss_upload (@) {
  my ($body)=@_;
  # Expect JSON: { name: "...", content: "base64...", filename: "...", display_type: "..." }
@@ -9073,9 +9223,7 @@ sub webui_ccss_upload (@) {
   return '{"status":"error","message":"'.&_webui_json_escape($error).'"}' if(!$valid);
   my $safe_name=&_webui_ccss_safe_filename($name,"ccmx");
   my $out_path="$custom_storage_dir/$safe_name";
-  if(open(my $fh,">:raw",$out_path)) {
-   print $fh $raw;
-   close($fh);
+  if(&_webui_profile_write_atomic($raw,$out_path)) {
    &log("WebUI: custom CCMX uploaded: $safe_name");
    return "{\"status\":\"ok\",\"filename\":\"$safe_name\",\"format\":\"ccmx\",\"message\":\"CCMX profile saved\"}";
   }
@@ -9086,21 +9234,8 @@ sub webui_ccss_upload (@) {
  my $safe_name=&_webui_ccss_safe_filename($name,"ccss");
 
  # Detect file type: CCSS, TI3, or CSV.
- if($raw=~/^CCSS\s/) {
-  # Already a CCSS file — validate basic structure
-  if($raw!~/BEGIN_DATA/ || $raw!~/END_DATA/) {
-   return '{"status":"error","message":"Invalid CCSS file: missing data section"}';
-  }
-  $raw=&_webui_ccss_normalize_keywords($raw);
-  my $out_path="$custom_storage_dir/$safe_name";
-  if(open(my $fh,">:raw",$out_path)) {
-   print $fh $raw;
-   close($fh);
-   &_webui_ccss_repair_file($out_path);
-   &log("WebUI: custom CCSS uploaded: $safe_name");
-   return "{\"status\":\"ok\",\"filename\":\"$safe_name\",\"message\":\"CCSS profile saved\"}";
-  }
-  return '{"status":"error","message":"Failed to write file"}';
+ if($raw=~/\A(?>\s*)(?:\#[^\r\n]*+(?>\s*))*+CCSS(?:\s|$)/ || $orig_filename=~/\.ccss$/i) {
+  return &_webui_ccss_save_content($raw,$custom_storage_dir,$safe_name,"CCSS profile saved");
  }
 
  if($raw=~/(?:^|\n)TARGET_INSTRUMENT\s+"[^"]+"/ && $raw=~/(?:^|\n)SPECTRAL_BANDS\s+"?[0-9]+"?/ && $raw=~/(?:^|\n)BEGIN_DATA_FORMAT(?:\n|\r\n)/) {
@@ -9109,15 +9244,7 @@ sub webui_ccss_upload (@) {
    $message=&_webui_json_escape($message);
    return "{\"status\":\"error\",\"message\":\"$message\"}";
   }
-  my $out_path="$custom_storage_dir/$safe_name";
-  if(open(my $fh,">",$out_path)) {
-   print $fh &_webui_ccss_normalize_keywords($ccss_content);
-   close($fh);
-   &_webui_ccss_repair_file($out_path);
-   &log("WebUI: custom CCSS converted from TI3: $safe_name");
-   return "{\"status\":\"ok\",\"filename\":\"$safe_name\",\"message\":\"TI3 converted to CCSS\"}";
-  }
-  return '{"status":"error","message":"Failed to write converted CCSS file"}';
+  return &_webui_ccss_save_content($ccss_content,$custom_storage_dir,$safe_name,"TI3 converted to CCSS");
  }
 
  # EDR (binary X-Rite/i1Display correction) — convert via oeminst.
@@ -9128,15 +9255,7 @@ sub webui_ccss_upload (@) {
    $message=&_webui_json_escape($message);
    return "{\"status\":\"error\",\"message\":\"$message\"}";
   }
-  my $out_path="$custom_storage_dir/$safe_name";
-  if(open(my $fh,">",$out_path)) {
-   print $fh &_webui_ccss_normalize_keywords($ccss_content);
-   close($fh);
-   &_webui_ccss_repair_file($out_path);
-   &log("WebUI: custom CCSS converted from EDR: $safe_name");
-   return "{\"status\":\"ok\",\"filename\":\"$safe_name\",\"message\":\"EDR converted to CCSS\"}";
-  }
-  return '{"status":"error","message":"Failed to write converted CCSS file"}';
+  return &_webui_ccss_save_content($ccss_content,$custom_storage_dir,$safe_name,"EDR converted to CCSS");
  }
 
  # Assume CSV — try to convert
@@ -9145,15 +9264,7 @@ sub webui_ccss_upload (@) {
    return '{"status":"error","message":"Failed to parse upload. Supported formats: CCSS, EDR, TI3, CSV with wavelength,R,G,B,W columns, or raw 3/4-row spectral CSV (380-780nm)"}';
  }
 
- my $out_path="$custom_storage_dir/$safe_name";
- if(open(my $fh,">",$out_path)) {
-  print $fh &_webui_ccss_normalize_keywords($ccss_content);
-  close($fh);
-  &_webui_ccss_repair_file($out_path);
-  &log("WebUI: custom CCSS converted from CSV: $safe_name");
-  return "{\"status\":\"ok\",\"filename\":\"$safe_name\",\"message\":\"CSV converted to CCSS\"}";
- }
- return '{"status":"error","message":"Failed to write file"}';
+ return &_webui_ccss_save_content($ccss_content,$custom_storage_dir,$safe_name,"CSV converted to CCSS");
 }
 
 sub _webui_ccss_create_write_state (@) {
@@ -9336,7 +9447,7 @@ sub webui_ccss_create_start (@) {
  if($format eq "ccmx") {
   my $target_label=$target->{name}||"target colorimeter";
   $target_label=~s/'/'"'"'/g;
-  my $target_yflag=&_webui_ccmx_base_yflag($display_type_key);
+  my $target_yflag=&_webui_ccmx_base_yflag($display_type_key,$target->{usb_id},$target_port);
   $cmd.=" --target-comport '$target_port' --target-label '$target_label' --target-display-type '$target_yflag'";
  }
  $cmd.=" --continue-file '$_ccss_create_continue_file'";
@@ -9407,20 +9518,19 @@ sub webui_ccss_delete (@) {
  if($fname eq "" || $fname=~/\.\./) {
   return '{"status":"error","message":"Invalid filename"}';
  }
+ # Installation and deletion must be ordered across both HTTP lanes.
+ lock($_webui_profile_install_lock);
  foreach my $path ("$_custom_ccss_dir/$fname","$_custom_ccss_legacy_dir/$fname") {
   next unless(-f $path);
-  unlink($path);
+  return '{"status":"error","message":"Failed to delete CCSS file"}' if(!unlink($path));
   &log("WebUI: custom CCSS deleted: $fname");
   return '{"status":"ok","message":"Deleted"}';
  }
  return '{"status":"error","message":"File not found"}';
 }
 
-# CCSS dry-run validator. Parses the file header to confirm it looks like
-# a spectral-sample file, then optionally attempts a short spotread probe
-# to verify the active meter accepts the upload. Returns:
-#   {ok:true,  description:"…", technology:"…", display_type_refresh:"YES|NO", yflag:"l|c|p"}
-#   {ok:false, error:"…"}
+# File-only CCSS validation shared with import. No meter probe or side effects.
+# A successful read cannot guarantee a matrix for the actual sensor CMFs.
 sub webui_ccss_validate (@) {
  my ($body)=@_;
  my $fname="";
@@ -9439,7 +9549,7 @@ sub webui_ccss_validate (@) {
  }
  return '{"ok":false,"error":"File not found"}' if($resolved eq "");
  my ($sz)=(-s $resolved);
- return '{"ok":false,"error":"File is empty"}' if(!$sz || $sz<200);
+ return '{"ok":false,"error":"File is empty"}' if(!$sz);
 
  if($resolved=~/\.ccmx$/i) {
   my $raw=&read_from_file($resolved);
@@ -9456,32 +9566,14 @@ sub webui_ccss_validate (@) {
    .'}';
  }
 
- my ($display,$technology,$refresh)=("","","");
- my $has_spectral_format=0;
- my $has_spectral_data=0;
- if(open(my $fh,"<",$resolved)) {
-  my $count=0;
-  while(my $line=<$fh>) {
-   $count++;
-   # Some valid Argyll CCSS files have hundreds of SPEC_* header lines before
-   # BEGIN_DATA, so allow a much deeper scan before giving up.
-   last if($count>1200);
-   chomp($line);
-   $display=$1    if(!$display    && $line=~/^DISPLAY\s+"([^"]*)"/i);
-   $technology=$1 if(!$technology && $line=~/^TECHNOLOGY\s+"([^"]*)"/i);
-   $refresh=$1    if(!$refresh    && $line=~/^DISPLAY_TYPE_REFRESH\s+"([^"]*)"/i);
-   $has_spectral_format=1 if($line=~/^SPECTRAL_BANDS\b/);
-   $has_spectral_format=1 if($line=~/^BEGIN_DATA_FORMAT\b/ && !$has_spectral_format);
-   $has_spectral_data=1   if($line=~/^BEGIN_DATA\b/);
-   last if($has_spectral_data);
-  }
-  close($fh);
- } else {
-  return '{"ok":false,"error":"Cannot open file for reading"}';
- }
- if(!$has_spectral_format || !$has_spectral_data) {
-  return '{"ok":false,"error":"Not a CCSS file (missing spectral bands or data section)"}';
- }
+ my $raw;
+ if(open(my $fh,"<:raw",$resolved)) {
+  local $/; $raw=<$fh>;
+  return '{"ok":false,"error":"Cannot read file"}' if(!close($fh));
+ } else { return '{"ok":false,"error":"Cannot open file for reading"}'; }
+ my ($valid,$error,$header)=PGCCSS::validate($raw);
+ return '{"ok":false,"error":"'.&_webui_json_escape($error).'"}' if(!$valid);
+ my ($display,$technology,$refresh)=map { $header->{$_} // "" } qw(DISPLAY TECHNOLOGY DISPLAY_TYPE_REFRESH);
  my $yflag=&_resolve_ccss_yflag($resolved);
  my $desc=$display ne "" ? $display : $fname;
  my $r='{"ok":true'
@@ -9918,7 +10010,8 @@ sub webui_ccss_validate (@) {
    $format=~s/[^a-z0-9]//g;
    $format="ccss" if($format eq "" || $format eq "raw" || $format eq "txt");
 
-   my ($resolved,$resolved_source,$safe_name)=&_webui_ccss_resolve_named_path($fname,$source);
+   my ($resolved,$resolved_source,$safe_name,$repair_error)=&_webui_ccss_resolve_named_path($fname,$source);
+   return (0,400,'application/json','', '{"status":"error","message":"'.&_webui_json_escape($repair_error).'"}') if($repair_error);
    return (0,400,'application/json','',"{\"status\":\"error\",\"message\":\"Missing or invalid filename\"}") if($safe_name eq "");
    return (0,404,'application/json','',"{\"status\":\"error\",\"message\":\"Correction profile not found\"}") if($resolved eq "");
 
@@ -9966,7 +10059,8 @@ sub webui_ccss_preview (@) {
  my ($body)=@_;
    my ($fname,$source)=&_webui_ccss_body_target($body);
 
- my ($resolved,$resolved_source,$safe_name)=&_webui_ccss_resolve_named_path($fname,$source);
+ my ($resolved,$resolved_source,$safe_name,$repair_error)=&_webui_ccss_resolve_named_path($fname,$source);
+ return '{"ok":false,"error":"'.&_webui_json_escape($repair_error).'"}' if($repair_error);
  return '{"ok":false,"error":"Missing or invalid filename"}' if($safe_name eq "");
  return '{"ok":false,"error":"Correction profile not found"}' if($resolved eq "");
 

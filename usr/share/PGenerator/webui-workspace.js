@@ -21712,7 +21712,7 @@ function pgInitialRetry(name,fn,delays){
       var body = windows
         ? '<div class="glow-greys" role="img" aria-label="' + esc(items.map(function (it) { return it.level + ' %'; }).join(', ')) + '">' + items.map(function (it) { var g = Math.round(255 * Math.max(0, Math.min(100, Number(it.level) || 0)) / 100); return '<i style="background:rgb(' + g + ',' + g + ',' + g + ')"></i>'; }).join('') + '</div>'
         : '<p class="glow-pl-first">' + esc(items.slice(0, 2).map(function (it) { return it.label; }).join(' \u00b7 ')) + (n > 2 ? ' <span>+' + (n - 2) + '</span>' : '') + '</p>';
-      return '<article class="glow-pl' + (isActive ? ' is-active' : '') + '"><div class="glow-pl-h"><h3>' + esc(p.name) + '</h3><span class="glow-pill">' + n + (windows ? (n === 1 ? ' window' : ' windows') : (n === 1 ? ' pattern' : ' patterns')) + '</span></div>' +
+      return '<article class="glow-pl' + (isActive ? ' is-active' : '') + '" tabindex="-1" data-glow-list="' + esc(p.id) + '"><div class="glow-pl-h"><h3>' + esc(p.name) + '</h3><span class="glow-pill">' + n + (windows ? (n === 1 ? ' window' : ' windows') : (n === 1 ? ' pattern' : ' patterns')) + '</span></div>' +
         '<p class="glow-pl-d">' + esc(p.description) + '</p>' + body +
         (blocked ? '<p class="glow-pl-note">Uses G1 plates: switch the output to SDR first.</p>' : '') +
         (isActive ? '<p class="glow-pl-live"><i aria-hidden="true"></i>On screen</p>'
@@ -21721,8 +21721,15 @@ function pgInitialRetry(name,fn,delays){
     }).join('');
     // Drawn on every pass: the card is replaced only when what it shows changed, and the note of that is taken after the drawing.
     if (html === listsHtml) return;
-    $('glowPls').innerHTML = html;
+    // The card is replaced whole. A Start that had the focus hands it on: to its list's new Start, or to the list itself where Start is locked or gone.
+    var box = $('glowPls'), act = document.activeElement, at = act && box.contains(act) ? act.closest('[data-glow-list]') : null, fid = at ? at.getAttribute('data-glow-list') : null;
+    box.innerHTML = html;
     listsHtml = html;
+    if (fid !== null) [].some.call(box.querySelectorAll('[data-glow-list]'), function (a) {
+      if (a.getAttribute('data-glow-list') !== fid) return false;
+      (a.querySelector('button:not([disabled])') || a).focus();
+      return true;
+    });
   }
 
   /* ---- Pi Ports on a phone: the port in use as one line of text ----

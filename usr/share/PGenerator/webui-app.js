@@ -4063,7 +4063,9 @@ async function playlistLoad(){
 }
 function playlistSchedule(){
  if(playlistPollTimer) clearTimeout(playlistPollTimer);
- const visible=!document.hidden&&document.getElementById('playlistCard')&&document.getElementById('playlistCard').offsetParent!==null;
+ // The Glow theme shows the lists a second time, on Output (#glowListsCard): its locks and "On screen" are read at the same pace.
+ const shown=id=>{ const e=document.getElementById(id); return !!e&&e.offsetParent!==null; };
+ const visible=!document.hidden&&(shown('playlistCard')||shown('glowListsCard'));
  const active=playlistActive()||(playlistData&&playlistData.tvmenu&&playlistData.tvmenu.view);
  playlistPollTimer=setTimeout(playlistLoad,active?(visible?1500:5000):(visible?15000:60000));
 }

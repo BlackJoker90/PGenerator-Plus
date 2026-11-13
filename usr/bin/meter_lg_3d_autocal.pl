@@ -3044,8 +3044,8 @@ sub export_lut {
  my $solve_only=!!(ref($config) eq "HASH" && $config->{"solve_only"});
  # Offline export is display-agnostic host-app LUT; AutoCal upload keeps the LG title.
  my $title=$solve_only
-  ? ("PGenerator ".signal_mode_label($signal_mode)." $method ".target_gamut_label($gamut)." ".target_gamma_label($gamma))
-  : ("PGenerator LG".($display_model ne "" ? " $display_model" : "")." ".signal_mode_label($signal_mode)." $method $picture ".target_gamut_label($gamut)." ".target_gamma_label($gamma));
+  ? ("rampecho ".signal_mode_label($signal_mode)." $method ".target_gamut_label($gamut)." ".target_gamma_label($gamma))
+  : ("rampecho LG".($display_model ne "" ? " $display_model" : "")." ".signal_mode_label($signal_mode)." $method $picture ".target_gamut_label($gamut)." ".target_gamma_label($gamma));
  my $have_payload=(ref($payload_u16) eq "ARRAY" && scalar(@{$payload_u16})>0) ? 1 : 0;
  my $binary="";
  my $payload_size=0;

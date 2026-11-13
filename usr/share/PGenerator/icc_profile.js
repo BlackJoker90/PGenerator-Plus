@@ -7,7 +7,7 @@ let meterIccBuildPending=false;
 let meterIccCompanionConnected=false;
 let meterIccCompanionReportedConnected=false;
 let meterIccCompanionLastSeenAt=0;
-let meterIccCompanionDetail='PGenerator+ Patch Companion connected';
+let meterIccCompanionDetail='Patch Companion connected';
 let meterIccCompanionClient='';
 let meterIccCompanionOutdated='';
 let meterIccCompanionTimer=null;
@@ -518,10 +518,10 @@ async function meterIccPushCompanionDisplaySettings(showError,correctionOverride
    body:JSON.stringify({settings_protocol:2,window_mode:mode,patch_size:meterIccCompanionPatchSizeValue(),correction_mode:correctionMode,correction_signal_mode:activeSignal}),
    _quiet:true,_timeoutMs:5000
   });
-  if(!response||response.status!=='ok') throw new Error(response&&response.message?response.message:'Could not update PGenerator+ Patch Companion');
+  if(!response||response.status!=='ok') throw new Error(response&&response.message?response.message:'Could not update Patch Companion');
   return true;
  }catch(error){
-  if(showError!==false) toast(error&&error.message?error.message:'Could not update PGenerator+ Patch Companion',true);
+  if(showError!==false) toast(error&&error.message?error.message:'Could not update Patch Companion',true);
   return false;
  }finally{
   meterIccCompanionSettingsPending=Math.max(0,meterIccCompanionSettingsPending-1);
@@ -964,8 +964,8 @@ function meterIccLocalOutputModeStatus(profileType){
   message:dirty
    ?'Apply & Restart before profiling so the HDMI measurements use the selected output settings.'
    :active===required
-   ?('PGenerator+ HDMI output is '+label+'.')
-   :('Set the PGenerator+ output to '+(required==='hdr10'?'HDR10':'SDR')+' before profiling. It is currently '+label+'.')
+   ?('rampecho HDMI output is '+label+'.')
+   :('Set the rampecho output to '+(required==='hdr10'?'HDR10':'SDR')+' before profiling. It is currently '+label+'.')
  };
 }
 
@@ -979,7 +979,7 @@ async function meterIccEnsureLocalOutputMode(profileType){
   title:dirty?'Apply output settings?':'Switch output mode?',
   body:dirty
    ?('This ICC profile requires '+requiredLabel+' output. The selected display settings must be applied before profiling can start. Apply them and restart the pattern generator now?')
-   :('This ICC profile requires '+requiredLabel+' output, but PGenerator+ is currently in '+activeLabel+' mode. Switch to '+requiredLabel+' and restart the pattern generator now?'),
+   :('This ICC profile requires '+requiredLabel+' output, but rampecho is currently in '+activeLabel+' mode. Switch to '+requiredLabel+' and restart the pattern generator now?'),
   acceptLabel:dirty?'Apply & Restart':('Switch to '+requiredLabel),
   cancelLabel:'Cancel'
  });
@@ -993,7 +993,7 @@ async function meterIccEnsureLocalOutputMode(profileType){
  if(typeof applySettings!=='function'||!await applySettings()) return false;
  const applied=meterIccLocalOutputModeStatus(profileType);
  if(!applied.matches){
-  toast('The PGenerator+ output did not switch to '+requiredLabel+'. Check the display connection and try again.',true);
+  toast('The rampecho output did not switch to '+requiredLabel+'. Check the display connection and try again.',true);
   return false;
  }
  return true;
@@ -1067,7 +1067,7 @@ function meterIccSyncUi(){
  if(localSetup) localSetup.style.display=usesCompanion?'none':'';
  const delayTip=usesCompanion
   ?'For single-monitor setups using the same computer for the WebUI and profiling, this delay gives you time to switch the display to the required input before measurements begin.'
-  :'The delay gives you time to switch the display to the PGenerator+ HDMI input before measurements begin.';
+  :'The delay gives you time to switch the display to the rampecho HDMI input before measurements begin.';
  if(delayNote) delayNote.textContent=delayTip;
  setTip('meterIccStartDelayHelp',delayTip);
  if(companionPatchSizeField) companionPatchSizeField.style.display=(!usesCompanion||companionWindowMode==='fullscreen')?'':'none';
@@ -1079,7 +1079,7 @@ function meterIccSyncUi(){
  if(calibrationPatchSizeField) calibrationPatchSizeField.style.display=companionWindowMode==='fullscreen'?'':'none';
  const patchSizeTip=usesCompanion
   ?'Linked to Patch Size in the Calibration workspace. Window and APL selections are applied live to the running Companion.'
-  :'Linked to Patch Size in the Calibration workspace and used by the PGenerator+ HDMI output.';
+  :'Linked to Patch Size in the Calibration workspace and used by the rampecho HDMI output.';
  if(patchSizeNote) patchSizeNote.textContent=patchSizeTip;
  setTip('meterIccPatchSizeHelp',patchSizeTip);
  const companionModeTip=companionWindowMode==='fullscreen'
@@ -1143,8 +1143,8 @@ function meterIccSyncUi(){
  const companionPatchSizeSelect=document.getElementById('meterIccCompanionPatchSize');
  const companionPatchSizeOption=companionPatchSizeSelect&&companionPatchSizeSelect.selectedOptions?companionPatchSizeSelect.selectedOptions[0]:null;
  const generatorLabel=usesCompanion
-  ?('PGenerator+ Patch Companion '+(companionWindowMode==='fullscreen'?('fullscreen, '+String(companionPatchSizeOption?companionPatchSizeOption.textContent:'controlled patch')):'resizable window'))
-  :'PGenerator+ HDMI';
+  ?('Patch Companion '+(companionWindowMode==='fullscreen'?('fullscreen, '+String(companionPatchSizeOption?companionPatchSizeOption.textContent:'controlled patch')):'resizable window'))
+  :'rampecho HDMI';
  if(summary) summary.textContent=invalidPatchSet
   ?('Increase total patches to at least '+patchMinimum+' for the selected structured patch coverage.')
   :(generatorLabel+' output: '+info.mode.toUpperCase()+'. Algorithm: '+profileModelInfo.label+' at '+profileQuality+' table resolution.'+(usesHdrB2a?' B2A cLUT: '+b2aGrid+'³.':'')+' ICC v'+effectiveIccVersion+(effectiveIccVersion==='4.4'?' CICP '+cicp.colour_primaries+'/'+cicp.transfer_characteristics+'/'+cicp.matrix_coefficients+'/'+cicp.video_full_range_flag:'')+'. Calibration: '+({vcgt:'With VCGT',profile:'Without VCGT',none:'None'}[calibrationMode])+'. Meter: '+meterLabel+'. Display: '+displayLabel+'. Meter correction: '+correctionLabel+'. Pattern insertion: '+(insertion?'On':'Off')+'. '+count+' profile patches'+(preRead?' plus a 34-patch optimization pre-read':'')+'.'+(selectsSdrTarget?' Target: '+transfer.label+'.':'')+(!usesCompanion?' '+localMode.message:''));
@@ -1158,10 +1158,10 @@ function meterIccSyncUi(){
   start.disabled=!meterReady||generatorUnavailable||busy||invalidPatchSet;
   start.textContent=meterIccBuildPending?'Building Profile...':(meterIccStarting||meterIccRunning?'Profiling...':'Start Profiling');
   start.setAttribute('aria-busy',(meterIccStarting||meterIccRunning||meterIccBuildPending)?'true':'false');
-  const startReason=!meterDetected?'Connect a meter first':!meterReady?'Waiting for the meter settings to finish loading':invalidPatchSet?('Increase total patches to at least '+patchMinimum):usesCompanion&&!meterIccCompanionConnected?'Start PGenerator+ Patch Companion on the target computer before profiling':busy?'A meter operation is already running':!usesCompanion&&!localMode.matches?'Start profiling to review and apply the required output mode':'Start the ICC profiling measurements';
+  const startReason=!meterDetected?'Connect a meter first':!meterReady?'Waiting for the meter settings to finish loading':invalidPatchSet?('Increase total patches to at least '+patchMinimum):usesCompanion&&!meterIccCompanionConnected?'Start Patch Companion on the target computer before profiling':busy?'A meter operation is already running':!usesCompanion&&!localMode.matches?'Start profiling to review and apply the required output mode':'Start the ICC profiling measurements';
   start.title='';
   if(startHint){
-   const companionTip=start.disabled&&generatorUnavailable?'Start PGenerator+ Patch Companion on the target computer before profiling':'';
+   const companionTip=start.disabled&&generatorUnavailable?'Start Patch Companion on the target computer before profiling':'';
    startHint.title='';
    startHint.dataset.tooltip=companionTip;
    startHint.setAttribute('aria-label',startReason);
@@ -1285,7 +1285,7 @@ function meterIccApplyDownloadRecommendation(){
 // so this needs no version lookup and works even though the Pi itself has no
 // internet route -- the browser does the fetching, not the server. Opened in
 // a new tab because it leaves the WebUI (and any running measurement) in
-// place. This copy is unpaired: it discovers this PGenerator+ by resolving
+// place. This copy is unpaired: it discovers this rampecho by resolving
 // pgenerator.local and waits for approval through the pairing prompt below.
 // Opens the release PAGE, not an asset. Chrome and Edge judge a download by
 // the origin of the page that started it, so a direct asset link from this
@@ -1328,8 +1328,8 @@ function meterCalibrationApplyCompanionAvailability(connected){
  if(companionOption){
   companionOption.disabled=!connected;
   companionOption.title=connected
-   ?'Use the connected PGenerator+ Patch Companion for patch generation'
-   :'Run PGenerator+ Patch Companion on the target computer to enable this option';
+   ?'Use the connected Patch Companion for patch generation'
+   :'Run Patch Companion on the target computer to enable this option';
  }
  if(!connected) meterCalibrationSelectLocalOutput();
 }
@@ -1395,7 +1395,7 @@ async function meterCalibrationRequirePatternProvider(){
  if(meterCalibrationReadPatternProvider()!=='companion') return true;
  const connected=await meterIccRefreshCompanionStatus();
  if(connected) return meterCalibrationPushCompanionCorrection();
- toast('Run the paired PGenerator+ Patch Companion on the target computer before reading',true);
+ toast('Run the paired Patch Companion on the target computer before reading',true);
  return false;
 }
 
@@ -1555,12 +1555,12 @@ function meterIccUpdateTopCompanionStatus(connected,detail,busy){
  const wrap=document.getElementById('iccCompanionTopStatusWrap');
  if(!wrap) return;
  wrap.style.display=connected?'':'none';
- wrap.title=connected?String(detail||'PGenerator+ Patch Companion connected'):'PGenerator+ Patch Companion not connected';
+ wrap.title=connected?String(detail||'Patch Companion connected'):'Patch Companion not connected';
  const dot=document.getElementById('iccCompanionTopDot');
  const text=document.getElementById('iccCompanionTopStatusText');
  if(dot) dot.style.background=busy?'#ffca28':'var(--green)';
  if(text){
-  text.textContent='PGenerator+ Patch Companion'+(meterIccCompanionClient?' ['+meterIccCompanionClient+']':'');
+  text.textContent='Patch Companion'+(meterIccCompanionClient?' ['+meterIccCompanionClient+']':'');
   text.style.color='var(--text)';
  }
  if(typeof syncTopStatusStack==='function') syncTopStatusStack();
@@ -1993,7 +1993,7 @@ async function meterIccStartClosedLoopFineTune(file,button,profile,source){
   return;
  }
  if(!await meterIccRefreshCompanionStatus()){
-  toast('Run PGenerator+ Patch Companion on the target computer to apply profiles and remeasure.',true);
+  toast('Run Patch Companion on the target computer to apply profiles and remeasure.',true);
   return;
  }
  const build=source.build_config&&typeof source.build_config==='object'?source.build_config:{};
@@ -2434,7 +2434,7 @@ function meterIccShowCubeModal(file,result){
   const methodLabel=String(result.method||'clut')==='clut'?'BToA cLUT':'matrix/TRC';
   summary.textContent='Converted '+file+' ('+modeLabel+', '+methodLabel+') into '
    +(size?size+'×'+size+'×'+size+' ':'')+String(result.file||'')
-   +'. The LUT was added to the 3D LUT workspace history on this PGenerator+.';
+   +'. The LUT was added to the 3D LUT workspace history on this rampecho.';
  }
  const modal=document.getElementById('meterIccCubeModal');
  if(modal){
@@ -3134,7 +3134,7 @@ async function meterIccRetryBuild(){
     // measure only those probes instead of repeating the characterization.
     meterIccRunConfig.stage='mhc2-feedback-provisional';
     if(!await meterIccRefreshCompanionStatus())
-     throw new Error('Run PGenerator+ Patch Companion on the target computer to finish the saved MHC2 response measurements');
+     throw new Error('Run Patch Companion on the target computer to finish the saved MHC2 response measurements');
     meterIccCompanionProfileRestoreMode=meterIccCompanionCorrectionValue();
     meterIccCompanionCorrectionInitialized=true;
    }
@@ -3245,7 +3245,7 @@ async function meterIccStart(){
  const mode=info.mode;
  const patternProvider=meterIccPatternProvider();
  if(patternProvider==='companion'){
-  if(!await meterIccRefreshCompanionStatus()){ toast('Run PGenerator+ Patch Companion on the target computer first',true); return; }
+  if(!await meterIccRefreshCompanionStatus()){ toast('Run Patch Companion on the target computer first',true); return; }
   // Profile builds always measure the panel itself, so the correction is
   // forced off for the run rather than offered as a choice. 'system' is NOT a
   // no-correction mode: on fullscreen HDR the Companion stands in for the
@@ -3376,8 +3376,8 @@ async function meterIccStart(){
   for(let remaining=startDelay;remaining>0;remaining--){
    if(startToken!==meterIccStartToken) throw new Error('ICC profiling stopped');
    if(status) status.textContent=patternProvider==='companion'
-    ?('Starting in '+remaining+' seconds. Move and resize PGenerator+ Patch Companion on the target display now.')
-    :('Starting in '+remaining+' seconds. Switch the display to the PGenerator+ HDMI input now.');
+    ?('Starting in '+remaining+' seconds. Move and resize Patch Companion on the target display now.')
+    :('Starting in '+remaining+' seconds. Switch the display to the rampecho HDMI input now.');
    meterIccSetProgress('Waiting to start',startDelay-remaining,startDelay);
    await new Promise(resolve=>setTimeout(resolve,1000));
   }
@@ -3712,21 +3712,21 @@ async function meterIccBuild(readings){
   const needsActiveMhc2=meterIccNeedsActiveMhc2Stage(meterIccRunConfig);
   const payload=Object.assign({},meterIccRunConfig,{readings:profileReadings,client_time:Math.floor(Date.now()/1000)});
   if(needsActiveMhc2){
-   payload.name=String(meterIccRunConfig.name||'PGenerator+ display profile')+' Null MHC2 Seed';
+   payload.name=String(meterIccRunConfig.name||'rampecho display profile')+' Null MHC2 Seed';
    // The active-path readings characterize Windows and the display, not an
    // earlier correction that the final MHC2 tag will replace. Install the
    // same fitted profile with identity MHC2 for this intermediate pass.
    payload.calibration_mode='none';
    payload.include_vcgt=false;
   }else if(meterIccRunConfig&&meterIccRunConfig.stage==='mhc2-seed'){
-   payload.name=String(meterIccRunConfig.name||'PGenerator+ display profile')+' Null MHC2 Seed';
+   payload.name=String(meterIccRunConfig.name||'rampecho display profile')+' Null MHC2 Seed';
    payload.calibration_mode='none';
    payload.include_vcgt=false;
    delete payload.mhc2_readings;
   }else if(meterIccRunConfig&&meterIccRunConfig.stage==='mhc2-provisional'){
-   payload.name=String(meterIccRunConfig.name||'PGenerator+ display profile')+' MHC2 Peak Probe';
+   payload.name=String(meterIccRunConfig.name||'rampecho display profile')+' MHC2 Peak Probe';
   }else if(meterIccRunConfig&&meterIccRunConfig.stage==='mhc2-feedback-provisional'){
-   payload.name=String(meterIccRunConfig.name||'PGenerator+ display profile')+' MHC2 Final Feedback Base';
+   payload.name=String(meterIccRunConfig.name||'rampecho display profile')+' MHC2 Final Feedback Base';
   }
   delete payload.steps;
   delete payload.reused_readings;

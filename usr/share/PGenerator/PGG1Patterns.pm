@@ -24,7 +24,7 @@ use POSIX qw(floor);
 
 our @EXPORT_OK=qw(g1_pattern_key g1_pattern_render g1_pattern_keys g1_pattern_level g1_pattern_has_10bit);
 
-our $VERSION="9";
+our $VERSION="10";
 
 # Calman token (SPECIALTY:<token> or IMAGE:<token>) -> pattern key.
 my %TOKEN=(
@@ -962,7 +962,7 @@ sub _ss_logo {
  my $logo=$o->{logo};
  return $logo if(ref($logo) eq "HASH" && $logo->{w} > 0 && $logo->{h} > 0);
  my $s=int($h/180+0.5); $s=1 if($s < 1);
- my $text="PGENERATOR+";
+ my $text="RAMPECHO";
  my $im=_img(_text_width($text,$s)+4*$s,11*$s,_lc($o,94,94,94));
  _text($im,$text,2*$s,2*$s,$s,_lc($o,235,170,16));
  return $im;
@@ -1042,7 +1042,7 @@ sub _warmup_bands {
 sub _warmup_box {
  my ($w,$h,$o)=@_;
  my $s=int($h/216+0.5); $s=1 if($s < 1);
- my @lines=("PGENERATOR+","WARM-UP");
+ my @lines=("RAMPECHO","WARM-UP");
  push(@lines,"IP:".$o->{ip}) if(($o->{ip} // "") ne "");
  my $tw=0;
  for(@lines) { my $lw=_text_width($_,$s); $tw=$lw if($lw > $tw); }

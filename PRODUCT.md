@@ -20,7 +20,7 @@ length, between measurements.
 
 ## Product Purpose
 
-PGenerator+ turns a Raspberry Pi 4 into an HDMI test-pattern generator. The
+rampecho turns a Raspberry Pi 4 into an HDMI test-pattern generator. The
 WebUI sets the signal (mode, resolution, range, bit depth, colour format,
 colorimetry, HDR10 and Dolby Vision metadata), shows patterns and playlists,
 runs on-Pi meter series and charts, controls an LG TV and HDMI-CEC, and
@@ -70,7 +70,15 @@ offline; the page is served by the Pi's own Perl daemon as fragments
 
 ## Brand Commitments
 
-Name PGenerator+; the PGen+ wordmark with its red-green-blue-yellow-red bar.
+Name rampecho (formerly PGenerator+; chosen 2026-11-13), written in lower case.
+Mark "Echo sequence": a stepped grayscale ramp and its echo one step later,
+unchanged (the readback). Wordmark Gabarito Bold, outlined, "ramp" and "echo" in
+two grays, the p descender stepped. Sources in `brand/`. The TV start screen
+uses dimmed codes (brightest #8a8a90): no large bright area on an OLED.
+The mark stays neutral gray in every theme: a theme's accent (Glow's orange,
+any palette) never tints the ramp, because a gray ramp is what the product
+measures. The accent belongs to the interface, not to the logo.
+Protocol names stay PGenerator (discovery, port-85 commands, mDNS, OTA assets).
 English UI copy. The fork's promise is the signal on the cable, proven, not
 assumed.
 

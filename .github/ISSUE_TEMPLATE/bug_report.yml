@@ -1,5 +1,5 @@
 name: "Bug report"
-description: "Report a problem with PGenerator Plus"
+description: "Report a problem with rampecho"
 title: "[Bug]: "
 labels: ["bug"]
 body:
@@ -22,7 +22,7 @@ body:
   - type: input
     id: version
     attributes:
-      label: "PGenerator version"
+      label: "rampecho version"
       description: "Example: 2.2.2"
       placeholder: "2.2.2"
     validations:

@@ -1398,7 +1398,7 @@ async function lgConnect(){
     else toast(r.message||'PIN was not accepted.','err');
     return false;
    }
-   if(showModal) lgConnectModalError('PGenerator+ didn\u2019t answer. Check that the Pi is still reachable, then try again.');
+   if(showModal) lgConnectModalError('rampecho didn\u2019t answer. Check that the Pi is still reachable, then try again.');
    else toast(pgFailMsg('Couldn\u2019t submit the PIN',r),'err');
    return false;
   }catch(e){
@@ -1444,7 +1444,7 @@ async function lgConnect(){
      else toast(pgFailMsg('Couldn\u2019t connect to the LG TV',r,'Check that the TV is on and on the same network as the Pi, then try again.'),'err');
     }
    }else{
-    if(showModal) lgConnectModalError('PGenerator+ didn\u2019t answer. Check that the Pi is still reachable, then try again.');
+    if(showModal) lgConnectModalError('rampecho didn\u2019t answer. Check that the Pi is still reachable, then try again.');
     else toast(pgFailMsg('Couldn\u2019t connect to the LG TV',r),'err');
    }
   }catch(e){
@@ -1686,7 +1686,7 @@ async function lgSetPictureMode(){
    // how this got mistaken for a broken picture-mode control -- say what
    // actually happened and what the operator still has to do.
    if(r.manual_confirmation_required||r.virtual_picture_settings){
-    toast(r.message||('PGenerator will calibrate '+lgPictureModeLabel(mode)+', but this LG generation cannot be switched over the network -- select '+lgPictureModeLabel(mode)+' on the TV with the remote.'),true);
+    toast(r.message||('rampecho will calibrate '+lgPictureModeLabel(mode)+', but this LG generation cannot be switched over the network -- select '+lgPictureModeLabel(mode)+' on the TV with the remote.'),true);
    }else{
     toast('LG picture mode set to '+lgPictureModeLabel(mode));
    }

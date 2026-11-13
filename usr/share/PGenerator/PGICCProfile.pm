@@ -658,7 +658,7 @@ sub webui_icc_companion_settings_fragment () {
 
 sub webui_icc_companion_settings (@) {
  my ($body)=@_;
- return '{"status":"error","message":"Invalid PGenerator+ Patch Companion display settings"}' unless(defined($body) && length($body)<2048);
+ return '{"status":"error","message":"Invalid Patch Companion display settings"}' unless(defined($body) && length($body)<2048);
  # Correction handling changed from a status-mirrored value into an explicit
  # operator preference in protocol 2. An already-open tab running the old
  # script otherwise keeps posting its stale `none` value every time the live
@@ -666,7 +666,7 @@ sub webui_icc_companion_settings (@) {
  # that cached script instead of silently measuring the wrong transform.
  my $settings_protocol=0;
  $settings_protocol=int($1) if($body=~/"settings_protocol"\s*:\s*(\d+)/);
- return '{"status":"error","message":"Refresh the PGenerator+ WebUI before changing Patch Companion profile correction"}'
+ return '{"status":"error","message":"Refresh the rampecho WebUI before changing Patch Companion profile correction"}'
   if($settings_protocol<2);
  my $window_mode="";
  my $patch_size=0;
@@ -677,8 +677,8 @@ sub webui_icc_companion_settings (@) {
  $correction_mode=$1 if($body=~/"correction_mode"\s*:\s*"(system|none|clut|matrix)"/);
  $signal_mode=$1 if($body=~/"correction_signal_mode"\s*:\s*"(sdr|hdr10)"/);
  my %allowed=map { $_=>1 } (2,5,10,18,25,50,75,100,105,110,118,125,150);
- return '{"status":"error","message":"Invalid PGenerator+ Patch Companion window mode"}' if($window_mode eq "");
- return '{"status":"error","message":"Invalid PGenerator+ Patch Companion patch size"}' unless($allowed{$patch_size});
+ return '{"status":"error","message":"Invalid Patch Companion window mode"}' if($window_mode eq "");
+ return '{"status":"error","message":"Invalid Patch Companion patch size"}' unless($allowed{$patch_size});
  if($correction_mode ne "system") {
   my @status_stat=stat($_icc_companion_status_file);
   my $status="";
@@ -687,7 +687,7 @@ sub webui_icc_companion_settings (@) {
   }
   if($status=~/"version"\s*:\s*"(\d+)\.(\d+)\.(\d+)"/) {
    my $version=$1*1000000+$2*1000+$3;
-   return '{"status":"error","message":"Install PGenerator+ Patch Companion 1.3.1 or newer before using active-profile correction"}'
+   return '{"status":"error","message":"Install Patch Companion 1.3.1 or newer before using active-profile correction"}'
     if($version<1003001);
   }
  }
@@ -696,7 +696,7 @@ sub webui_icc_companion_settings (@) {
  my $revision=int(Time::HiRes::time()*1000);
  $revision=$previous_revision+1 if($revision<=$previous_revision);
  my $content='{"window_mode":"'.$window_mode.'","patch_size":'.$patch_size.',"revision":'.$revision.',"correction_mode":"'.$correction_mode.'","correction_signal_mode":"'.$signal_mode.'"}';
- return '{"status":"error","message":"Could not save PGenerator+ Patch Companion display settings"}'
+ return '{"status":"error","message":"Could not save Patch Companion display settings"}'
   unless(&webui_icc_companion_write_atomic($_icc_companion_settings_file,$content,0600));
  return '{"status":"ok",'.&webui_icc_companion_settings_fragment().'}';
 }
@@ -987,9 +987,9 @@ sub webui_icc_companion_profile_install (@) {
  my $bytes=-s $path;
  return '{"status":"error","message":"ICC profile is empty or too large"}' unless(defined($bytes) && $bytes>128 && $bytes<=64*1024*1024);
  my $connected=&webui_icc_companion_status();
- return '{"status":"error","message":"PGenerator+ Patch Companion is not connected"}' unless($connected=~/"connected"\s*:\s*true/);
+ return '{"status":"error","message":"Patch Companion is not connected"}' unless($connected=~/"connected"\s*:\s*true/);
  return '{"status":"error","message":"Wait for the active meter reading to finish before installing a display profile"}' if(&webui_icc_meter_busy());
- return '{"status":"error","message":"Update PGenerator+ ICC Tools before using Install & Apply"}'
+ return '{"status":"error","message":"Update ICC Tools before using Install & Apply"}'
   unless($connected=~/"version"\s*:\s*"(\d+)\.(\d+)\.(\d+)"/ && ($1*1000000+$2*1000+$3)>=1004011);
  eval { require File::Path; File::Path::make_path($_icc_companion_install_dir,{mode=>0700}); } unless(-d $_icc_companion_install_dir);
  return '{"status":"error","message":"Could not prepare the profile installation"}' unless(-d $_icc_companion_install_dir);
@@ -1092,7 +1092,7 @@ sub webui_icc_companion_pattern (@) {
  my ($body)=@_;
  return '{"status":"error","message":"Invalid companion pattern request"}' unless(defined($body) && length($body)<8192);
  my $connected=&webui_icc_companion_status();
- return '{"status":"error","message":"PGenerator+ Patch Companion is not connected"}' unless($connected=~/"connected"\s*:\s*true/);
+ return '{"status":"error","message":"Patch Companion is not connected"}' unless($connected=~/"connected"\s*:\s*true/);
  my $idle_request=($body=~/"(?:name|status)"\s*:\s*"(?:stop|align|alignment)"/i) ? 1 : 0;
  if($idle_request && $body=~/"only_if_idle"\s*:\s*true/i && -f $_icc_companion_command_file) {
   my $current="";
@@ -1170,17 +1170,17 @@ sub webui_icc_companion_pattern (@) {
  }
  return &webui_icc_companion_write_atomic($_icc_companion_command_file,$payload,0644)
   ? '{"status":"ok","sequence":'.$sequence.'}'
-  : '{"status":"error","message":"Could not send a pattern to PGenerator+ Patch Companion"}';
+  : '{"status":"error","message":"Could not send a pattern to Patch Companion"}';
 }
 
 sub webui_icc_companion_download (@) {
  my ($query,$host)=@_;
  my $platform=&webui_icc_companion_query_value($query,"platform");
- return ("","","Unsupported PGenerator+ Patch Companion platform") unless($platform eq "windows-x64" || $platform eq "windows-portable-x64" || $platform eq "linux-x64");
- return ("","","Could not determine this PGenerator address") unless(defined($host) && $host=~/^[A-Za-z0-9._\-\[\]:]+$/);
- return ("","","PGenerator+ Patch Companion packager is not installed") unless(-f $_icc_companion_packager);
+ return ("","","Unsupported Patch Companion platform") unless($platform eq "windows-x64" || $platform eq "windows-portable-x64" || $platform eq "linux-x64");
+ return ("","","Could not determine this rampecho address") unless(defined($host) && $host=~/^[A-Za-z0-9._\-\[\]:]+$/);
+ return ("","","Patch Companion packager is not installed") unless(-f $_icc_companion_packager);
  my $token=&webui_icc_companion_token();
- return ("","","Could not create the PGenerator+ Patch Companion pairing token") if($token eq "");
+ return ("","","Could not create the Patch Companion pairing token") if($token eq "");
  my $tmp="/tmp/pgen_icc_companion_".$$ ."_".int(rand(1000000)).($platform eq "windows-x64" ? ".exe" : ".zip");
  my $server="http://$host";
  my $output=`/usr/bin/python3 $_icc_companion_packager '$platform' '$server' '$token' '$tmp' 2>&1`;
@@ -1193,8 +1193,8 @@ sub webui_icc_companion_download (@) {
  $output=~s/[\r\n]+/ /g;
  $output=~s/[^A-Za-z0-9 ._:\/()\[\]-]+/?/g;
  $output=substr($output,0,240);
- &log("PGenerator+ Patch Companion package failed: ".($output||"unknown packager error"));
- return ("","",$output||"PGenerator+ Patch Companion package generation failed");
+ &log("Patch Companion package failed: ".($output||"unknown packager error"));
+ return ("","",$output||"Patch Companion package generation failed");
 }
 
 

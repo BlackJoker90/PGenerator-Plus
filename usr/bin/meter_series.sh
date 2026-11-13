@@ -404,12 +404,12 @@ post_companion_patch() {
   payload="${payload%\}},\"preserve_hdr_calibration\":1}"
  fi
  tmp="${COMPANION_COMMAND_FILE}.$$.$sequence.tmp"
- printf '%s' "$payload" > "$tmp" || companion_pattern_failure "Could not send a patch to PGenerator+ Patch Companion"
+ printf '%s' "$payload" > "$tmp" || companion_pattern_failure "Could not send a patch to Patch Companion"
  # The root-run worker writes RGB patch commands, while the WebUI poll
  # endpoint runs as pgenerator. The command contains no pairing token or
  # measurement data, so make it readable after the atomic rename.
  chmod 644 "$tmp" 2>/dev/null || true
- mv -f "$tmp" "$COMPANION_COMMAND_FILE" || companion_pattern_failure "Could not send a patch to PGenerator+ Patch Companion"
+ mv -f "$tmp" "$COMPANION_COMMAND_FILE" || companion_pattern_failure "Could not send a patch to Patch Companion"
  # Windows can briefly pause the Companion while changing HDR or fullscreen
  # swapchains. Keep the patch pending long enough for polling to resume rather
  # than aborting an otherwise valid measurement run after ten seconds.
@@ -423,12 +423,12 @@ post_companion_patch() {
     ack_status=$(printf '%s' "$ack" | sed -n 's/.*"status"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p')
     [[ "$ack_status" == "ok" ]] && return 0
     ack_message=$(printf '%s' "$ack" | sed -n 's/.*"message"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p')
-    companion_pattern_failure "${ack_message:-PGenerator+ Patch Companion could not render the requested patch}"
+    companion_pattern_failure "${ack_message:-Patch Companion could not render the requested patch}"
    fi
   fi
   sleep 0.05
  done
- companion_pattern_failure "PGenerator+ Patch Companion did not acknowledge the patch"
+ companion_pattern_failure "Patch Companion did not acknowledge the patch"
 }
 
 companion_show_alignment() {

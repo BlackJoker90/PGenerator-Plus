@@ -793,10 +793,22 @@ sub calman_g1_convert_file (@) {
 
 sub calman_g1_logo (@) {
  my ($h,$range)=@_;
- my $src="$shared_dir/pgen-logo-light.png";
+ # The dark lockup: on the Screensaver's grey (code 91-94) the light one's
+ # "ramp" (86-90) would vanish.
+ my $src="$shared_dir/pgen-logo-dark.png";
  return undef if(!$convert || !-x $convert || !-f $src);
+ # Keep the logo's own aspect ratio: read width and height from the PNG header.
+ my ($sw,$sh)=(0,0);
+ if(open(my $ih,"<",$src)) {
+  binmode($ih);
+  my $hd="";
+  ($sw,$sh)=unpack("NN",substr($hd,16,8)) if((read($ih,$hd,24) // 0) == 24 && substr($hd,0,8) eq "\x89PNG\r\n\x1a\n" && substr($hd,12,4) eq "IHDR");
+  close($ih);
+ }
+ return undef if($sw < 1 || $sh < 1);
  my $lh=int($h/12+0.5);
- my $lw=int($lh*751/240+0.5);
+ my $lw=int($lh*$sw/$sh+0.5);
+ return undef if($lw < 1 || $lw > 8*$lh);
  my $bg=&g1_pattern_level($range,94);
  return undef if(!open(my $fh,"-|",$convert,$src,"-background","rgb($bg,$bg,$bg)","-flatten","-resize","${lw}x${lh}!","-depth","8","rgb:-"));
  binmode($fh);
@@ -1778,7 +1790,7 @@ sub pattern_daemon {
      if($clean_key eq "CAP") {
       # Capabilities. Calman stores the tokens as the device's command set
       # (with no usable CAP reply it falls back to the same UPGCI list), so
-      # report the UPGCI commands first, then the PGenerator+ extensions.
+      # report the UPGCI commands first, then the rampecho extensions.
       # Calman only sends GET_SETTINGS when CAP lists it, and it ignores a
       # CAP reply that does not start with ACK.
       my $caps="GET_SETTINGS,STATUS,CONF_FORMAT,CONF_HDR,CONF_LEVEL,CONF_DV,HDR_ENABLE,IMAGE,PUSH,RGB_S,RGB_B,RGB_A,SPECIALTY,UPDATE,YCC_A,YCC_B,YCC_S,HDR,DOLBYVISION,SIZE,10_SIZE,11_APL,CommandRGB,BITDEPTH,COLORSPACE,RANGE";
@@ -2195,7 +2207,7 @@ sub pattern_daemon {
 	       &log("Calman: YCbCr 4:2:0 is not supported, keeping color_format=".($pgenerator_conf{"color_format"} // "0")." max_bpc=".($pgenerator_conf{"max_bpc"} // "8"));
 	       my %fmt_name=("0"=>"RGB","1"=>"YCbCr 4:4:4","2"=>"YCbCr 4:2:2");
 	       my $kept=($fmt_name{$pgenerator_conf{"color_format"} // "0"} || "RGB")." ".($pgenerator_conf{"max_bpc"} || 8)."-bit";
-	       &webui_notice("YCbCr 4:2:0 is not supported","Calman requested YCbCr 4:2:0. PGenerator+ has no YCbCr 4:2:0 output, so the output stays $kept.\nChoose RGB or YCbCr 4:4:4 in Calman for bit-exact measurements.");
+	       &webui_notice("YCbCr 4:2:0 is not supported","Calman requested YCbCr 4:2:0. rampecho has no YCbCr 4:2:0 output, so the output stays $kept.\nChoose RGB or YCbCr 4:4:4 in Calman for bit-exact measurements.");
 	       $parsed{color_format}="";
 	       $parsed{max_bpc}="";
 	      }
@@ -3844,7 +3856,7 @@ sub send_calman_payload_to_client (@) {
  # On the RPC port (Calman's G1 source) only the replies passed with
  # $framed are framed: CAP and GET_SETTINGS. SN, FIRMWARE and STATUS stay
  # bare there, as they always were. With an SN stored, the G1 source switches to its
- # obfuscated "CryptoII" transport, which PGenerator+ does not speak.
+ # obfuscated "CryptoII" transport, which rampecho does not speak.
  $response=$ack_cmd_string.$response.$end_cmd_string_calman if(!$rpc_client{$connection} || $framed);
  eval { $connection->send("$response"); };
  if($@) {

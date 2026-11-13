@@ -8,4 +8,9 @@
 # update_repo=owner/repo in /etc/PGenerator/PGenerator.conf, then this file,
 # then BigShoots/PGenerator-Plus. Values that are not a plain owner/repo are
 # ignored.
-BlackJoker90/PGenerator-Plus
+#
+# rampecho: the repository was BlackJoker90/PGenerator-Plus. Devices with the
+# old name in this file still update after the rename (GitHub redirects the
+# API, see pgenerator-update). A release with this name may only be built once
+# the repository is renamed on GitHub (release-ota.sh checks it).
+BlackJoker90/rampecho

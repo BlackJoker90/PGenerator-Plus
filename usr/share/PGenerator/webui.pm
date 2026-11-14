@@ -1080,6 +1080,7 @@ sub webui_route_device_lane (@) {
  $method="" if(!defined($method));
  $path="" if(!defined($path));
  return "renderer" if($path eq "/api/pattern" && $method eq "POST");
+ return "renderer" if($path eq "/api/hdr-cycle/step" && $method eq "POST");
  return "renderer" if($path=~m{^/api/playlists?/(?:start|step|stop)$} && $method eq "POST");
  return "renderer" if(($path eq "/api/remote/key" || $path=~m{^/api/tvmenu/(?:open|close)$}) && $method eq "POST");
  return "tv" if($path=~m{^/api/lg(?:/|$)} || $path=~m{^/api/cec(?:/|$)});
@@ -1300,6 +1301,123 @@ sub webui_restart_video_took_over (@) {
  return 1;
 }
 
+# The renderer's pattern file as it is, undef when it cannot be read.
+sub webui_pattern_file_text (@) {
+ open(my $fh,"<",$command_file) or return undef;
+ local $/;
+ my $text=<$fh>;
+ close($fh);
+ return $text;
+}
+
+# The name of the pattern a pattern text holds, as webui_pattern_current_name
+# reads it from the file: its first PATTERN_NAME line. "" without one.
+sub webui_pattern_text_name (@) {
+ my $text=shift;
+ return "" if(!defined($text) || $text!~/^PATTERN_NAME=(.*)$/m);
+ my $name=$1;
+ $name=~s/[\r\n]+//g;
+ return $name;
+}
+
+# The black of the link as the pattern: 16 as a video level on YCbCr and RGB
+# Limited, 0 on RGB Full. The caller loads it. Returns the pattern text it
+# wrote (as the pattern file holds it: the range line as create_tmp_file
+# adds it, no picture for the writer to spell), undef when it could not be
+# written.
+sub webui_link_black_write (@) {
+ my ($w,$h)=(int($w_s || 0) || 1920,int($h_s || 0) || 1080);
+ my $lim=(($pgenerator_conf{"color_format"} || "0") ne "0" || &effective_rgb_quant_range() == 1);
+ my $k=$lim ? 16 : 0;
+ my $range=&pattern_default_source_range($lim ? "LIMITED" : "");
+ my $text="PATTERN_NAME=stop\nBITS=8\nDRAW=RECTANGLE\nDIM=$w,$h\nRGB=$k,$k,$k\nBG=$k,$k,$k\nPOSITION=0,0\n".($range ne "" ? "SOURCE_RANGE=$range\n" : "")."END=1\n";
+ return &pattern_file_write($text) ? $text : undef;
+}
+
+# What the renderer says it has shown last: "pid count" from
+# running/presented (ofxRPI4Window.cpp: written at the first flip of every
+# pattern it reads, the count one up each time). "" without one.
+sub webui_renderer_presented (@) {
+ open(my $fh,"<","$var_dir/running/presented") or return "";
+ my $line=<$fh>;
+ close($fh);
+ return (defined($line) && $line=~/^(\d+) (\d+) /) ? "$1 $2" : "";
+}
+
+# Before a picture is drawn again for a new signal: the black of the link
+# goes first, and the renderer is waited for until it has shown it.
+# The renderer takes its window's bit depth from the pattern (BITS), and
+# sets the window up anew when that changes, after the frame that loaded
+# the picture: the picture is gone again, and the renderer does not load it
+# a second time (ofApp.cpp image(): only a picture that follows a pattern
+# without one is loaded in two frames). Read at the output 2026-11-14: HDR
+# Steps at code 0 in every pixel after Bit Depth 10 -> 8 in place, and after
+# RGB -> YCbCr 4:2:2 at 8 bit (which is 10 bit again).
+# With the black first, the renderer sets its window up for the new depth
+# with no picture to lose, and forgets the one it held: the plate that
+# follows is a new picture to it.
+# $pattern: the pattern file as the caller read it. A pattern written since
+# is the newer request and stays. Returns the pattern text it wrote and
+# loaded, undef when it wrote none (the newer pattern, or the file could not
+# be written). At most $webui_picture_reset_wait seconds; a renderer that
+# reports nothing in that time gets the picture all the same.
+our $webui_picture_reset_wait=3;
+sub webui_renderer_forget_pictures (@) {
+ my $pattern=shift;
+ my $before=&webui_renderer_presented();
+ my $now_text=&webui_pattern_file_text();
+ return undef if(!defined($pattern) || !defined($now_text) || $now_text ne $pattern);
+ my $text=&webui_link_black_write();
+ return undef if(!defined($text));
+ &load_new_pattern_file("webui apply");
+ my $until=&webui_hdr_cycle_clock()+$webui_picture_reset_wait;
+ while(1) {
+  my $now=&webui_renderer_presented();
+  return $text if($now ne "" && $now ne $before);
+  last if(&webui_hdr_cycle_clock() >= $until);
+  select(undef,undef,undef,0.02);
+ }
+ &log("WebUI: the renderer did not report the black field within ${webui_picture_reset_wait}s; the picture is drawn all the same");
+ return $text;
+}
+
+# A picture on screen across a signal change the renderer took in place,
+# which nothing has drawn again for the new signal (White Clipping, Overscan,
+# an uploaded picture; the two plates have been by now). The renderer has
+# lost it with its window: it reads code 0, below the black of a limited
+# link. And its pattern text is the old signal's: asked for on YCbCr it has
+# no SOURCE_RANGE, and loaded again on RGB Limited the renderer would
+# compress it (235 -> 218). So it gives way to the black of the link, as
+# after an apply with a renderer restart; asked for again it is drawn for
+# the signal now and loaded (pattern_pictures_spelled).
+# Only a pattern of one picture: a sequence of several (G1 Warm-Up with one
+# strip per phase, PGG1Patterns _warmup; the frames of an uploaded video)
+# comes to another path as it runs, so the renderer loads its pictures again
+# by itself and it runs on, as it did before this, with the pattern text it
+# had. Read at the output 2026-11-14, G1 Warm-Up at 1080p: on screen
+# throughout across RGB -> YCbCr 4:2:2 at one depth; dark for its first phase
+# (about 13 s) after Bit Depth 8 -> 10 and 10 -> 8, then its second strip.
+# $before: the pattern file from before the change. A pattern written since
+# (a plate, another request) stays. The caller loads the pattern file.
+# Returns 1 if it wrote the black.
+sub webui_picture_gives_way (@) {
+ my $before=shift;
+ return 0 if(!defined($before) || $before!~/^IMAGE=/m);
+ my %pictures=map { $_ => 1 } $before=~/^IMAGE=(.*)$/mg;
+ return 0 if(keys(%pictures) > 1);
+ my $now=&webui_pattern_file_text();
+ return 0 if(!defined($now) || $now ne $before);
+ my ($name)=$before=~/^PATTERN_NAME=(.*)$/m;
+ $name="a picture" if(!defined($name) || $name eq "");
+ $name=~s/[^\x20-\x7e]/?/g;
+ if(defined(&webui_link_black_write())) {
+  &log("WebUI: $name cleared after the signal change: the renderer lost its picture with its window; asked for again it is drawn for the signal now");
+  return 1;
+ }
+ &log("WebUI: $name not cleared after the signal change, the pattern file could not be written: the screen is dark until another pattern is drawn");
+ return 0;
+}
+
 sub webui_restart_renderer_locked (@) {
  my $restart_id=shift;
  my $apply_hint=shift;
@@ -1312,10 +1430,29 @@ sub webui_restart_renderer_locked (@) {
  # a reject or a timeout falls through to the full restart below.
  if(ref($apply_hint) eq "HASH" && ref($apply_hint->{changed}) eq "HASH" && %{$apply_hint->{changed}}) {
   &webui_renderer_restart_status_write($restart_id,"starting","Applying the new signal settings to the running renderer.");
+  my $pattern_before=&webui_pattern_file_text();
   if(&renderer_reconfigure_in_place($apply_hint->{changed},$apply_hint->{dv_before})) {
    # Re-push the current pattern so it is redrawn with the new bit depth /
    # range defaults (the renderer is running, so this does not restart it).
-   &webui_range_check_refresh({check => 0});
+   # The two plates that follow the signal are drawn for the new one first
+   # (HDR Steps, a picture, after the black of the link:
+   # webui_renderer_forget_pictures). Any other picture has gone with the
+   # renderer's window and gives way to the black of the link.
+   # HDR Steps is taken from the pattern file as it is now: asked for again
+   # while the renderer took the change, its picture was loaded into the
+   # window the change replaces, and needs the black first like the one from
+   # before. The black is written over this very text only: a pattern that
+   # comes after it is read stays (webui_renderer_forget_pictures).
+   # A plate drawn here is not cleared after it: its text is the one from
+   # before the change when its picture's spelling could not be moved on
+   # (pattern_pictures_respell) and nothing else of it changed.
+   my $drawn=&webui_range_check_refresh({check => 0}) ? 1 : 0;
+   my $steps_text=&webui_pattern_file_text();
+   if(&webui_pattern_text_name($steps_text) eq "hdr_steps") {
+    my $black=&webui_renderer_forget_pictures($steps_text);
+    $drawn=1 if(defined($black) ? &webui_hdr_steps_refresh("hdr_steps",$black) : &webui_hdr_steps_refresh());
+   }
+   &webui_picture_gives_way($pattern_before) if(!$drawn);
    &load_new_pattern_file("webui apply");
    &webui_restart_release_renderer_lock();
    &webui_renderer_restart_status_write($restart_id,"ready","Applied without restarting the renderer.");
@@ -1325,9 +1462,23 @@ sub webui_restart_renderer_locked (@) {
   }
  }
  &webui_renderer_restart_status_write($restart_id,"starting","Restarting the renderer and waiting for DRM readiness.");
+ # The stop empties running/, the pattern file with it: what is on screen
+ # is read before. The two plates that follow the signal (Range Check, HDR
+ # Steps) are drawn again once the new renderer is ready, not into the file
+ # it starts with: only then are the size of the mode ($w_s, $h_s, read by
+ # pattern_generator_start) and, on RGB with the range on Default, the
+ # range of the cable (the renderer's default-rgb-quant-range file, which
+ # the stop removed) known, and a start that needed a second attempt has
+ # emptied running/ once more (load_new_pattern_file).
+ my $on_screen=&webui_pattern_current_name();
+ $clean_files_pattern_name=undef;
  &pattern_generator_stop();
- &webui_range_check_refresh({check => 0});
  &load_new_pattern_file("webui apply");
+ # A pattern that was asked for while the renderer was down went with the
+ # wipe of a stop or of the start (clean_files), as it always did; it was
+ # the newer request, so the plate from before it does not come back in
+ # its place.
+ $on_screen=$clean_files_pattern_name if(defined($clean_files_pattern_name));
  &webui_restart_release_renderer_lock();
  if(!&pattern_generator_is_running() && !&hdmi_sink_connected()) {
   &webui_renderer_restart_status_write($restart_id,"ready","Settings saved. No HDMI display is connected; the renderer starts when one is plugged in.",0);
@@ -1364,9 +1515,15 @@ sub webui_restart_renderer_locked (@) {
    }
    return 1;
   }
+  # The plate is back before the page is told "ready": with an empty
+  # pattern file the output counts as idle, and a page that shows no
+  # pattern of its own sends its idle stop at "ready"
+  # ({"name":"stop","only_if_idle":true}), which the redraw would give way
+  # to. A pattern file that names the plate is not idle.
+  &webui_range_check_follow_wire($avi_before,undef,$on_screen);
+  &webui_hdr_steps_follow_restart() if($on_screen eq "hdr_steps");
   &webui_renderer_restart_status_write($restart_id,"ready","The renderer is running and owns DRM master.");
   &log("WebUI: renderer restart $restart_id is ready");
-  &webui_range_check_follow_wire($avi_before);
   return 1;
  }
  return 1 if(&webui_restart_video_took_over($restart_id));
@@ -2300,6 +2457,13 @@ sub webui_handle_request (@) {
     my $connected=($calibration_client_software eq "Resolve") ? "true" : "false";
     my $ip=$calibration_client_ip||"";
     my $result="{\"connected\":$connected,\"ip\":\"$ip\"}";
+    my $len=length($result);
+    print $client "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: $len\r\n$cors\r\n$result";
+   }
+   elsif($path eq "/api/hdr-cycle/step" && $method eq "POST") {
+    # The HDR Metadata Cycle's worker, over loopback only.
+    my $result=($request_peer_ip eq "127.0.0.1" || $request_peer_ip eq "::1") ? &webui_hdr_cycle_route($body)
+     : '{"status":"error","message":"Only the HDR Metadata Cycle itself posts its steps"}';
     my $len=length($result);
     print $client "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: $len\r\n$cors\r\n$result";
    }
@@ -10374,6 +10538,16 @@ sub webui_config_json (@) {
   }
  }
  $json_conf{"rgb_quant_range"}=&webui_preferred_rgb_quant_range() if($external_rgb_quant_range_active);
+ # During an HDR Metadata Cycle the conf holds the step's Max Luma and
+ # MaxCLL. The page shows, and posts back with its next apply, the values
+ # that were set before it.
+ {
+  my $user=&webui_hdr_cycle_user_values(\%json_conf);
+  for my $k (keys %$user) {
+   if($user->{$k} eq "") { delete $json_conf{$k}; }
+   else { $json_conf{$k}=$user->{$k}; }
+  }
+ }
  # Every value goes out as a JSON string, escaped by JSON::PP: a backslash
  # or a control character in one conf value must not break the whole reply.
  # The conf holds bytes and goes out as the same bytes: no utf8 layer.
@@ -10569,6 +10743,10 @@ sub webui_apply_config (@) {
   my $result='{"status":"error","message":"'.&_webui_json_escape("Invalid value for $k: $changes{$k}").'"}';
   return wantarray ? ($result,0) : $result;
  }
+ # A running HDR Metadata Cycle holds its step's Max Luma and MaxCLL in the
+ # conf. A post that touches the signal ends it first: what follows then
+ # compares against, and keeps, the values that were set before the cycle.
+ &webui_hdr_cycle_end("settings are applied",1) if(-e &webui_hdr_cycle_state_file() && grep { exists $changes{$_} } (@signal_conf_keys,@signal_metadata_keys));
   # As posted, before the derivations below: what was quietly changed is
   # reported back (adjusted).
   my %posted=%changes;
@@ -14800,11 +14978,16 @@ sub webui_pattern_image_save (@) {
  if($file=~/\.png$/i) {
   return 0 if(!$convert || !-x $convert);
   unlink($file);
-  return 0 if(!open(my $fh,"|-",$convert,"-size",$image->{"w"}."x".$image->{"h"},"-depth","8","rgb:-","PNG24:$file"));
+  # A 10-bit plate carries its codes in 16-bit samples (big-endian, as
+  # PGG1Patterns packs them): PNG48, as calman_g1_save_image writes it.
+  my @format=(($image->{"depth"} || 8) == 16) ? ("-depth","16","-endian","MSB","rgb:-","PNG48:$file") : ("-depth","8","rgb:-","PNG24:$file");
+  return 0 if(!open(my $fh,"|-",$convert,"-size",$image->{"w"}."x".$image->{"h"},@format));
   binmode($fh);
   return 0 if(!&webui_pattern_write_all($fh,$buf));
   return (close($fh) && -f $file) ? 1 : 0;
  }
+ # A PPM here holds 8-bit samples only.
+ return 0 if(($image->{"depth"} || 8) != 8);
  return 0 if(!open(my $fh,">",$file));
  binmode($fh);
  return 0 if(!&webui_pattern_write_all($fh,"P6\n".$image->{"w"}." ".$image->{"h"}."\n255\n"));
@@ -15159,15 +15342,26 @@ sub webui_avi_log_stamp (@) {
 sub webui_range_check_refresh (@) {
  my $o=shift;
  $o={} if(ref($o) ne "HASH");
- return 0 if(&webui_pattern_current_name() ne "range_check");
+ # name: the pattern that was on screen, for a caller whose renderer stop
+ # has removed the pattern file since.
+ return 0 if((defined($o->{name}) ? $o->{name} : &webui_pattern_current_name()) ne "range_check");
  my ($source_range,$why)=&webui_range_check_source_range();
  $why="the output is not SDR" if($why eq "" && &webui_pattern_signal_mode("") ne "sdr");
- my %draw=(source_range => $source_range,load => 0);
+ # Drawing takes its time and a pattern request does not wait for it: asked
+ # again right before the pattern file is written, a pattern that came
+ # meanwhile keeps the output.
+ my $still=defined($o->{name}) ? sub { return (-s $command_file) ? 0 : 1; } : sub { return (&webui_pattern_current_name() eq "range_check") ? 1 : 0; };
+ my $gave_way=0;
+ my %draw=(source_range => $source_range,load => 0,still => sub { $gave_way=1 if(!$still->()); return !$gave_way; });
  if($why eq "" && (!exists $o->{check} || $o->{check})) {
   require PGSignalCheck;
   $draw{check}=PGSignalCheck::signal_range_plate_lines(&webui_range_expectation($source_range eq "LIMITED" ? 1 : 2));
  }
  return 1 if($why eq "" && &calman_render_g1_pattern("range_check","range_check",\%draw));
+ if($gave_way || !$still->()) {
+  &log("WebUI: Range Check not drawn again, another pattern was asked for");
+  return 0;
+ }
  &log("WebUI: Range Check cleared after the signal change".($why ne "" ? ": $why" : ""));
  my ($w,$h)=(int($w_s) || 1920,int($h_s) || 1080);
  # Black of the link: 16 as a video level on YCbCr and RGB Limited, 0 on
@@ -15183,16 +15377,32 @@ sub webui_range_check_refresh (@) {
 # is), then draw the Range Check again with the EDID check for it.
 # Returns 1 if it loaded a pattern.
 sub webui_range_check_follow_wire (@) {
- my ($before,$wait)=@_;
- return 0 if(!defined $before || $before eq "" || &webui_pattern_current_name() ne "range_check");
+ # $on_screen: the pattern that was on screen before a renderer restart.
+ # The restart left an empty pattern file, so the plate is known by this
+ # name; a pattern that was asked for since (a file that is not empty)
+ # keeps the output.
+ my ($before,$wait,$on_screen)=@_;
+ return 0 if(!defined $before || $before eq "");
+ my $restarted=(defined($on_screen) && $on_screen eq "range_check") ? 1 : 0;
+ return 0 if(&webui_pattern_current_name() ne "range_check" && !($restarted && !-s $command_file));
  $wait=3 if(!defined $wait);
  require Time::HiRes;
  my $until=Time::HiRes::time()+$wait;
+ # After a restart the log's last AVI frame is the console's, logged when
+ # the old renderer exited, until the new renderer has logged its own
+ # (webui_signal_verdict_record): the EDID check is drawn from that one or
+ # left off the plate.
+ my $own=$restarted ? 0 : 1;
  while(Time::HiRes::time() < $until) {
-  my $now=&webui_avi_log_stamp();
-  last if($before ne "unread" && $now ne "unread" && $now ne $before);
+  if($restarted) {
+   if(&webui_signal_verdict_record()) { $own=1; last; }
+  } else {
+   my $now=&webui_avi_log_stamp();
+   last if($before ne "unread" && $now ne "unread" && $now ne $before);
+  }
   Time::HiRes::sleep(0.25);
  }
+ &webui_plate_cable_range_named($webui_plate_range_wait) if($restarted);
  # Under renderer_lock: a video started meanwhile is a newer request and
  # keeps the output; this redraw is the daemon's own and gives way.
  &renderer_lock();
@@ -15201,10 +15411,672 @@ sub webui_range_check_follow_wire (@) {
   &log("WebUI: Range Check not redrawn, a video owns the output");
   return 0;
  }
- if(!&webui_range_check_refresh()) { &renderer_unlock();return 0; }
+ # Asked again under the lock: a pattern of the last seconds stays.
+ my $by_name=($restarted && !-s $command_file) ? 1 : 0;
+ if($by_name && !&webui_plate_cable_range_named(0)) {
+  &renderer_unlock();
+  &log("WebUI: Range Check not drawn again after the restart: the renderer did not name the range of the cable");
+  return 0;
+ }
+ my %o=();
+ $o{name}="range_check" if($by_name);
+ if(!$own) {
+  $o{check}=0;
+  &log("WebUI: Range Check drawn without its EDID check, the new renderer has logged no AVI infoframe yet");
+ }
+ if(!&webui_range_check_refresh(\%o)) { &renderer_unlock();return 0; }
  &load_new_pattern_file("range check");
  &renderer_unlock();
  return 1;
+}
+
+###############################################
+#     HDR Steps and HDR Metadata Cycle        #
+###############################################
+# Both plates are drawn by PGHdrPatterns: grey bars at absolute luminances,
+# at the code the cable carries (10-bit codes in a PNG48 on a 10-bit link).
+#
+# HDR Metadata Cycle: while its plate is on screen a worker steps the HDR10
+# mastering peak and MaxCLL (hdr_cycle_peaks) every $webui_hdr_cycle_seconds;
+# the picture stays, so a display that follows the metadata changes its tone
+# mapping and one that ignores it does not. The renderer takes its metadata
+# from PGenerator.conf, so a step is a conf write and a reload in place. The
+# values that were there are kept in $var_dir/hdrcycle/state (a subdirectory:
+# clean_files empties $var_dir itself at every daemon start) and put back
+# when the cycle ends: another pattern, a settings apply, a changed signal
+# mode, a video, calibration software connecting, the daemon's next start,
+# $webui_hdr_cycle_minutes after its start, or no step for
+# $webui_hdr_cycle_stale seconds (a worker that is gone). Only a key that
+# still holds a value of the cycle is put back: what calibration software or
+# an apply wrote meanwhile stays. The record names the step being written
+# and the one before it, so a step interrupted between the record and the
+# conf is put back too. Steps and the end exclude each other through a lock,
+# so a step never lands after the end that puts the values back.
+# MaxFALL follows where it has to: never above the step's MaxCLL.
+our $webui_hdr_cycle_seconds=6;
+our @webui_hdr_cycle_keys=qw(max_luma max_cll max_fall);
+# The bars reach 10000 cd/m2 and stand still: the cycle ends by itself.
+our $webui_hdr_cycle_minutes=30;
+our $webui_hdr_cycle_stale=60;
+our ($webui_hdr_cycle_watchdog_next,$webui_hdr_cycle_watchdog_seen,$webui_hdr_cycle_watchdog_since)=(0,"",0);
+# Where the worker reaches the daemon: webui_http binds 80, 8080 when that
+# fails.
+our @webui_hdr_cycle_ports=(80,8080);
+
+sub webui_hdr_cycle_state_file (@) { return "$var_dir/hdrcycle/state"; }
+
+# The cycle's lock, held until the handle goes out of scope; undef when it
+# cannot be opened (the caller then gives up instead of running unlocked).
+sub webui_hdr_cycle_lock (@) {
+ require Fcntl;
+ open(my $fh,">",&pgen_lock_path("hdr-cycle.lock")) or return undef;
+ return undef if(!flock($fh,Fcntl::LOCK_EX()));
+ return $fh;
+}
+
+# {token,step,saved_<key>,cycle_<key>,prev_<key>} or undef: no file, or one
+# that is not whole (written through a rename, so only a foreign or damaged
+# file). cycle_: the value of the step being written or last written;
+# prev_: the one before it.
+sub webui_hdr_cycle_state_read (@) {
+ open(my $fh,"<",&webui_hdr_cycle_state_file()) or return undef;
+ my %s;
+ while(my $line=<$fh>) {
+  $s{$1}=$2 if($line=~/^([a-z_]+)=(.*?)\r?\n$/);
+ }
+ close($fh);
+ return undef if(($s{"end"} // "") ne "1" || ($s{"token"} // "")!~/^[0-9a-f]{16}$/ || ($s{"step"} // "")!~/^\d{1,9}$/);
+ for my $k (@webui_hdr_cycle_keys) {
+  return undef if(!defined($s{"saved_$k"}) || $s{"saved_$k"}!~/^[0-9.]{0,16}$/);
+  for my $kind ("cycle","prev") {
+   return undef if(defined($s{"${kind}_$k"}) && $s{"${kind}_$k"}!~/^[0-9.]{1,16}$/);
+  }
+ }
+ return \%s;
+}
+
+sub webui_hdr_cycle_state_write (@) {
+ my $s=shift;
+ my $file=&webui_hdr_cycle_state_file();
+ (my $dir=$file)=~s{/[^/]+$}{};
+ mkdir($dir) if(!-d $dir);
+ my $text="token=$s->{token}\nstep=$s->{step}\n";
+ for my $k (@webui_hdr_cycle_keys) {
+  $text.="saved_$k=".$s->{"saved_$k"}."\n";
+  for my $kind ("cycle","prev") {
+   $text.="${kind}_$k=".$s->{"${kind}_$k"}."\n" if(defined($s->{"${kind}_$k"}));
+  }
+ }
+ $text.="end=1\n";
+ my $tmp="$file.$$.tmp";
+ my $ok=0;
+ if(open(my $fh,">",$tmp)) {
+  $ok=(print $fh $text) ? 1 : 0;
+  $ok=0 if(!close($fh));
+  $ok=0 if($ok && !rename($tmp,$file));
+ }
+ unlink($tmp) if(!$ok);
+ return $ok;
+}
+
+# 1 when the running cycle is the one that carries $token.
+sub webui_hdr_cycle_owned (@) {
+ my $token=shift;
+ my $s=&webui_hdr_cycle_state_read();
+ return ($s && defined($token) && $token ne "" && $s->{"token"} eq $token) ? 1 : 0;
+}
+
+# Starts a cycle's record: the values to put back, nothing of the cycle's
+# in the conf yet. Returns its token, "" when the record cannot be written
+# (nothing has changed then). The caller holds the lock.
+sub webui_hdr_cycle_begin (@) {
+ # A record that is still there belongs to a cycle whose values could not
+ # be put back: its saved values are the user's, a new record would save a
+ # step's in their place.
+ return "" if(-e &webui_hdr_cycle_state_file());
+ my %s=(token => sprintf("%08x%08x",time() & 0xffffffff,int(rand(0xffffffff))), step => 0);
+ for my $k (@webui_hdr_cycle_keys) {
+  my $v=defined($pgenerator_conf{$k}) ? "$pgenerator_conf{$k}" : "";
+  # A value the record cannot hold is not one the cycle may replace.
+  return "" if($v!~/^[0-9.]{0,16}$/);
+  $s{"saved_$k"}=$v;
+ }
+ return &webui_hdr_cycle_state_write(\%s) ? $s{"token"} : "";
+}
+
+# Puts step $step of the cycle $token on the cable: the record first (so an
+# interrupted step is put back), then the conf, then the reload in place.
+# Returns ("",$peak) or the reason it did not happen; the caller holds the
+# lock and ends the cycle on a reason.
+# What a step with the peak $peak puts into the conf: {key => value}.
+# MaxFALL only where it was set: it goes down to the step's MaxCLL when it
+# is above it (a frame's average is not above its brightest pixel) and is
+# the user's value otherwise.
+sub webui_hdr_cycle_step_values (@) {
+ my ($s,$peak)=@_;
+ my %v=(max_luma => "$peak", max_cll => "$peak");
+ my $fall=$s->{"saved_max_fall"};
+ $v{"max_fall"}=(int($fall) > $peak) ? "$peak" : $fall if(defined($fall) && $fall=~/^\d+(?:\.\d+)?$/);
+ return \%v;
+}
+
+# 1 when $cur is a value the cycle $s wrote for $k: its last step's, or the
+# one before (a step whose conf write did not happen).
+sub webui_hdr_cycle_holds (@) {
+ my ($s,$k,$cur)=@_;
+ return 0 if(!defined($s->{"cycle_$k"}));
+ return 1 if($cur eq $s->{"cycle_$k"});
+ return (defined($s->{"prev_$k"}) && $cur eq $s->{"prev_$k"}) ? 1 : 0;
+}
+
+# The values the user had set, for the keys whose value in $conf (default:
+# the conf in memory) is the running cycle's: {key => saved value}. Empty
+# without a cycle. For whoever shows or stores "the settings": the config
+# answer, the snapshot a refused apply goes back to.
+sub webui_hdr_cycle_user_values (@) {
+ my $conf=shift;
+ $conf=\%pgenerator_conf if(ref($conf) ne "HASH");
+ my %out;
+ return \%out if(!-e &webui_hdr_cycle_state_file());
+ my $s=&webui_hdr_cycle_state_read();
+ return \%out if(!$s);
+ for my $k (@webui_hdr_cycle_keys) {
+  my $cur=defined($conf->{$k}) ? "$conf->{$k}" : "";
+  $out{$k}=$s->{"saved_$k"} if(&webui_hdr_cycle_holds($s,$k,$cur));
+ }
+ return \%out;
+}
+
+sub webui_hdr_cycle_apply_step (@) {
+ my ($token,$step)=@_;
+ my $s=&webui_hdr_cycle_state_read();
+ return ("this metadata cycle has ended",0) if(!$s || $s->{"token"} ne $token);
+ require PGHdrPatterns;
+ my @peaks=PGHdrPatterns::hdr_cycle_peaks();
+ my $peak=$peaks[$step % scalar(@peaks)];
+ my $values=&webui_hdr_cycle_step_values($s,$peak);
+ my (@writes,%changed);
+ for my $k (@webui_hdr_cycle_keys) {
+  next if(!exists $values->{$k});
+  my $cur=defined($pgenerator_conf{$k}) ? "$pgenerator_conf{$k}" : "";
+  # After the first step the conf holds the cycle's last value; anything
+  # else was written by someone else, and the cycle gives way to it.
+  return ("the HDR metadata was changed from outside the cycle",0) if(defined($s->{"cycle_$k"}) && $cur ne $s->{"cycle_$k"});
+  if($cur ne $values->{$k}) {
+   push(@writes,$k,$values->{$k});
+   $changed{$k}=1;
+  }
+  $s->{"prev_$k"}=$s->{"cycle_$k"} if(defined($s->{"cycle_$k"}));
+  $s->{"cycle_$k"}=$values->{$k};
+ }
+ $s->{"step"}=$step;
+ return ("the cycle's record could not be written",0) if(!&webui_hdr_cycle_state_write($s));
+ return ("",$peak) if(!@writes);
+ return ("the HDR metadata could not be written",0) if(!&normalize_conf_write("HDR Metadata Cycle",@writes));
+ # A renderer that is not running reads the conf when it starts.
+ return ("",$peak) if(!&pattern_generator_is_running());
+ # The step's plate is written next (webui_pattern): the plate of the step
+ # before is not loaded again under the new metadata.
+ return ("the renderer did not take the HDR metadata without a restart",0) if(!&renderer_reconfigure_in_place(\%changed));
+ return ("",$peak);
+}
+
+# Ends the cycle: puts back each value the conf still holds from the cycle
+# and removes the record. $reload: also bring the cable back (a reload in
+# place, a renderer restart when that is refused); 0 before the renderer
+# starts. Returns 1 when a cycle was ended, 0 when there was none or its
+# values could not be put back (the record stays for the next attempt: the
+# next pattern, the next daemon start).
+sub webui_hdr_cycle_end (@) {
+ my ($why,$reload,$token,$keep_plate)=@_;
+ return 0 if(!-e &webui_hdr_cycle_state_file());
+ my $lock=&webui_hdr_cycle_lock();
+ if(!$lock) {
+  &log("HDR Metadata Cycle: lock not available ($!), the cycle is not ended ($why)");
+  return 0;
+ }
+ return &webui_hdr_cycle_end_locked($why,$reload,$token,$keep_plate);
+}
+
+# The cycle's plate names a step. Once the cycle has ended with the plate
+# still on screen it would name metadata the cable no longer carries: the
+# black of the link takes its place. Returns 1 if it wrote that.
+sub webui_hdr_cycle_clear_plate (@) {
+ return 0 if(&webui_pattern_current_name() ne "hdr_metadata_cycle");
+ my ($w,$h)=(int($w_s || 0) || 1920,int($h_s || 0) || 1080);
+ my $lim=(($pgenerator_conf{"color_format"} || "0") ne "0" || &effective_rgb_quant_range() == 1);
+ my $k=$lim ? 16 : 0;
+ return 0 if(!&create_tmp_file("PATTERN_NAME=stop\nBITS=8\nDRAW=RECTANGLE\nDIM=$w,$h\nRGB=$k,$k,$k\nBG=$k,$k,$k\nPOSITION=0,0\nEND=1\n",$lim ? "LIMITED" : ""));
+ &create_return_file();
+ return 1;
+}
+
+# The same with the lock held by the caller. $token (optional): only that
+# cycle is ended, another one that replaced it is left alone. $keep_plate:
+# the caller draws another pattern next; otherwise a plate of the cycle
+# still on screen is cleared.
+sub webui_hdr_cycle_end_locked (@) {
+ my ($why,$reload,$token,$keep_plate)=@_;
+ my $file=&webui_hdr_cycle_state_file();
+ return 0 if(!-e $file);
+ my $s=&webui_hdr_cycle_state_read();
+ if(!$s) {
+  &log("HDR Metadata Cycle: $file is not readable as a cycle record; removed, the HDR metadata stays as it is ($why)");
+  unlink($file);
+  return 0;
+ }
+ return 0 if(defined($token) && $token ne "" && $s->{"token"} ne $token);
+ # What the file holds now, not this thread's memory of it.
+ &webui_reload_pgenerator_conf();
+ my (@writes,%changed);
+ for my $k (@webui_hdr_cycle_keys) {
+  my $cur=defined($pgenerator_conf{$k}) ? "$pgenerator_conf{$k}" : "";
+  next if($cur eq $s->{"saved_$k"} || !&webui_hdr_cycle_holds($s,$k,$cur));
+  push(@writes,$k,$s->{"saved_$k"});
+  $changed{$k}=1;
+ }
+ if(@writes && !&normalize_conf_write("HDR Metadata Cycle",@writes)) {
+  &log("HDR Metadata Cycle: the HDR metadata could not be put back ($why); the record stays for the next attempt");
+  return 0;
+ }
+ &log("HDR Metadata Cycle: $file could not be removed ($!)") if(!unlink($file));
+ &webui_hdr_cycle_clear_plate() if(!$keep_plate);
+ &log("HDR Metadata Cycle: ended ($why)".(@writes ? ", put back ".join(" ",map { "$writes[2*$_]=".($writes[2*$_+1] eq "" ? "(unset)" : $writes[2*$_+1]) } 0..(@writes/2-1)) : ", the HDR metadata was already as before"));
+ if($reload && %changed && &pattern_generator_is_running() && int($pgenerator_conf{"is_hdr"} || 0) == 1) {
+  &pattern_generator_restart_unless_current("HDR Metadata Cycle end") if(!&renderer_reconfigure_in_place(\%changed));
+ }
+ return 1;
+}
+
+# Seconds on the monotonic clock, the wall clock where there is none.
+sub webui_hdr_cycle_clock (@) {
+ my $t=eval { Time::HiRes::clock_gettime(Time::HiRes::CLOCK_MONOTONIC()) };
+ return (defined($t) && $t > 0) ? $t : Time::HiRes::time();
+}
+
+# A cycle whose worker is gone (killed, or its requests never arrived) would
+# leave a step's metadata on the cable under a plate that says it changes.
+# The daemon's main loop asks here: a record no step has written for
+# $webui_hdr_cycle_stale seconds is ended. Returns 1 if it ended one.
+sub webui_hdr_cycle_watchdog (@) {
+ my @st=stat(&webui_hdr_cycle_state_file());
+ if(!@st) {
+  $webui_hdr_cycle_watchdog_seen="";
+  return 0;
+ }
+ # The age of the record is counted here, from when this record (every
+ # step writes a new file) was first seen, on a clock that does not jump:
+ # a time sync that moves the wall clock by more than
+ # $webui_hdr_cycle_stale must not end a cycle that is being stepped.
+ my $now=&webui_hdr_cycle_clock();
+ my $mark="$st[1]:$st[9]:$st[7]";
+ if($mark ne $webui_hdr_cycle_watchdog_seen) {
+  ($webui_hdr_cycle_watchdog_seen,$webui_hdr_cycle_watchdog_since)=($mark,$now);
+  return 0;
+ }
+ my $age=int($now-$webui_hdr_cycle_watchdog_since);
+ return 0 if($age < $webui_hdr_cycle_stale || $now < $webui_hdr_cycle_watchdog_next);
+ my $ended=&webui_hdr_cycle_end("no step for $age s",1);
+ # Not ended (the conf could not be written), or ended with its record
+ # still there (it could not be removed): asked again, not at every pass
+ # of the loop.
+ $webui_hdr_cycle_watchdog_next=$now+15 if(-e &webui_hdr_cycle_state_file());
+ return $ended;
+}
+
+# POST /api/hdr-cycle/step, the worker's way in: a step of the cycle whose
+# token it carries, or its end ("cycle_end"). Its own path, not /api/pattern:
+# a pattern posted over loopback is a calibration worker's patch, queued
+# ahead of the others and dropped once a newer one has run
+# (webui_route_is_loopback_pattern); a step must neither jump that queue nor
+# make a waiting patch look superseded.
+sub webui_hdr_cycle_route (@) {
+ my $body=shift;
+ $body="" if(!defined($body));
+ return '{"status":"error","message":"This metadata cycle has ended"}' if($body!~/"cycle_token"\s*:\s*"([0-9a-f]{16})"/);
+ my $token=$1;
+ if($body=~/"cycle_end"\s*:\s*(?:true|1)\s*[,}]/) {
+  return '{"status":"error","message":"This metadata cycle has ended"}' if(!&webui_hdr_cycle_owned($token));
+  my $why=($body=~/"cycle_why"\s*:\s*"(time|worker)"/ && $1 eq "time") ? "it ran for $webui_hdr_cycle_minutes minutes" : "a step was not shown";
+  return &webui_hdr_cycle_end($why,1,$token) ? '{"status":"ok","ended":true}' : '{"status":"error","message":"The HDR Metadata Cycle could not be ended"}';
+ }
+ return '{"status":"error","message":"Missing cycle step"}' if($body!~/"cycle_step"\s*:\s*(\d{1,9})\s*[,}]/);
+ return &webui_pattern('{"name":"hdr_metadata_cycle","cycle_token":"'.$token.'","cycle_step":'.int($1).'}');
+}
+
+# One POST /api/hdr-cycle/step over loopback. Returns the answer's body, ""
+# without one.
+sub webui_hdr_cycle_post (@) {
+ my $json=shift;
+ require IO::Socket::INET;
+ require IO::Select;
+ # A write to a port nobody listens on must not end this process.
+ local $SIG{PIPE}="IGNORE";
+ for my $port (@webui_hdr_cycle_ports) {
+  my $sock=IO::Socket::INET->new(PeerAddr => "127.0.0.1", PeerPort => $port, Proto => "tcp", Timeout => 3) or next;
+  # A connect with a timeout can hand back a socket for a refused
+  # connection (seen on macOS): only a socket with a peer is one.
+  if(!defined(getpeername($sock))) { close($sock); next; }
+  my $answer="";
+  # Nothing sent, nothing asked for: the next port is tried.
+  if(!(print $sock "POST /api/hdr-cycle/step HTTP/1.1\r\nHost: 127.0.0.1\r\nContent-Type: application/json\r\nContent-Length: ".length($json)."\r\nConnection: close\r\n\r\n$json")) { close($sock); next; }
+  {
+   my $sel=IO::Select->new($sock);
+   my $until=&webui_hdr_cycle_clock()+30;
+   while(&webui_hdr_cycle_clock() < $until && length($answer) < 65536) {
+    next if(!$sel->can_read(1));
+    my $got=sysread($sock,my $chunk,4096);
+    last if(!$got);
+    $answer.=$chunk;
+    last if($answer=~/\r\n\r\n/ && $answer=~/^Content-Length:\s*(\d+)/mi && length($answer)-(index($answer,"\r\n\r\n")+4) >= $1);
+   }
+  }
+  close($sock);
+  # Only the daemon's own answer counts (it always carries a status):
+  # another service on this port is not the WebUI, which then listens on
+  # the next one.
+  my ($said)=$answer=~/\r\n\r\n(.*)\z/s;
+  return $said if(defined($said) && $said=~/"status"\s*:/);
+ }
+ return "";
+}
+
+# The worker of one cycle, a process of its own (webui_spawn_detached): a
+# step every $webui_hdr_cycle_seconds from its start (a slow step does not
+# stretch the period), asked of the daemon over HTTP so the step runs in a
+# request worker and not in this fork. It ends with the cycle: the record
+# gone or another cycle's. A step that is not shown has ended the cycle in
+# its request; if the cycle is still there (the request never ran), and
+# after $webui_hdr_cycle_minutes, the worker asks for its end. A daemon that
+# answers none of it ends the cycle itself (webui_hdr_cycle_watchdog, its
+# next start).
+# The worker lives as long as the cycle, up to $webui_hdr_cycle_minutes: as
+# the single-threaded child of a threaded process it drops what it
+# inherited (client and listening sockets, the pipe of a helper command
+# another thread was starting at the fork), or that thread's command would
+# not come back before the cycle ends. As the VSIF worker
+# ($webui_vsif_spawn); stdio stays for the log, unbuffered, as the worker
+# ends without Perl's cleanup (its handles name descriptors closed here).
+sub webui_hdr_cycle_spawn (@) {
+ my $token=shift;
+ require POSIX;
+ return &webui_spawn_detached(sub {
+  # Above 1023 only what /proc lists (Linux): a daemon with a higher limit.
+  my @above;
+  if(opendir(my $fds,"/proc/self/fd")) {
+   @above=grep { /^\d+$/ && $_ > 1023 } readdir($fds);
+   closedir($fds);
+  }
+  POSIX::close($_) for(3..1023,@above);
+  select(STDOUT);
+  $|=1;
+  eval { &webui_hdr_cycle_worker($token) };
+  POSIX::_exit(0);
+ });
+}
+sub webui_hdr_cycle_worker (@) {
+ my $token=shift;
+ # The clock of the watchdog (webui_hdr_cycle_clock): a wall clock that is
+ # set back would hold the next step back by as much, and the watchdog
+ # would end a cycle whose worker is alive.
+ my $start=&webui_hdr_cycle_clock();
+ my $last=int($webui_hdr_cycle_minutes*60/$webui_hdr_cycle_seconds);
+ my $step=0;
+ while(1) {
+  $step++;
+  my $at=$start+$step*$webui_hdr_cycle_seconds;
+  # A step that overran its period: the next follows at once, the ones
+  # after it keep the new beat instead of catching up in a burst.
+  my $now=&webui_hdr_cycle_clock();
+  if($now > $at) { $start+=$now-$at; $at=$now; }
+  while((my $left=$at-&webui_hdr_cycle_clock()) > 0) {
+   select(undef,undef,undef,$left < 0.25 ? $left : 0.25);
+   return if(!&webui_hdr_cycle_owned($token));
+  }
+  return if(!&webui_hdr_cycle_owned($token));
+  my $why=($step > $last) ? "time" : "";
+  if($why eq "") {
+   my $answer=&webui_hdr_cycle_post('{"cycle_token":"'.$token.'","cycle_step":'.$step.'}');
+   next if($answer=~/"status"\s*:\s*"ok"/);
+   &log("HDR Metadata Cycle: step $step not shown (".($answer eq "" ? "no answer" : substr($answer,0,200)).")");
+   $why="worker";
+  }
+  for my $try (1..3) {
+   return if(!&webui_hdr_cycle_owned($token));
+   my $answer=&webui_hdr_cycle_post('{"cycle_token":"'.$token.'","cycle_end":true,"cycle_why":"'.$why.'"}');
+   return if($answer=~/"status"\s*:\s*"ok"/);
+   select(undef,undef,undef,2) if($try < 3);
+  }
+  &log("HDR Metadata Cycle: the worker could not end the cycle; the daemon ends it");
+  return;
+ }
+}
+
+# The range of the codes on the cable now: 1 limited (every YCbCr link, RGB
+# Limited), 0 full.
+sub webui_hdr_plate_cable_limited (@) {
+ return ((($pgenerator_conf{"color_format"} || "0") ne "0") || &effective_rgb_quant_range() == 1) ? 1 : 0;
+}
+
+# The name of that range. The one place the HDR plates say FULL: only for
+# the codes of an RGB Full cable (t/ycc_default_full_source_range.t).
+sub webui_hdr_plate_range_name (@) { return $_[0] ? "LIMITED" : "FULL"; }
+
+# The MaxDML of HDR Steps: the conf's Max Luma as the renderer sends it
+# (ofxRPI4Window.cpp updateHDR_Infoframe: the whole cd/m2 of max_luma, 1000
+# without the key). 0 when that is not a peak PQ can draw bars up to.
+sub webui_hdr_steps_peak (@) {
+ my $v=$pgenerator_conf{"max_luma"};
+ # No key: the renderer's default. A key without a value reads as 0 there.
+ $v=1000 if(!defined($v));
+ return 0 if($v!~/^\d+(?:\.\d+)?$/);
+ $v=int($v);
+ return ($v >= 1 && $v <= 10000) ? $v : 0;
+}
+
+# HDR Steps names the Max Luma, the depth and the range it was drawn for.
+# After a signal change (an apply, in place or with a renderer restart) it
+# is drawn again for the signal now, or gives way to the black of the link
+# when that is no longer HDR10 or has no peak to draw. The caller loads the
+# pattern file. Returns 1 if it wrote one.
+#
+# What it does not survive: a renderer restart the WebUI's apply did not
+# make (pattern_generator_stop empties running/ for every caller), and an
+# apply without a display (the renderer's later start empties it too).
+sub webui_hdr_steps_refresh (@) {
+ # The pattern that was on screen, from a caller whose renderer stop has
+ # removed the pattern file since, or who has put $placeholder (the pattern
+ # file's text) in its place; the file's otherwise.
+ my ($on_screen,$placeholder)=@_;
+ # Drawing takes its time and a pattern request does not wait for it: asked
+ # again right before the pattern file is written, a pattern that came
+ # meanwhile keeps the output.
+ my $still=defined($placeholder) ? sub { my $t=&webui_pattern_file_text(); return (defined($t) && $t eq $placeholder) ? 1 : 0; }
+  : defined($on_screen) ? sub { return (-s $command_file) ? 0 : 1; } : sub { return (&webui_pattern_current_name() eq "hdr_steps") ? 1 : 0; };
+ $on_screen=&webui_pattern_current_name() if(!defined($on_screen));
+ return 0 if($on_screen ne "hdr_steps");
+ # This thread's default depth for the conf now ($bits_default is per
+ # thread). Not webui_reload_pgenerator_conf: it takes lock(%pgenerator_conf),
+ # and the apply worker that calls this is a fork of a threaded process, in
+ # which a lock another thread held at the fork is never released
+ # (webui_spawn_detached).
+ &sync_pattern_bits_default();
+ my ($w,$h)=(int($w_s || 0) || 1920,int($h_s || 0) || 1080);
+ my $lim=&webui_hdr_plate_cable_limited();
+ my $why="";
+ my $peak=&webui_hdr_steps_peak();
+ $why="the output is not HDR10" if(&signal_mode_from_conf(\%pgenerator_conf) ne "hdr10" || int($pgenerator_conf{"eotf"} || 0) != 2);
+ $why="Max Luma is not 1 to 10000 cd/m2" if($why eq "" && !$peak);
+ if($why eq "") {
+  my $bits=&webui_pattern_effective_bits("","hdr10");
+  $bits=8 if($bits != 10);
+  my $img=&webui_hdr_steps_image_file($w,$h,$bits,$lim,$peak);
+  my $range=&webui_hdr_plate_range_name($lim);
+  my $pat=($bits == 10 && $img!~/\.png$/i) ? "" : &webui_hdr_steps_plate($img,$w,$h,$bits,$lim,$peak);
+  if($pat ne "") {
+   $pat=~s/^END=1$/SOURCE_RANGE=$range\nEND=1/mg if(($pgenerator_conf{"color_format"} || "0") eq "0");
+   if(!$still->()) {
+    &log("WebUI: HDR Steps not drawn again, another pattern was asked for");
+    return 0;
+   }
+   return 1 if(&pattern_file_write("PATTERN_NAME=hdr_steps\nBITS=$bits\nSOURCE_MAX=".&webui_pattern_target_max($bits)."\n".$pat."FRAME=$frame_default\n"));
+   $why="the pattern file could not be written";
+  } else {
+   $why="the plate could not be drawn";
+  }
+ }
+ if(!$still->()) {
+  &log("WebUI: HDR Steps not drawn again, another pattern was asked for");
+  return 0;
+ }
+ my $k=$lim ? 16 : 0;
+ if(&create_tmp_file("PATTERN_NAME=stop\nBITS=8\nDRAW=RECTANGLE\nDIM=$w,$h\nRGB=$k,$k,$k\nBG=$k,$k,$k\nPOSITION=0,0\nEND=1\n",$lim ? "LIMITED" : "")) {
+  &log("WebUI: HDR Steps cleared after the signal change: $why");
+  return 1;
+ }
+ # The pattern file could not be written at all: it still names the plate
+ # from before the change, with the picture that belongs to it
+ # (webui_hdr_steps_image_file), or holds the caller's $placeholder.
+ &log("WebUI: HDR Steps not drawn again ($why) and not cleared either, the pattern file could not be written: ".(defined($placeholder) ? "the field drawn before it stays" : "the plate from before the change stays"));
+ return 0;
+}
+
+# HDR Steps after a renderer restart (webui_restart_renderer_locked): drawn
+# and loaded once the new renderer is ready. On RGB with the range on
+# Default the renderer names the range it resolved for the mode; that file
+# is waited for, and without it the plate is not drawn (its codes and its
+# caption would be a guess). A video or a pattern that was asked for since
+# the restart keeps the output. Returns 1 if the plate was loaded.
+our $webui_plate_range_wait=3;
+# On RGB with the range on Default a plate's codes follow the range the
+# renderer resolved for the cable: its default-rgb-quant-range file, which a
+# renderer stop removes and the new renderer writes again. 1 when that
+# range is known or not needed, 0 when the file has not come within $wait
+# seconds: read without it, the range would be a fallback, not the cable's.
+sub webui_plate_cable_range_named (@) {
+ my $wait=shift;
+ return 1 if(($pgenerator_conf{"color_format"} || "0") ne "0" || ($pgenerator_conf{"rgb_quant_range"} || "0")=~/^[12]$/);
+ require Time::HiRes;
+ my $until=Time::HiRes::time()+($wait || 0);
+ Time::HiRes::sleep(0.1) while(!-s $renderer_default_range_file && Time::HiRes::time() < $until);
+ return (-s $renderer_default_range_file) ? 1 : 0;
+}
+sub webui_hdr_steps_follow_restart (@) {
+ &webui_plate_cable_range_named($webui_plate_range_wait);
+ &renderer_lock();
+ my $why="";
+ $why="a video owns the output" if(&video_record_present() || -e $video_starting_file);
+ $why="another pattern was asked for" if($why eq "" && -s $command_file);
+ $why="the renderer did not name the range of the cable" if($why eq "" && !&webui_plate_cable_range_named(0));
+ if($why ne "") {
+  &renderer_unlock();
+  &log("WebUI: HDR Steps not drawn again after the restart: $why");
+  return 0;
+ }
+ my $ok=&webui_hdr_steps_refresh("hdr_steps");
+ # "webui apply": the daemon's own load, no request number (a fork cannot
+ # take the lock on that counter either, see output_request_counts).
+ &load_new_pattern_file("webui apply") if($ok);
+ &renderer_unlock();
+ return $ok;
+}
+
+# HDR Steps for the peak $peak into $img: the pattern text, "" when the
+# picture could not be written.
+# The picture file of an HDR Steps plate, one per content: a pattern file
+# that could not be rewritten after a signal change keeps naming the picture
+# that belongs to its BITS and SOURCE_RANGE, not one drawn over it since.
+sub webui_hdr_steps_image_file (@) {
+ my ($w,$h,$bits,$lim,$peak)=@_;
+ return &webui_pattern_diag_image_file("hdr_steps_${w}x${h}_${bits}bit_".($lim ? "limited" : "full")."_$peak");
+}
+# The pictures of earlier plates go, but for the one the pattern file names.
+sub webui_hdr_steps_sweep (@) {
+ my $keep=shift;
+ my $shown="";
+ if(open(my $fh,"<",$command_file)) {
+  while(my $line=<$fh>) {
+   if($line=~/^IMAGE=(.*)$/) { $shown=$1; last; }
+  }
+  close($fh);
+ }
+ $shown=~s/[\r\n]+//g;
+ # The pattern file may name it by another spelling (pattern_pictures_spelled).
+ $shown=~s{/(?:\./)+([^/]+)$}{/$1};
+ (my $dir=$keep)=~s{/[^/]*$}{};
+ opendir(my $dh,$dir) or return;
+ for my $f (readdir($dh)) {
+  next if($f!~/^webui_pattern_hdr_steps_/);
+  next if("$dir/$f" eq $keep || "$dir/$f" eq $shown);
+  # A picture another request is drawing right now (webui_hdr_steps_plate:
+  # ".new.<pid>.<thread>"), or has drawn and not yet named in the pattern
+  # file, is left to it; one left behind goes with a later plate.
+  next if((time()-((stat("$dir/$f"))[9] || 0)) < 60);
+  unlink("$dir/$f");
+ }
+ closedir($dh);
+}
+sub webui_hdr_steps_plate (@) {
+ my ($img,$w,$h,$bits,$lim,$peak)=@_;
+ require PGHdrPatterns;
+ &webui_hdr_steps_sweep($img);
+ # The file's name is its content (webui_hdr_steps_image_file), and it gets
+ # that name only once it is whole: drawn under another name and renamed. A
+ # picture that is there is the one on screen or the same again, and is
+ # neither removed nor drawn over (a save removes its file first: one that
+ # failed would leave the pattern file naming no picture).
+ return &webui_pattern_image_pattern($w,$h,$img) if(-s $img);
+ my $tid=eval { threads->tid() } // 0;
+ (my $new=$img)=~s/(\.[A-Za-z0-9]+)$/.new.$$.$tid$1/;
+ my $pat=&webui_hdr_plate_pattern($new,$w,$h,{
+  bits => $bits, limited => $lim, levels => [PGHdrPatterns::hdr_steps_levels($peak)], title => "HDR STEPS",
+  lines => ["MAXDML $peak CD/M2","ST 2084 PQ  $bits BIT  ".&webui_hdr_plate_range_name($lim)." RANGE"]});
+ if($pat eq "" || !rename($new,$img)) {
+  unlink($new);
+  return "";
+ }
+ return &webui_pattern_image_pattern($w,$h,$img);
+}
+
+# The picture of the cycle's step $index (peak $peak) into $img: the pattern
+# text, "" when the picture could not be written. A picture that is already
+# the one asked for is kept ($img.sig names what the file holds, written
+# after it), so a step is a conf write and a pattern load, not a redraw.
+sub webui_hdr_cycle_plate (@) {
+ my ($img,$w,$h,$bits,$lim,$index,$peak)=@_;
+ require PGHdrPatterns;
+ my @peaks=PGHdrPatterns::hdr_cycle_peaks();
+ my $sig=join(",",$w,$h,$bits,$lim ? 1 : 0,$index,scalar(@peaks),$peak,$webui_hdr_cycle_seconds,$PGHdrPatterns::VERSION);
+ my @pic=stat($img);
+ my @mark=stat("$img.sig");
+ if(@pic && $pic[7] > 0 && @mark && $mark[9] >= $pic[9] && open(my $fh,"<","$img.sig")) {
+  my $have=<$fh>;
+  close($fh);
+  $have="" if(!defined($have));
+  $have=~s/[\r\n]+$//;
+  return &webui_pattern_image_pattern($w,$h,$img) if($have eq $sig);
+ }
+ unlink("$img.sig");
+ my $pat=&webui_hdr_plate_pattern($img,$w,$h,{
+  bits => $bits, limited => $lim, levels => [PGHdrPatterns::hdr_cycle_levels()], title => "HDR METADATA CYCLE",
+  lines => ["MAXDML $peak  MAXCLL $peak CD/M2","STEP ".($index+1)."/".scalar(@peaks)."  EVERY $webui_hdr_cycle_seconds S",
+   "ST 2084 PQ  $bits BIT  ".&webui_hdr_plate_range_name($lim)." RANGE"]});
+ return "" if($pat eq "");
+ if(open(my $fh,">","$img.sig")) {
+  print $fh "$sig\n";
+  close($fh);
+ }
+ return $pat;
+}
+
+# Draws one of the two plates into $img. Returns the pattern text, "" when
+# the picture could not be written.
+sub webui_hdr_plate_pattern (@) {
+ my ($img,$w,$h,$opt)=@_;
+ require PGHdrPatterns;
+ my $out=PGHdrPatterns::hdr_plate_render($w,$h,$opt);
+ return "" if(!$out || !&webui_pattern_image_save($out->{"img"},$img));
+ return &webui_pattern_image_pattern($w,$h,$img);
 }
 
 sub webui_pattern (@) {
@@ -15219,6 +16091,8 @@ sub webui_pattern (@) {
  if($name ne "stop" && !$_tvmenu_drawing) {
   my $why=&signal_patches_refused();
   if($why ne "") {
+   # A step of the HDR Metadata Cycle that is refused ends its cycle.
+   &webui_hdr_cycle_end("patches are refused",1) if($name eq "hdr_metadata_cycle");
    return '{"status":"error","refused":true,"message":"'.&_webui_json_escape("Patches are refused: $why Choose settings that work in the calibration software, or apply settings in Output.").'"}';
   }
  }
@@ -15229,8 +16103,54 @@ sub webui_pattern (@) {
    return '{"status":"ok","pattern":"'.$current.'","unchanged":true}';
   }
  }
+ # HDR Metadata Cycle: a step of the running cycle carries its token; any
+ # other request for a pattern ends the cycle and puts its metadata back
+ # before it draws. The lock is held to the end of this request, so a step
+ # and the end of its cycle never interleave.
+ my ($cycle_token,$cycle_step,$cycle_new,$cycle_lock,$cycle_generation)=("",0,0,undef,undef);
+ # A step does not own the output: a patch from calibration software (no
+ # lock, its own request number), a video or another request can come while
+ # it draws. Asked at its start and again right before it writes the
+ # metadata and the pattern; "" while the cycle still has the output.
+ my $cycle_gone=sub {
+  return "" if($cycle_token eq "" || $cycle_new);
+  return "another request has the output" if(defined($cycle_generation) && &output_request_latest() != $cycle_generation);
+  return "another pattern is on screen" if(&webui_pattern_current_name() ne "hdr_metadata_cycle");
+  return "a video has the output" if(&video_record_present() || -e $video_starting_file);
+  my $owner=&webui_signal_owner();
+  return "$owner is connected and sets the signal" if($owner ne "");
+  return "";
+ };
+ if($name eq "hdr_metadata_cycle" && $body=~/"cycle_token"\s*:\s*"([0-9a-f]{16})"/) {
+  $cycle_token=$1;
+  $cycle_step=int($1) if($body=~/"cycle_step"\s*:\s*(\d{1,9})/);
+ }
+ if($name eq "hdr_metadata_cycle" || -e &webui_hdr_cycle_state_file()) {
+  $cycle_lock=&webui_hdr_cycle_lock();
+  return '{"status":"error","message":"The HDR Metadata Cycle could not be locked; the pattern was not changed"}' if(!$cycle_lock);
+  if($cycle_token eq "") {
+   # The plate goes with its cycle: if this request then draws nothing (a
+   # refused pattern, a failed write), no plate is left naming a step.
+   &webui_hdr_cycle_end_locked("pattern $name",1);
+   return '{"status":"error","message":"The HDR Metadata Cycle could not start: the HDR metadata of the previous one could not be put back (see the log)"}'
+    if($name eq "hdr_metadata_cycle" && -e &webui_hdr_cycle_state_file());
+  } else {
+   # A step: only of the cycle that is running, with its plate still on
+   # screen and no video on the output (a plate drawn by calibration
+   # software or a video start does not go through here).
+   return '{"status":"error","message":"This metadata cycle has ended"}' if(!&webui_hdr_cycle_owned($cycle_token));
+   $cycle_generation=&output_request_latest() if(defined(&output_request_latest));
+   my $gone=$cycle_gone->();
+   if($gone ne "") {
+    &webui_hdr_cycle_end_locked($gone,1,$cycle_token);
+    return '{"status":"error","message":"'.&_webui_json_escape("The HDR Metadata Cycle ended: $gone").'"}';
+   }
+  }
+  undef $cycle_lock if($name ne "hdr_metadata_cycle");
+ }
  # A request for the output: a video start still in its checks gives up.
- &output_request_claim() if(defined(&output_request_claim));
+ # A cycle's step is the daemon's own redraw and takes no number.
+ &output_request_claim() if(defined(&output_request_claim) && $cycle_token eq "");
  if($name eq "patch" && &webui_pattern_stop_guard_active()) {
   if(&webui_pattern_stop_guard_allows_patch($body)) {
    &webui_pattern_stop_guard_clear();
@@ -15252,6 +16172,15 @@ sub webui_pattern (@) {
  }
  my $signal_mode=&webui_pattern_signal_mode($body);
  my $max_luma=&webui_pattern_max_luma($body);
+ # HDR Steps and the HDR Metadata Cycle are drawn for the signal on the
+ # cable (PQ codes, the MaxDML the infoframe carries), not for a mode or a
+ # Max Luma chosen on the page and not applied.
+ my $hdr_plate=($name eq "hdr_steps" || $name eq "hdr_metadata_cycle") ? 1 : 0;
+ my $wire_mode=&signal_mode_from_conf(\%pgenerator_conf);
+ if($hdr_plate && ($wire_mode ne "hdr10" || int($pgenerator_conf{"eotf"} || 0) != 2)) {
+  &webui_hdr_cycle_end_locked("the signal is no longer HDR10",1,$cycle_token) if($cycle_token ne "");
+  return '{"status":"error","message":"'.($name eq "hdr_steps" ? "HDR Steps is" : "The HDR Metadata Cycle is").' available only in HDR10 (PQ). Apply HDR10 in Output first."}';
+ }
  my ($signal_range)=$body=~/"signal_range"\s*:\s*"?(\d+)"?/;
  my ($pattern_signal_range)=$body=~/"pattern_signal_range"\s*:\s*"?(\d+)"?/;
  my ($transport_signal_range)=$body=~/"transport_signal_range"\s*:\s*"?(\d+)"?/;
@@ -15348,6 +16277,69 @@ sub webui_pattern (@) {
   $pat=&webui_pattern_image_pattern($w,$h,$img);
   $pat_bits=&webui_pattern_effective_bits("IMAGE",$signal_mode);
  }
+ # HDR Steps and HDR Metadata Cycle (PGHdrPatterns): bars at absolute
+ # luminances, each at its PQ code for the depth and range on the cable.
+ elsif($pat eq "" && $hdr_plate) {
+  require PGHdrPatterns;
+  my $bits=&webui_pattern_effective_bits("",$wire_mode);
+  $bits=8 if($bits != 10);
+  # The range of the plate's codes is the cable's, read after this
+  # request's range was applied above: every YCbCr link and RGB Limited are
+  # limited, whatever range the request names.
+  my $lim=&webui_hdr_plate_cable_limited();
+  my $plate_range=&webui_hdr_plate_range_name($lim);
+  # A 10-bit plate needs 16-bit samples, which only the PNG holds: without
+  # convert there is no plate rather than one with rounded codes.
+  if($bits == 10 && $img!~/\.png$/i) {
+   &webui_hdr_cycle_end_locked("no 10-bit plate",1,$cycle_token) if($cycle_token ne "");
+   return '{"status":"error","message":"This pattern needs ImageMagick (convert) for its 10-bit picture"}';
+  }
+  if($name eq "hdr_steps") {
+   # MaxDML as the renderer sends it. A Max Luma it would send as 0, or
+   # one PQ has no code for, gets no plate that names another peak.
+   my $peak=&webui_hdr_steps_peak();
+   if(!$peak) {
+    my $set=defined($pgenerator_conf{"max_luma"}) ? "$pgenerator_conf{max_luma}" : "";
+    return '{"status":"error","message":"'.&_webui_json_escape("HDR Steps needs a Max Luma from 1 to 10000 cd/m2; it is set to \"$set\". Set it in Output.").'"}';
+   }
+   $img=&webui_hdr_steps_image_file($w,$h,$bits,$lim,$peak);
+   $pat=&webui_hdr_steps_plate($img,$w,$h,$bits,$lim,$peak);
+   return '{"status":"error","message":"Failed to generate image pattern"}' if($pat eq "");
+  } else {
+   if($cycle_token eq "") {
+    # The cycle writes Max Luma and MaxCLL: not under calibration software
+    # that set them and shows what it set (webui_signal_owner).
+    my $owner=&webui_signal_owner();
+    return '{"status":"error","refused":true,"message":"'.&_webui_json_escape("$owner is connected and sets the HDR metadata. Disconnect it to run the HDR Metadata Cycle.").'"}' if($owner ne "");
+    $cycle_token=&webui_hdr_cycle_begin();
+    return '{"status":"error","message":"The HDR Metadata Cycle could not start: its record could not be written"}' if($cycle_token eq "");
+    $cycle_new=1;
+   }
+   my @peaks=PGHdrPatterns::hdr_cycle_peaks();
+   my $index=$cycle_step % scalar(@peaks);
+   # One picture file per step: the file on screen is never the one being
+   # written. The picture first, so the metadata and its caption change
+   # together.
+   $img=&webui_pattern_diag_image_file("hdr_metadata_cycle_$index");
+   $pat=&webui_hdr_cycle_plate($img,$w,$h,$bits,$lim,$index,$peaks[$index]);
+   my $why=($pat eq "") ? "the plate could not be drawn" : $cycle_gone->();
+   ($why)=&webui_hdr_cycle_apply_step($cycle_token,$cycle_step) if($why eq "");
+   # The timer of a new cycle starts before its plate is drawn: a plate
+   # that names a step is never left without the worker behind it.
+   if($why eq "" && $cycle_new) {
+    my $token=$cycle_token;
+    $why="its timer could not be started" if(!&webui_hdr_cycle_spawn($token));
+   }
+   if($why ne "") {
+    &webui_hdr_cycle_end_locked("step $cycle_step: $why",1,$cycle_token);
+    return '{"status":"error","message":"'.&_webui_json_escape("The HDR Metadata Cycle stopped: $why.").'"}';
+   }
+  }
+  $pattern_source_max=&webui_pattern_target_max($bits);
+  $pat_bits=$bits;
+  # The codes are the cable's: the renderer takes them as they are.
+  $source_range=$plate_range;
+ }
  # Full field solid colors
    elsif($pat eq "" && $name eq "white")   { $pat="DRAW=RECTANGLE\nDIM=$w,$h\nRGB=$white_rgb\nBG=$black_rgb\nPOSITION=0,0\nEND=1\n"; }
    elsif($pat eq "" && $name eq "black")   { $pat="DRAW=RECTANGLE\nDIM=$w,$h\nRGB=$black_rgb\nBG=$black_rgb\nPOSITION=0,0\nEND=1\n"; }
@@ -15403,10 +16395,15 @@ elsif($pat eq "" && $name eq "uploaded_diag_video") {
   # only after the source and timing checks: a refused request leaves the
   # playing video (or the pattern) on the output. The WebUI range is applied
   # there too, after the checks.
+  # "match_frame_rate": the clip plays in the configured size at its own
+  # frame rate when the display lists such a mode (play_video); without
+  # the key the configured timing is kept, as before.
+  my $match_rate=($body =~ /"match_frame_rate"\s*:\s*(?:true|1|"1"|"true")\s*[,}]/) ? 1 : 0;
   $video_result=&play_video("pg_diag_video_player",$requested_name,"1h-1",$w,$h,
-   sub { &apply_source_rgb_quant_range("webui",$transport_signal_range); });
+   sub { &apply_source_rgb_quant_range("webui",$transport_signal_range); },$match_rate);
   return '{"status":"error","message":"'.&_webui_json_escape($video_result).'"}' if($video_result ne "OK");
-  return '{"status":"ok","pattern":"'.$name.'"}';
+  my $mode_note=defined($video_mode_note) ? $video_mode_note : "";
+  return '{"status":"ok","pattern":"'.$name.'"'.($mode_note ne "" ? ',"video_mode":"'.&_webui_json_escape($mode_note).'"' : '').'}';
  }
 }
  # Generic patch takes r,g,b,size params from JSON. Stabilization uses the
@@ -15463,8 +16460,11 @@ elsif($pat eq "" && $name eq "uploaded_diag_video") {
  elsif($pat eq "") {
   return '{"status":"error","message":"Unknown pattern: '.$name.'"}';
  }
- if(!&video_program_stop()) {
+ # A step of the cycle ends no video: one that started meanwhile has the
+ # output, and the step gives way to it below.
+ if(($cycle_token eq "" || $cycle_new) && !&video_program_stop()) {
   &log("WebUI: pattern $name not shown, the video could not be ended");
+  &webui_hdr_cycle_end_locked("the video could not be ended",1,$cycle_token) if($cycle_token ne "");
   return '{"status":"error","message":"'.&webui_video_not_ended_message().'"}';
  }
  # Ensure the C renderer binary is running (auto-start on first pattern)
@@ -15473,6 +16473,7 @@ elsif($pat eq "" && $name eq "uploaded_diag_video") {
   Time::HiRes::sleep(0.5);
   if(!&pattern_generator_is_running()) {
    &log("WebUI: renderer failed to start for pattern $name");
+   &webui_hdr_cycle_end_locked("the renderer did not start",0,$cycle_token) if($cycle_token ne "");
    return '{"status":"error","message":"Pattern renderer failed to start"}';
   }
  }
@@ -15494,7 +16495,17 @@ elsif($pat eq "" && $name eq "uploaded_diag_video") {
  # the default FRAME for single-shot patterns that have none.
  $pat="PATTERN_NAME=$name\nBITS=$pat_bits\nSOURCE_MAX=$pattern_source_max\n".$pat;
  $pat.="FRAME=$frame_default\n" if($pat !~ /^FRAME=/m);
- return '{"status":"error","message":"Pattern could not be written (see the log)"}' if(!&pattern_file_write($pat));
+ {
+  my $gone=$cycle_gone->();
+  if($gone ne "") {
+   &webui_hdr_cycle_end_locked($gone,1,$cycle_token);
+   return '{"status":"error","message":"'.&_webui_json_escape("The HDR Metadata Cycle ended: $gone").'"}';
+  }
+ }
+ if(!&pattern_file_write($pat)) {
+  &webui_hdr_cycle_end_locked("the pattern could not be written",1,$cycle_token) if($cycle_token ne "");
+  return '{"status":"error","message":"Pattern could not be written (see the log)"}';
+ }
  &create_return_file();
  # Record what is now on screen for the simulated meter. Patch/stabilization
  # captured raw codes above; named solid fields map to their 8-bit authoring

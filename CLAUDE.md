@@ -58,6 +58,9 @@ Run what applies and say what was and was not checked:
   In the Bash sandbox `t/pi_exp.t`, `t/refused_settings.t` and
   `t/meter_ccss_y_selector.t` fail on sandbox limits (ptys, sockets, temp
   files); rerun just those unsandboxed before calling a red real.
+  `t/webui_hdr_plates.t` skips its socket tests there instead of failing
+  (the HDR Metadata Cycle worker's POST): a green in the sandbox does not
+  cover `webui_hdr_cycle_post`, run it unsandboxed after a change to it.
 - Perl: `perl -I usr/share/PGenerator -c <file>` for scripts in `usr/bin`,
   `usr/sbin`; modules are checked by `tools/runtime/pgen_release_checks.sh`
   (`pgen_release_check_runtime_syntax`)

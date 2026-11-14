@@ -29,6 +29,11 @@ sub fork_pattern_daemon (@) {
   $SIG{PIPE}='IGNORE';
   open(STDERR,">>/tmp/pg_stderr.log");
   &boot_time_mark("daemon: start");
+  # An HDR Metadata Cycle the last daemon did not end left its step's Max
+  # Luma, MaxCLL and MaxFALL in the conf: put the values that were set back
+  # before anything reads the conf as the settings (the snapshot below, the
+  # renderer).
+  &webui_hdr_cycle_end("daemon start",0) if(defined(&webui_hdr_cycle_end));
   # A refusal ends with the daemon; what a refused apply goes back to until
   # the first one passes is the conf found now.
   &signal_state_reset();
@@ -839,7 +844,9 @@ sub calman_g1_ip (@) {
 # fall back. $o (optional): source_range => "LIMITED" or "" to draw for that
 # range instead of the configured one; load => 0 to only write the command
 # file (the caller loads it); check => [verdict,basis] for the Range Check
-# (PGG1Patterns g1_pattern_render).
+# (PGG1Patterns g1_pattern_render); still => code asked once the pictures
+# are drawn, right before the command file is written: false, and nothing
+# is written (the daemon's own redraw, which a newer pattern outranks).
 sub calman_render_g1_pattern (@) {
  my ($key,$pattern_name,$o)=@_;
  $o={} if(ref($o) ne "HASH");
@@ -921,6 +928,7 @@ sub calman_render_g1_pattern (@) {
   $bg=$out->{bg} if($out->{bg});
  }
  my $bg_str=join(",",@$bg);
+ return 0 if(ref($o->{still}) eq "CODE" && !$o->{still}->());
  # Shown now: a client's pattern (pattern.pm output_pattern_begin).
  my $load=(!exists $o->{load} || $o->{load}) ? 1 : 0;
  my $locked=$load ? &output_pattern_begin("calman") : 0;
@@ -1106,6 +1114,10 @@ sub calibration_session_open (@) {
   $s=$calibration_session{$connection}={since=>$now,ip=>($client_ip{$connection} || $client_address || ""),
    protocol=>&calibration_session_protocol($connection),port=>&calibration_session_port($connection)};
   &log("Calibration session open: software=$software protocol=$s->{protocol} port=$s->{port} peer=$s->{ip}");
+  # Software that sets the signal (webui_signal_owner) sets the HDR metadata
+  # too and shows what it set: a running HDR Metadata Cycle gives way before
+  # its first command, so no value it sends meets a step's.
+  &webui_hdr_cycle_end("$software connected",1) if(defined(&webui_hdr_cycle_end) && $software ne "HCFR" && $software ne "Resolve");
  }
  $s->{software}=$software;
  $s->{last_rx}=$now;
@@ -1375,6 +1387,7 @@ sub pattern_daemon {
  ############################
  while ($select->count()) {
   my $video_tick=&video_playback_poll();
+  &webui_hdr_cycle_watchdog() if(defined(&webui_hdr_cycle_watchdog));
   # Commands read but not handled yet (one read carried several) go first,
   # without waiting for their socket to become readable again.
   my @ready = grep { $pending_cmd{$_} && @{$pending_cmd{$_}} } $select->handles();

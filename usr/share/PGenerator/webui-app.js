@@ -3140,6 +3140,8 @@ const DIAG_DESCRIPTIONS={
  white_clipping:'<b>White Clipping (Contrast)</b> &mdash; Labeled near-white bars from 232 to 255 on a reference-white field. Set HDMI output to RGB, then lower Contrast/White Level until the 236+ bars separate cleanly and 255 is not clipped into the background.',
  black_clipping:'<b>Black Clipping / PLUGE (Brightness)</b> &mdash; Labeled near-black bars from 2 to 25 on black. Set HDMI output to RGB, then raise Brightness until the first few bars above black become barely visible without turning the whole background gray.',
  range_check:'<b>Range Check (SDR)</b> &mdash; Shows whether the display decodes the signal in the range the Pi sends; the caption names the range on the cable. A display that decodes Full shows a dark grey panel with the word FULL, one that decodes Limited only the empty outline. The legend below shows which of the two is a match; the EDID check under it (IF TV ON AUTO) predicts from the display\u2019s EDID and the Pi\u2019s AVI infoframe how the display decodes with its range on Auto. On a mismatch, set the display\u2019s HDMI range or black level to the signal\u2019s range (or Auto). FULL showing only faintly on a Limited signal can also mean Brightness is far too high: check Black Clipping.',
+ hdr_steps:'<b>HDR Steps (HDR10)</b> &mdash; Grey bars at absolute luminances up to the Max Luma (MaxDML) that is applied, each at its exact PQ code; the plate names the luminance and the code under every bar. A display that clips below the mastering peak shows the bars above its own peak alike: the last bar you can tell from its neighbour is where it clips. It is drawn again when you apply signal settings. Available in HDR10 only, with a Max Luma from 1 to 10,000 cd/m&sup2;.',
+ hdr_metadata_cycle:'<b>HDR Metadata Cycle (HDR10)</b> &mdash; The same bars up to 10,000 cd/m&sup2;, unchanged, while the mastering peak (MaxDML) and MaxCLL on the cable step through 600, 1000, 2000, 4000 and 10,000 every 6 seconds; the caption names the step. A display whose tone mapping follows the metadata changes the look of the bars with each step, one that ignores it does not. MaxFALL is lowered to the step&rsquo;s MaxCLL where it would be above it. The values you set come back when the cycle ends: another pattern or stop, applied settings, calibration software connecting, or by itself after 30 minutes. Available in HDR10 only.',
  overscan:'<b>Overscan</b> &mdash; Border lines at 0%, 2.5%, and 5% from screen edges with corner L-brackets and center crosshair. Use HDMI RGB output, and all lines should be visible &mdash; if not, disable overscan in your TV settings.',
 };
 const DIAG_UPLOAD_SENTINEL='__upload__';
@@ -3292,6 +3294,19 @@ function diagVideoRangePref(){
 function diagVideoRangePrefSet(v){
  try{ localStorage.setItem('diagVideoRange', v==='full'?'full':'limited'); }catch(_e){}
 }
+// "Play at the clip's frame rate" (Pi video player): on unless switched off.
+function diagVideoMatchRatePref(){
+ try{ return localStorage.getItem('diagVideoMatchRate')!=='0'; }catch(_e){}
+ return true;
+}
+function diagVideoMatchRatePrefSet(on){
+ try{ localStorage.setItem('diagVideoMatchRate', on?'1':'0'); }catch(_e){}
+}
+function diagVideoMatchRateInit(){
+ const box=document.getElementById('diagVideoMatchRate');
+ if(box) box.checked=diagVideoMatchRatePref();
+}
+if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',diagVideoMatchRateInit); else diagVideoMatchRateInit();
 // Ask the user (only at upload time) which range to author the extracted
 // frames at. Remembers the last choice. Renders into the upload-status area.
 function diagPromptVideoRange(){
@@ -3453,8 +3468,12 @@ async function diagShowUploadedAsset(kind,filename,forcePlay){
  activePattern=token;
  diagSetInfoHtml(diagAssetInfoHtml(kind,filename));
  const body={name:kind==='video'?'uploaded_diag_video':'uploaded_diag_image',filename:filename,signal_mode:getVal('signal_mode'),max_luma:document.getElementById('max_luma').value};
+ if(kind==='video'){
+  const rateBox=document.getElementById('diagVideoMatchRate');
+  body.match_frame_rate=rateBox?!!rateBox.checked:diagVideoMatchRatePref();
+ }
  const r=await fetchJSON('/api/pattern',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
- if(r&&r.status==='ok'){toast('Pattern: '+diagAssetDisplayLabel(filename));pgDiagRemember(diagAssetDisplayLabel(filename),'',()=>diagShowUploadedAsset(kind,filename,true));pgSetHeaderPattern(diagAssetDisplayLabel(filename));}
+ if(r&&r.status==='ok'){toast('Pattern: '+diagAssetDisplayLabel(filename)+(r.video_mode?' \u2013 '+r.video_mode:''));pgDiagRemember(diagAssetDisplayLabel(filename),'',()=>diagShowUploadedAsset(kind,filename,true));pgSetHeaderPattern(diagAssetDisplayLabel(filename));}
  else toast(pgFailMsg('Couldn\u2019t show the pattern',r),true);
 }
 async function diagHandleAssetSelect(kind){

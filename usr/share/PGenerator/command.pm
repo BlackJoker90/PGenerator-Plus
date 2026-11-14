@@ -1223,6 +1223,17 @@ sub pattern_generator_restart_unless_current (@) {
  return 1;
 }
 
+# A picture on screen goes with the renderer's window. It is not loaded
+# again here (its pattern text is the old signal's); the next pattern that
+# names a picture is (pattern_pictures_spelled). Not across a change of the
+# window's bit depth (max_bpc, 4:2:2 at 8 bit): the renderer then sets its
+# window up once more after that load. For HDR Steps, whose BITS follow the
+# depth, the WebUI's apply loads a pattern without a picture first
+# (webui_renderer_forget_pictures); its Range Check, BITS=8 at every depth,
+# was read back at the output without that (2026-11-14: on screen at the new
+# signal's codes across 8 <-> 10 bit and RGB <-> YCbCr 4:2:2). A picture that
+# a calibration client's own change replays (calman_replay_last_pattern)
+# stays dark until another pattern is drawn, as it did before the spelling.
 sub renderer_reconfigure_in_place (@) {
  my ($changed,$dv_before)=@_;
  my %in_place_keys=map{$_=>1} qw(color_format rgb_quant_range colorimetry max_bpc eotf
@@ -1305,6 +1316,10 @@ sub renderer_reconfigure_in_place (@) {
   close($lock) if($lock);
   return 0;
  }
+ # The renderer builds its window anew from here on, also when its answer
+ # comes too late to count: pictures get their next spelling. Under the
+ # lock, as two reconfigures at once would both read the same number.
+ &pattern_pictures_respell();
  my $result=0;
  my $reason="no acknowledgement within 3s";
  my $deadline=$t0+3;
@@ -1541,6 +1556,36 @@ sub signal_mode_info (@) {
  return $preferred || $first || {};
 }
 
+# The mode a clip of $rate (N/D frames a second) plays in when it is to
+# play at its own frame rate: the size and scan of the configured mode
+# $conf_mode (a signal_mode_info hash), at the clip's rate or the lowest
+# whole multiple of it the display lists. Never a higher pixel clock than
+# the configured mode's: the link was set up for that one. An interlaced
+# configured mode keeps its timing. undef: stay in the configured mode.
+sub signal_mode_for_frame_rate (@) {
+ my ($conf_mode,$rate,$out)=@_;
+ return undef if(ref($conf_mode) ne "HASH" || !defined($conf_mode->{timing}) || $conf_mode->{interlaced});
+ return undef if(!$conf_mode->{width} || !$conf_mode->{height} || !$conf_mode->{clock_khz});
+ return undef if(!defined($rate) || $rate !~ /^([1-9]\d{0,6})\/([1-9]\d{0,6})\z/);
+ my $fps=$1/$2;
+ return undef if($fps < 1 || $fps > 300);
+ $out=`timeout 3 $modetest -c 2>/dev/null` if(!defined $out);
+ $out="" if(!defined $out);
+ my ($best,$best_k);
+ for(my $i=0;$i<512;$i++) {
+  my $m=&signal_mode_info($i,$out);
+  last if(ref($m) ne "HASH" || !%$m);
+  next if(!defined($m->{timing}) || !defined($m->{video_refresh}) || $m->{interlaced});
+  next if($m->{width} != $conf_mode->{width} || $m->{height} != $conf_mode->{height});
+  next if($m->{clock_khz} > $conf_mode->{clock_khz});
+  my $k=int($m->{video_refresh}/$fps+0.5);
+  # 24 and 24/1.001 differ by a thousandth: a fifth of that is the same rate.
+  next if($k < 1 || $k > 5 || abs($m->{video_refresh}-$k*$fps) > $k*$fps*0.0002);
+  ($best,$best_k)=($m,$k) if(!defined($best_k) || $k < $best_k);
+ }
+ return $best;
+}
+
 # Signal mode from the flags the renderer reads.
 sub signal_mode_from_conf (@) {
  my $conf=shift;
@@ -1631,6 +1676,12 @@ sub signal_applied_snapshot_write (@) {
  my $conf=shift || \%pgenerator_conf;
  lock($signal_applied_guard);
  my %f=map {("conf_$_"=>defined($conf->{$_}) ? "$conf->{$_}" : "")} (@signal_conf_keys,@signal_metadata_keys);
+ # During an HDR Metadata Cycle the conf holds a step's metadata: what a
+ # refused apply goes back to is what was set before the cycle.
+ if(defined(&webui_hdr_cycle_user_values)) {
+  my $user=&webui_hdr_cycle_user_values($conf);
+  $f{"conf_$_"}=$user->{$_} for(keys %$user);
+ }
  $f{time}=time();
  return 1 if(&_signal_state_write($signal_applied_file,%f));
  # A later refusal then goes back to an older snapshot, or refuses without
@@ -2540,7 +2591,14 @@ sub process_pid(@) {
 ###############################################
 #        Pattern Clean Files Function         #
 ###############################################
+# The name of the pattern the last wipe removed with the pattern file ("" for
+# one without a name, a client's patch); an empty or missing pattern file
+# leaves it as it is. Per thread. Read by the WebUI apply that draws its
+# plate again after a renderer restart (webui_restart_renderer_locked): a
+# pattern asked for while the renderer was down is the newer one.
+our $clean_files_pattern_name;
 sub clean_files(@) {
+ $clean_files_pattern_name=&webui_pattern_current_name() if(-s $command_file && defined(&webui_pattern_current_name));
  # Meter settings are durable user preferences (meter ports, custom series,
  # grey profiles). The blanket $var_dir wipe below deleted the persist copy on
  # EVERY daemon restart, so settings only survived when an open browser tab

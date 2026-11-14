@@ -162,6 +162,78 @@ sub pattern_template_name_ok (@) {
  return 0;
 }
 
+# The renderer keeps a picture under the path it loaded it from and does not
+# load it again while the pattern file names that path (ofApp.cpp, image():
+# previous_image). A reconfigure in place builds its window anew, the GL
+# context with it (ofxRPI4Window::update, flip): the picture is gone, and all
+# of it reads code 0 until another path is named. Read at the output
+# 2026-11-14: HDR Steps, White Clipping and Overscan after RGB <-> YCbCr
+# 4:2:2, still code 0 when the pattern was asked for again, back at once
+# with the path spelled differently.
+# So a picture's path has several spellings, ".../x.png", "..././x.png",
+# ".../././x.png" and so on, the same file to the renderer's loader, and
+# every reconfigure in place moves on to the next (pattern_pictures_respell):
+# the next pattern that names a picture is loaded. The pattern on screen is
+# not written again here: its text is the signal's from before the change
+# (a picture asked for on YCbCr has no SOURCE_RANGE, and the renderer would
+# compress it on RGB Limited). Who draws for the new signal writes it (the
+# WebUI's apply: its plates, webui_picture_gives_way).
+# $picture_spelling_file holds which spelling it is; without it, the first.
+# A renderer stop removes it with the rest of running/: a new renderer holds
+# no picture.
+# More than two: two reconfigures that follow each other before a picture is
+# written again must not end on the spelling the renderer holds.
+sub pattern_pictures_spellings (@) { return 8; }
+
+# $str with its pictures in spelling $n (0 is the plain path).
+sub pattern_pictures_spelled (@) {
+ my ($str,$n)=@_;
+ return $str if(!defined($str) || index($str,"IMAGE=/") < 0);
+ 1 while($str=~s{^(IMAGE=/(?:[^\n]*/)?)\./([^/\n]+)$}{$1$2}mg);
+ $n=int($n || 0);
+ if($n > 0) {
+  my $dots="./" x $n;
+  $str=~s{^(IMAGE=/(?:[^\n]*/)?)([^/\n]+)$}{$1$dots$2}mg;
+ }
+ return $str;
+}
+
+# The spelling of now: 0 without $picture_spelling_file or with one that
+# cannot be read as a number.
+sub pattern_pictures_spelling (@) {
+ open(my $fh,"<",$picture_spelling_file) or return 0;
+ my $line=<$fh>;
+ close($fh);
+ return (defined($line) && $line=~/^(\d{1,3})\s*$/ && $1 < &pattern_pictures_spellings()) ? int($1) : 0;
+}
+
+# Moves on to the next spelling: 1 when it did. The pattern on screen is
+# not touched. The caller holds the reconfigure lock: two at once would both
+# read the same number. Written through a temp file, as a pattern write
+# reads it at any time.
+sub pattern_pictures_respell (@) {
+ my $next=(&pattern_pictures_spelling()+1) % &pattern_pictures_spellings();
+ my $why="";
+ if($next == 0) {
+  return 1 if(unlink($picture_spelling_file) || !-e $picture_spelling_file);
+  $why="$!";
+ } else {
+  my $tid=eval { threads->tid() } // 0;
+  my $new="$picture_spelling_file.new.$$.$tid";
+  if(open(my $fh,">",$new)) {
+   my $ok=(print $fh "$next\n") ? 1 : 0;
+   $ok=0 if(!close($fh));
+   return 1 if($ok && rename($new,$picture_spelling_file));
+   $why="$!";
+   unlink($new);
+  } else {
+   $why="$!";
+  }
+ }
+ &log("Pattern: $picture_spelling_file could not be changed ($why): a picture asked for again may stay dark until another pattern is drawn");
+ return 0;
+}
+
 # Writes the renderer's pattern file ($command_file) through a temp file of
 # this process and thread (the daemon thread and the WebUI workers write it
 # at once), checking every step: a failed write (running/ is a 20 MB tmpfs)
@@ -171,6 +243,7 @@ sub pattern_template_name_ok (@) {
 # shared): send_key_to_client answers Calman with NAK after a failed write.
 sub pattern_file_write (@) {
  my ($str)=@_;
+ $str=&pattern_pictures_spelled($str,&pattern_pictures_spelling());
  my $tid=eval { threads->tid() } // 0;
  my $tmp="$command_file.$$.$tid.tmp";
  my $err="";
@@ -267,6 +340,10 @@ sub play_video(@) {
  # Optional: the caller's step that can restart the renderer (the WebUI
  # range), run only for an accepted clip, before the session takes over.
  my $before_stop = shift;
+ # Optional: play at the clip's frame rate (signal_mode_for_frame_rate)
+ # instead of the configured mode's. $video_mode_note names the outcome.
+ my $match_rate = shift;
+ $video_mode_note="";
  my $response="OK";
  $repeat=(defined($repeat) && $repeat eq "1") ? 1 : 0;
  # Player, file and duration come from a port 85 client. Only the players
@@ -285,12 +362,13 @@ sub play_video(@) {
  # Capture the configured mode's refresh before stopping the renderer.
  # Exit resets colour properties and fbdev may restore a different timing.
  # Keep the configured size/refresh together, including a port-85 VIDEO call.
- my $video_refresh=0;my $video_timing="-";
+ my $video_refresh=0;my $video_timing="-";my $conf_mode;
  if($program =~ /(?:^|\/)pg_diag_video_player\z/ && ($width<=0 || $height<=0)) {
   ($width,$height)=(int($w_s || 0),int($h_s || 0));
  }
  if($program =~ /(?:^|\/)pg_diag_video_player\z/ && defined(&signal_mode_info)) {
   my $mode=&signal_mode_info($pgenerator_conf{"mode_idx"});
+  $conf_mode=$mode;
   my $hz=defined($mode->{video_refresh}) ? $mode->{video_refresh} : $mode->{refresh};
   $video_refresh=0+sprintf("%.6f",$hz) if(defined($hz) && $hz =~ /^\d+(?:\.\d+)?\z/);
   return "Configured video timing is unavailable" if(!defined($mode->{timing}));
@@ -299,8 +377,27 @@ sub play_video(@) {
  # Reject unsupported source colour metadata before releasing the renderer.
  # Connector/timing checks require DRM master and run in the player later.
  if($program =~ /(?:^|\/)pg_diag_video_player\z/) {
-  my $check=&sudo("CHECK_VIDEO_SOURCE",$video);
+  my $check=&sudo("CHECK_VIDEO_SOURCE",$video,($match_rate ? ("rate") : ()));
   chomp($check) if(defined($check));
+  # The clip's frame rate, when asked for: the mode it plays in. The
+  # player takes the timing only if the display lists it.
+  if($match_rate && defined($check) && $check =~ /^OK:(\d{1,7}\/\d{1,7})\z/) {
+   my $clip_rate=$1;
+   $check="OK";
+   my $m=($conf_mode && defined(&signal_mode_for_frame_rate)) ? &signal_mode_for_frame_rate($conf_mode,$clip_rate) : undef;
+   if($m && defined($m->{timing}) && defined($m->{video_refresh}) && $m->{video_refresh} =~ /^\d+(?:\.\d+)?\z/) {
+    $video_mode_note=($m->{timing} eq $video_timing) ? "the configured mode is the clip's frame rate ($clip_rate)"
+     : sprintf("%dx%d at %.3f Hz for the clip's frame rate (%s)",$m->{width},$m->{height},$m->{video_refresh},$clip_rate);
+    $video_timing=$m->{timing};
+    $video_refresh=0+sprintf("%.6f",$m->{video_refresh});
+   } else {
+    $video_mode_note="no mode of the configured size for the clip's frame rate ($clip_rate): the configured mode is kept";
+   }
+   &log("Video: $video_mode_note");
+  } elsif($match_rate && defined($check) && $check eq "OK") {
+   $video_mode_note="the clip names no steady progressive frame rate: the configured mode is kept";
+   &log("Video: $video_mode_note");
+  }
   if(!defined($check) || $check ne "OK") {
    $check="Video source check failed" if(!defined($check) || $check eq "");
    $check=~s/^ERR://;

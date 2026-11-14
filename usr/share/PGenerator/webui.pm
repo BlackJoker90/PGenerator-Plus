@@ -1764,15 +1764,15 @@ sub webui_move_page (@) {
   var already=stored(fromKey)!==null;
   request('GET','/api/ui/move?token='+m[1],null,function(status,d){
    if(status!==200){ go(back); return; }
-   // Confirmed only when everything is kept: otherwise the old address
-   // hands over again on its next visit.
-   var ok=true,items=(!already&&d&&d.items&&typeof d.items==='object')?d.items:{};
+   // A key this browser refuses (quota) stays behind, like one it cannot
+   // encode. Confirmed once the note that it took the hand-over is kept:
+   // without it (storage blocked) the old address hands over again.
+   var items=(!already&&d&&d.items&&typeof d.items==='object')?d.items:{};
    for(var k in items){
     if(!Object.prototype.hasOwnProperty.call(items,k)||typeof items[k]!=='string') continue;
-    if(stored(k)===null&&!put(k,items[k])) ok=false;
+    if(stored(k)===null) put(k,items[k]);
    }
-   if(ok&&!already) ok=put(fromKey,'1');
-   if(!ok){ go(back); return; }
+   if(!already&&!put(fromKey,'1')){ go(back); return; }
    request('POST','/api/ui/move',JSON.stringify({ack:m[1]}),function(){ go(back); });
   });
   return;

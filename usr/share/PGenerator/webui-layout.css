@@ -929,17 +929,6 @@ body.layout-desktop .devinfo-facts:not(.update-facts){grid-template-columns:repe
 :root:not([data-palette]) :is(#lutCubeView,#ccssPreviewCanvas,#chartRGB,#chartDeltaE,#chartGammaValue,#chartEOTF,#chartGamma,#chartCubeView,#chartCIE,#chartColorDE){outline:0}
 /* Light: a secondary button is a key like any other, carried by its tone. */
 [data-theme="light"]:not([data-palette]) .btn-secondary,[data-theme="light"]:not([data-palette]) .ccss-file-input::file-selector-button{box-shadow:none}
-/* High Contrast has one tone: every surface is #000, so a tone step cannot show a key, a well or a
-   panel there. It keeps a drawn line, in its own --border, around what the rules above only fill.
-   :where() adds no weight and each :is() holds selectors of one weight, so the accent ring of what
-   is chosen, live or open (one class or attribute more) still wins. */
-:where([data-palette="contrast"]) :is(.pat-btn,.theme-swatch-btn,.meter-lg-rgb-bar,.meter-xyz-gear,.meter-pattern-insert-gear,.btn-warning,.btn-danger-quiet,.signal-port-box,.diag-now,.layout-switch,.selftest-verdict,.ccss-editor-panel,.meter-icc-panel,.meter-3dlut-workspace-section,.info-item,.lg-current-input-value),
-:where([data-palette="contrast"]) .setting-tiles > .field,
-:where([data-palette="contrast"]) .status-bar,
-:where([data-palette="contrast"]) .desktop-nav-btn[aria-current="page"],
-:where([data-palette="contrast"]) body:is(.layout-desktop,.layout-tablet) .dashboard > .card,
-:where([data-palette="contrast"]) :is(#meterNoMeterBanner,#meterGreyRgbLegacyWrap,#meterGreyTvWrap,#lgDeviceList){box-shadow:inset 0 0 0 1px var(--border)}
-:where([data-palette="contrast"]) .dashboard :is(select,input:not([type=checkbox]):not([type=radio])):disabled{border-color:var(--border)}
 /* Paper and Natrium Light: a key is only a few code values off its card and a tile has the card's
    tone on the desktop, so what is pressed keeps a line there as well. */
 :where([data-palette="paper"],[data-palette="natrium-light"]) :is(.pat-btn,.theme-swatch-btn,.meter-lg-rgb-bar,.meter-xyz-gear,.meter-pattern-insert-gear,.info-item),
@@ -1022,16 +1011,16 @@ body.layout-desktop .status-bar:has(.status-diff){column-gap:12px}
 }
 /* A light theme: what Glow draws white is the theme's darkest text, the icons dark. */
 :root[data-skin="glow"][data-theme="light"]{--glow-lit:var(--text-primary)}
-/* High contrast keeps its full-strength lines and a plain ground. */
-:root[data-skin="glow"][data-palette="contrast"]{--glow-line:var(--border);--glow-line2:var(--border);--glow-sheen:var(--card);--glow-ground:var(--bg);--glow-ground-top:var(--bg)}
-/* Fields as Glow draws them: a fill a step lighter than the card and a fine line,
-   mixed from the theme's text and card in Glow's proportions (#232120 and #34312e
-   on #191817); the Glow theme sets its own values below, High Contrast keeps its lines.
-   --field-border-hover stays the theme's: it is also an unticked box's edge (3:1). */
-:root[data-skin="glow"]:not([data-palette="contrast"]){
- --surface-field:color-mix(in srgb,var(--text-primary) 6%,var(--surface-card));
- --field-border:color-mix(in srgb,var(--text-primary) 15%,var(--surface-card));
-}
+/* Fields as Glow draws them: a box with a fill a step lighter than the card,
+   mixed from the theme's text and card in Glow's proportion (#232120 on #191817).
+   The line round it stays at 3:1 on the card (the themes' own --field-border):
+   in the light themes it is what marks a field. Dark and Light drew no line
+   (Mesopic); they get the 3:1 line of the base themes. Glow sets its own values below. */
+:root[data-skin="glow"]{--surface-field:color-mix(in srgb,var(--text-primary) 6%,var(--surface-card))}
+:root[data-skin="glow"]:not([data-palette]){--field-border:color-mix(in srgb,var(--text-primary) 42%,var(--surface-card));--field-border-hover:color-mix(in srgb,var(--text-primary) 62%,var(--surface-card))}
+:root[data-skin="glow"][data-theme="light"]:not([data-palette]){--field-border:color-mix(in srgb,var(--text-primary) 54%,var(--surface-card));--field-border-hover:color-mix(in srgb,var(--text-primary) 72%,var(--surface-card))}
+/* A placeholder on that fill: --text-muted falls under 4.5:1 in Graphite and Amber; Glow's muted is its secondary. */
+:root[data-skin="glow"] ::placeholder{color:var(--text-secondary)}
 
 :root[data-skin="glow"][data-theme-id="glow"]{
  --meso:"PGen Glow","Avenir Next","Segoe UI",system-ui,sans-serif;

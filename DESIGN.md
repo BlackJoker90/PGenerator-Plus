@@ -331,12 +331,14 @@ with (below). Every other theme's lines, tile grounds, keys, corner glow and
 Apply fill are derived from its own tokens (`--text-primary`, `--card`,
 `--bg`, `--accent`, `--accent-fill`; the `:root[data-skin="glow"]` block of
 webui-layout.css). A light theme draws in its darkest text what Glow draws
-white, with dark icons; High Contrast keeps full-strength lines and a plain
-ground. The values below are Glow's.
+white, with dark icons. Settings lists the themes in two groups, Dark and
+Light. High Contrast was removed on 2026-11-14; a browser that still has it
+stored gets Glow, and the TV start screen it left is replaced on the next
+page load. The values below are Glow's.
 
 - **Ground:** warm near-black #0b0a09 with a dot grid and the corner glow, as a fixed layer behind the page. The glow lies on the ground only; cards are opaque, so no calibration colour is ever under it.
 - **Cards and tiles:** card #191817 with a faint sheen and a line of white at 7 %; a tile is white at 2.5 % with a line at 14 %, radius 16 px, an icon tile top left, the name, then the value.
-- **Fields:** a select or input is a box with its own fill #232120 and a 1 px line #34312e on the card. Other themes mix both from their text and card in the same proportions (6 % and 15 % text); High Contrast keeps its own lines, and every theme keeps its own hover line, which is also an unticked box's edge. A setting tile's value has no box: the tile carries the fill.
+- **Fields:** a select or input is a box with its own fill #232120 and a 1 px line #34312e on the card. Other themes mix the fill from their text and card in the same proportion (6 % text). Their line stays at 3:1 on the card, as before the Glow look: in the light themes it is what marks a field, and Dark and Light, which drew none, take the base themes' 3:1 line. Glow's 1.37:1 line is its own. A placeholder is drawn in the secondary text colour, at least 4.5:1 on the fill. A setting tile's value has no box: the tile carries the fill.
 - **Type:** Plus Jakarta Sans for text ("PGen Glow"), Sora for titles and values ("PGen Glow Display"), both served by the Pi, OFL 1.1. Tabular figures; nothing under 12 px.
 - **Output is a dashboard on the desktop:** the settings stand on the page as tiles, with ports, presets and the Calman settings above them; the HDR metadata on its ST 2084 curve; Signal Self-Test as a ring with one segment per mode; the playlists as cards.
 

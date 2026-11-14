@@ -5401,7 +5401,7 @@ function pgUpdateLayoutControls(){
 // theme; Glow's colours are its own (data-theme-id="glow") over the Dark
 // base and carry no data-palette. The inline script in webui.html holds the
 // same list and the same default.
-const PG_THEMES={glow:'dark',dark:'dark',light:'light',oled:'dark',graphite:'dark',nord:'dark',amber:'dark',contrast:'dark',paper:'light',natrium:'dark','natrium-light':'light',volt:'dark',scope:'dark',ultraviolet:'dark'};
+const PG_THEMES={glow:'dark',dark:'dark',light:'light',oled:'dark',graphite:'dark',nord:'dark',amber:'dark',paper:'light',natrium:'dark','natrium-light':'light',volt:'dark',scope:'dark',ultraviolet:'dark'};
 const PG_THEME_DEFAULT='glow';
 let pgThemeId=PG_THEME_DEFAULT;
 function pgReadThemeMode(){
@@ -5507,7 +5507,8 @@ async function pgSyncBootscreenTheme(force){
   if(!retry){
    const cur=await fetchJSON('/api/ui/bootscreen-theme',{_quiet:true});
    if(!current()||!cur||cur.status!=='ok') return;
-   if(cur.theme&&cur.theme!==theme) return;
+   // Another browser's theme stays; one that no longer exists (High Contrast) is replaced.
+   if(cur.theme&&cur.theme!==theme&&Object.prototype.hasOwnProperty.call(PG_THEMES,cur.theme)) return;
    if(cur.theme===theme&&Object.keys(colors).every(k=>cur.colors&&cur.colors[k]===colors[k])) return;
   }
   const r=await fetchJSON('/api/ui/bootscreen-theme',{method:'POST',_quiet:true,headers:{'Content-Type':'application/json'},body:JSON.stringify({theme,colors})});

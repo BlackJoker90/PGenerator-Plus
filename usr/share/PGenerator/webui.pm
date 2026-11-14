@@ -1763,13 +1763,17 @@ sub webui_move_page (@) {
  if(m){
   var already=stored(fromKey)!==null;
   request('GET','/api/ui/move?token='+m[1],null,function(status,d){
-   var items=(!already&&status===200&&d&&d.items&&typeof d.items==='object')?d.items:{};
+   if(status!==200){ go(back); return; }
+   // Confirmed only when everything is kept: otherwise the old address
+   // hands over again on its next visit.
+   var ok=true,items=(!already&&d&&d.items&&typeof d.items==='object')?d.items:{};
    for(var k in items){
     if(!Object.prototype.hasOwnProperty.call(items,k)||typeof items[k]!=='string') continue;
-    if(stored(k)===null) put(k,items[k]);
+    if(stored(k)===null&&!put(k,items[k])) ok=false;
    }
-   if(status===200) put(fromKey,'1');
-   go(back);
+   if(ok&&!already) ok=put(fromKey,'1');
+   if(!ok){ go(back); return; }
+   request('POST','/api/ui/move',JSON.stringify({ack:m[1]}),function(){ go(back); });
   });
   return;
  }
@@ -1809,12 +1813,13 @@ sub webui_move_page (@) {
 HTML
 }
 
-# POST /api/ui/move {"items":{key:string,...}} keeps the items for one GET
+# POST /api/ui/move {"items":{key:string,...}} keeps the items for GET
 # /api/ui/move?token=<token> within ten minutes, in a file directly in
-# $var_dir (clean_files clears it at the next daemon start). A fetched
-# token leaves an empty mark in $var_dir/ui/ (kept across restarts, 30 days)
-# that GET /api/ui/move?check=<token> reports as {"done":1}: the old address
-# counts the hand-over as done only then.
+# $var_dir (clean_files clears it at the next daemon start). Once the new
+# address has stored them it sends POST {"ack":"<token>"}: the file goes and
+# an empty mark in $var_dir/ui/ (kept across restarts, 30 days) remains,
+# which GET /api/ui/move?check=<token> reports as {"done":1}. The old
+# address counts the hand-over as done only then.
 $WEBUI_MOVE_TTL=600;
 $WEBUI_MOVE_DONE_TTL=30*86400;
 $WEBUI_MOVE_MAX_BYTES=16*1024*1024;
@@ -1834,31 +1839,46 @@ sub webui_move (@) {
   my $token=($query=~/(?:^|&)token=([0-9a-f]{32})(?:&|$)/) ? $1 : "";
   return $err->("400 Bad Request","token expected") if($token eq "");
   my $file=&webui_move_file($token);
-  # Claim the file first: a second request for the same token finds nothing.
-  my $claimed="$file.claimed.$$";
-  return $err->("404 Not Found","Nothing to hand over") if(!rename($file,$claimed));
-  my @st=stat($claimed);
+  my @st=stat($file);
+  return $err->("404 Not Found","Nothing to hand over") if(!@st);
+  if($now - $st[9] > $WEBUI_MOVE_TTL) {
+   unlink($file);
+   return $err->("404 Not Found","Nothing to hand over");
+  }
   my $data;
-  if(@st && $now - $st[9] <= $WEBUI_MOVE_TTL && open(my $fh,"<:raw",$claimed)) {
+  if(open(my $fh,"<:raw",$file)) {
    local $/;
    $data=<$fh>;
    close($fh);
   }
-  unlink($claimed);
   return $err->("404 Not Found","Nothing to hand over") if(!defined($data) || $data eq "");
-  # Mark it fetched. Without the mark the old address hands over again on
-  # its next visit; the new one then fetches but stores nothing (movedFrom).
-  my $done=&webui_move_done_file($token);
-  (my $done_dir=$done)=~s{/[^/]+$}{};
-  mkdir($done_dir) if(!-d $done_dir);
-  if(open(my $mark,">",$done)) { close($mark); }
-  else { &log("WebUI: hand-over $token fetched, mark not written: $!"); }
+  # Kept until the new address confirms it stored the items (POST ack): an
+  # answer lost on the way can be fetched again within the ten minutes.
   return ("200 OK",$data);
  }
  return $err->("405 Method Not Allowed","Use GET or POST") if($method ne "POST");
  return $err->("413 Payload Too Large","Too much to hand over") if(defined($body) && length($body) > $WEBUI_MOVE_MAX_BYTES);
  my $req=eval { $json->decode(defined $body ? $body : "") };
  return $err->("400 Bad Request","Body is not a JSON object") if(ref($req) ne "HASH");
+ if(exists $req->{ack}) {
+  # The new address stored the items: the hand-over is done, the old
+  # address learns it from ?check=. Repeating the ack is harmless.
+  my $token=(defined($req->{ack}) && !ref($req->{ack}) && $req->{ack}=~/^([0-9a-f]{32})\z/) ? $1 : "";
+  return $err->("400 Bad Request","ack: token expected") if($token eq "");
+  my $done=&webui_move_done_file($token);
+  return ("200 OK",$json->encode({status=>"ok"})) if(-e $done);
+  my $file=&webui_move_file($token);
+  return $err->("404 Not Found","Nothing to hand over") if(!-e $file);
+  (my $done_dir=$done)=~s{/[^/]+$}{};
+  mkdir($done_dir) if(!-d $done_dir);
+  my $mark;
+  if(!open($mark,">",$done) || !close($mark)) {
+   &log("WebUI: hand-over $token stored, mark not written: $!");
+   return $err->("500 Internal Server Error","Could not note the hand-over as done");
+  }
+  unlink($file);
+  return ("200 OK",$json->encode({status=>"ok"}));
+ }
  my $items=$req->{items};
  return $err->("400 Bad Request","items: object expected") if(ref($items) ne "HASH");
  return $err->("400 Bad Request","items: too many keys") if(scalar(keys %$items) > 10000);

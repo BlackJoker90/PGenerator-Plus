@@ -53,12 +53,6 @@ button,input,select,textarea{font-family:inherit}
 --selected-bg:rgba(255,179,0,.15);--hover-bg:rgba(255,220,160,.05);--focus-ring:#ffc94d;--status-calibration:#c27400;
 --chart-bg:#120d07;--chart-grid:#241b0f;--chart-axis:#4a3a22;--chart-label:#b09a7a;--chart-tooltip:#221a0f;--meter-bar-track:#151009;
 --scroll-track:#1a140c;--scroll-thumb:#5a4428;--scroll-thumb-border:#6e5432;--scroll-thumb-hover:#6e5432}
-[data-palette="contrast"]{--bg:#000;--card:#000;--panel:#000;--border:#9a9a9a;--divider:#9a9a9a;--accent:#2f6bff;--accent2:#1a4fe0;--accent-fill:#255ff0;--accent-fill2:#1a4fe0;--neutral-fill:#1f1f1f;
---text:#fff;--text2:#e0e0e0;--text-primary:#fff;--text-secondary:#e0e0e0;--text-muted:#c4c4c4;--text-disabled:#9a9a9a;
---surface-page:#000;--surface-header:#000;--surface-sidebar:#000;--surface-card:#000;--surface-drawer:#000;--surface-modal:#000;--surface-popover:#0a0a0a;--surface-inset:#000;--surface-field:#000;
---focus-ring:#ffd400;--selected-bg:rgba(255,212,0,.2);--hover-bg:rgba(255,255,255,.12);--shadow:rgba(0,0,0,.6);
---chart-bg:#000;--chart-grid:#2a2a2a;--chart-axis:#9a9a9a;--chart-label:#e0e0e0;--chart-tooltip:#0a0a0a;--meter-bar-track:#111;
---scroll-track:#000;--scroll-thumb:#9a9a9a;--scroll-thumb-border:#c4c4c4;--scroll-thumb-hover:#c4c4c4}
 [data-palette="paper"]{--bg:#f4efe6;--card:#fffaf1;--panel:#fffaf1;--border:#d8ccb8;--divider:#d8ccb8;--accent:#8a5a2b;--accent2:#6b4423;--accent-fill:#8a5a2b;--accent-fill2:#6b4423;
 --text:#2b2118;--text2:#5e4e3c;--text-primary:#2b2118;--text-secondary:#5e4e3c;--text-muted:#6d5d4a;--text-disabled:#857462;
 --surface-page:#f4efe6;--surface-header:#fffaf1;--surface-sidebar:#f8f3ea;--surface-card:#fffaf1;--surface-drawer:#fffaf1;--surface-modal:#fffaf1;--surface-popover:#f8f3ea;--surface-inset:#f6f0e5;--surface-field:#fffdf8;
@@ -96,7 +90,6 @@ button,input,select,textarea{font-family:inherit}
 --chart-bg:#0d0913;--chart-grid:#1e1729;--chart-axis:#3a2f4a;--chart-label:#a597b3;--chart-tooltip:#1d1628;--chart-empty:#6f6380;--meter-bar-track:#130e1a;
 --scroll-track:#0d0913;--scroll-thumb:#352a45;--scroll-thumb-border:#4a3d5e;--scroll-thumb-hover:#4a3d5e}
 [data-palette="volt"] .btn,[data-palette="volt"] .update-btn{border-radius:999px}
-[data-palette="contrast"] .btn-secondary{box-shadow:inset 0 0 0 1px var(--border)}
 [data-palette="nord"] #hdmiWarnBadge{color:var(--warning-text)}
 /* Natrium and the secondaries have light accents: text on them uses the dark foreground. */
 [data-palette^="natrium"] .btn-primary,[data-palette^="natrium"] .layout-switch-btn[aria-pressed="true"],
@@ -409,6 +402,8 @@ body.layout-tablet .card-section-head{min-height:44px}
    thumb position. Nord needs a lighter fill to stand off its card. */
 :root{--switch-on:var(--accent-fill)}
 [data-palette="nord"]{--switch-on:#7b96bb}
+/* Nord's softer text leaves the base 42 % field line at 2.94:1 on its card; 48 % reaches 3:1. */
+[data-palette="nord"]{--field-border:color-mix(in srgb,var(--text-primary) 48%,var(--surface-card))}
 .pg-switch{position:relative;display:inline-flex;align-items:center;cursor:pointer;flex:0 0 auto;user-select:none}
 .pg-switch input{position:absolute;opacity:0;width:0;height:0;margin:0}
 .pg-switch-track{display:inline-block;position:relative;width:34px;height:18px;border-radius:var(--r-md);background:transparent;box-shadow:inset 0 0 0 1.5px var(--text2);transition:background .2s,box-shadow .2s}
@@ -807,8 +802,6 @@ transition:opacity .15s ease-out,transform .15s ease-out;z-index:999;pointer-eve
 .help-tip-pop::-webkit-scrollbar{display:none}
 @keyframes help-tip-in{from{opacity:0;transform:translateY(var(--tip-rise,-4px))}to{opacity:1;transform:none}}
 @media(prefers-reduced-motion:reduce){.help-tip-pop{animation:none}}
-/* High Contrast keeps a solid surface and a full-strength edge */
-[data-palette="contrast"] .help-tip-pop{background:var(--surface-popover);border-color:var(--text-primary)}
 .help-tip-pop[hidden]{display:none}
 .help-tip-pop[data-capped]{overscroll-behavior:contain;scrollbar-width:thin}
 /* A tip cut by the window height shows that it scrolls. */
@@ -1460,6 +1453,9 @@ body.pg-hide-measure .desktop-nav-group[aria-labelledby="desktopNavGroupMeasure"
 body.pg-hide-measure .dashboard>.card:is([data-desktop-workspace="calibration"],[data-desktop-workspace="meter-profile"],[data-desktop-workspace="3d-lut"],[data-desktop-workspace="icc-profile"]),
 body.pg-hide-measure #meterStatusWrap,body.pg-hide-measure #meterUsbWarnBadge{display:none!important}
 .theme-swatch-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(136px,1fr));gap:8px}
+/* Dark and Light themes, each under its own heading */
+.theme-group-title{margin:14px 0 7px;font-size:var(--fs-xs);font-weight:600;line-height:1.3;color:var(--text-secondary)}
+.ui-settings-theme h3 + .theme-group-title{margin-top:0}
 .theme-swatch-btn{display:flex;align-items:center;gap:8px;min-width:0;padding:7px 9px;border:1px solid var(--border);border-radius:var(--r-md);
 background:var(--surface-inset);color:var(--text-primary);font-size:var(--fs-xs);font-weight:600;text-align:left;cursor:pointer;transition:border-color .15s,background-color .15s}
 .theme-swatch-btn:hover{border-color:var(--accent);background:var(--hover-bg)}

@@ -1410,11 +1410,13 @@ sub webui_renderer_forget_pictures (@) {
 # which nothing has drawn again for the new signal (White Clipping, Overscan,
 # an uploaded picture; the two plates have been by now). The renderer has
 # lost it with its window: it reads code 0, below the black of a limited
-# link. And its pattern text is the old signal's: asked for on YCbCr it has
-# no SOURCE_RANGE, and loaded again on RGB Limited the renderer would
-# compress it (235 -> 218). So it gives way to the black of the link, as
-# after an apply with a renderer restart; asked for again it is drawn for
-# the signal now and loaded (pattern_pictures_spelled).
+# link. And its picture is the old signal's (drawn for its depth; a text
+# that names no SOURCE_RANGE, as the WebUI wrote every one on YCbCr up to
+# 2026-11-14, still writes its two HDR plates there and the texts of Low
+# Latency DV, and other writers may, is compressed on RGB Limited: 235 ->
+# 218). So it gives way to the black of the link, as after an apply with a
+# renderer restart; asked for again it is drawn for the signal now and
+# loaded (pattern_pictures_spelled).
 # Only a pattern of one picture: a sequence of several (G1 Warm-Up with one
 # strip per phase, PGG1Patterns _warmup; the frames of an uploaded video)
 # comes to another path as it runs, so the renderer loads its pictures again
@@ -16462,11 +16464,16 @@ sub webui_pattern (@) {
  my $pi_video_request=($name eq "uploaded_diag_video" && $diag_video_sequence eq "") ? 1 : 0;
  &apply_source_rgb_quant_range("webui",$transport_signal_range) if(!$pi_video_request);
  my ($color_format_body)=$body=~/"color_format"\s*:\s*"?(\d+)"?/;
- my $pattern_color_format=defined($color_format_body) ? int($color_format_body) : int($pgenerator_conf{"color_format"} || 0);
+ # The format of the link, read once: the codes and the range line below
+ # are decided by the same value (the conf is shared between threads). HDR
+ # Steps and the HDR Metadata Cycle take the range of their codes from the
+ # conf themselves (webui_hdr_plate_cable_limited).
+ my $link_color_format=int($pgenerator_conf{"color_format"} || 0);
+ my $pattern_color_format=defined($color_format_body) ? int($color_format_body) : $link_color_format;
  # Backgrounds, named colours, APL and the stabilization code follow the range of
  # the link, so the format here is the conf's, not the request's.
- $pattern_signal_range=1 if(&webui_range_is_limited($pattern_signal_range,$pgenerator_conf{"color_format"}));
- $signal_range=1 if(defined($signal_range) && &webui_range_is_limited($signal_range,$pgenerator_conf{"color_format"}));
+ $pattern_signal_range=1 if(&webui_range_is_limited($pattern_signal_range,$link_color_format));
+ $signal_range=1 if(defined($signal_range) && &webui_range_is_limited($signal_range,$link_color_format));
 	 # Standard DV's outer HDMI tunnel is RGB Full, but its inner source
 	 # components are legal-range. SOURCE_RANGE describes those authored
 	 # components; transport_signal_range remains the wire setting.
@@ -16745,6 +16752,31 @@ elsif($pat eq "" && $name eq "uploaded_diag_video") {
   }
  }
  if($pattern_color_format == 0 && $pat !~/^SOURCE_RANGE=/m) {
+  $pat=~s/^END=1$/SOURCE_RANGE=$source_range\nEND=1/mg;
+ }
+ # Any other text says so too: the range its codes were written in, which
+ # is the link's (above: by the conf's format, not the request's; on YCbCr
+ # always LIMITED). The renderer reads a text without the line by the
+ # output it has when it draws: studio codes on YCbCr (ofApp.cpp
+ # scaleSourceToBitDepth, normalizeSourceValue: the same result as with
+ # SOURCE_RANGE=LIMITED there, t/ycbcr_source_range_line.t), codes to
+ # compress on RGB Limited.
+ # - A signal change the renderer takes in place loads the pattern file
+ #   again as it is: a text written on YCbCr without the line was
+ #   compressed after a change to RGB Limited. (A change of the range on
+ #   the wire, to or from RGB Full, is never taken in place: main.cpp
+ #   reloadSignalConf, t/renderer_reload_handover.t.)
+ # - A request that names YCbCr while the link is RGB Limited (a page whose
+ #   Output form is not the applied signal) got the link's studio codes
+ #   and no line, and was compressed as well.
+ # Not in Dolby Vision: in standard DV a text without the line follows the
+ # range of the signal (doviSourceFull), and the texts of Low Latency DV
+ # stay as they were. HDR Steps and the HDR Metadata Cycle get it here on
+ # an RGB link only, as their other writers do (webui_hdr_steps_refresh, the
+ # cycle's worker: the same text from each for the request the page sends,
+ # which names no format). On a YCbCr link they stay without the line,
+ # unless the request names RGB: the branch above, as before.
+ elsif($pat !~/^SOURCE_RANGE=/m && $signal_mode ne "dv" && $wire_mode ne "dv" && (!$hdr_plate || $link_color_format == 0)) {
   $pat=~s/^END=1$/SOURCE_RANGE=$source_range\nEND=1/mg;
  }
  if($name eq "patch") {

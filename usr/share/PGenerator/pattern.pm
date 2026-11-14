@@ -175,9 +175,10 @@ sub pattern_template_name_ok (@) {
 # every reconfigure in place moves on to the next (pattern_pictures_respell):
 # the next pattern that names a picture is loaded. The pattern on screen is
 # not written again here: its text is the signal's from before the change
-# (a picture asked for on YCbCr has no SOURCE_RANGE, and the renderer would
-# compress it on RGB Limited). Who draws for the new signal writes it (the
-# WebUI's apply: its plates, webui_picture_gives_way).
+# (a text without SOURCE_RANGE, as create_tmp_file writes it on YCbCr when
+# no range is given, is compressed by the renderer on RGB Limited). Who
+# draws for the new signal writes it (the WebUI's apply: its plates,
+# webui_picture_gives_way).
 # $picture_spelling_file holds which spelling it is; without it, the first.
 # A renderer stop removes it with the rest of running/: a new renderer holds
 # no picture.

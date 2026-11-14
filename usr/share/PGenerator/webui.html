@@ -8,11 +8,13 @@
 <script>
 /* Apply the browser-local appearance before CSS is parsed to avoid a flash. */
 (function(){
- var themes={glow:'dark',dark:'dark',light:'light',oled:'dark',graphite:'dark',nord:'dark',amber:'dark',contrast:'dark',paper:'light',natrium:'dark','natrium-light':'light',volt:'dark',scope:'dark',ultraviolet:'dark'},skins={glow:1},id='glow';
+ var themes={glow:'dark',dark:'dark',light:'light',oled:'dark',graphite:'dark',nord:'dark',amber:'dark',contrast:'dark',paper:'light',natrium:'dark','natrium-light':'light',volt:'dark',scope:'dark',ultraviolet:'dark'},id='glow';
  try{var saved=localStorage.getItem('pgen.ui.themeMode');if(themes.hasOwnProperty(saved))id=saved;}catch(e){}
  document.documentElement.setAttribute('data-theme',themes[id]);
- if(skins.hasOwnProperty(id))document.documentElement.setAttribute('data-skin',id);
- else if(id!==themes[id])document.documentElement.setAttribute('data-palette',id);
+ // Every theme has the Glow look; a theme gives the colours (data-theme-id, data-palette).
+ document.documentElement.setAttribute('data-skin','glow');
+ document.documentElement.setAttribute('data-theme-id',id);
+ if(id!=='glow'&&id!==themes[id])document.documentElement.setAttribute('data-palette',id);
  try{
   if(localStorage.getItem('pgen.ui.desktopSidebarCollapsed')==='1'){
    document.documentElement.setAttribute('data-desktop-sidebar-collapsed','1');

@@ -44,7 +44,7 @@ Sessions run from minutes to hours. Neighbouring tools: Calman (also as a
 Portrait Displays G1), ColourSpace, HCFR, DaVinci Resolve, LG AutoCal, the TV
 remote over HDMI-CEC (pattern menu and playlists on the TV). The Pi is often
 offline; the page is served by the Pi's own Perl daemon as fragments
-(`usr/share/PGenerator/webui-*`), at `http://pgenerator.local` on port 80.
+(`usr/share/PGenerator/webui-*`), at `http://rampecho.local` on port 80.
 
 ## Capabilities and Constraints
 
@@ -84,7 +84,7 @@ assumed.
 
 ## Evidence on Hand
 
-The running page on the Pi (`http://pgenerator.local`), README screenshots
+The running page on the Pi (`http://rampecho.local`), README screenshots
 (`screenshots/`), the maintainer's local WebUI tests, the Signal Self-Test's
 readback results on the Pi. No user research, analytics or
 testimonials exist; none may be invented.

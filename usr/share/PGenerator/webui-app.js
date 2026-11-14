@@ -5396,11 +5396,12 @@ function pgUpdateLayoutControls(){
 }
 // Theme ids: each one is a palette over one of the two base themes, so the
 // light-mode overrides and data-theme checks keep working for every palette.
-// A skin is a look with a layout of its own, drawn over a base theme's own
-// tokens: it is named by data-skin and carries no data-palette. The inline
-// script in webui.html holds the same two lists and the same default.
+// Every theme has the Glow look (data-skin="glow": layout, faces, tiles,
+// the dashboard); a theme gives only the colours. data-theme-id names the
+// theme; Glow's colours are its own (data-theme-id="glow") over the Dark
+// base and carry no data-palette. The inline script in webui.html holds the
+// same list and the same default.
 const PG_THEMES={glow:'dark',dark:'dark',light:'light',oled:'dark',graphite:'dark',nord:'dark',amber:'dark',contrast:'dark',paper:'light',natrium:'dark','natrium-light':'light',volt:'dark',scope:'dark',ultraviolet:'dark'};
-const PG_THEME_SKINS={glow:1};
 const PG_THEME_DEFAULT='glow';
 let pgThemeId=PG_THEME_DEFAULT;
 function pgReadThemeMode(){
@@ -5448,11 +5449,10 @@ function pgApplyThemeMode(mode,options){
  pgThemeId=Object.prototype.hasOwnProperty.call(PG_THEMES,mode)?mode:PG_THEME_DEFAULT;
  pgThemeMode=PG_THEMES[pgThemeId];
  const root=document.documentElement;
- const skin=Object.prototype.hasOwnProperty.call(PG_THEME_SKINS,pgThemeId);
  root.setAttribute('data-theme',pgThemeMode);
- if(skin) root.setAttribute('data-skin',pgThemeId);
- else root.removeAttribute('data-skin');
- if(skin||pgThemeId===pgThemeMode) root.removeAttribute('data-palette');
+ root.setAttribute('data-skin','glow');
+ root.setAttribute('data-theme-id',pgThemeId);
+ if(pgThemeId==='glow'||pgThemeId===pgThemeMode) root.removeAttribute('data-palette');
  else root.setAttribute('data-palette',pgThemeId);
  pgUpdateThemeControls();
  if(!(options&&options.initial)){

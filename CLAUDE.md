@@ -181,7 +181,7 @@ a turn while a snapshot is open.
   fundamental is added or changed (a new setting, workspace, card, endpoint,
   signal mode or behaviour a user would notice), update `README.md` in the
   same piece of work: the fork-vs-original table, the workspace table, the
-  API list, and new or retaken screenshots (`screenshots/`, Volt theme,
+  API list, and new or retaken screenshots (`screenshots/`, Glow theme,
   1280x800, Desktop layout, GET-only, no real reboots or setting POSTs).
   It reaches GitHub with the release that ships the feature, so the README
   never describes something users cannot install yet.

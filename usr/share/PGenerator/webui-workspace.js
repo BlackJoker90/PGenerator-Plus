@@ -21550,13 +21550,13 @@ function pgInitialRetry(name,fn,delays){
 })();
 
 /* ==== Glow look: what the dashboard adds to the Output workspace ============
-   The pieces the Glow theme (data-skin="glow", "Glow look" in
+   The pieces the Glow look (data-skin="glow", every theme; "Glow look" in
    webui-layout.css) draws beyond the page's own markup: the ST 2084 curve in
    HDR Metadata, the ring in Signal Self-Test, the playlists as cards, the
    port in use as a line of text on a phone. Each shows what the page already
    holds (the HDR fields, SELFTEST_MODES and selftestState, playlistData, the
    port drawing) and starts nothing but playlistStart(), under the locks of
-   the page's own list. Every other theme hides them. */
+   the page's own list. Without data-skin they are hidden again. */
 (function () {
   'use strict';
   var $ = function (id) { return document.getElementById(id); };

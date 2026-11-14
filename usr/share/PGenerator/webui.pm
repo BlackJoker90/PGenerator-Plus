@@ -4,7 +4,7 @@
 # Provides:
 #   - HTTP server on port 80 serving settings UI
 #   - JSON API for reading/writing PGenerator.conf
-#   - mDNS responder so device is reachable at pgenerator.local
+#   - mDNS responder so device is reachable at rampecho.local and pgenerator.local
 #
 # Threads:
 #   webui_http()  — HTTP server (port 80)
@@ -144,6 +144,8 @@ sub webui_mdns_read_name (@) {
   return ("",$next_offset,0) if($offset + $len > length($buf));
   $name.="." if($name ne "");
   $name.=substr($buf,$offset,$len);
+  # A name is at most 255 bytes (RFC 1035 3.1); longer is a crafted packet.
+  return ("",$next_offset,0) if(length($name) > 255);
   $offset+=$len;
   $next_offset=$offset if(!$jumped);
  }
@@ -182,13 +184,46 @@ sub webui_mdns_build_a_response (@) {
  return $resp;
 }
 
+# The names this device answers to: rampecho.local, the product's name, and
+# pgenerator.local, which installed companion apps and old bookmarks look up.
+our @webui_mdns_hostnames=("rampecho","pgenerator");
+
+# Which of NAMES a DNS message asks an A, AAAA or ANY record of (class IN),
+# each once, in the order asked; none when it asks none of them, is not a
+# query or is malformed. An AAAA question is answered with the A record plus
+# the NSEC saying there is no AAAA record. At most the first 32 questions are
+# read: a query asks a handful, and a crafted one with thousands of questions
+# pointing at a long name must not keep the responder busy.
+sub webui_mdns_query_names (@) {
+ my ($buf,@names)=@_;
+ return () if(!defined($buf) || length($buf) < 12);
+ my ($id,$flags,$qdcount)=unpack("nnn",substr($buf,0,6));
+ return () if($flags & 0x8000);  # a response, not a query
+ $qdcount=32 if($qdcount > 32);
+ my $offset=12;
+ my (@asked,%seen);
+ for(my $i=0;$i<$qdcount;$i++) {
+  my ($qname,$next_offset,$ok)=&webui_mdns_read_name($buf,$offset);
+  return () if(!$ok);
+  $offset=$next_offset;
+  return () if($offset + 4 > length($buf));
+  my ($qtype,$qclass)=unpack("nn",substr($buf,$offset,4));
+  $offset+=4;
+  next if(($qclass & 0x7FFF) != 1 || !($qtype == 1 || $qtype == 28 || $qtype == 255));
+  foreach my $name (@names) {
+   push(@asked,$name) if(lc($qname) eq "$name.local" && !$seen{$name}++);
+  }
+ }
+ return @asked;
+}
+
 ###############################################
 #              mDNS Responder                 #
 ###############################################
 sub webui_mdns (@) {
  my $MDNS_ADDR="224.0.0.251";
  my $MDNS_PORT=5353;
- my $mdns_hostname="pgenerator";
+ my @mdns_hostnames=@webui_mdns_hostnames;
  my $MDNS_REJOIN_INTERVAL=30; # seconds between multicast re-join checks
 
  # Create UDP socket bound to mDNS port
@@ -265,13 +300,19 @@ sub webui_mdns (@) {
     if($joined) {
      $mdns_joined{$key}={ %$route };
      &log("mDNS: joined multicast on $route->{iface} ($route->{ip})");
-     my $announce=&webui_mdns_build_a_response($mdns_hostname,$route->{ip});
-     if(!$already_joined && $announce ne "") {
+     if(!$already_joined) {
       my $IP_MULTICAST_IF=eval { Socket::IP_MULTICAST_IF() } || 32;
       setsockopt($sock, $IPPROTO_IP, $IP_MULTICAST_IF, Socket::inet_aton($route->{ip}));
       my $mcast_dest=Socket::sockaddr_in($MDNS_PORT, Socket::inet_aton($MDNS_ADDR));
-      send($sock, $announce, 0, $mcast_dest);
-      &log("mDNS: announced $mdns_hostname.local -> $route->{ip}");
+      foreach my $mdns_hostname (@mdns_hostnames) {
+       my $announce=&webui_mdns_build_a_response($mdns_hostname,$route->{ip});
+       next if($announce eq "");
+       if(send($sock, $announce, 0, $mcast_dest)) {
+        &log("mDNS: announced $mdns_hostname.local -> $route->{ip}");
+       } else {
+        &log("mDNS: announcing $mdns_hostname.local -> $route->{ip} failed: $!");
+       }
+      }
      }
     } else {
      &log("mDNS: multicast join failed on $route->{iface} ($route->{ip}): $join_error");
@@ -288,7 +329,7 @@ sub webui_mdns (@) {
    };
    $mdns_rejoin->();
 
-   &log("mDNS: responder started for $mdns_hostname.local on port $MDNS_PORT");
+   &log("mDNS: responder started for ".join(", ",map { "$_.local" } @mdns_hostnames)." on port $MDNS_PORT");
 
    my $sel=IO::Select->new($sock);
  while(1) {
@@ -303,48 +344,32 @@ sub webui_mdns (@) {
   next if(!defined $from);
   my ($qport,$qaddr)=Socket::sockaddr_in($from);
 
-  # Parse DNS query header
-  next if(length($buf) < 12);
-  my ($id,$flags,$qdcount)=unpack("nnn",substr($buf,0,6));
-  # Only respond to queries (QR=0)
-  next if($flags & 0x8000);
-  next if($qdcount < 1);
-
-  my $offset=12;
-  my $matched=0;
-  for(my $i=0;$i<$qdcount;$i++) {
-   my ($qname,$next_offset,$ok)=&webui_mdns_read_name($buf,$offset);
-   last if(!$ok);
-   $offset=$next_offset;
-   last if($offset + 4 > length($buf));
-   my ($qtype,$qclass)=unpack("nn",substr($buf,$offset,4));
-   $offset+=4;
-   if(lc($qname) eq "$mdns_hostname.local" && ($qclass & 0x7FFF) == 1 && ($qtype == 1 || $qtype == 28 || $qtype == 255)) {
-    $matched=1;
-    last;
-   }
-  }
-
-  # Respond to A, AAAA and ANY queries for pgenerator.local. An AAAA query
-  # gets the A record plus the NSEC saying there is no AAAA record.
-  next if(!$matched);
+  # A, AAAA or ANY query for our names: each name asked is answered under
+  # that name (a resolver may ask both in one message).
+  my @asked=&webui_mdns_query_names($buf,@mdns_hostnames);
+  next if(!@asked);
 
   my $querier_ip=Socket::inet_ntoa($qaddr);
   my $best_ip=&webui_mdns_best_ip($querier_ip);
   next if($best_ip eq "");
 
-  my $resp=&webui_mdns_build_a_response($mdns_hostname,$best_ip);
-  next if($resp eq "");
-
   my $IP_MULTICAST_IF=eval { Socket::IP_MULTICAST_IF() } || 32;
   setsockopt($sock, $IPPROTO_IP, $IP_MULTICAST_IF, Socket::inet_aton($best_ip));
   my $mcast_dest=Socket::sockaddr_in($MDNS_PORT, Socket::inet_aton($MDNS_ADDR));
-  send($sock, $resp, 0, $mcast_dest);
-
-  # Also send unicast reply directly to the querier (RFC 6762 compatibility)
-  send($sock, $resp, 0, $from);
-
-  &log("mDNS: replied $mdns_hostname.local -> $best_ip (querier=$querier_ip)");
+  foreach my $mdns_hostname (@asked) {
+   my $resp=&webui_mdns_build_a_response($mdns_hostname,$best_ip);
+   next if($resp eq "");
+   # Multicast, and unicast straight to the querier (RFC 6762 compatibility).
+   my $sent_mc=send($sock, $resp, 0, $mcast_dest);
+   my $err_mc=defined($sent_mc) ? "" : "$!";
+   my $sent_uc=send($sock, $resp, 0, $from);
+   my $err_uc=defined($sent_uc) ? "" : "$!";
+   if($err_mc ne "" || $err_uc ne "") {
+    &log("mDNS: reply for $mdns_hostname.local -> $best_ip (querier=$querier_ip) not sent".($err_mc ne "" ? ", multicast: $err_mc" : "").($err_uc ne "" ? ", unicast: $err_uc" : ""));
+   } else {
+    &log("mDNS: replied $mdns_hostname.local -> $best_ip (querier=$querier_ip)");
+   }
+  }
  }
 }
 
@@ -1807,6 +1832,250 @@ sub _webui_reject_request (@) {
  &log("WebUI: request rejected ($status): $message");
 }
 
+# The page opened under the old name, pgenerator.local, moves to
+# rampecho.local (maintainer 2026-11-14), port and query kept. Only the page
+# itself: assets and API calls under pgenerator.local are served as before,
+# because installed companion apps and Calman setups still use that name and
+# do not follow a redirect on a POST. 307, not 301: a browser does not keep it,
+# so after a downgrade to 2.13.x (no rampecho.local) pgenerator.local works.
+#
+# Until now pgenerator.local led to the address that took the connection
+# (http://<ip>/), so a browser keeps the WebUI's own storage (theme, layout,
+# Auto-Cal resume, the custom series backup ...) under that origin. The way
+# to rampecho.local goes through /rampecho-move on that address, which hands
+# the storage over once (webui_move_page). Without a known IPv4 address it
+# goes straight to rampecho.local. Returns the Location, or "" for no
+# redirect.
+sub webui_name_redirect (@) {
+ my ($path,$query,$host,$local_ip)=@_;
+ return "" if(!defined($path) || ($path ne "/" && $path ne "/index.html"));
+ return "" if(!defined($host) || $host!~/^pgenerator\.local\.?(:\d{1,5})?$/i);
+ my $port=defined($1) ? $1 : "";
+ $port="" if($port eq ":80");
+ $query="" if(!defined($query));
+ $query=~s/[\x00-\x20\x7f]//g;
+ if(defined($local_ip) && $local_ip=~/^\d{1,3}(?:\.\d{1,3}){3}$/ && $local_ip ne "0.0.0.0") {
+  (my $q=$query)=~s/([^A-Za-z0-9\-._~])/sprintf("%%%02X",ord($1))/ge;
+  return "http://$local_ip$port/rampecho-move".($q ne "" ? "?q=$q" : "");
+ }
+ my $location="http://rampecho.local$port/";
+ $location.="?$query" if($query ne "");
+ return $location;
+}
+
+# /rampecho-move: one small page with two roles.
+# - On the old address (no #pgen-move= in the URL): it sends everything the
+#   browser stored for that origin to POST /api/ui/move, keeps the token
+#   (pgen.movePending) and opens
+#   http://rampecho.local/rampecho-move#pgen-move=<token>. It counts as done
+#   (pgen.movedTo, later visits go straight on) only once the server says
+#   that token was fetched (GET ?check=); until then each visit hands over
+#   again, so a hand-over lost on the way is repeated.
+# - On rampecho.local (#pgen-move=<token>): it fetches the items once from
+#   GET /api/ui/move and stores each key the new origin does not have yet
+#   (a setting already made there wins), then notes pgen.movedFrom: a later
+#   hand-over is fetched (so the old address can finish) but not stored, and
+#   keys the WebUI removed there do not come back. Then it opens the WebUI.
+# A value JSON cannot carry (a lone UTF-16 surrogate) stays behind. Any
+# failure (no storage, no answer, a bad token) opens the WebUI without the
+# hand-over; nothing is deleted, the old origin keeps its copy.
+sub webui_move_page (@) {
+ my ($query)=@_;
+ require JSON::PP;
+ $query="" if(!defined($query));
+ my $q="";
+ $q=$1 if($query=~/(?:^|&)q=([^&]*)/);
+ $q=~s/\+/ /g;
+ $q=~s/%([0-9A-Fa-f]{2})/chr(hex($1))/ge;
+ # Only what a query string may carry: no space, no control, no '#'.
+ $q=~s{[^A-Za-z0-9\-._~%!\$&'()*+,;=:@/?]}{}g;
+ my $back="/".($q ne "" ? "?$q" : "");
+ my $back_js=JSON::PP->new->allow_nonref->ascii->encode($back);
+ $back_js=~s{<}{\\u003c}g; $back_js=~s{>}{\\u003e}g; $back_js=~s{&}{\\u0026}g;
+ (my $back_html=$back)=~s/&/&amp;/g;
+ $back_html=~s/"/&quot;/g; $back_html=~s/</&lt;/g; $back_html=~s/>/&gt;/g;
+ return <<"HTML";
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="referrer" content="no-referrer"><title>rampecho</title>
+<style>html,body{margin:0;background:#0b0a09;color:#a09b95;font:14px system-ui,sans-serif}p{padding:24px}a{color:#ff8b45}</style>
+</head><body><noscript><p>JavaScript is off. <a href="http://rampecho.local$back_html">Open rampecho</a></p></noscript>
+<script>
+(function(){
+ var back=$back_js;
+ var marker='pgen.movedTo',pendingKey='pgen.movePending',fromKey='pgen.movedFrom';
+ function go(u){ location.replace(u); }
+ function stored(k){ try{ return localStorage.getItem(k); }catch(e){ return null; } }
+ function put(k,v){ try{ localStorage.setItem(k,v); return true; }catch(e){ return false; } }
+ function request(method,url,body,done){
+  var x=new XMLHttpRequest();
+  x.open(method,url);
+  x.timeout=15000;
+  if(body!==null) x.setRequestHeader('Content-Type','application/json');
+  x.onload=function(){ var d=null; try{ d=JSON.parse(x.responseText); }catch(e){} done(x.status,d); };
+  x.onerror=x.ontimeout=function(){ done(0,null); };
+  x.send(body);
+ }
+ var m=/^#pgen-move=([0-9a-f]{32})\$/.exec(location.hash);
+ if(m){
+  var already=stored(fromKey)!==null;
+  request('GET','/api/ui/move?token='+m[1],null,function(status,d){
+   if(status!==200){ go(back); return; }
+   // A key this browser refuses (quota) stays behind, like one it cannot
+   // encode. Confirmed once the note that it took the hand-over is kept:
+   // without it (storage blocked) the old address hands over again.
+   var items=(!already&&d&&d.items&&typeof d.items==='object')?d.items:{};
+   for(var k in items){
+    if(!Object.prototype.hasOwnProperty.call(items,k)||typeof items[k]!=='string') continue;
+    if(stored(k)===null) put(k,items[k]);
+   }
+   if(!already&&!put(fromKey,'1')){ go(back); return; }
+   request('POST','/api/ui/move',JSON.stringify({ack:m[1]}),function(){ go(back); });
+  });
+  return;
+ }
+ var next='http://rampecho.local'+(location.port?':'+location.port:'');
+ if(stored(marker)==='rampecho.local'){ go(next+back); return; }
+ function handOver(){
+  var items={},n=0;
+  try{
+   for(var i=0;i<localStorage.length;i++){
+    var k=localStorage.key(i);
+    if(k===null||k===marker||k===pendingKey) continue;
+    var v=localStorage.getItem(k);
+    // A lone surrogate makes JSON the server refuses, and the whole hand-over with it.
+    try{ encodeURIComponent(k); encodeURIComponent(v); }catch(e){ continue; }
+    items[k]=v; n++;
+   }
+  }catch(e){ go(next+back); return; }
+  if(!n){ put(marker,'rampecho.local'); go(next+back); return; }
+  request('POST','/api/ui/move',JSON.stringify({items:items}),function(status,d){
+   if(status===200&&d&&/^[0-9a-f]{32}\$/.test(d.token||'')){
+    put(pendingKey,d.token);
+    go(next+'/rampecho-move'+location.search+'#pgen-move='+d.token);
+   } else go(next+back);
+  });
+ }
+ var pending=stored(pendingKey);
+ if(pending&&/^[0-9a-f]{32}\$/.test(pending)){
+  request('GET','/api/ui/move?check='+pending,null,function(status,d){
+   if(status===200&&d&&d.done===1){ put(marker,'rampecho.local'); go(next+back); }
+   else handOver();
+  });
+  return;
+ }
+ handOver();
+})();
+</script></body></html>
+HTML
+}
+
+# POST /api/ui/move {"items":{key:string,...}} keeps the items for GET
+# /api/ui/move?token=<token> within ten minutes, in a file directly in
+# $var_dir (clean_files clears it at the next daemon start). Once the new
+# address has stored them it sends POST {"ack":"<token>"}: the file goes and
+# an empty mark in $var_dir/ui/ (kept across restarts, 30 days) remains,
+# which GET /api/ui/move?check=<token> reports as {"done":1}. The old
+# address counts the hand-over as done only then.
+$WEBUI_MOVE_TTL=600;
+$WEBUI_MOVE_DONE_TTL=30*86400;
+$WEBUI_MOVE_MAX_BYTES=16*1024*1024;
+sub webui_move_file (@) { my $t=shift; return "$var_dir/ui-move-$t.json"; }
+sub webui_move_done_file (@) { my $t=shift; return "$var_dir/ui/move-done-$t"; }
+
+sub webui_move (@) {
+ my ($method,$query,$body)=@_;
+ my $json=&_webui_json_pp();
+ my $err=sub { my ($code,$msg)=@_; return ($code,$json->encode({status=>"error",message=>$msg})); };
+ my $now=time();
+ $query="" if(!defined($query));
+ if($method eq "GET" && $query=~/(?:^|&)check=([0-9a-f]{32})(?:&|$)/) {
+  return ("200 OK",$json->encode({status=>"ok",done=>(-e &webui_move_done_file($1)) ? 1 : 0}));
+ }
+ if($method eq "GET") {
+  my $token=($query=~/(?:^|&)token=([0-9a-f]{32})(?:&|$)/) ? $1 : "";
+  return $err->("400 Bad Request","token expected") if($token eq "");
+  my $file=&webui_move_file($token);
+  my @st=stat($file);
+  return $err->("404 Not Found","Nothing to hand over") if(!@st);
+  if($now - $st[9] > $WEBUI_MOVE_TTL) {
+   unlink($file);
+   return $err->("404 Not Found","Nothing to hand over");
+  }
+  my $data;
+  if(open(my $fh,"<:raw",$file)) {
+   local $/;
+   $data=<$fh>;
+   close($fh);
+  }
+  return $err->("404 Not Found","Nothing to hand over") if(!defined($data) || $data eq "");
+  # Kept until the new address confirms it stored the items (POST ack): an
+  # answer lost on the way can be fetched again within the ten minutes.
+  return ("200 OK",$data);
+ }
+ return $err->("405 Method Not Allowed","Use GET or POST") if($method ne "POST");
+ return $err->("413 Payload Too Large","Too much to hand over") if(defined($body) && length($body) > $WEBUI_MOVE_MAX_BYTES);
+ my $req=eval { $json->decode(defined $body ? $body : "") };
+ return $err->("400 Bad Request","Body is not a JSON object") if(ref($req) ne "HASH");
+ if(exists $req->{ack}) {
+  # The new address stored the items: the hand-over is done, the old
+  # address learns it from ?check=. Repeating the ack is harmless.
+  my $token=(defined($req->{ack}) && !ref($req->{ack}) && $req->{ack}=~/^([0-9a-f]{32})\z/) ? $1 : "";
+  return $err->("400 Bad Request","ack: token expected") if($token eq "");
+  my $done=&webui_move_done_file($token);
+  return ("200 OK",$json->encode({status=>"ok"})) if(-e $done);
+  my $file=&webui_move_file($token);
+  return $err->("404 Not Found","Nothing to hand over") if(!-e $file);
+  (my $done_dir=$done)=~s{/[^/]+$}{};
+  mkdir($done_dir) if(!-d $done_dir);
+  my $mark;
+  if(!open($mark,">",$done) || !close($mark)) {
+   &log("WebUI: hand-over $token stored, mark not written: $!");
+   return $err->("500 Internal Server Error","Could not note the hand-over as done");
+  }
+  unlink($file);
+  return ("200 OK",$json->encode({status=>"ok"}));
+ }
+ my $items=$req->{items};
+ return $err->("400 Bad Request","items: object expected") if(ref($items) ne "HASH");
+ return $err->("400 Bad Request","items: too many keys") if(scalar(keys %$items) > 10000);
+ foreach my $k (keys %$items) {
+  return $err->("400 Bad Request","items: key too long") if(length($k) == 0 || length($k) > 512);
+  return $err->("400 Bad Request","items: strings expected") if(!defined($items->{$k}) || ref($items->{$k}));
+ }
+ # Old hand-overs nobody fetched go; of the rest at most three stay beside
+ # this one, so repeated posts cannot fill the card.
+ my @pending;
+ foreach my $old (glob("$var_dir/ui-move-*.json")) {
+  my @st=stat($old);
+  next if(!@st);
+  if($now - $st[9] > $WEBUI_MOVE_TTL) { unlink($old); next; }
+  push(@pending,[$old,$st[9]]);
+ }
+ @pending=sort { $a->[1] <=> $b->[1] } @pending;
+ unlink((shift @pending)->[0]) while(@pending > 3);
+ foreach my $mark (glob("$var_dir/ui/move-done-*")) {
+  my @st=stat($mark);
+  unlink($mark) if(@st && $now - $st[9] > $WEBUI_MOVE_DONE_TTL);
+ }
+ my $raw="";
+ if(open(my $rnd,"<:raw","/dev/urandom")) { read($rnd,$raw,16); close($rnd); }
+ return $err->("500 Internal Server Error","No random token") if(length($raw) != 16);
+ my $token=unpack("H*",$raw);
+ my $file=&webui_move_file($token);
+ my $content=$json->encode({status=>"ok",items=>$items});
+ my $tmp="$file.tmp.$$";
+ my $ok=open(my $out,">:raw",$tmp);
+ $ok=$ok && print $out $content;
+ $ok=close($out) && $ok if($out);
+ $ok=$ok && rename($tmp,$file);
+ if(!$ok) {
+  unlink($tmp);
+  return $err->("500 Internal Server Error","Could not keep the settings for the hand-over");
+ }
+ return ("200 OK",$json->encode({status=>"ok",token=>$token}));
+}
+
 ###############################################
 #          WebUI Request Handler              #
 ###############################################
@@ -1899,12 +2168,8 @@ sub webui_handle_request (@) {
     $path=~s/\?.*$// if(defined($path));
     my $request_host="";
     $request_host=$1 if($req=~/^Host:\s*([A-Za-z0-9._\-\[\]:]+)\s*$/mi);
-    # mDNS is useful for discovery, but keeping pgenerator.local in the
-    # browser address bar makes every refresh and every new connection depend
-    # on the client's mDNS resolver. Some Windows network stacks intermittently
-    # fail that lookup, especially with multiple adapters or a VPN. Redirect
-    # only the main page to the concrete address that accepted this socket;
-    # all subsequent assets and API calls then use that stable numeric host.
+    # The address that took this connection: pgenerator.local's way to
+    # rampecho.local passes through it (webui_name_redirect).
     my $request_local_ip=eval { $client->sockhost() } || "";
     # Only the pairing endpoints use this -- it lets the approval prompt show
     # which machine on the network is asking, alongside its name and code.
@@ -1942,14 +2207,12 @@ sub webui_handle_request (@) {
     my $r='{"status":"error","message":"Use POST"}';
     print $client "HTTP/1.1 405 Method Not Allowed\r\nAllow: POST\r\nContent-Type: application/json\r\nContent-Length: ".length($r)."\r\n$cors\r\n$r";
    }
-   elsif(($path eq "/" || $path eq "/index.html") && $request_host=~/^pgenerator\.local(?::\d+)?$/i && $request_local_ip=~/^\d{1,3}(?:\.\d{1,3}){3}$/ && $request_local_ip ne "0.0.0.0") {
-    my $redirect_path=$path;
-    $redirect_path="/" if($redirect_path eq "/index.html");
-    my $safe_query=$request_query;
-    $safe_query=~s/[\r\n]//g;
-    $redirect_path.="?$safe_query" if($safe_query ne "");
-    my $location="http://$request_local_ip$redirect_path";
+   elsif(my $location=&webui_name_redirect($path,$request_query,$request_host,$request_local_ip)) {
     print $client "HTTP/1.1 307 Temporary Redirect\r\nLocation: $location\r\nCache-Control: no-store\r\nContent-Length: 0\r\nConnection: close\r\n\r\n";
+   }
+   elsif($path eq "/rampecho-move") {
+    my $html=&webui_move_page($request_query);
+    print $client "HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\nCache-Control: no-store\r\nReferrer-Policy: no-referrer\r\nContent-Length: ".length($html)."\r\n$cors\r\n$html";
    }
    elsif($path eq "/" || $path eq "/index.html") {
     my $html=&webui_html();
@@ -2170,6 +2433,10 @@ sub webui_handle_request (@) {
     # restarted Pi from a daemon that is still shutting down.
     my $r='{"ok":1,"boot":"'.&webui_boot_id().'"}';
     print $client "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: ".length($r)."\r\n$cors\r\n$r";
+   }
+   elsif($path eq "/api/ui/move") {
+    my ($code,$r)=&webui_move($method,$request_query,$body);
+    print $client "HTTP/1.1 $code\r\nContent-Type: application/json\r\nCache-Control: no-store\r\nContent-Length: ".length($r)."\r\n$cors\r\n$r";
    }
    elsif($path eq "/api/ui/bootscreen-theme") {
     my ($code,$r)=&webui_bootscreen_theme($method,$body);

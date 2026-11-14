@@ -25,7 +25,7 @@
 </p>
 
 <p align="center">
-  <img src="screenshots/webui-patterns.png" alt="PGenerator+ Web UI in the Volt theme: Patterns workspace with Calman G1 plates, test images and playlists" width="900"/>
+  <img src="screenshots/webui-patterns.png" alt="rampecho Web UI in the Glow theme: Patterns workspace with Calman G1 plates, test images and playlists" width="900"/>
 </p>
 
 ---
@@ -128,7 +128,7 @@ Without a display, the renderer waits instead of failing. The UI says so in a ba
 <td valign="top">
 
 ### 🖥️ A reworked Web UI
-**14 themes** and workspace navigation. The default, **Glow**, lays Output out as a dashboard on warm near-black with one orange accent that is kept for the signal (the port in use, a value not applied yet, the action that sends it): the settings as tiles with an icon, each with a line for what the generator actually sends, the HDR metadata on its ST 2084 curve, and the Signal Self-Test as a ring with one segment per mode. The other themes (dark, light, OLED, Natrium, the lime Volt …) keep the look built for a dim room: large keys with their name inside, Dark and Light stepping in tone instead of drawing outlines, with a single aqua accent. The typefaces are served by the Pi itself, so the page looks the same without internet. Only sending patterns (for example from Calman or HCFR)? Hide the Measure workspaces with one switch in Settings. The UI shows the measured HDMI link depth and clock. It is served compressed with an ETag, pauses polling in hidden tabs and uses its own dialogs instead of browser pop-ups. Toasts appear only for warnings and errors.
+**13 themes**, ten dark and three light, and workspace navigation. Every theme has the same look and differs only in its colours: Output laid out as a dashboard, the settings as tiles with an icon, each with a line for what the generator actually sends, the HDR metadata on its ST 2084 curve, and the Signal Self-Test as a ring with one segment per mode. One accent colour is kept for the signal (the port in use, a value not applied yet, the action that sends it). The default, **Glow**, is warm near-black with an orange accent; the others (dark, light, OLED, Natrium, the lime Volt …) bring their own ground and accent. The typefaces are served by the Pi itself, so the page looks the same without internet. Only sending patterns (for example from Calman or HCFR)? Hide the Measure workspaces with one switch in Settings. The UI shows the measured HDMI link depth and clock. It is served compressed with an ETag, pauses polling in hidden tabs and uses its own dialogs instead of browser pop-ups. Toasts appear only for warnings and errors.
 
 </td>
 </tr>
@@ -211,7 +211,7 @@ Signal Mode, Bit Depth, Color Format and Range each have a **Sent** line: what t
 | Display's Dolby Vision block | only "DV supported" | peak, black, interfaces and primaries shown; mismatch warnings; patches above the peak flagged |
 | SPD InfoFrame | always sent ("Broadcom Videocore", media player); can limit a display's LLDV gamut to Rec.709 (ASUS PA32DC, Light Illusion) | **never sent**: removed in the vc4 driver (Pi 4) |
 | Diagnostic video player | – | **8-bit SDR picture**, H.264 via V4L2 hardware decode and zero-copy DRM scanout when available; software fallback and other codecs (limits below). **Play at the clip's frame rate** switches the output to the configured resolution at the clip's rate (23.976 to 60 Hz) while it plays |
-| WebUI themes | dark / light / system | **14 themes**: Glow (the default, with a dashboard layout for Output), Natrium dark & light, Volt, Scope, Ultraviolet … |
+| WebUI themes | dark / light / system | **13 themes** (10 dark, 3 light) in one look with a dashboard layout for Output, each in its own colours: Glow (the default), Natrium dark & light, Volt, Scope, Ultraviolet … |
 | WebUI look | – | signal settings as keys with their name inside, each with its read-back line, own typeface served by the Pi (works offline); a select's menu opens above or below its key, never over its name |
 | Measurement workspaces | – | **can be hidden** in Settings for pattern-only setups (Calman, HCFR) |
 | HDMI link readout | – | measured link depth and clock |
@@ -238,7 +238,7 @@ Signal Mode, Bit Depth, Color Format and Range each have a **Sent** line: what t
 <td align="center"><sub>Playlists: the deck follows the TV remote; Start, duplicate or edit from the library</sub></td>
 </tr>
 <tr>
-<td valign="top"><img src="screenshots/webui-settings.png" alt="Settings workspace with the theme picker (Volt selected), the Measure switch and settings backup"/><br/><p align="center"><sub>Settings: themes, layout and backup in one place</sub></p></td>
+<td valign="top"><img src="screenshots/webui-settings.png" alt="Settings workspace with the theme picker (Glow selected), the Measure switch and settings backup"/><br/><p align="center"><sub>Settings: themes, layout and backup in one place</sub></p></td>
 </tr>
 <tr>
 <td colspan="2" valign="top"><img src="screenshots/webui-system.png" alt="System workspace: Device Info with CPU, memory and temperature meters and tiles for board, hostname, resolution, uptime, RAM and network, plus the GPU Memory and Scaling Type selects, and Software Update below"/><br/><p align="center"><sub>System: CPU, memory and temperature at a glance, the device facts, GPU memory and CPU Scaling Type set right in their tiles, and the OTA update</sub></p></td>
@@ -250,7 +250,7 @@ Signal Mode, Bit Depth, Color Format and Range each have a **Sent** line: what t
 <td colspan="2" valign="top"><img src="screenshots/webui-selftest.png" alt="Signal self-test in Output: all 12 modes bit-exact (SDR, HDR10, HLG, Dolby Vision), with link details and the drawn swatches per mode"/><br/><p align="center"><sub>Signal self-test, right below Display Settings: every mode read back from the scanout on a real Pi 4, bit-exact in 12 of 12</sub></p></td>
 </tr>
 <tr>
-<td colspan="2" valign="top"><img src="screenshots/tv-restart.png" alt="Restart screen on the TV: PGenerator+ logo, Restarting PGenerator+, a progress bar and the steps Shut down (done), Restart (current) and Start"/><br/><p align="center"><sub>On the TV during a restart, in the Volt theme (rendered by the Pi's start screen program); at start-up the same screen follows System, Network, Services and PGenerator+</sub></p></td>
+<td colspan="2" valign="top"><img src="screenshots/tv-restart.png" alt="Restart screen on the TV: rampecho logo, Restarting rampecho, a progress bar and the steps Shut down (done), Restart (current) and Start"/><br/><p align="center"><sub>On the TV during a restart, in the Glow theme (rendered by the Pi's start screen program); at start-up the same screen follows System, Network, Services and rampecho</sub></p></td>
 </tr>
 </table>
 <p align="center"><sub>Top right: the same playlists on a phone, with a bottom tab bar</sub></p>
@@ -270,7 +270,7 @@ Signal Mode, Bit Depth, Color Format and Range each have a **Sent** line: what t
    - **macOS / Linux:** `cat PGenerator_Plus_*_pi4.img.xz.0* > pgen.img.xz`, then flash `pgen.img.xz` with [Raspberry Pi Imager](https://www.raspberrypi.com/software/). Imager reads `.xz` directly.
    - Use a microSD card or USB stick of at least 8 GB.
 3. Boot the Pi and connect to it, using one of the methods below.
-4. Open **`http://pgenerator.local`** (or the Pi's IP address).
+4. Open **`http://rampecho.local`** (or the Pi's IP address). `http://pgenerator.local` still works and forwards to `rampecho.local`.
 5. Go to **System → Software Update → Check for Updates** to move to the newest OTA release.
 
 <details>
@@ -332,7 +332,7 @@ rampecho is a free, open-source display calibration suite for the Raspberry Pi 4
 - **LG AutoCal (SDR and HDR):** on-device closed-loop calibration of LG TVs: 26-point greyscale, RGB balance, 3D LUT and HDR tone mapping, with an optional Tone Mapping Shadow Fix.
 - **Meter workflows:** ArgyllCMS `spotread` with persistent sessions, greyscale, colour and saturation sweeps, CCSS management, and live ΔE and chromaticity charts.
 - **Display profiles:** measured Windows MHC2 and KDE HDR cLUT profiles (ICC v2.2 / v4.4 with CICP), built in the browser.
-- **mDNS:** reachable at `pgenerator.local`.
+- **mDNS:** reachable at `rampecho.local` and, for installed apps and bookmarks, `pgenerator.local`. Opening the page at `pgenerator.local` forwards the browser to `rampecho.local` (307, not kept by the browser); API calls under the old name are answered as before. The first time, the browser's WebUI settings (theme, layout, Auto-Cal resume, custom series backup …) come along: until 3.0.0 they were stored under the Pi's IP address, and a short hand-over page passes them to `rampecho.local` once, without overwriting anything already set there.
 - **Field networking:** Bluetooth PAN, Wi-Fi AP, Ethernet.
 
 ---
@@ -364,7 +364,7 @@ rampecho is a free, open-source display calibration suite for the Raspberry Pi 4
 
 - **Protocol:** XML network calibration protocol (port `85`)
 - **Connect:** **Hardware Options** → Hardware `Network` (or `PGenerator`) → enter the Pi's IP.
-- **Connect as PiTPG:** in a Profiling window, **Hardware Options** → Hardware `PiTPG` → enter the Pi's IP in *Network Address* (rampecho is `pgenerator.local`, not `PiTPG.local`). Port 85 tells the two protocols apart by the client's first bytes, so the classic entry keeps working.
+- **Connect as PiTPG:** in a Profiling window, **Hardware Options** → Hardware `PiTPG` → enter the Pi's IP in *Network Address* (rampecho is `rampecho.local` or `pgenerator.local`, not `PiTPG.local`). Port 85 tells the two protocols apart by the client's first bytes, so the classic entry keeps working.
   - *What it does:* PiTPG protocol 2 as PiTPG 2.0.0 answers it (reported edition `basic`): settings with PiTPG's value ranges, rolled back when one is refused, and after a refusal patches are refused until settings that work come or ColourSpace disconnects (HDR metadata sent in between waits until then); modes matched to the display's own list within 0.005 Hz, the EDID's timing preferred over the userdef boot mode; patches whose reply carries the DRM flip that showed them (sequence, time, frame period); the 11 test patterns (Contrast, Brightness, ANSI 1/2, Corner Box 1/2, Probe Alignment, Granger, horizontal and vertical ramps, FALD) drawn in the last patch's window; a peak note for HDR10 and Dolby Vision patches above the display's declared peak; HDMI info, EDID, InfoFrames, log and kernel log as texts.
   - *Codes and depth:* as in PiTPG, patch codes go out unchanged: the patch scale (Full, Legal, Extended) sets the RGB range in the AVI infoframe, not the codes (in TV-led Dolby Vision it sets the range of the Dolby signal instead: Full gives full-range tunnel codes and metadata, Legal and User limited ones, Extended is refused), and the link follows the patch depth (8-bit patches on an 8-bit link, 10-bit patches need a 10-bit one; TV-led Dolby Vision stays on its 8-bit tunnel link with either). Both end with the next settings change and when ColourSpace disconnects, and the output settings in effect before them come back.
   - *Differences from a PiTPG:* Granger is not drawn in Dolby Vision, YCbCr with a Full scale is refused (YCbCr is always Limited), and refused settings are put back rather than kept, and their refusal ends when ColourSpace disconnects. Ted's Edition content is not part of it.
@@ -391,7 +391,7 @@ rampecho is a free, open-source display calibration suite for the Raspberry Pi 4
 
 ## 🗺️ Web UI tour
 
-Served on **port 80** at `http://pgenerator.local`. It has a **Desktop** layout with a sidebar of workspaces and a **Tablet** layout for tablets and phones: a bottom tab bar opens one workspace at a time (Output first), with draggable, collapsible cards. The layout is chosen in Settings → UI Settings.
+Served on **port 80** at `http://rampecho.local`. It has a **Desktop** layout with a sidebar of workspaces and a **Tablet** layout for tablets and phones: a bottom tab bar opens one workspace at a time (Output first), with draggable, collapsible cards. The layout is chosen in Settings → UI Settings.
 
 | Workspace | What's in it |
 |---|---|
@@ -403,7 +403,7 @@ Served on **port 80** at `http://pgenerator.local`. It has a **Desktop** layout 
 | **Connectivity** | Wi-Fi client, access point and Bluetooth in one Network card, LG TV control (pairing, AutoCal: greyscale, 3D LUT, HDR tone map, Shadow Fix) and the Resolve client; on Tablet and Phone also HDMI-CEC |
 | **System** | Device info: CPU, memory and temperature with meters, plus board, hostname, resolution, uptime, RAM and the network interfaces; GPU memory (asks before the required reboot) and CPU **Scaling Type** (Performance recommended, applies at once) are set in their tiles. Below the device info: Software Update (with notes, progress, rollback) and Download Logs |
 | **Live Information** (right-hand drawer on Desktop) | Active signal, the infoframe decoder (AVI, DRM and SPD), the measured HDMI link depth and clock, and HDMI-CEC with the TV remote. Updated while open; a failed read says how old the frames on screen are. On Tablet and Phone the infoframe decoder is a card in **System** |
-| **Settings** | Layout, zoom, **14 themes** (Glow is the default), Show/Hide for the Measure workspaces, and settings backup and restore |
+| **Settings** | Layout, zoom, **13 themes** in a Dark and a Light group (Glow is the default), Show/Hide for the Measure workspaces, and settings backup and restore |
 
 **Custom Diagnostic Video — Pi player limits.** `pg_diag_video_player` uses the Pi 4's bcm2835 H.264 hardware decoder when `/dev/video10` identifies it and `pg_v4l2_player` is installed. ffmpeg only demuxes H.264 and inserts access-unit delimiters; decoded 8-bit YU12/NV12 DMA-BUFs go directly to a DRM overlay. The HVS scales the visible crop, preserves the display aspect ratio for unrotated input and converts YCbCr to RGB, with black borders. Clips with rotation tags or display-matrix side data use software ffmpeg autorotate before aspect fitting. On the hardware path, no decoded pixels are copied by the CPU. Constant frame rate is assumed. Measured on a Pi 4 (kernel 5.10): **1080p24 and 1080p60 H.264 test clips played in real time** (a 1080p60 clip at 3.65 Mbit/s: 60.0 fps; the player used about 2 % CPU at 24p, software decoding about 270 %). A clip far beyond H.264 Level 4.2 (frames of about 800 KB, about 380 Mbit/s) stalled for about 250 ms at times. At a lower output refresh, an older late frame is dropped only when a newer decoded replacement is already available. Decode-ahead continues during a pending flip. A lone late frame is shown and the pacing clock is re-anchored, so a slightly slow decoder keeps presenting instead of freezing while discarding every frame. Decoder-limited playback can still run below real time. Logs report completed flip FPS, `late_drops`, `error_drops` and `reanchors`.
 
@@ -599,6 +599,7 @@ All endpoints are on port 80 and return JSON.
 | GET | `/api/modes` | HDMI modes from the display EDID |
 | POST | `/api/restart` | Restart the pattern generator |
 | POST | `/api/reboot` | Reboot the device |
+| GET / POST | `/api/ui/move` | One-time hand-over of the browser's WebUI settings from the old address to `rampecho.local`: POST `{"items":{…}}` returns a token, GET `?token=` within ten minutes returns the items, POST `{"ack":"<token>"}` confirms they are stored, GET `?check=<token>` tells whether that happened (used by the page at `/rampecho-move`; at most four kept) |
 | GET / POST | `/api/ui/bootscreen-theme` | Read / store the theme colours for the TV's start and restart screen (`theme`, `colors`: nine `#rrggbb` values); the WebUI sends the latest theme choice in order, reports save failures with Retry, and retries an unsaved choice after a page reload |
 | GET | `/api/wifi/scan` | Scan for Wi-Fi networks |
 | GET | `/api/wifi/status` | Wi-Fi connection status |
@@ -748,7 +749,7 @@ This fork stands on the shoulders of:
 - **[PGenerator](https://github.com/Biasiolo/PGenerator)** by Riccardo Biasiotto: the pattern engine, TCP protocols and renderer (GPLv3).
 - **[BigShoots/PGenerator-Plus](https://github.com/BigShoots/PGenerator-Plus)**: the original PGenerator+, with the Web UI, HDR/DV configuration, meter workflows, LG AutoCal, profile building and OTA. This fork continues from its 2.12.1.
 - **[docdude/ofxRPI4WindowHDR](https://github.com/docdude/ofxRPI4WindowHDR)**, **[ArgyllCMS](https://www.argyllcms.com/)** and **[HCFR](https://github.com/hcfr/hcfr)**.
-- The Web UI's typefaces, each under the SIL Open Font License 1.1, with its licence next to the font in [`usr/share/PGenerator/fonts/`](usr/share/PGenerator/fonts/) and served at `/assets/fonts/<name>-OFL.txt`: **[Gabarito](https://github.com/naipefoundry/gabarito)** by The Gabarito Project Authors (`meso`), and for the Glow theme **[Plus Jakarta Sans](https://github.com/tokotype/PlusJakartaSans)** by The Plus Jakarta Sans Project Authors (`glow`) and **[Sora](https://github.com/sora-xor/sora-font)** by The Sora Project Authors (`glow-display`).
+- The Web UI's typefaces, each under the SIL Open Font License 1.1, with its licence next to the font in [`usr/share/PGenerator/fonts/`](usr/share/PGenerator/fonts/) and served at `/assets/fonts/<name>-OFL.txt`: **[Gabarito](https://github.com/naipefoundry/gabarito)** by The Gabarito Project Authors (`meso`), and for the Glow look of every theme **[Plus Jakarta Sans](https://github.com/tokotype/PlusJakartaSans)** by The Plus Jakarta Sans Project Authors (`glow`) and **[Sora](https://github.com/sora-xor/sora-font)** by The Sora Project Authors (`glow-display`).
 
 ## ☕ Support the project
 

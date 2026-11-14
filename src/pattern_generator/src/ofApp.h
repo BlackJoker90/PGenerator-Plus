@@ -26,6 +26,7 @@
 /* Start Include RPI p4 header file */
 #include "ofxRPI4Window.h"
 #include "dovi_metadata.h"
+#include "picture_cache.h"
 #define GL_RGB10 0x8052
 #define GL_RGB10_A2 0x8059
 #define GL_RGBA16F  0x881A
@@ -59,7 +60,8 @@ class ofApp : public ofBaseApp{
   int dv_source_max=255;
   int dv_source_range=0; // SOURCE_RANGE of the draw: 1 limited, 2 full codes, 0 unset
   std::string previous_draw_type;
-  std::string previous_image; 
+  PictureCache picture; // the picture image() holds as a texture
+  bool picture_fresh=false; // a pattern was read since image() last drew
   /* End Patch For RPI 4 */
 
   string image_save;
@@ -143,6 +145,7 @@ class ofApp : public ofBaseApp{
   int scaleSourceToBitDepth(int value);
   int sourceToOutputCode(int value);
   void normalizeImageSourcePixels(int source_range_mode);
+  int imageNormalization(int source_range_mode);
   bool usesFloatImage();
   void setDoViBackground(int redbg, int greenbg, int bluebg);
   void shader_begin(int is_image);
@@ -174,6 +177,5 @@ class ofApp : public ofBaseApp{
   uint64_t dv_start_t0=0;
   void dovi_dump();
   void fbo_allocate();
-  int loop_count=0;
   /* End Patch For RPI 4 */
 };

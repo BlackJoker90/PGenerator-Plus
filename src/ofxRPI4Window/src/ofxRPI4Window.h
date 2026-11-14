@@ -404,6 +404,10 @@ public:
 	static hdmi_eotf eotf;
 	static int hdr_primaries; 
 	static int bit_depth;
+	/* Counts the window setups (DestroyWindow): each destroys the EGL
+	   context and every texture, so ofApp makes its picture's texture
+	   again when this has moved on (picture_cache.h). */
+	static unsigned long window_generation;
 	// Bit depth the HDMI link actually runs at: drm_override.so forces the
 	// configured max bpc onto the connector, whatever the renderer asks for.
 	static int wire_bpc;
@@ -541,7 +545,11 @@ public:
 	static unsigned long frame_tag;
 	unsigned long presented_tag = 0;
 	bool exit_started = false;
-	bool reload_pending = false;
+	/* A SIGHUP reload was taken and its first completed flip, which
+	   acknowledges it (running/reconfigured), is still to come. Read by
+	   ofApp::image(): before that flip a picture file is read only for a
+	   new pattern, or once more when the read of the one held failed. */
+	static bool reload_pending;
 	bool exit_reset_done = false;
 	/* SwitchOffIfModeKept: the first flip of this process was checked; the
 	   "rgb quant range" value the request being built sets. */

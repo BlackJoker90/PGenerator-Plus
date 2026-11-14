@@ -1223,17 +1223,24 @@ sub pattern_generator_restart_unless_current (@) {
  return 1;
 }
 
-# A picture on screen goes with the renderer's window. It is not loaded
-# again here (its pattern text is the old signal's); the next pattern that
-# names a picture is (pattern_pictures_spelled). Not across a change of the
-# window's bit depth (max_bpc, 4:2:2 at 8 bit): the renderer then sets its
-# window up once more after that load. For HDR Steps, whose BITS follow the
-# depth, the WebUI's apply loads a pattern without a picture first
-# (webui_renderer_forget_pictures); its Range Check, BITS=8 at every depth,
-# was read back at the output without that (2026-11-14: on screen at the new
-# signal's codes across 8 <-> 10 bit and RGB <-> YCbCr 4:2:2). A picture that
-# a calibration client's own change replays (calman_replay_last_pattern)
-# stays dark until another pattern is drawn, as it did before the spelling.
+# A picture on screen is not written again here (its pattern text is the
+# old signal's). The renderer makes its texture again in the new window from
+# the pixels it holds, and reads the file after the window's first flip
+# where the new output asks for other pixels (picture_cache.h). Read at the
+# output 2026-11-14: White Clipping, HDR Steps and G1 Warm-Up on screen after
+# a bare SIGHUP and across 8 <-> 10 bit, and the alignment plate a
+# calibration client's own change replays (calman_replay_last_pattern) after
+# every CONF_LEVEL:Bits. The change waits for that texture: 0.15 to 0.6 s
+# with an 8-bit picture at 1080p, 0.35 s with a float texture (HDR Steps,
+# the HDR Metadata Cycle's plates), 1.0 to 1.7 s with one at 2160p (0.15 to
+# 0.2 s with no picture; read 2026-11-15).
+# A renderer without the picture cache (md5 cdbb0bca... and before) lost the
+# picture with its window: the next pattern that names a picture was loaded
+# by another spelling of its path (pattern_pictures_spelled), not across a
+# change of the window's bit depth (max_bpc, 4:2:2 at 8 bit), where it set
+# its window up once more after that load; for HDR Steps, whose BITS follow
+# the depth, the WebUI's apply loads a pattern without a picture first
+# (webui_renderer_forget_pictures). Both stay for such a renderer.
 sub renderer_reconfigure_in_place (@) {
  my ($changed,$dv_before)=@_;
  my %in_place_keys=map{$_=>1} qw(color_format rgb_quant_range colorimetry max_bpc eotf

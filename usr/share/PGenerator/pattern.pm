@@ -162,18 +162,22 @@ sub pattern_template_name_ok (@) {
  return 0;
 }
 
-# The renderer keeps a picture under the path it loaded it from and does not
-# load it again while the pattern file names that path (ofApp.cpp, image():
-# previous_image). A reconfigure in place builds its window anew, the GL
-# context with it (ofxRPI4Window::update, flip): the picture is gone, and all
-# of it reads code 0 until another path is named. Read at the output
-# 2026-11-14: HDR Steps, White Clipping and Overscan after RGB <-> YCbCr
-# 4:2:2, still code 0 when the pattern was asked for again, back at once
-# with the path spelled differently.
+# A renderer without the picture cache (src/pattern_generator/src/
+# picture_cache.h; md5 cdbb0bca... and before) kept a picture under the path it
+# loaded it from and did not load it again while the pattern file named that
+# path. A reconfigure in place builds its window anew, the GL context with
+# it (ofxRPI4Window::update, flip): the picture was gone, and all of it read
+# code 0 until another path was named. Read at the output 2026-11-14: HDR
+# Steps, White Clipping and Overscan after RGB <-> YCbCr 4:2:2, still code 0
+# when the pattern was asked for again, back at once with the path spelled
+# differently.
 # So a picture's path has several spellings, ".../x.png", "..././x.png",
 # ".../././x.png" and so on, the same file to the renderer's loader, and
 # every reconfigure in place moves on to the next (pattern_pictures_respell):
-# the next pattern that names a picture is loaded. The pattern on screen is
+# the next pattern that names a picture is loaded. The renderer with the
+# picture cache makes its texture again in the new window by itself; the
+# spelling stays for one without, and to the one with it is another path,
+# read once, as a picture asked for again was before. The pattern on screen is
 # not written again here: its text is the signal's from before the change
 # (a text without SOURCE_RANGE, as create_tmp_file writes it on YCbCr when
 # no range is given, is compressed by the renderer on RGB Limited). Who

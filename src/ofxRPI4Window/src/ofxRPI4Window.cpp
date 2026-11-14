@@ -1590,6 +1590,8 @@ int ofxRPI4Window::isHDR = 0;
 int ofxRPI4Window::isDoVi = 0;
 int ofxRPI4Window::is_std_DoVi = 0;
 int ofxRPI4Window::bit_depth = 0;
+unsigned long ofxRPI4Window::window_generation = 0;
+bool ofxRPI4Window::reload_pending = false;
 unsigned long ofxRPI4Window::frame_tag = 0;
 int ofxRPI4Window::wire_bpc = 8;
 int ofxRPI4Window::mode_idx = 0;
@@ -2308,7 +2310,8 @@ void ofxRPI4Window::HDRWindowSetup()
 		ofLogError() << "GBM: Failed to deinitialize GBM";
 	}
 	
-    gbmDevice = gbm_create_device(device);
+    if (!gbmDevice) /* one for the life of the process, see gbmClean() */
+        gbmDevice = gbm_create_device(device);
 	  if (!gbmDevice)
 	{
 		ofLogError() << "GBM: - failed to create device: " << gbmDevice; 
@@ -2571,7 +2574,8 @@ void ofxRPI4Window::Bit10_16WindowSetup()
 		ofLogError() << "GBM: Failed to deinitialize GBM";
 	}
 	
-    gbmDevice = gbm_create_device(device);
+    if (!gbmDevice) /* one for the life of the process, see gbmClean() */
+        gbmDevice = gbm_create_device(device);
 	  if (!gbmDevice)
 	{
 		ofLogError() << "GBM: - failed to create device: " << gbmDevice; 
@@ -2855,7 +2859,8 @@ int ret;
 		ofLogError() << "GBM: Failed to deinitialize GBM";
 	}
 	
-    gbmDevice = gbm_create_device(device);
+    if (!gbmDevice) /* one for the life of the process, see gbmClean() */
+        gbmDevice = gbm_create_device(device);
 	
 	if (!gbmDevice)
 	{
@@ -4561,6 +4566,9 @@ string ofxRPI4Window::getInfo()
  
 bool ofxRPI4Window::DestroyWindow()
 {
+	/* The EGL context goes, and every texture with it: ofApp makes its
+	   picture's texture again for the new window (picture_cache.h). */
+	window_generation++;
     DestroySurface();
 	DestroyContext();
   if (display != EGL_NO_DISPLAY)
@@ -4627,10 +4635,15 @@ void ofxRPI4Window::gbmClean()
     gbm_surface_destroy(gbmSurface);
 	gbmSurface = NULL;
   }
-  if (gbmDevice != NULL) {
-  //  gbm_device_destroy(gbmDevice);
-	gbmDevice = NULL;
-  }
+  /* The GBM device stays, one for the life of the process: it owns the
+     driver's screen, and the buffers of a destroyed context go to that
+     screen's cache, which frees them as rendering goes on. A device per
+     window setup (as before: made anew each time, never destroyed) left
+     each one's cache behind for good, with the texture of every picture
+     that was on screen at a window setup still mapped. Read on the Pi 4
+     2026-11-14: 32 MB per signal change in place with HDR Steps on screen
+     at 1080p, nothing with a patch; the HDR Metadata Cycle at 2160p took
+     380 MB a step and ended the 32-bit process at 2.7 GB in its seventh. */
 }
 
 

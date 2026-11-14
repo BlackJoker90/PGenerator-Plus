@@ -1087,10 +1087,11 @@ body.apply-settings-error #applySettingsIcon,body.apply-settings-error #applySet
  :is(.devinfo-card,.facts-host) .devinfo-facts .info-item:not(.devinfo-control){row-gap:0}
  :is(.devinfo-card,.facts-host) .devinfo-facts .info-item{grid-row:auto;grid-template-rows:none}
  .devinfo-facts .info-item:not(.devinfo-control)>.value{margin-top:2px}
- /* The copy button takes the top-right corner. */
+ /* The copy button sits at the right edge, centred on the tile's height. */
  :is(.devinfo-card,.facts-host) .devinfo-facts .info-item.has-copy{position:relative;grid-template-columns:minmax(0,1fr)}
- /* An absolutely placed grid item sits in its grid area; reset it so the tile is the frame. */
- .fact-copy{position:absolute;grid-row:auto;grid-column:auto;top:11px;right:12px}
+ /* An absolutely placed grid item sits in its grid area; reset it so the tile is the frame.
+    Centred by auto margins, not a transform: :active scales the button. */
+ .fact-copy{position:absolute;grid-row:auto;grid-column:auto;top:0;bottom:0;right:12px;margin:auto 0}
 }
 .wifi-list{max-height:150px;overflow-y:auto;margin:6px 0}
 .wifi-item{display:flex;justify-content:space-between;align-items:center;

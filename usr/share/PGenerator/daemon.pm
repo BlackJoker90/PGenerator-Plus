@@ -29,6 +29,11 @@ sub fork_pattern_daemon (@) {
   $SIG{PIPE}='IGNORE';
   open(STDERR,">>/tmp/pg_stderr.log");
   &boot_time_mark("daemon: start");
+  # An HDR Metadata Cycle the last daemon did not end left its step's Max
+  # Luma, MaxCLL and MaxFALL in the conf: put the values that were set back
+  # before anything reads the conf as the settings (the snapshot below, the
+  # renderer).
+  &webui_hdr_cycle_end("daemon start",0) if(defined(&webui_hdr_cycle_end));
   # A refusal ends with the daemon; what a refused apply goes back to until
   # the first one passes is the conf found now.
   &signal_state_reset();
@@ -793,10 +798,22 @@ sub calman_g1_convert_file (@) {
 
 sub calman_g1_logo (@) {
  my ($h,$range)=@_;
- my $src="$shared_dir/pgen-logo-light.png";
+ # The dark lockup: on the Screensaver's grey (code 91-94) the light one's
+ # "ramp" (86-90) would vanish.
+ my $src="$shared_dir/pgen-logo-dark.png";
  return undef if(!$convert || !-x $convert || !-f $src);
+ # Keep the logo's own aspect ratio: read width and height from the PNG header.
+ my ($sw,$sh)=(0,0);
+ if(open(my $ih,"<",$src)) {
+  binmode($ih);
+  my $hd="";
+  ($sw,$sh)=unpack("NN",substr($hd,16,8)) if((read($ih,$hd,24) // 0) == 24 && substr($hd,0,8) eq "\x89PNG\r\n\x1a\n" && substr($hd,12,4) eq "IHDR");
+  close($ih);
+ }
+ return undef if($sw < 1 || $sh < 1);
  my $lh=int($h/12+0.5);
- my $lw=int($lh*751/240+0.5);
+ my $lw=int($lh*$sw/$sh+0.5);
+ return undef if($lw < 1 || $lw > 8*$lh);
  my $bg=&g1_pattern_level($range,94);
  return undef if(!open(my $fh,"-|",$convert,$src,"-background","rgb($bg,$bg,$bg)","-flatten","-resize","${lw}x${lh}!","-depth","8","rgb:-"));
  binmode($fh);
@@ -827,7 +844,9 @@ sub calman_g1_ip (@) {
 # fall back. $o (optional): source_range => "LIMITED" or "" to draw for that
 # range instead of the configured one; load => 0 to only write the command
 # file (the caller loads it); check => [verdict,basis] for the Range Check
-# (PGG1Patterns g1_pattern_render).
+# (PGG1Patterns g1_pattern_render); still => code asked once the pictures
+# are drawn, right before the command file is written: false, and nothing
+# is written (the daemon's own redraw, which a newer pattern outranks).
 sub calman_render_g1_pattern (@) {
  my ($key,$pattern_name,$o)=@_;
  $o={} if(ref($o) ne "HASH");
@@ -909,6 +928,7 @@ sub calman_render_g1_pattern (@) {
   $bg=$out->{bg} if($out->{bg});
  }
  my $bg_str=join(",",@$bg);
+ return 0 if(ref($o->{still}) eq "CODE" && !$o->{still}->());
  # Shown now: a client's pattern (pattern.pm output_pattern_begin).
  my $load=(!exists $o->{load} || $o->{load}) ? 1 : 0;
  my $locked=$load ? &output_pattern_begin("calman") : 0;
@@ -1094,6 +1114,10 @@ sub calibration_session_open (@) {
   $s=$calibration_session{$connection}={since=>$now,ip=>($client_ip{$connection} || $client_address || ""),
    protocol=>&calibration_session_protocol($connection),port=>&calibration_session_port($connection)};
   &log("Calibration session open: software=$software protocol=$s->{protocol} port=$s->{port} peer=$s->{ip}");
+  # Software that sets the signal (webui_signal_owner) sets the HDR metadata
+  # too and shows what it set: a running HDR Metadata Cycle gives way before
+  # its first command, so no value it sends meets a step's.
+  &webui_hdr_cycle_end("$software connected",1) if(defined(&webui_hdr_cycle_end) && $software ne "HCFR" && $software ne "Resolve");
  }
  $s->{software}=$software;
  $s->{last_rx}=$now;
@@ -1363,6 +1387,7 @@ sub pattern_daemon {
  ############################
  while ($select->count()) {
   my $video_tick=&video_playback_poll();
+  &webui_hdr_cycle_watchdog() if(defined(&webui_hdr_cycle_watchdog));
   # Commands read but not handled yet (one read carried several) go first,
   # without waiting for their socket to become readable again.
   my @ready = grep { $pending_cmd{$_} && @{$pending_cmd{$_}} } $select->handles();
@@ -1778,7 +1803,7 @@ sub pattern_daemon {
      if($clean_key eq "CAP") {
       # Capabilities. Calman stores the tokens as the device's command set
       # (with no usable CAP reply it falls back to the same UPGCI list), so
-      # report the UPGCI commands first, then the PGenerator+ extensions.
+      # report the UPGCI commands first, then the rampecho extensions.
       # Calman only sends GET_SETTINGS when CAP lists it, and it ignores a
       # CAP reply that does not start with ACK.
       my $caps="GET_SETTINGS,STATUS,CONF_FORMAT,CONF_HDR,CONF_LEVEL,CONF_DV,HDR_ENABLE,IMAGE,PUSH,RGB_S,RGB_B,RGB_A,SPECIALTY,UPDATE,YCC_A,YCC_B,YCC_S,HDR,DOLBYVISION,SIZE,10_SIZE,11_APL,CommandRGB,BITDEPTH,COLORSPACE,RANGE";
@@ -2195,7 +2220,7 @@ sub pattern_daemon {
 	       &log("Calman: YCbCr 4:2:0 is not supported, keeping color_format=".($pgenerator_conf{"color_format"} // "0")." max_bpc=".($pgenerator_conf{"max_bpc"} // "8"));
 	       my %fmt_name=("0"=>"RGB","1"=>"YCbCr 4:4:4","2"=>"YCbCr 4:2:2");
 	       my $kept=($fmt_name{$pgenerator_conf{"color_format"} // "0"} || "RGB")." ".($pgenerator_conf{"max_bpc"} || 8)."-bit";
-	       &webui_notice("YCbCr 4:2:0 is not supported","Calman requested YCbCr 4:2:0. PGenerator+ has no YCbCr 4:2:0 output, so the output stays $kept.\nChoose RGB or YCbCr 4:4:4 in Calman for bit-exact measurements.");
+	       &webui_notice("YCbCr 4:2:0 is not supported","Calman requested YCbCr 4:2:0. rampecho has no YCbCr 4:2:0 output, so the output stays $kept.\nChoose RGB or YCbCr 4:4:4 in Calman for bit-exact measurements.");
 	       $parsed{color_format}="";
 	       $parsed{max_bpc}="";
 	      }
@@ -3844,7 +3869,7 @@ sub send_calman_payload_to_client (@) {
  # On the RPC port (Calman's G1 source) only the replies passed with
  # $framed are framed: CAP and GET_SETTINGS. SN, FIRMWARE and STATUS stay
  # bare there, as they always were. With an SN stored, the G1 source switches to its
- # obfuscated "CryptoII" transport, which PGenerator+ does not speak.
+ # obfuscated "CryptoII" transport, which rampecho does not speak.
  $response=$ack_cmd_string.$response.$end_cmd_string_calman if(!$rpc_client{$connection} || $framed);
  eval { $connection->send("$response"); };
  if($@) {

@@ -1741,12 +1741,16 @@ sub check_video_source_root (@) {
   $video =~ /(^\/|\.\.|[\r\n\0])/ || $video !~ /^[A-Za-z0-9 _.\-\/()]+\z/);
  my $path="$video_dir/$video";
  return print "ERR:Diagnostic video source check unavailable" if(!-f $path || !-x $player);
- my $pid=open(my $check,"-|",$timeout,"-k","2s","8s",$player,"--check-source",$path);
+ # "rate" as the next argument: the answer may name the clip's frame rate
+ # (OK:24000/1001). Without it the answer is OK, as before.
+ my $want_rate=(defined($ARGV[2]) && $ARGV[2] eq "rate") ? 1 : 0;
+ my $pid=open(my $check,"-|",$timeout,"-k","2s","8s",$player,($want_rate ? "--check-source-rate" : "--check-source"),$path);
  return print "ERR:Diagnostic video source check failed" if(!defined($pid));
  my $response=<$check>;
  my $closed=close($check);
  chomp($response) if(defined($response));
- return print "OK" if($closed && defined($response) && $response eq "OK");
+ return print $response if($closed && defined($response) && ($response eq "OK" ||
+  ($want_rate && $response =~ /^OK:[1-9]\d{0,6}\/[1-9]\d{0,6}\z/)));
  $response="ERR:Diagnostic video source check failed" if(!defined($response) || $response !~ /^ERR:.+/);
  $response =~ s/[\r\n]/ /g;
  print $response;

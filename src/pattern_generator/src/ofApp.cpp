@@ -294,16 +294,17 @@ void ofApp::update(){
    }
   }
   // A pattern was read: the next completed flip shows it (running/presented).
-  if(entered)
+  if(entered) {
    ofxRPI4Window::frame_tag++;
+   picture_fresh=true; // image(): its picture is read before that flip
+  }
  }
   /* Start Patch RPI P4 */
 	if (draw_type == "IMAGE") {
 	 ofxRPI4Window::colorspace_on = 0;
 	}else {
    ofxRPI4Window::colorspace_on = 1;
-   loop_count=0; //reset counter
-   previous_image = ""; 
+   picture.forget(); // the next picture is a first one: loaded at two draws
   }
 #if 1 
 	if (ofxRPI4Window::shader_init && usesYCbCrConversionShader()) {
@@ -654,16 +655,36 @@ void ofApp::image() {
   cur_op().posx=(ofGetWindowWidth()-cur_op().dim1)/2;
   cur_op().posy=(ofGetWindowHeight()-cur_op().dim2)/2;
  }
+ /* The file is read when the pixels held are not this picture's: another
+    path, rotation, texture kind or normalization. After a window setup,
+    which destroys the EGL context and the texture with it, the texture is
+    made again from the pixels held; while the daemon waits for the flip
+    after a SIGHUP, a file that has to be read is left for the next draw
+    (picture_cache.h). A first picture is read at two draws, to allow time
+    to load the shader. */
+ bool float_texture=usesFloatImage();
+ bool fresh=picture_fresh;
+ picture_fresh=false;
+ int need=picture.needs(cur_op().image,cur_op().rotate,imageNormalization(cur_op().source_range),float_texture,fresh,ofxRPI4Window::reload_pending,ofxRPI4Window::window_generation);
+ if (need == PictureCache::LATER)
+  return;
+ /* No pixels (the file could not be read): there is nothing to upload,
+    and the file is tried again, also in a draw the daemon waits for. */
+ if (need == PictureCache::UPLOAD && !(float_texture ? float_img.getPixels().isAllocated() : img.getPixels().isAllocated()))
+  need=PictureCache::LOAD;
  /* Start Patch RPI P4 */
- if (usesFloatImage()) {
-  if (previous_image != cur_op().image || loop_count < 2) { //needs to load each new image twice to allow time to load shader
+ if (float_texture) {
+  if (need == PictureCache::LOAD) {
   float_img.clear();
   float_img.load(cur_op().image);
   float_img.rotate90(cur_op().rotate);
   normalizeImageSourcePixels(cur_op().source_range);
 
   float_img.getTexture().setTextureMinMagFilter(GL_NEAREST, GL_NEAREST); //set pixel precision
-  loop_count++;
+  } else if (need == PictureCache::UPLOAD) {
+   float_img.getTexture().clear();
+   float_img.update();
+   float_img.getTexture().setTextureMinMagFilter(GL_NEAREST, GL_NEAREST);
   }
   ofSet10bitColor(1023,1023,1023,1023);
 //  float_img.update();  //update here no necessary,  occurs in both load and rotate90 routines 
@@ -672,14 +693,17 @@ void ofApp::image() {
   ofApp::shader_end(1); //set for image = 1
  /* End Patch RPI P4 */
  } else {
-  if (previous_image != cur_op().image || loop_count < 2) { //needs to load each new image twice to allow time to load shader
+  if (need == PictureCache::LOAD) {
     img.clear();
     img.load(cur_op().image);
     img.rotate90(cur_op().rotate);
     normalizeImageSourcePixels(cur_op().source_range);
   //img.update(); //update here no necessary,  occurs in both load and rotate90 routines 
     img.getTexture().setTextureMinMagFilter(GL_NEAREST, GL_NEAREST); //set pixel precision
-	loop_count++;
+  } else if (need == PictureCache::UPLOAD) {
+    img.getTexture().clear();
+    img.update();
+    img.getTexture().setTextureMinMagFilter(GL_NEAREST, GL_NEAREST);
   }
   /* Passthrough puts the texels on the wire as they are, and the YCbCr
      shader encodes them as studio-range codes: an 8-bit texel in the
@@ -699,7 +723,6 @@ void ofApp::image() {
   /* End Patch RPI P4 */
  
  }
- previous_image = cur_op().image; 
 }
 
 /*
@@ -973,6 +996,30 @@ int ofApp::normalizeSourceValue(int value, int source_range_mode) {
  if(normalized > max_value)
   normalized=max_value;
  return normalized;
+}
+
+/*
+ * What normalizeImageSourcePixels (below) does to the texels of the picture
+ * being drawn, with the output there is: 0 nothing, 1 full-range texels
+ * compressed to studio codes, 2 studio texels expanded; +4 when the float
+ * texture's texels are 10-bit codes. Pixels normalized under one value are
+ * the pixels of that value and of no other (picture_cache.h). Kept next to
+ * that function, condition for condition; t/renderer_picture_cache.t runs
+ * both over every state.
+ */
+int ofApp::imageNormalization(int source_range_mode) {
+ if(ofxRPI4Window::avi_info.output_format != 0)
+  return 0;
+ if(ofxRPI4Window::isDoVi || ofxRPI4Window::is_std_DoVi)
+  return 0;
+ if(ofxRPI4Window::avi_info.rgb_quant_range != 1)
+  return 0;
+ int codes10=(usesFloatImage() && cur_op().bits == 10) ? 4 : 0;
+ if(ofxRPI4Window::rgbLimitedPassthrough())
+  return (source_range_mode == 1) ? 0 : 1 + codes10;
+ if(source_range_mode != 1)
+  return 0;
+ return 2 + codes10;
 }
 
 void ofApp::normalizeImageSourcePixels(int source_range_mode) {

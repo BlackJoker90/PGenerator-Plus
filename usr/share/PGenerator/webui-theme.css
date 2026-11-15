@@ -53,12 +53,6 @@ button,input,select,textarea{font-family:inherit}
 --selected-bg:rgba(255,179,0,.15);--hover-bg:rgba(255,220,160,.05);--focus-ring:#ffc94d;--status-calibration:#c27400;
 --chart-bg:#120d07;--chart-grid:#241b0f;--chart-axis:#4a3a22;--chart-label:#b09a7a;--chart-tooltip:#221a0f;--meter-bar-track:#151009;
 --scroll-track:#1a140c;--scroll-thumb:#5a4428;--scroll-thumb-border:#6e5432;--scroll-thumb-hover:#6e5432}
-[data-palette="contrast"]{--bg:#000;--card:#000;--panel:#000;--border:#9a9a9a;--divider:#9a9a9a;--accent:#2f6bff;--accent2:#1a4fe0;--accent-fill:#255ff0;--accent-fill2:#1a4fe0;--neutral-fill:#1f1f1f;
---text:#fff;--text2:#e0e0e0;--text-primary:#fff;--text-secondary:#e0e0e0;--text-muted:#c4c4c4;--text-disabled:#9a9a9a;
---surface-page:#000;--surface-header:#000;--surface-sidebar:#000;--surface-card:#000;--surface-drawer:#000;--surface-modal:#000;--surface-popover:#0a0a0a;--surface-inset:#000;--surface-field:#000;
---focus-ring:#ffd400;--selected-bg:rgba(255,212,0,.2);--hover-bg:rgba(255,255,255,.12);--shadow:rgba(0,0,0,.6);
---chart-bg:#000;--chart-grid:#2a2a2a;--chart-axis:#9a9a9a;--chart-label:#e0e0e0;--chart-tooltip:#0a0a0a;--meter-bar-track:#111;
---scroll-track:#000;--scroll-thumb:#9a9a9a;--scroll-thumb-border:#c4c4c4;--scroll-thumb-hover:#c4c4c4}
 [data-palette="paper"]{--bg:#f4efe6;--card:#fffaf1;--panel:#fffaf1;--border:#d8ccb8;--divider:#d8ccb8;--accent:#8a5a2b;--accent2:#6b4423;--accent-fill:#8a5a2b;--accent-fill2:#6b4423;
 --text:#2b2118;--text2:#5e4e3c;--text-primary:#2b2118;--text-secondary:#5e4e3c;--text-muted:#6d5d4a;--text-disabled:#857462;
 --surface-page:#f4efe6;--surface-header:#fffaf1;--surface-sidebar:#f8f3ea;--surface-card:#fffaf1;--surface-drawer:#fffaf1;--surface-modal:#fffaf1;--surface-popover:#f8f3ea;--surface-inset:#f6f0e5;--surface-field:#fffdf8;
@@ -96,7 +90,6 @@ button,input,select,textarea{font-family:inherit}
 --chart-bg:#0d0913;--chart-grid:#1e1729;--chart-axis:#3a2f4a;--chart-label:#a597b3;--chart-tooltip:#1d1628;--chart-empty:#6f6380;--meter-bar-track:#130e1a;
 --scroll-track:#0d0913;--scroll-thumb:#352a45;--scroll-thumb-border:#4a3d5e;--scroll-thumb-hover:#4a3d5e}
 [data-palette="volt"] .btn,[data-palette="volt"] .update-btn{border-radius:999px}
-[data-palette="contrast"] .btn-secondary{box-shadow:inset 0 0 0 1px var(--border)}
 [data-palette="nord"] #hdmiWarnBadge{color:var(--warning-text)}
 /* Natrium and the secondaries have light accents: text on them uses the dark foreground. */
 [data-palette^="natrium"] .btn-primary,[data-palette^="natrium"] .layout-switch-btn[aria-pressed="true"],
@@ -409,6 +402,8 @@ body.layout-tablet .card-section-head{min-height:44px}
    thumb position. Nord needs a lighter fill to stand off its card. */
 :root{--switch-on:var(--accent-fill)}
 [data-palette="nord"]{--switch-on:#7b96bb}
+/* Nord's softer text leaves the base 42 % field line at 2.94:1 on its card; 48 % reaches 3:1. */
+[data-palette="nord"]{--field-border:color-mix(in srgb,var(--text-primary) 48%,var(--surface-card))}
 .pg-switch{position:relative;display:inline-flex;align-items:center;cursor:pointer;flex:0 0 auto;user-select:none}
 .pg-switch input{position:absolute;opacity:0;width:0;height:0;margin:0}
 .pg-switch-track{display:inline-block;position:relative;width:34px;height:18px;border-radius:var(--r-md);background:transparent;box-shadow:inset 0 0 0 1.5px var(--text2);transition:background .2s,box-shadow .2s}
@@ -807,8 +802,6 @@ transition:opacity .15s ease-out,transform .15s ease-out;z-index:999;pointer-eve
 .help-tip-pop::-webkit-scrollbar{display:none}
 @keyframes help-tip-in{from{opacity:0;transform:translateY(var(--tip-rise,-4px))}to{opacity:1;transform:none}}
 @media(prefers-reduced-motion:reduce){.help-tip-pop{animation:none}}
-/* High Contrast keeps a solid surface and a full-strength edge */
-[data-palette="contrast"] .help-tip-pop{background:var(--surface-popover);border-color:var(--text-primary)}
 .help-tip-pop[hidden]{display:none}
 .help-tip-pop[data-capped]{overscroll-behavior:contain;scrollbar-width:thin}
 /* A tip cut by the window height shows that it scrolls. */
@@ -1094,10 +1087,11 @@ body.apply-settings-error #applySettingsIcon,body.apply-settings-error #applySet
  :is(.devinfo-card,.facts-host) .devinfo-facts .info-item:not(.devinfo-control){row-gap:0}
  :is(.devinfo-card,.facts-host) .devinfo-facts .info-item{grid-row:auto;grid-template-rows:none}
  .devinfo-facts .info-item:not(.devinfo-control)>.value{margin-top:2px}
- /* The copy button takes the top-right corner. */
+ /* The copy button sits at the right edge, centred on the tile's height. */
  :is(.devinfo-card,.facts-host) .devinfo-facts .info-item.has-copy{position:relative;grid-template-columns:minmax(0,1fr)}
- /* An absolutely placed grid item sits in its grid area; reset it so the tile is the frame. */
- .fact-copy{position:absolute;grid-row:auto;grid-column:auto;top:11px;right:12px}
+ /* An absolutely placed grid item sits in its grid area; reset it so the tile is the frame.
+    Centred by auto margins, not a transform: :active scales the button. */
+ .fact-copy{position:absolute;grid-row:auto;grid-column:auto;top:0;bottom:0;right:12px;margin:auto 0}
 }
 .wifi-list{max-height:150px;overflow-y:auto;margin:6px 0}
 .wifi-item{display:flex;justify-content:space-between;align-items:center;
@@ -1150,6 +1144,8 @@ background:color-mix(in srgb,var(--dv) 20%,transparent);box-shadow:inset 0 0 0 1
 .pat-thumb{display:block;height:30px;border-radius:var(--r-xs);box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--text) 14%,transparent);background:#808080}
 .pat-thumb[data-thumb="white"]{background:linear-gradient(90deg,#d9d9d9 0 20%,#e4e4e4 20% 40%,#eeeeee 40% 60%,#f7f7f7 60% 80%,#fff 80%)}
 .pat-thumb[data-thumb="black"]{background:linear-gradient(90deg,#000 0 20%,#0a0a0a 20% 40%,#151515 40% 60%,#202020 60% 80%,#2b2b2b 80%)}
+.pat-thumb[data-thumb="hdr_steps"]{background:#000 linear-gradient(90deg,#4a4a4a 0 12%,#000 12% 17.6%,#6b6b6b 17.6% 29.6%,#000 29.6% 35.2%,#8d8d8d 35.2% 47.2%,#000 47.2% 52.8%,#b0b0b0 52.8% 64.8%,#000 64.8% 70.4%,#d4d4d4 70.4% 82.4%,#000 82.4% 88%,#fff 88%) center/84% 44% no-repeat}
+.pat-thumb[data-thumb="hdr_metadata_cycle"]{background:linear-gradient(90deg,#8d8d8d 0 12%,#000 12% 22%,#8d8d8d 22% 34%,#000 34% 44%,#fff 44% 56%,#000 56% 66%,#8d8d8d 66% 78%,#000 78% 88%,#8d8d8d 88%) center 84%/38% 7% no-repeat,#000 linear-gradient(90deg,#4a4a4a 0 12%,#000 12% 17.6%,#6b6b6b 17.6% 29.6%,#000 29.6% 35.2%,#8d8d8d 35.2% 47.2%,#000 47.2% 52.8%,#b0b0b0 52.8% 64.8%,#000 64.8% 70.4%,#d4d4d4 70.4% 82.4%,#000 82.4% 88%,#fff 88%) center 36%/84% 40% no-repeat}
 .pat-thumb[data-thumb="overscan"]{background:#111;box-shadow:inset 0 0 0 2px #e6e6e6,inset 0 0 0 5px #111,inset 0 0 0 6px #777}
 .pat-thumb[data-thumb="range_check"]{background:#000 url("data:image/webp;base64,UklGRn4EAABXRUJQVlA4IHIEAADwJgCdASpAAbQAPj0ejUSiIaGSySxgIAPEtLd+PkyLXoOzrw/T3sE/rlkT+6n5vhvlrcBvqF/b/OG9VPCc7m/uXox/x/5d/4z5Oc7P1X7AfSG9AD9Ow6+i0HVr5f2cVB1a+X9nFQdWvl/ZxUHThcGYsaxl94Zjun0RFspMwp+pRM0SYqFBvcM9w0LRhS/Vr5gCEuG7JOwbCPB3SYKm+aTmNgazdsEij3l0ENGdFw7fHvztL7xO7wY/FQ9WPF9Yj3bWWwGGg2MFwlKpOZrRnRcN16TooPK38I9NN7kfmr8r4ejKGRFspOQHqgzKORNN2ZBtIqLqi1EP/a2fcmi0HVrC7wL+lAn8iD2g1kK+jlePY6jC2HA0MpM6Lhr+Fx/e8OgZOtBWedyDci+2UmdFw6tfL+zioOrXy/s4qDq18v7CAAD+/6dVAdfDQUqUg3urxWm5Pdt14dk9fMmAuhrpcfG7xVhXYWI0mctrU0FbiVPnuPoxX8s/zVibI/283wwRzyfZYvtWGX/HXJ66kOqT9ce95hn4g/JAqsEy0mWbTjn7FFuAyfZG10ogiLJJ2fQwe/mSxRDElSHxTIZ38Na4Uw8pdl4Ec343JiptbTR8FpTZNHYj2psDG+dYV5XzjXOkqkj+Wz+GXynBnImouzaGsKZWrrKCucXBSQKFrj3GET8xq2BIEQqhQxOw2RgVjAP262lqp56oiBzxDUQpTInJSA0goghzDyVCOqgG7Q6EeiaF24YH8dO3xJ+CKxSsaHzthgFbtWmAr1JPu50jhreF+CgVx4r+C39SeCgZLuDRh+ngqlARqJnI23RntCFdd//GSkboWfaAXrWUDK8UM5GycEOvcsBABSV4t4lioBQHnNe7ZISbtpwvsTjLGM++L0ntwcwGaWgNj7mcrU6vuf1O89u6II3pN9LfLwGwule7Fl7ZMZGRT1Z49tk97FYAhkSjwOKraX4Dw4gTa7d2rqn0YvR2yx2UxnuVKDzZ5dzVR1dKkHb4RHf+1uBEr+jZIH0qLucDOXF201ExrQ9R5H8cfORnwdAtSrfwLsjuFg4cW4n+0Je0bhI8lbzp3FdgPBjIn/JY71U1PVzsTiMpHeurJsjumPuP6bU/SHCrN1UkPUVuoWss36Gf3c1SRSr3Bg+yvsuk4M/MxVT2qBn3gnX/mXdPn5qCqQw5LTAFF4F5A1/vyqJeDdDwfAyWPUM9naY9c98b4vJNTs+jAcC+OKPGodmwjvz2IMX1YvV+h6ykUif8206Er9JPj7nlMOGcANTVCYzgt9VQ4qc4ZWpwhFl4TM6hdiAuQZg/7BOkj+tC8nScdgo4Wh1ZOycdfQGKcHf8C2sgtgJiqUoVE9+CsR1O60Ki+pDJCc6+vK+aQ71lEMkUin3ZJ5XgwCuTZ93C8La/j7EQHDgy2bn450nYU2rb4/J+9V6Y+tFd5x5Ob/y0z2rID69Hej2PWse1FRcjF7Vvb086ey4O4UrCdcWyVIdolihDdKRePWWAnIyiiAFEoIoAAAAA") center/cover no-repeat}
 .pat-grid-16x9{grid-template-columns:repeat(3,minmax(0,1fr))}
@@ -1211,6 +1207,7 @@ cursor:pointer;user-select:none;display:flex;align-items:center;gap:4px}
 .diag-asset-delete:disabled{opacity:.35;cursor:not-allowed}
 .diag-asset-delete:not(:disabled):hover{color:var(--on-danger);background:var(--danger-fill);border-color:var(--danger-fill)}
 .diag-custom-hint{font-size:var(--fs-sm);color:var(--text2);margin:4px 0 0 2px;line-height:1.4}
+.diag-rate-toggle{display:flex;align-items:center;margin:6px 0 0 2px}
 @media (max-width:720px){.diag-pattern-layout{grid-template-columns:1fr}}
 @media (hover:hover) and (pointer:fine){.pat-btn:hover{border-color:var(--accent);background:var(--hover-bg)}}
 .sat-row{display:flex;align-items:center;gap:4px;margin-bottom:4px}
@@ -1460,6 +1457,9 @@ body.pg-hide-measure .desktop-nav-group[aria-labelledby="desktopNavGroupMeasure"
 body.pg-hide-measure .dashboard>.card:is([data-desktop-workspace="calibration"],[data-desktop-workspace="meter-profile"],[data-desktop-workspace="3d-lut"],[data-desktop-workspace="icc-profile"]),
 body.pg-hide-measure #meterStatusWrap,body.pg-hide-measure #meterUsbWarnBadge{display:none!important}
 .theme-swatch-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(136px,1fr));gap:8px}
+/* Dark and Light themes, each under its own heading */
+.theme-group-title{margin:14px 0 7px;font-size:var(--fs-xs);font-weight:600;line-height:1.3;color:var(--text-secondary)}
+.ui-settings-theme h3 + .theme-group-title{margin-top:0}
 .theme-swatch-btn{display:flex;align-items:center;gap:8px;min-width:0;padding:7px 9px;border:1px solid var(--border);border-radius:var(--r-md);
 background:var(--surface-inset);color:var(--text-primary);font-size:var(--fs-xs);font-weight:600;text-align:left;cursor:pointer;transition:border-color .15s,background-color .15s}
 .theme-swatch-btn:hover{border-color:var(--accent);background:var(--hover-bg)}

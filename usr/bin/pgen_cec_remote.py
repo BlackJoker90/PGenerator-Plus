@@ -1,7 +1,7 @@
 #!/usr/bin/python3
 # -*- coding: utf-8 -*-
 #
-# pgen_cec_remote.py - PGenerator+ TV remote listener (HDMI-CEC).
+# pgen_cec_remote.py - rampecho TV remote listener (HDMI-CEC).
 #
 # Forwards the TV remote's keys to the daemon (POST /api/remote/key), which
 # steps a running playlist and drives the on-screen pattern menu. Started by
@@ -284,7 +284,7 @@ def serve():
     if la == 0xFF:
         la = claim_playback(fd)
     if la == 0xFF:
-        write_status(message="The TV did not give PGenerator+ a CEC address. Is the TV on, with HDMI-CEC (SimpLink, Anynet+, Bravia Sync) enabled?")
+        write_status(message="The TV did not give rampecho a CEC address. Is the TV on, with HDMI-CEC (SimpLink, Anynet+, Bravia Sync) enabled?")
         os.close(fd)
         return RETRY
     write_status(listening=True, message="Listening for the TV remote.", logical_address=la)

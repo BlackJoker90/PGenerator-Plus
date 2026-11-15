@@ -35,6 +35,14 @@
 # lock-order inversion cannot form. glibc reads this variable once at process
 # start, before any Perl code runs, so it must already be in the environment:
 # re-exec this interpreter exactly once with it set. Harmless on newer glibc.
+# glibc 2.21 reads it only outside secure-execution mode: the init script
+# starts perl with a file capability, and there it is ignored (read on the
+# Pi 2026-11-15: AT_SECURE 1, eight arenas; the WebUI's start line says
+# what the process can tell of it, which after such a start is "not
+# known"). So everything above about one arena holds only for a start
+# without the capability. The wedge as it was caught on the Pi is not this
+# inversion: it is fork against perl's descriptor table, happens with one
+# arena too, and is prevented below (perlio_descriptor_table_presize).
 # Skipped under `perl -c` ($^C): a syntax check must never start the daemon.
 BEGIN {
  if(!$^C && !defined($ENV{"MALLOC_ARENA_MAX"})) {
@@ -86,6 +94,13 @@ do "lg.pm"            || die "Error";
 do "webui.pm"         || die "Error";
 do "bash.pm"          || die "Error";
 do "serial.pm"        || die "Error";
+
+#############################################
+#        perl's descriptor table            #
+#############################################
+# Before the first thread: a table that grows while one thread forks can
+# wedge the daemon for good (command.pm, perlio_descriptor_table_presize).
+$perlio_descriptor_table_reaches=&perlio_descriptor_table_presize();
 
 #############################################
 #                Get Conf                   #

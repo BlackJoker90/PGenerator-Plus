@@ -1,11 +1,14 @@
 <p align="center">
-  <img src="Pgen+_Logo_black_bg_slim.png" alt="PGenerator+" width="640"/>
+  <picture>
+    <source media="(prefers-color-scheme: light)" srcset="brand/rampecho-lockup-light.png"/>
+    <img src="brand/rampecho-lockup-dark.png" alt="rampecho" width="560"/>
+  </picture>
 </p>
 
 <h3 align="center">The Raspberry Pi 4 pattern generator that proves its codes on the HDMI cable: bit-exact, Dolby Vision aware, driven from your TV remote</h3>
 
 <p align="center">
-  <a href="https://github.com/BlackJoker90/PGenerator-Plus/releases/latest"><img src="https://img.shields.io/github/v/release/BlackJoker90/PGenerator-Plus?style=for-the-badge&color=5b7fff&label=release" alt="Latest release"/></a>
+  <a href="https://github.com/BlackJoker90/rampecho/releases/latest"><img src="https://img.shields.io/github/v/release/BlackJoker90/rampecho?style=for-the-badge&color=5b7fff&label=release" alt="Latest release"/></a>
   <img src="https://img.shields.io/badge/Raspberry%20Pi-4-c51a4a?style=for-the-badge&logo=raspberrypi&logoColor=white" alt="Raspberry Pi 4"/>
   <img src="https://img.shields.io/badge/SDR%20%C2%B7%20HDR10%20%C2%B7%20HLG%20%C2%B7%20Dolby%20Vision-1f2433?style=for-the-badge" alt="SDR, HDR10, HLG, Dolby Vision"/>
   <a href="COPYING"><img src="https://img.shields.io/badge/license-GPLv3-3b4252?style=for-the-badge" alt="GPLv3"/></a>
@@ -22,7 +25,7 @@
 </p>
 
 <p align="center">
-  <img src="screenshots/webui-patterns.png" alt="PGenerator+ Web UI in the Volt theme: Patterns workspace with Calman G1 plates, test images and playlists" width="900"/>
+  <img src="screenshots/webui-patterns.png" alt="rampecho Web UI in the Glow theme: Patterns workspace with Calman G1 plates, test images and playlists" width="900"/>
 </p>
 
 ---
@@ -66,7 +69,7 @@ Press **OK or Menu on the TV remote** and every pattern appears as a menu on the
 <td valign="top">
 
 ### 🎛️ Calman connects as a G1
-Calman can drive PGenerator+ as a **Portrait Displays G1**: patches, signal modes and all **19 G1 specialty patterns**, rendered on the Pi. The UPGCI connection works too, now with replies Calman can parse.
+Calman can drive rampecho as a **Portrait Displays G1**: patches, signal modes and all **19 G1 specialty patterns**, rendered on the Pi. The UPGCI connection works too, now with replies Calman can parse.
 
 </td>
 <td valign="top">
@@ -82,7 +85,7 @@ A signal mode change takes **~3.5–4.5 s instead of ~10 s**. Rapid setting chan
 
 ## ✨ Why this fork
 
-This is **BlackJoker90's fork** of [BigShoots/PGenerator-Plus](https://github.com/BigShoots/PGenerator-Plus). It branched from upstream 2.12.1 in September 2026 and has had **145+ commits and 30+ releases** since then (2.12.2 → 2.13.x). Upstream has nothing newer that the fork lacks.
+**rampecho** (formerly PGenerator+) is **BlackJoker90's fork** of [BigShoots/PGenerator-Plus](https://github.com/BigShoots/PGenerator-Plus). It branched from upstream 2.12.1 in September 2026 and has had **145+ commits and 30+ releases** since then (2.12.2 → 2.13.x). Upstream has nothing newer that the fork lacks.
 
 Everything the original does is still here: patterns over TCP for Calman, ColourSpace, HCFR and Resolve; on-Pi meter workflows; LG AutoCal; profile building. The fork's focus is the **signal on the HDMI cable** and the **day-to-day experience**:
 
@@ -105,7 +108,7 @@ Changing signal mode takes **~3.5–4.5 s instead of ~10 s**. Format changes go 
 <td valign="top">
 
 ### 🎛️ Calman that just works
-The UPGCI handshake now has proper ACKs and the settings format Calman actually parses. `GET_SETTINGS` works. Codes are rounded to the output depth, with a notice when a code is not exact. YCbCr 4:2:0 requests are refused cleanly with a NAK instead of breaking the link. Calman can also **connect to PGenerator+ as a G1** and control it completely; the output follows what Calman shows (a G1 connection starts at RGB 8-bit Limited, like Calman's G1 source). All 19 **G1 specialty patterns** are rendered on the Pi; you start them from Calman or from the WebUI.
+The UPGCI handshake now has proper ACKs and the settings format Calman actually parses. `GET_SETTINGS` works. Codes are rounded to the output depth, with a notice when a code is not exact. YCbCr 4:2:0 requests are refused cleanly with a NAK instead of breaking the link. Calman can also **connect to rampecho as a G1** and control it completely; the output follows what Calman shows (a G1 connection starts at RGB 8-bit Limited, like Calman's G1 source). All 19 **G1 specialty patterns** are rendered on the Pi; you start them from Calman or from the WebUI.
 
 </td>
 <td valign="top">
@@ -125,7 +128,7 @@ Without a display, the renderer waits instead of failing. The UI says so in a ba
 <td valign="top">
 
 ### 🖥️ A reworked Web UI
-**13 colour themes** (dark, light, OLED, Natrium, the lime Volt …) and workspace navigation. The look is built for a dim room: the signal settings in Output are large keys with their name inside, each with a line for what the generator actually sends, and Dark and Light step in tone instead of drawing outlines, with a single aqua accent. The typeface is served by the Pi itself, so the page looks the same without internet. Only sending patterns (for example from Calman or HCFR)? Hide the Measure workspaces with one switch in Settings. The UI shows the measured HDMI link depth and clock. It is served compressed with an ETag, pauses polling in hidden tabs and uses its own dialogs instead of browser pop-ups. Toasts appear only for warnings and errors.
+**13 themes**, ten dark and three light, and workspace navigation. Every theme has the same look and differs only in its colours: Output laid out as a dashboard, the settings as tiles with an icon, each with a line for what the generator actually sends, the HDR metadata on its ST 2084 curve, and the Signal Self-Test as a ring with one segment per mode. One accent colour is kept for the signal (the port in use, a value not applied yet, the action that sends it). The default, **Glow**, is warm near-black with an orange accent; the others (dark, light, OLED, Natrium, the lime Volt …) bring their own ground and accent. The typefaces are served by the Pi itself, so the page looks the same without internet. Only sending patterns (for example from Calman or HCFR)? Hide the Measure workspaces with one switch in Settings. The UI shows the measured HDMI link depth and clock. It is served compressed with an ETag, pauses polling in hidden tabs and uses its own dialogs instead of browser pop-ups. Toasts appear only for warnings and errors.
 
 </td>
 </tr>
@@ -179,7 +182,7 @@ Signal Mode, Bit Depth, Color Format and Range each have a **Sent** line: what t
 
 ## ⚖️ At a glance: fork vs. original
 
-| | Original ([BigShoots](https://github.com/BigShoots/PGenerator-Plus) 2.12.1) | **This fork (2.13.x)** |
+| | Original ([BigShoots](https://github.com/BigShoots/PGenerator-Plus) 2.12.1) | **This fork (3.0)** |
 |---|---|---|
 | 10-bit pattern codes | quantised through 8 bit on the way to the GPU | **sent at full 10-bit precision** |
 | RGB Limited output | kernel compression CSC after the framebuffer | **bit-exact** (patched vc4, verified by scanout readback) |
@@ -199,6 +202,7 @@ Signal Mode, Bit Depth, Color Format and Range each have a **Sent** line: what t
 | Calman's percent greys on an 8-bit output | 10-bit code with the low bits dropped | **the 8-bit code of that percent, as Calman's own 8-bit formula gives it**; other 10-bit codes go to the nearest code with a notice |
 | What goes out on the cable | – | **shown in each setting field**, checked against the setting, quiet adjustments named (e.g. 12-bit sent as 10-bit); in Dolby Vision the vendor infoframe against the display's Dolby block |
 | Range mismatch between Pi and display | – | **Range Check** test image: shows whether the display decodes Limited or Full, next to the range on the cable, plus an EDID check that predicts from the display's EDID (QS/QY) and the Pi's AVI infoframe (Q/YQ, VIC) whether the display on Auto matches |
+| Where an HDR10 display clips, and whether it follows the metadata | – | **HDR Steps**: grey bars at absolute luminances up to the applied Max Luma (MaxDML), each at its exact PQ code (ST 2084, quantised as BT.2100) for the depth and range on the cable, the luminance and the code named under every bar, drawn again when signal settings are applied. **HDR Metadata Cycle**: the same bars up to 10,000 cd/m², unchanged, while MaxDML and MaxCLL step through 600, 1000, 2000, 4000 and 10,000 every 6 s (MaxFALL never above the step's MaxCLL); your own values come back when it ends: another pattern, applied settings, calibration software connecting, or by itself after 30 minutes |
 | HDMI link drop during a measurement | – | **recorded with the time**, notice and banner: readings across it can't be combined |
 | Calman connection as G1 | – | **full control** from Calman (patches, signal modes, G1 patterns) |
 | Calman G1 specialty patterns | – | all 19 rendered on the Pi, started from Calman or the WebUI |
@@ -206,8 +210,8 @@ Signal Mode, Bit Depth, Color Format and Range each have a **Sent** line: what t
 | Rapid setting changes | could start two renderers at once (vc4 crash, reboot needed) | **serialized**: one renderer, no crash |
 | Display's Dolby Vision block | only "DV supported" | peak, black, interfaces and primaries shown; mismatch warnings; patches above the peak flagged |
 | SPD InfoFrame | always sent ("Broadcom Videocore", media player); can limit a display's LLDV gamut to Rec.709 (ASUS PA32DC, Light Illusion) | **never sent**: removed in the vc4 driver (Pi 4) |
-| Diagnostic video player | – | **8-bit SDR picture**, H.264 via V4L2 hardware decode and zero-copy DRM scanout when available; software fallback and other codecs (limits below) |
-| WebUI themes | dark / light / system | **13 themes** incl. Natrium dark & light and Volt, Scope, Ultraviolet |
+| Diagnostic video player | – | **8-bit SDR picture**, H.264 via V4L2 hardware decode and zero-copy DRM scanout when available; software fallback and other codecs (limits below). **Play at the clip's frame rate** switches the output to the configured resolution at the clip's rate (23.976 to 60 Hz) while it plays |
+| WebUI themes | dark / light / system | **13 themes** (10 dark, 3 light) in one look with a dashboard layout for Output, each in its own colours: Glow (the default), Natrium dark & light, Volt, Scope, Ultraviolet … |
 | WebUI look | – | signal settings as keys with their name inside, each with its read-back line, own typeface served by the Pi (works offline); a select's menu opens above or below its key, never over its name |
 | Measurement workspaces | – | **can be hidden** in Settings for pattern-only setups (Calman, HCFR) |
 | HDMI link readout | – | measured link depth and clock |
@@ -234,19 +238,19 @@ Signal Mode, Bit Depth, Color Format and Range each have a **Sent** line: what t
 <td align="center"><sub>Playlists: the deck follows the TV remote; Start, duplicate or edit from the library</sub></td>
 </tr>
 <tr>
-<td valign="top"><img src="screenshots/webui-settings.png" alt="Settings workspace with the theme picker (Volt selected), the Measure switch and settings backup"/><br/><p align="center"><sub>Settings: 13 themes, layout and backup in one place</sub></p></td>
+<td valign="top"><img src="screenshots/webui-settings.png" alt="Settings workspace with the theme picker (Glow selected), the Measure switch and settings backup"/><br/><p align="center"><sub>Settings: themes, layout and backup in one place</sub></p></td>
 </tr>
 <tr>
 <td colspan="2" valign="top"><img src="screenshots/webui-system.png" alt="System workspace: Device Info with CPU, memory and temperature meters and tiles for board, hostname, resolution, uptime, RAM and network, plus the GPU Memory and Scaling Type selects, and Software Update below"/><br/><p align="center"><sub>System: CPU, memory and temperature at a glance, the device facts, GPU memory and CPU Scaling Type set right in their tiles, and the OTA update</sub></p></td>
 </tr>
 <tr>
-<td colspan="2" valign="top"><img src="screenshots/webui-live-info.png" alt="Output workspace with the signal settings, the Range with Calman and Dolby Vision with Calman options, and the Live Information drawer open: the output as measured, decoded AVI, DRM and SPD infoframes, and HDMI-CEC"/><br/><p align="center"><sub>Output on Desktop with the two Calman options, and Live Information: the output as measured, the infoframes the Pi sends, decoded and updated as the signal changes, and HDMI-CEC with the TV remote</sub></p></td>
+<td colspan="2" valign="top"><img src="screenshots/webui-live-info.png" alt="Output workspace with the Pi ports, signal presets and the signal settings as tiles, each with what is sent, and the Live Information drawer open: the output as measured, decoded AVI, DRM and SPD infoframes, and HDMI-CEC"/><br/><p align="center"><sub>Output on Desktop: the signal settings as tiles, each with what the generator sends, and Live Information: the output as measured, the infoframes the Pi sends, decoded and updated as the signal changes, and HDMI-CEC with the TV remote</sub></p></td>
 </tr>
 <tr>
 <td colspan="2" valign="top"><img src="screenshots/webui-selftest.png" alt="Signal self-test in Output: all 12 modes bit-exact (SDR, HDR10, HLG, Dolby Vision), with link details and the drawn swatches per mode"/><br/><p align="center"><sub>Signal self-test, right below Display Settings: every mode read back from the scanout on a real Pi 4, bit-exact in 12 of 12</sub></p></td>
 </tr>
 <tr>
-<td colspan="2" valign="top"><img src="screenshots/tv-restart.png" alt="Restart screen on the TV: PGenerator+ logo, Restarting PGenerator+, a progress bar and the steps Shut down (done), Restart (current) and Start"/><br/><p align="center"><sub>On the TV during a restart, in the Volt theme (rendered by the Pi's start screen program); at start-up the same screen follows System, Network, Services and PGenerator+</sub></p></td>
+<td colspan="2" valign="top"><img src="screenshots/tv-restart.png" alt="Restart screen on the TV: rampecho logo, Restarting rampecho, a progress bar and the steps Shut down (done), Restart (current) and Start"/><br/><p align="center"><sub>On the TV during a restart, in the Glow theme (rendered by the Pi's start screen program); at start-up the same screen follows System, Network, Services and rampecho</sub></p></td>
 </tr>
 </table>
 <p align="center"><sub>Top right: the same playlists on a phone, with a bottom tab bar</sub></p>
@@ -259,14 +263,14 @@ Signal Mode, Bit Depth, Color Format and Range each have a **Sent** line: what t
 
 ### 💾 New install: flash the image
 
-1. Download the newest release that has image parts, from [Releases](https://github.com/BlackJoker90/PGenerator-Plus/releases) (`PGenerator_Plus_vX.Y.Z_pi4.img.xz.001` and `.002`).
+1. Download the newest release that has image parts, from [Releases](https://github.com/BlackJoker90/rampecho/releases) (`PGenerator_Plus_vX.Y.Z_pi4.img.xz.001` and `.002`).
    Image releases are rare by design. Most releases are OTA-only, so grab the latest image and update from there.
 2. Join the parts and flash:
    - **Windows:** open `.001` with [7-Zip](https://www.7-zip.org/) to get the `.img`, then flash it with [Balena Etcher](https://etcher.balena.io/) or [Rufus](https://rufus.ie/).
    - **macOS / Linux:** `cat PGenerator_Plus_*_pi4.img.xz.0* > pgen.img.xz`, then flash `pgen.img.xz` with [Raspberry Pi Imager](https://www.raspberrypi.com/software/). Imager reads `.xz` directly.
    - Use a microSD card or USB stick of at least 8 GB.
 3. Boot the Pi and connect to it, using one of the methods below.
-4. Open **`http://pgenerator.local`** (or the Pi's IP address).
+4. Open **`http://rampecho.local`** (or the Pi's IP address). `http://pgenerator.local` still works and forwards to `rampecho.local`.
 5. Go to **System → Software Update → Check for Updates** to move to the newest OTA release.
 
 <details>
@@ -297,17 +301,17 @@ Signal Mode, Bit Depth, Color Format and Range each have a **Sent** line: what t
 
 ### 🔀 Coming from the original project?
 
-OTA updates stay within one `MAJOR.MINOR` family. 2.13 needs a new kernel module, so a Pi on upstream 2.12.x cannot update to the fork over the air. To switch:
+OTA updates stay within one `MAJOR.MINOR` family, with one bridge: 2.13 goes to 3.0. 2.13 needs a new kernel module, so a Pi on upstream 2.12.x cannot update to the fork over the air. To switch:
 
 1. Export your settings with **Export System Settings** in the Web UI.
 2. Flash the latest fork image (see above).
-3. Import the backup, then use **Check for Updates** to reach the newest 2.13.x.
+3. Import the backup, then use **Check for Updates** to reach the newest release. A Pi on 2.13.51 or older is offered 2.13.52 first; check again from there to get 3.0.
 
 From then on the Pi follows this fork's releases. The update source is `usr/share/PGenerator/update-channel`, and an `update_repo=owner/repo` line in `PGenerator.conf` overrides it.
 
 ### ⬆️ Updating
 
-- **Web UI:** **System → Software Update → Check for Updates → Install Update.** The dialog shows the release notes and download progress, then restarts the service. The release dropdown also lets you reinstall the current release or roll back to an earlier one.
+- **Web UI:** **System → Software Update → Check for Updates → Install Update.** The dialog shows the release notes and download progress, then restarts the service. The release dropdown also lets you reinstall the current release or roll back to an earlier one; from 3.0 that includes the 2.13.x releases. Coming from 2.13.51 or older, install 2.13.52 first: only from there does the updater offer 3.0.
 - **SSH** (`root` / `PGenerator!!$`):
 
   ```bash
@@ -317,9 +321,9 @@ From then on the Pi follows this fork's releases. The update source is `usr/shar
 
 ---
 
-## 🎨 What PGenerator+ does
+## 🎨 What rampecho does
 
-PGenerator+ is a free, open-source display calibration suite for the Raspberry Pi 4, built around a precision HDMI test pattern generator. It produces SDR, HDR10, HLG and Dolby Vision patterns. The calibration software on your laptop drives it over TCP/IP, or it runs closed-loop SDR and HDR workflows on the Pi itself with a USB colorimeter.
+rampecho is a free, open-source display calibration suite for the Raspberry Pi 4, built around a precision HDMI test pattern generator. It produces SDR, HDR10, HLG and Dolby Vision patterns. The calibration software on your laptop drives it over TCP/IP, or it runs closed-loop SDR and HDR workflows on the Pi itself with a USB colorimeter.
 
 - **Precision HDMI patterns:** full-screen patches, windows, APL backgrounds, custom RGB triplets and patch sizes, drawn through DRM/KMS.
 - **HDR and Dolby Vision:** HDR10 (ST.2084 PQ with mastering metadata), HLG, standard and Low Latency Dolby Vision. AVI, DRM and DOVI infoframes are set correctly, and capabilities are detected from the EDID.
@@ -328,7 +332,7 @@ PGenerator+ is a free, open-source display calibration suite for the Raspberry P
 - **LG AutoCal (SDR and HDR):** on-device closed-loop calibration of LG TVs: 26-point greyscale, RGB balance, 3D LUT and HDR tone mapping, with an optional Tone Mapping Shadow Fix.
 - **Meter workflows:** ArgyllCMS `spotread` with persistent sessions, greyscale, colour and saturation sweeps, CCSS management, and live ΔE and chromaticity charts.
 - **Display profiles:** measured Windows MHC2 and KDE HDR cLUT profiles (ICC v2.2 / v4.4 with CICP), built in the browser.
-- **mDNS:** reachable at `pgenerator.local`.
+- **mDNS:** reachable at `rampecho.local` and, for installed apps and bookmarks, `pgenerator.local`. Opening the page at `pgenerator.local` forwards the browser to `rampecho.local` (307, not kept by the browser); API calls under the old name are answered as before. The first time, the browser's WebUI settings (theme, layout, Auto-Cal resume, custom series backup …) come along: until 3.0.0 they were stored under the Pi's IP address, and a short hand-over page passes them to `rampecho.local` once, without overwriting anything already set there.
 - **Field networking:** Bluetooth PAN, Wi-Fi AP, Ethernet.
 
 ---
@@ -341,7 +345,7 @@ PGenerator+ is a free, open-source display calibration suite for the Raspberry P
 
 - **Protocol:** SpectraCal Unified Pattern Generator Control Interface (port `2100`)
 - **Connect:** **Find Source** → Manufacturer `SpectraCal` (or `Portrait Displays`) → Model `SpectraCal - Unified Pattern Generator Control Interface`. Enter the Pi's IP and connect.
-  - *Calman control:* PGenerator+ applies Calman's commands for SDR / HDR10 / HLG, EOTF, colorimetry, format and mastering metadata in real time. In Calman 2026 the UPGCI source itself only has an HDR switch with EOTF and mastering metadata; colour format, bit depth, range, resolution and Dolby Vision are settings of the **Portrait Displays G1** source (*Connect as G1* below), or stay as set in Output. In HDR10, HLG and Dolby Vision the colorimetry stays BT.2020, the container these signals are defined in; a BT.709 gamut target is drawn inside it.
+  - *Calman control:* rampecho applies Calman's commands for SDR / HDR10 / HLG, EOTF, colorimetry, format and mastering metadata in real time. In Calman 2026 the UPGCI source itself only has an HDR switch with EOTF and mastering metadata; colour format, bit depth, range, resolution and Dolby Vision are settings of the **Portrait Displays G1** source (*Connect as G1* below), or stay as set in Output. In HDR10, HLG and Dolby Vision the colorimetry stays BT.2020, the container these signals are defined in; a BT.709 gamut target is drawn inside it.
   - *Dolby Vision needs the G1 source:* the UPGCI source does not send Calman's Dolby Vision command (`CONF_DV`). In a Calman 5.14 log, "Dolby Vision RGB Tunneling" sent the same commands as HDR10, so the output is HDR10. Connect as **Portrait Displays G1** instead, which sends it. Whether Calman Home offers the G1 source is not confirmed. Connecting the UPGCI source while Dolby Vision is on switches the output to SDR (its handshake sends `HDR_ENABLE:False`), in the range Output had before Dolby Vision, when that was switched on in the WebUI or over the API with 2.13.48 or later.
   - *Bit depth:* the Calman thread follows the configured bit depth. 10-bit codes stay exact. Calman sends a grey it holds as a percent level in 10 bit whatever its bit depth setting says (20 % Limited is 239), and RGB triplets as 8-bit codes times 4. On an 8-bit output a whole-percent grey gets the 8-bit code of that percent (Calman's own 8-bit formula: 2 % Limited is 20, where rounding the 10-bit code 82 gives 21); any other code 8 bit cannot carry goes to the nearest code, with a notice for the patch. The `RGB_S`, `RGB_B` and `RGB_A` patches and their backgrounds are converted this way (a rounded background has no notice of its own); a `CommandRGB` flagged as 10 bit keeps the nearest code. In Full range a percent grey whose 10-bit code is a multiple of 4 cannot be told from a triplet and keeps code/4, which can be one code off.
   - *Dolby Vision container:* in a Calman session, Standard Dolby Vision signals the **P3-D65** container (BT.709 YCC matrix and P3 `rgb_to_lms` in the metadata), as PGenerator 1.6 did: Calman's Dolby Vision patches are RGB of its P3 target (red is 504,64,64). **Dolby Vision with Calman** in Output switches to BT.2020, the container versions up to 2.13.45 signalled; there the same patches are BT.2020 colours and measure more saturated than Calman's targets, while greys are the same. The container applies from the first picture Calman shows (or from Calman switching Dolby Vision on itself) until Calman disconnects, to everything shown in Standard Dolby Vision in that time, the WebUI's own patterns and measurements included; a Calman that connects and shows nothing changes nothing. When the last Calman session ends, Dolby Vision that stays on goes back to BT.2020, which the WebUI's own patterns and measurements are computed for: the renderer restarts once for it and the last patch is no longer shown. Low Latency Dolby Vision has no container of its own and is not touched.
@@ -352,15 +356,15 @@ PGenerator+ is a free, open-source display calibration suite for the Raspberry P
   - *Refused settings:* settings the Pi or the display cannot carry (link bandwidth, missing EDID support for a format, depth or HDR mode) get a NAK. The output stays as it was, the WebUI shows the reason and what works, and patches get a NAK until Calman sends settings that work (or disconnects). The same applies to port 85 clients (`ERR:Refused: …`).
   - *YCbCr is always Limited:* with Range Full on a YCbCr output (Calman, LightSpace), the full-range codes are converted to studio range (0–1023 → 64–940) and the AVI infoframe says Limited, also on modes without a CEA VIC.
   - *Session safety:* pattern state is cleared on session start, shutdown and disconnect.
-  - *Connect as G1:* Calman can also connect through **Find Source → Portrait Displays G1** and controls PGenerator+ completely that way: patches, signal modes and every G1 specialty pattern (Basic Alignment, Warm-Up, Granger Rainbow, Brightness, Contrast, Color Bars, SMPTE, ANSI checkerboards and the rest). The same 19 patterns are in the WebUI under Patterns.
-  - *Compatibility note:* PGenerator+ is an independent community project, not affiliated with or endorsed by Portrait Displays. Make sure your Calman license and workflow comply with the vendor's terms.
+  - *Connect as G1:* Calman can also connect through **Find Source → Portrait Displays G1** and controls rampecho completely that way: patches, signal modes and every G1 specialty pattern (Basic Alignment, Warm-Up, Granger Rainbow, Brightness, Contrast, Color Bars, SMPTE, ANSI checkerboards and the rest). The same 19 patterns are in the WebUI under Patterns.
+  - *Compatibility note:* rampecho is an independent community project, not affiliated with or endorsed by Portrait Displays. Make sure your Calman license and workflow comply with the vendor's terms.
   - *License note:* Portrait Displays removed UPGCI from Calman **Home** licenses starting with 5.15.x (2024). Home users need 5.14.x or older, a professional tier, or other software (ColourSpace, HCFR).
 
 **2. ColourSpace / LightSpace CMS**
 
 - **Protocol:** XML network calibration protocol (port `85`)
 - **Connect:** **Hardware Options** → Hardware `Network` (or `PGenerator`) → enter the Pi's IP.
-- **Connect as PiTPG:** in a Profiling window, **Hardware Options** → Hardware `PiTPG` → enter the Pi's IP in *Network Address* (PGenerator+ is `pgenerator.local`, not `PiTPG.local`). Port 85 tells the two protocols apart by the client's first bytes, so the classic entry keeps working.
+- **Connect as PiTPG:** in a Profiling window, **Hardware Options** → Hardware `PiTPG` → enter the Pi's IP in *Network Address* (rampecho is `rampecho.local` or `pgenerator.local`, not `PiTPG.local`). Port 85 tells the two protocols apart by the client's first bytes, so the classic entry keeps working.
   - *What it does:* PiTPG protocol 2 as PiTPG 2.0.0 answers it (reported edition `basic`): settings with PiTPG's value ranges, rolled back when one is refused, and after a refusal patches are refused until settings that work come or ColourSpace disconnects (HDR metadata sent in between waits until then); modes matched to the display's own list within 0.005 Hz, the EDID's timing preferred over the userdef boot mode; patches whose reply carries the DRM flip that showed them (sequence, time, frame period); the 11 test patterns (Contrast, Brightness, ANSI 1/2, Corner Box 1/2, Probe Alignment, Granger, horizontal and vertical ramps, FALD) drawn in the last patch's window; a peak note for HDR10 and Dolby Vision patches above the display's declared peak; HDMI info, EDID, InfoFrames, log and kernel log as texts.
   - *Codes and depth:* as in PiTPG, patch codes go out unchanged: the patch scale (Full, Legal, Extended) sets the RGB range in the AVI infoframe, not the codes (in TV-led Dolby Vision it sets the range of the Dolby signal instead: Full gives full-range tunnel codes and metadata, Legal and User limited ones, Extended is refused), and the link follows the patch depth (8-bit patches on an 8-bit link, 10-bit patches need a 10-bit one; TV-led Dolby Vision stays on its 8-bit tunnel link with either). Both end with the next settings change and when ColourSpace disconnects, and the output settings in effect before them come back.
   - *Differences from a PiTPG:* Granger is not drawn in Dolby Vision, YCbCr with a Full scale is refused (YCbCr is always Limited), and refused settings are put back rather than kept, and their refusal ends when ColourSpace disconnects. Ted's Edition content is not part of it.
@@ -373,7 +377,7 @@ PGenerator+ is a free, open-source display calibration suite for the Raspberry P
 
 **4. Resolve protocol (Calman / HCFR / DisplayCAL)**
 
-- **Protocol:** XML calibration protocol (port `20002`). PGenerator+ connects *outbound* to the calibration PC, which helps across subnets.
+- **Protocol:** XML calibration protocol (port `20002`). rampecho connects *outbound* to the calibration PC, which helps across subnets.
 - **Connect:** in the Web UI's **Resolve Protocol** card, enter the PC's IP and port and click **Connect**.
 - **Range:** the protocol carries no range. The codes are drawn as sent, in the range set in Output; Resolve neither changes the range nor gives one back when it disconnects. Set the client's levels to the display's input range: on RGB Limited (and on YCbCr) the client sends video levels (DisplayCAL: Output levels *Auto* detects it, or *TV RGB 16-235*; ColourSpace: Patch Scale *Legal*), on RGB Full it sends full range.
 - **Bit depth:** the XML's `bits` is the precision of the patch codes, not an output setting. The output keeps the depth set in the WebUI: 8-bit codes on a 10-bit output take the same 8 → 10-bit step as the G1 patches, 10-bit codes on an 8-bit output are scaled to 8 bits by the renderer.
@@ -387,25 +391,27 @@ PGenerator+ is a free, open-source display calibration suite for the Raspberry P
 
 ## 🗺️ Web UI tour
 
-Served on **port 80** at `http://pgenerator.local`. It has a **Desktop** layout with a sidebar of workspaces and a **Tablet** layout for tablets and phones: a bottom tab bar opens one workspace at a time (Output first), with draggable, collapsible cards. The layout is chosen in Settings → UI Settings.
+Served on **port 80** at `http://rampecho.local`. It has a **Desktop** layout with a sidebar of workspaces and a **Tablet** layout for tablets and phones: a bottom tab bar opens one workspace at a time (Output first), with draggable, collapsible cards. The layout is chosen in Settings → UI Settings.
 
 | Workspace | What's in it |
 |---|---|
 | **Output** | Signal mode (SDR / HDR10 / HLG / Dolby Vision), resolution from the EDID, bit depth, colour format, colorimetry, range, and HDR10 and DV metadata (with hints for measuring Dolby Vision); **Range with Calman** (follow Calman, or always Full / Limited) and **Dolby Vision with Calman** (P3-D65 or BT.2020 container for Calman's Dolby Vision patches). Options the Pi or the display cannot carry stay visible but locked, with the reason. A **Sent** line in each setting field shows what is actually sent, checked against the setting, and any quiet adjustment; banners show refused settings (with what works), HDMI link interruptions during a measurement and a test EDID in use. Shows a banner while no display is connected. Moving the cable to the other HDMI port keeps the resolution (the mode is followed by its timing, not its list position) and the output follows the cable. Below it the **Signal Self-Test**: draws known codes in every signal mode and reads the scanout back, next to link depth, range CSC, AVI infoframe, HDR metadata and the Dolby Vision infoframe |
-| **Patterns** | Calman G1 plates (favourites Basic Alignment, Warm-Up, Granger Rainbow, plus all others; Basic Alignment doubles as an overscan check: numbered rings 1 to 5 % in from each edge, so the outermost ring still visible shows how much the display crops), the test images Range Check (sub-black codes show whether the display decodes the signal as Limited or Full, next to the range on the cable; an EDID check from the display's EDID and the Pi's AVI infoframe says whether the display on Auto should match), White Clipping and Black Clipping, your own uploaded images and videos (browser-prepared renderer previews or the 8-bit SDR Pi video player; see limits below), and **playlists** you step through with the TV remote; "Show menu on TV" opens the on-screen pattern menu |
+| **Patterns** | Calman G1 plates (favourites Basic Alignment, Warm-Up, Granger Rainbow, plus all others; Basic Alignment doubles as an overscan check: numbered rings 1 to 5 % in from each edge, so the outermost ring still visible shows how much the display crops), the test images Range Check (sub-black codes show whether the display decodes the signal as Limited or Full, next to the range on the cable; an EDID check from the display's EDID and the Pi's AVI infoframe says whether the display on Auto should match), White Clipping and Black Clipping, in HDR10 **HDR Steps** (PQ bars up to the applied Max Luma: the last bar you can tell from its neighbour is where the display clips) and the **HDR Metadata Cycle** (the mastering peak and MaxCLL on the cable change every 6 s under an unchanged picture: a display that follows the metadata changes its tone mapping with each step; it ends by itself after 30 minutes), your own uploaded images and videos (browser-prepared renderer previews or the 8-bit SDR Pi video player; see limits below), and **playlists** you step through with the TV remote; "Show menu on TV" opens the on-screen pattern menu |
 | **Calibration** | Meter detection, single and continuous reads, series runs (Greyscale 21/11, Colors 30, Saturation 24), charts, and session export |
 | **Meter Profiler** | Meter correction (CCSS) editor and preview |
 | **3D LUT · Display Profiler** | LUT handling, MHC2 / KDE HDR profile building |
 | **Connectivity** | Wi-Fi client, access point and Bluetooth in one Network card, LG TV control (pairing, AutoCal: greyscale, 3D LUT, HDR tone map, Shadow Fix) and the Resolve client; on Tablet and Phone also HDMI-CEC |
 | **System** | Device info: CPU, memory and temperature with meters, plus board, hostname, resolution, uptime, RAM and the network interfaces; GPU memory (asks before the required reboot) and CPU **Scaling Type** (Performance recommended, applies at once) are set in their tiles. Below the device info: Software Update (with notes, progress, rollback) and Download Logs |
 | **Live Information** (right-hand drawer on Desktop) | Active signal, the infoframe decoder (AVI, DRM and SPD), the measured HDMI link depth and clock, and HDMI-CEC with the TV remote. Updated while open; a failed read says how old the frames on screen are. On Tablet and Phone the infoframe decoder is a card in **System** |
-| **Settings** | Layout, zoom, **13 themes**, Show/Hide for the Measure workspaces, and settings backup and restore |
+| **Settings** | Layout, zoom, **13 themes** in a Dark and a Light group (Glow is the default), Show/Hide for the Measure workspaces, and settings backup and restore |
 
 **Custom Diagnostic Video — Pi player limits.** `pg_diag_video_player` uses the Pi 4's bcm2835 H.264 hardware decoder when `/dev/video10` identifies it and `pg_v4l2_player` is installed. ffmpeg only demuxes H.264 and inserts access-unit delimiters; decoded 8-bit YU12/NV12 DMA-BUFs go directly to a DRM overlay. The HVS scales the visible crop, preserves the display aspect ratio for unrotated input and converts YCbCr to RGB, with black borders. Clips with rotation tags or display-matrix side data use software ffmpeg autorotate before aspect fitting. On the hardware path, no decoded pixels are copied by the CPU. Constant frame rate is assumed. Measured on a Pi 4 (kernel 5.10): **1080p24 and 1080p60 H.264 test clips played in real time** (a 1080p60 clip at 3.65 Mbit/s: 60.0 fps; the player used about 2 % CPU at 24p, software decoding about 270 %). A clip far beyond H.264 Level 4.2 (frames of about 800 KB, about 380 Mbit/s) stalled for about 250 ms at times. At a lower output refresh, an older late frame is dropped only when a newer decoded replacement is already available. Decode-ahead continues during a pending flip. A lone late frame is shown and the pacing clock is re-anchored, so a slightly slow decoder keeps presenting instead of freezing while discarding every frame. Decoder-limited playback can still run below real time. Logs report completed flip FPS, `late_drops`, `error_drops` and `reanchors`.
 
-Other codecs, including HEVC, keep software decoding. Expect about **1080p24–30 at H.264-class bitrates**, depending on the clip. **4K HEVC is not real time: 0.255× measured** on the Pi 4 (2026-11-12). Hardware admission requires known Baseline/Constrained Baseline/Main/High/Constrained High, progressive `yuv420p` or `yuvj420p` (8-bit 4:2:0). High 10, 4:2:2, 4:4:4, interlaced input and unknown profile/pixel-format/field-order metadata go directly to software; their hardware correctness is unconfirmed. ffprobe is required for source admission in both paths. A missing executable, nonzero probe exit, unreadable metadata or no selected video stream refuses playback before anything is stopped: a refused request leaves the current video or pattern on the output. The maintainer verified ffprobe 7.0.2-static on the Pi and support for the side-data query; deploy ffprobe with images where it is absent. Both probe and software output explicitly select the first video stream (`0:v:0`). Software applies `fps=min(source_fps, output_refresh)` before scaling when the configured output refresh is known; this drops excess frames without duplicating a slower clip. A direct invocation without refresh cannot apply this cap. CPU-limited software decoding may still run below real time. Browser-prepared previews remain a separate renderer path: up to three seconds at eight frames per second, not full-rate clip playback.
+Other codecs, including HEVC, keep software decoding. Expect about **1080p24–30 at H.264-class bitrates**, depending on the clip. **4K HEVC is not real time: 0.255× measured** on the Pi 4 (2026-11-12). **HDR10 clips are not played:** 1080p HEVC Main 10 at 10 Mbit/s decoded at 0.80× real time in software and at 0.48× with the conversion to 10-bit RGB (2026-11-13); this image's ffmpeg has no hardware HEVC decoder. Hardware admission requires known Baseline/Constrained Baseline/Main/High/Constrained High, progressive `yuv420p` or `yuvj420p` (8-bit 4:2:0). High 10, 4:2:2, 4:4:4, interlaced input and unknown profile/pixel-format/field-order metadata go directly to software; their hardware correctness is unconfirmed. ffprobe is required for source admission in both paths. A missing executable, nonzero probe exit, unreadable metadata or no selected video stream refuses playback before anything is stopped: a refused request leaves the current video or pattern on the output. The maintainer verified ffprobe 7.0.2-static on the Pi and support for the side-data query; deploy ffprobe with images where it is absent. Both probe and software output explicitly select the first video stream (`0:v:0`). Software applies `fps=min(source_fps, output_refresh)` before scaling when the configured output refresh is known; this drops excess frames without duplicating a slower clip. A direct invocation without refresh cannot apply this cap. CPU-limited software decoding may still run below real time. Browser-prepared previews remain a separate renderer path: up to three seconds at eight frames per second, not full-rate clip playback.
 
 The daemon passes the **exact configured timing** (clock, syncs, totals and flags) to both DRM players. Active and advertised modes must match it, including the interlace flag (picture-aspect annotations are excluded from the timing comparison); modetest's 30 fps for 1080i is treated as 60 fields/s and cannot select 1080p30. Console restoration may have changed the active mode on renderer exit. Logs distinguish `active-exact` and `configured-exact`; unavailable/unrepresentable configured timings are refused. Direct CLI use without an exact timing retains its legacy selection rules. Port-85 VIDEO calls without dimensions use the configured renderer size. Interlaced output timing/presentation still needs verification on the Pi.
+
+**Play at the clip's frame rate** (the checkbox under the video picker, on by default; `"match_frame_rate":true` in a `/api/pattern` request, off by default there) replaces that timing for one clip: a progressive clip plays in the configured resolution at its own frame rate (23.976, 24, 25, 29.97, 30, 50, 59.94 or 60 Hz), or at the lowest whole multiple of it, when the display lists such a mode. The source check reports the clip's rate (`avg_frame_rate`); the daemon picks the mode from the display's list and hands its exact timing to the player, which refuses a timing the display does not advertise. The pixel clock never exceeds the configured mode's, so a 60 fps clip on a 30 Hz output keeps 30 Hz. An interlaced configured mode, an interlaced clip, a clip without a steady frame rate and a rate the display does not list keep the configured timing; the answer and the log say which mode plays. The configured mode comes back when the clip ends.
 
 Both paths produce an **8-bit SDR picture** and use tagged BT.601/709/2020 non-constant-luminance input matrices; only explicit bt709, bt470bg, smpte170m and bt2020nc matrix tags are accepted. Other matrices (including ycgco, ictcp and bt2020c) are refused in both paths. An explicit bt2020nc matrix additionally requires known, supported primaries and transfer tags for every codec; it never inherits the untagged SDR assumptions. Correctly tagged bt2020nc input with supported primaries/transfer can be converted, but BT.2020 primaries remain refused without gamut mapping. Untagged H.264 SD defaults to BT.601, HD (source height >576) to BT.709. If a successful probe supplies no source height, unknown-matrix software input uses BT.601 and logs that default. Probe failure never becomes an unknown-colour default. Explicit matrix tags still win when available. The software scale filter specifies the same input matrix before resizing. A matrix conversion does not convert source primaries. Both paths accept only **BT.709 or SD BT.470BG/SMPTE 170M/SMPTE 240M primaries**, plus unknown/empty tags under the SD/HD default rule. BT.470M (Illuminant C), BT.2020, Display P3, DCI-P3, XYZ and all other unsupported primaries are refused because no gamut mapping to Default RGB output is implemented. Transfer admission accepts BT.709, BT.470M/gamma22, BT.470BG/gamma28, SMPTE 170M/240M, sRGB (iec61966-2-1) and the SDR BT.2020-10/12 functions. PQ (smpte2084), HLG (arib-std-b67), linear/logarithmic, cinema/extended-gamut and other unsupported transfer tags are refused. Reported stream-level DOVI configuration records, mastering-display metadata, content-light-level metadata and other identified HDR/Dolby Vision side data are refused. **HEVC requires known, supported matrix, primaries and transfer tags**: unknown/empty HEVC colour metadata is refused because raw bitstream HDR SEI or DV without container signalling can escape a stream-only probe. A first-frame sample cannot establish that later frames are SDR, so the player does not use that as certification. Use a correctly tagged SDR source; there is no exhaustive bitstream HDR/DV check. Unknown/empty transfer tags for other codecs in a successful probe assume SDR; they cannot verify the actual source gamut/transfer. Unknown source height is logged and uses the documented BT.601 software default. The player does not tone-map HDR or add HDR metadata. Stopping the renderer normally requests an HDMI reset to **RGB, 8 bpc SDR**, Default colorimetry and Automatic RGB range. Both `pg_v4l2_player` and the rebuilt `drm_player` independently **check exposed connector properties before their first modeset**: nonzero HDR metadata, active/malformed/unreadable DOVI blobs, YCbCr output, deep colour, non-default colorimetry/range, or unreadable properties refuse playback. A zero DOVI property or a readable 12-byte renderer-layout DOVI blob with `dv_status=0` is accepted; the committed DV-off blob is retained. They do not blindly clear DOVI (zero alone can leave a VSIF latched on these kernels). A software fallback cannot bypass this check. These property checks are not HDMI packet readback; cable signalling and conversion remain Pi verification. The wrapper no longer selects unverified fb/OMX backends automatically. Deploy the rebuilt `drm_player` with this wrapper. This is not a bit-exact calibration pattern source; HDR playback remains open.
 
@@ -477,14 +483,14 @@ The Pi 4 sends at most **600 MHz** on the HDMI link, and only on HDMI0 (HDMI1: 3
 | 4K 60 Hz, RGB / YCbCr 4:4:4, 10-bit | 742.5 MHz | **not possible**: needs HDMI 2.1 |
 | 4K 60 Hz, RGB / YCbCr 4:4:4, 12-bit | 891 MHz | **not possible**: needs HDMI 2.1 |
 
-HDMI 2.0 ends at 600 MHz; anything above needs the FRL link of HDMI 2.1, which the Pi 4 does not have. PGenerator+ **refuses** these settings with the reason and suggests what works instead (8-bit, YCbCr 4:2:2 or 24 / 30 Hz). A 12-bit RGB setting outside Dolby Vision goes out as 10-bit, and the Bit Depth field's **Sent** line says so.
+HDMI 2.0 ends at 600 MHz; anything above needs the FRL link of HDMI 2.1, which the Pi 4 does not have. rampecho **refuses** these settings with the reason and suggests what works instead (8-bit, YCbCr 4:2:2 or 24 / 30 Hz). A 12-bit RGB setting outside Dolby Vision goes out as 10-bit, and the Bit Depth field's **Sent** line says so.
 
 The Pi 4's KMS driver sets the HDMI InfoFrames directly:
 
 - **AVI:** colour format (RGB / YCbCr 4:4:4 / 4:2:2), colorimetry (BT.709 / BT.2020), quantisation range, VIC
 - **DRM:** EOTF, mastering primaries, max/min luminance, MaxCLL, MaxFALL
 - **Dolby Vision:** a DOVI output metadata blob from `PGeneratord.dv`, with DV capability detected from the EDID VSVDB
-- **SPD:** a stock Pi kernel names the Pi "Broadcom Videocore", source type media player, and some displays treat that source type differently (an ASUS PA32DC limited LLDV to Rec.709 until it was removed, see Light Illusion's [HDMI InfoFrames](https://www.lightillusion.com/hdmi_infoframes.html)). The vc4 driver shipped with PGenerator+ (Pi 4) never sends it; the card shows the packet enable bit read back from the HDMI block as proof
+- **SPD:** a stock Pi kernel names the Pi "Broadcom Videocore", source type media player, and some displays treat that source type differently (an ASUS PA32DC limited LLDV to Rec.709 until it was removed, see Light Illusion's [HDMI InfoFrames](https://www.lightillusion.com/hdmi_infoframes.html)). The vc4 driver shipped with rampecho (Pi 4) never sends it; the card shows the packet enable bit read back from the HDMI block as proof
 
 The Dolby Vision card shows what the display declares in its EDID Dolby block: peak and black luminance, supported interfaces (Standard / Low Latency) and primaries. Choosing Dolby Vision fills in the declared peak and black while Max/Min Luma are still at the factory 1000 / 0.005; otherwise it warns when Max Luma or the transport does not match (a higher Max Luma is fine to test the display's tone mapping) and sets the declared values with one button, and the measurement strip flags DV patches above the declared peak, which the display clips. With the Standard transport the card also shows the mastering display the DV metadata carries (`source_min/max_PQ`): by default the Dolby 62 / 3696 = 0.005–4000 cd/m², as in PGenerator 1.6, or the values a port 85 client sent; while ColourSpace is connected as PiTPG, Max/Min Luma as 12-bit PQ, as PiTPG 2.0.3 sets it (0.005 / 1000 cd/m² → 62 / 3079). In HDR10 the strip flags greyscale patches above the peak the display's HDR static metadata block declares (Desired Content Max Luminance, 50 × 2^(CV/32) cd/m²); most TVs leave that value out, so nothing is flagged for them.
 
@@ -526,7 +532,7 @@ FRAME=1
 
 `PGeneratord` reads this file and renders it through OpenGL ES on DRM/KMS.
 
-Standard Dolby Vision stays wire-compatible with PGenerator 1.6 on port `85`. Clients send the same 8-bit `RGB`, `TESTPATTERN` or `TESTTEMPLATE` requests they send to 1.6. PGenerator+ converts them internally from 8-bit to 12-bit Dolby source values and keeps the 8-bit HDMI tunnel. Clients must not send the internal `SOURCE_MAX` field. `10bit` declarations are accepted and keep their added precision.
+Standard Dolby Vision stays wire-compatible with PGenerator 1.6 on port `85`. Clients send the same 8-bit `RGB`, `TESTPATTERN` or `TESTTEMPLATE` requests they send to 1.6. rampecho converts them internally from 8-bit to 12-bit Dolby source values and keeps the 8-bit HDMI tunnel. Clients must not send the internal `SOURCE_MAX` field. `10bit` declarations are accepted and keep their added precision.
 
 A client can advertise its name without detecting the version by extending `GETSTATUS`:
 
@@ -534,7 +540,7 @@ A client can advertise its name without detecting the version by extending `GETS
 GETSTATUS:CLIENTNAME=PerceptualPro
 ```
 
-PGenerator 1.6 treats this as a normal `GETSTATUS`. PGenerator+ also shows the sanitised name in its status bar while the socket is connected. `CLIENTNAME:<name>` works as a standalone command, and so do the aliases `CLIENT_NAME` and `SOFTWARE`. `=` may replace `:`. Names are limited to 64 safe characters, and commands end with `0x02 0x0d`.
+PGenerator 1.6 treats this as a normal `GETSTATUS`. rampecho also shows the sanitised name in its status bar while the socket is connected. `CLIENTNAME:<name>` works as a standalone command, and so do the aliases `CLIENT_NAME` and `SOFTWARE`. `=` may replace `:`. Names are limited to 64 safe characters, and commands end with `0x02 0x0d`.
 
 **Privilege separation:** the daemon runs as `pgenerator`. Privileged operations (config writes, service control, updates) go through `PGenerator_cmd.pl` via `sudo`, with base64-encoded environment arguments. The WebUI refuses cross-site requests.
 
@@ -571,7 +577,7 @@ PGenerator 1.6 treats this as a normal `GETSTATUS`. PGenerator+ also shows the s
 
 **LUT correction:** `/etc/PGenerator/lut.txt` holds per-channel deltas (`R,G,B=R_delta,G_delta,B_delta`, plus an `ALL` wildcard). The daemon applies them before writing pattern files.
 
-**Test EDID:** a file `PGenerator-test-EDID.bin` in the root of the boot partition (the FAT partition a PC sees on the SD card) replaces the connected display's EDID from the next start of PGenerator+: modes, formats, HDR and Dolby Vision support then come from the file (for example to try a Dolby Vision block the display does not have). It must be a complete EDID (version 1, 128 bytes per block, as many blocks as the base block declares, valid checksums); anything else is ignored with the reason. Copied through the Pi's USB drive, eject the drive on the computer before restarting. A display must still be connected. The HDMI-CEC physical address is taken from the file too, so with a file from another display the TV remote may not reach the Pi. Output shows a banner while it is in use; remove the file and restart for the display's own EDID. The last result is in `/var/log/PGenerator/test-edid.txt` (what the banner shows) and `test-edid.log` (the whole run).
+**Test EDID:** a file `PGenerator-test-EDID.bin` in the root of the boot partition (the FAT partition a PC sees on the SD card) replaces the connected display's EDID from the next start of rampecho: modes, formats, HDR and Dolby Vision support then come from the file (for example to try a Dolby Vision block the display does not have). It must be a complete EDID (version 1, 128 bytes per block, as many blocks as the base block declares, valid checksums); anything else is ignored with the reason. Copied through the Pi's USB drive, eject the drive on the computer before restarting. A display must still be connected. The HDMI-CEC physical address is taken from the file too, so with a file from another display the TV remote may not reach the Pi. Output shows a banner while it is in use; remove the file and restart for the display's own EDID. The last result is in `/var/log/PGenerator/test-edid.txt` (what the banner shows) and `test-edid.log` (the whole run).
 
 ### 🍓 Hardware
 
@@ -593,6 +599,7 @@ All endpoints are on port 80 and return JSON.
 | GET | `/api/modes` | HDMI modes from the display EDID |
 | POST | `/api/restart` | Restart the pattern generator |
 | POST | `/api/reboot` | Reboot the device |
+| GET / POST | `/api/ui/move` | One-time hand-over of the browser's WebUI settings from the old address to `rampecho.local`: POST `{"items":{…}}` returns a token, GET `?token=` within ten minutes returns the items, POST `{"ack":"<token>"}` confirms they are stored, GET `?check=<token>` tells whether that happened (used by the page at `/rampecho-move`; at most four kept) |
 | GET / POST | `/api/ui/bootscreen-theme` | Read / store the theme colours for the TV's start and restart screen (`theme`, `colors`: nine `#rrggbb` values); the WebUI sends the latest theme choice in order, reports save failures with Retry, and retries an unsaved choice after a page reload |
 | GET | `/api/wifi/scan` | Scan for Wi-Fi networks |
 | GET | `/api/wifi/status` | Wi-Fi connection status |
@@ -602,7 +609,7 @@ All endpoints are on port 80 and return JSON.
 | GET | `/api/signal` | What the settings ask for (`requested`), what is on the cable (`sending`, `wire`: format, range, EOTF, depth, TMDS clock, and per setting field whether it `matches` or `differs` (`fields`), the sentence for each difference, `differences`, and the settings that comparison used, `compared`), the check against board and display (`check`), quiet `adjustments`, the current refusal (`refused`), the last HDMI link interruption during a measurement (`link_event`) and a test EDID in use or not applied (`test_edid`) |
 | GET | `/api/cec/status` | HDMI-CEC TV power status |
 | GET | `/api/cec/{cmd}` | Send a CEC command (`wake`, `on`, `off`, `as`) |
-| POST | `/api/pattern` | Display a test pattern (refused with the reason while signal settings are refused) |
+| POST | `/api/pattern` | Display a test pattern (refused with the reason while signal settings are refused). `hdr_steps` and `hdr_metadata_cycle` are drawn for the signal on the cable and only in HDR10; `hdr_steps` needs a Max Luma from 1 to 10000; the cycle is refused while calibration software that sets the signal is connected and ends when such software connects (its timer posts the steps to `/api/hdr-cycle/step`, loopback only). `uploaded_diag_video` with `"match_frame_rate":true` plays the clip at its own frame rate and names the mode in `video_mode` |
 | POST | `/api/resolve/connect` · `/disconnect` | Resolve client mode |
 | GET | `/api/resolve/status` | Resolve connection status |
 | GET | `/api/update/check` | Check this fork's releases for an OTA package |
@@ -722,7 +729,7 @@ src/
 ```bash
 cp -r src/ofxRPI4Window /opt/openFrameworks/addons/
 cd /opt/openFrameworks/addons/ofxRPI4Window && ./patchOF.sh   # option 1
-cd /path/to/PGenerator-Plus/src/pattern_generator && make
+cd /path/to/rampecho/src/pattern_generator && make
 sudo cp bin/PGeneratord /usr/sbin/PGeneratord
 sudo cp bin/PGeneratord /usr/sbin/PGeneratord.dv
 ```
@@ -742,7 +749,7 @@ This fork stands on the shoulders of:
 - **[PGenerator](https://github.com/Biasiolo/PGenerator)** by Riccardo Biasiotto: the pattern engine, TCP protocols and renderer (GPLv3).
 - **[BigShoots/PGenerator-Plus](https://github.com/BigShoots/PGenerator-Plus)**: the original PGenerator+, with the Web UI, HDR/DV configuration, meter workflows, LG AutoCal, profile building and OTA. This fork continues from its 2.12.1.
 - **[docdude/ofxRPI4WindowHDR](https://github.com/docdude/ofxRPI4WindowHDR)**, **[ArgyllCMS](https://www.argyllcms.com/)** and **[HCFR](https://github.com/hcfr/hcfr)**.
-- The Web UI's typeface: **[Gabarito](https://github.com/naipefoundry/gabarito)** by The Gabarito Project Authors, under the SIL Open Font License 1.1 ([`usr/share/PGenerator/fonts/meso-OFL.txt`](usr/share/PGenerator/fonts/meso-OFL.txt), also served at `/assets/fonts/meso-OFL.txt`).
+- The Web UI's typefaces, each under the SIL Open Font License 1.1, with its licence next to the font in [`usr/share/PGenerator/fonts/`](usr/share/PGenerator/fonts/) and served at `/assets/fonts/<name>-OFL.txt`: **[Gabarito](https://github.com/naipefoundry/gabarito)** by The Gabarito Project Authors (`meso`), and for the Glow look of every theme **[Plus Jakarta Sans](https://github.com/tokotype/PlusJakartaSans)** by The Plus Jakarta Sans Project Authors (`glow`) and **[Sora](https://github.com/sora-xor/sora-font)** by The Sora Project Authors (`glow-display`).
 
 ## ☕ Support the project
 

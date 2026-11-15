@@ -58,6 +58,9 @@ Run what applies and say what was and was not checked:
   In the Bash sandbox `t/pi_exp.t`, `t/refused_settings.t` and
   `t/meter_ccss_y_selector.t` fail on sandbox limits (ptys, sockets, temp
   files); rerun just those unsandboxed before calling a red real.
+  `t/webui_hdr_plates.t` skips its socket tests there instead of failing
+  (the HDR Metadata Cycle worker's POST): a green in the sandbox does not
+  cover `webui_hdr_cycle_post`, run it unsandboxed after a change to it.
 - Perl: `perl -I usr/share/PGenerator -c <file>` for scripts in `usr/bin`,
   `usr/sbin`; modules are checked by `tools/runtime/pgen_release_checks.sh`
   (`pgen_release_check_runtime_syntax`)
@@ -181,7 +184,7 @@ a turn while a snapshot is open.
   fundamental is added or changed (a new setting, workspace, card, endpoint,
   signal mode or behaviour a user would notice), update `README.md` in the
   same piece of work: the fork-vs-original table, the workspace table, the
-  API list, and new or retaken screenshots (`screenshots/`, Volt theme,
+  API list, and new or retaken screenshots (`screenshots/`, Glow theme,
   1280x800, Desktop layout, GET-only, no real reboots or setting POSTs).
   It reaches GitHub with the release that ships the feature, so the README
   never describes something users cannot install yet.

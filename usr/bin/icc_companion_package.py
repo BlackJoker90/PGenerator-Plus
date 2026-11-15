@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Create a paired PGenerator+ Patch Companion download package."""
+"""Create a paired Patch Companion download package."""
 
 import hashlib
 import os
@@ -76,7 +76,7 @@ def build(platform, server, token, output_path, paired=True):
     if platform not in PLATFORMS:
         fail("Unsupported companion platform")
     if paired and not SAFE_SERVER.match(server):
-        fail("Invalid PGenerator address")
+        fail("Invalid rampecho address")
     if paired and not SAFE_TOKEN.match(token):
         fail("Invalid pairing token")
     package = PLATFORMS[platform]
@@ -84,7 +84,7 @@ def build(platform, server, token, output_path, paired=True):
     files = package["files"]
     binary_dir = os.path.join(ROOT, "icc-companion", package["directory"])
     source_dir = os.path.join(ROOT, "icc-companion-src")
-    config = "# Paired automatically by PGenerator+\nSERVER={}\nTOKEN={}\n".format(server, token)
+    config = "# Paired automatically by rampecho\nSERVER={}\nTOKEN={}\n".format(server, token)
     if package["kind"] == "installer":
         installer = os.path.join(binary_dir, "PGeneratorPlusICCSetup.exe")
         checksum_path = installer + ".sha256"
@@ -93,7 +93,7 @@ def build(platform, server, token, output_path, paired=True):
         if not paired:
             # The release copy is the installer exactly as built, pairing slots
             # still unfilled. The Companion recognises the untouched slot text
-            # as "no address, no token" and discovers its PGenerator+ instead,
+            # as "no address, no token" and discovers its rampecho instead,
             # so one installer serves both the paired download and the release.
             with open(installer, "rb") as source:
                 payload = source.read()

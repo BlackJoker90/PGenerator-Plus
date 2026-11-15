@@ -22,7 +22,7 @@ sub bash_menu (@) {
   $text_subscribe="Subscribe to Beta Channel";
   $channel=$distro_name."Beta";
  }
- print "\t\t\tPGenerator $version Update Login\n\n";
+ print "\t\t\trampecho $version Update Login\n\n";
  print "1) $text_subscribe\n";
  print "2) Update Software\n";
  print "3) Change Password\n";

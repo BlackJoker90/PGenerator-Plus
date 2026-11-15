@@ -1,8 +1,12 @@
 #!/bin/sh
 # CFR diagnostic playback. H.264 uses V4L2 DMA-BUF scanout when available;
 # the other codecs and failed hardware starts retain the software path.
+# --check-source answers OK or ERR:<reason> and plays nothing.
+# --check-source-rate is the same check; its OK also names the frame rate of
+# a progressive clip (OK:24000/1001) for a caller that plays at that rate.
 check_source=no
-if [ "$1" = --check-source ]; then check_source=yes; shift; fi
+if [ "$1" = --check-source ]; then check_source=yes; shift
+elif [ "$1" = --check-source-rate ]; then check_source=rate; shift; fi
 video="$1"
 width="${2:-1920}"
 height="${3:-1080}"
@@ -20,7 +24,7 @@ fi
 
 refuse_source() {
  echo "Diagnostic video: $*" >&2
- [ "$check_source" != yes ] || printf 'ERR:%s\n' "$*"
+ [ "$check_source" = no ] || printf 'ERR:%s\n' "$*"
  exit 1
 }
 producer=
@@ -234,8 +238,17 @@ EOF
    else software_matrix=bt601; fi ;;
   *) refuse_source "matrix $space unsupported by software conversion" ;;
  esac
- if [ "$check_source" = yes ]; then
-  printf 'OK\n'
+ if [ "$check_source" != no ]; then
+  # A rate only as two plain numbers, and not for a clip known to be
+  # interlaced: its frames keep the configured timing.
+  rate=
+  if [ "$check_source" = rate ]; then
+   case "$field_order" in
+    progressive|unknown|"")
+     rate=$(printf '%s\n' "$fps" | awk -F/ 'NF==2 && $1 ~ /^[0-9]+$/ && $2 ~ /^[0-9]+$/ && length($1)<=7 && length($2)<=7 && $1+0>0 && $2+0>0 {print $1+0 "/" $2+0}') ;;
+   esac
+  fi
+  if [ -n "$rate" ]; then printf 'OK:%s\n' "$rate"; else printf 'OK\n'; fi
   exit 0
  fi
  if [ -n "$hw_player" ] && [ "$(cat /sys/class/video4linux/video10/name 2>/dev/null)" = bcm2835-codec-decode ] &&
@@ -263,7 +276,7 @@ EOF
   exit $?
  fi
 fi
-[ "$check_source" != yes ] || refuse_source "ffmpeg is unavailable; cannot play diagnostic video"
+[ "$check_source" = no ] || refuse_source "ffmpeg is unavailable; cannot play diagnostic video"
 # fb/OMX do not expose a connector that this wrapper can verify. Do not
 # bypass a refused SDR precondition via an unguarded legacy backend.
 echo "No SDR-verified diagnostic video playback backend is available" >&2

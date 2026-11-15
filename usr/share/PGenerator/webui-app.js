@@ -810,10 +810,10 @@ function setUiOffline(offline){
 // reuse the cause instead of replacing it with a bare "failed".
 let _pgFetchFail=null;
 const PG_FAIL_TEXT={
- network:'PGenerator+ couldn\u2019t be reached. Check that the Pi is on and on the same network as this device, then try again.',
- timeout:'PGenerator+ took too long to answer. It may be busy; wait a moment, then try again.',
- unreadable:'PGenerator+ sent a reply this page couldn\u2019t read. Reload the page, then try again.',
- http:'PGenerator+ reported an internal error{status}. Try again; if it keeps happening, reboot the Pi.'
+ network:'rampecho couldn\u2019t be reached. Check that the Pi is on and on the same network as this device, then try again.',
+ timeout:'rampecho took too long to answer. It may be busy; wait a moment, then try again.',
+ unreadable:'rampecho sent a reply this page couldn\u2019t read. Reload the page, then try again.',
+ http:'rampecho reported an internal error{status}. Try again; if it keeps happening, reboot the Pi.'
 };
 function pgFailKind(e){
  const n=e&&e.name||'',m=String(e&&e.message||e||'');
@@ -825,10 +825,10 @@ function pgFailKind(e){
 // Plain-language reason for a caught error. Technical text goes to the console.
 function pgErrText(e){
  const kind=pgFailKind(e);
- if(e) console.warn('PGenerator+ request error:',e);
+ if(e) console.warn('rampecho request error:',e);
  if(kind) return PG_FAIL_TEXT[kind];
  const m=String(e&&e.message||e||'').trim();
- return m||'PGenerator+ gave no reason. Try again.';
+ return m||'rampecho gave no reason. Try again.';
 }
 // "<what>. <reason>" for an API reply (r) that was missing or not ok.
 // r.message from the server is kept as the reason; a missing reply reuses
@@ -838,7 +838,7 @@ function pgFailMsg(what,r,next){
  if(msg) return what+': '+String(msg).replace(/^\s+|\s+$/g,'');
  const f=!r&&_pgFetchFail&&Date.now()-_pgFetchFail.at<8000?_pgFetchFail:null;
  if(f) return what+'. '+f.text;
- return what+'. '+(next||'PGenerator+ gave no reason. Try again.');
+ return what+'. '+(next||'rampecho gave no reason. Try again.');
 }
 // Safe retry for a failed GET: re-run the caller's loader when it passed one,
 // otherwise recheck the connection and refresh the polled status/settings.
@@ -2106,13 +2106,13 @@ async function checkPing(){
   _pingFailCount=0;
   _pgEverConnected=true;
   setUiOffline(false);
-  pgAnnounceStatus('connection','online','Connection to PGenerator+ restored.');
+  pgAnnounceStatus('connection','online','Connection to rampecho restored.');
   if(wasOffline){
    // Back from an outage: what was read before it is no verdict now.
    if(typeof pgSignalWireDrop==='function'){ pgSignalWireDrop(); pgSignalSummaryRefresh(); }
    document.getElementById('statusDot').style.background='var(--status-success)';
    document.getElementById('statusText').textContent='Connected';
-   document.getElementById('statusWrap').title='Connection to PGenerator+ restored';
+   document.getElementById('statusWrap').title='Connection to rampecho restored';
    setPowerButtonState(true);
    return;
   }
@@ -2136,14 +2136,14 @@ async function checkPing(){
   if(_pingFailCount<3){
    document.getElementById('statusDot').style.background='var(--orange)';
    document.getElementById('statusText').textContent='Reconnecting\u2026';
-   document.getElementById('statusWrap').title='PGenerator+ did not answer; retrying';
+   document.getElementById('statusWrap').title='rampecho did not answer; retrying';
    return;
   }
   document.getElementById('statusDot').style.background='var(--red)';
   document.getElementById('statusText').textContent='Offline';
-  document.getElementById('statusWrap').title='PGenerator+ is not responding; still retrying';
+  document.getElementById('statusWrap').title='rampecho is not responding; still retrying';
   setUiOffline(true);
-  pgAnnounceStatus('connection','offline','Connection to PGenerator+ lost. Retrying automatically.');
+  pgAnnounceStatus('connection','offline','Connection to rampecho lost. Retrying automatically.');
   setPowerButtonState(false);
   return;
  }
@@ -2156,7 +2156,7 @@ async function checkPing(){
  const slow=_pingLatencies.length===3&&Math.min.apply(null,_pingLatencies)>1000;
  document.getElementById('statusDot').style.background=slow?'var(--orange)':'var(--status-success)';
  document.getElementById('statusText').textContent=slow?'Connected \u00b7 slow':'Connected';
- document.getElementById('statusWrap').title=(slow?'Connected, but PGenerator+ answers slowly':'Connected to PGenerator+')+' \u00b7 response time '+latency+' ms';
+ document.getElementById('statusWrap').title=(slow?'Connected, but rampecho answers slowly':'Connected to rampecho')+' \u00b7 response time '+latency+' ms';
  setPowerButtonState(true);
 }
 
@@ -2429,7 +2429,7 @@ function pgSetFill(el,pct){
 function setMeter(id,pct){
  pgSetFill(document.getElementById(id),pct);
 }
-// Daemon notice (e.g. Calman asked for a format PGenerator+ cannot output):
+// Daemon notice (e.g. Calman asked for a format rampecho cannot output):
 // a modal info card that stays until dismissed, once per notice id.
 function pgShowDaemonNotice(notice){
  let seen='';
@@ -3140,6 +3140,8 @@ const DIAG_DESCRIPTIONS={
  white_clipping:'<b>White Clipping (Contrast)</b> &mdash; Labeled near-white bars from 232 to 255 on a reference-white field. Set HDMI output to RGB, then lower Contrast/White Level until the 236+ bars separate cleanly and 255 is not clipped into the background.',
  black_clipping:'<b>Black Clipping / PLUGE (Brightness)</b> &mdash; Labeled near-black bars from 2 to 25 on black. Set HDMI output to RGB, then raise Brightness until the first few bars above black become barely visible without turning the whole background gray.',
  range_check:'<b>Range Check (SDR)</b> &mdash; Shows whether the display decodes the signal in the range the Pi sends; the caption names the range on the cable. A display that decodes Full shows a dark grey panel with the word FULL, one that decodes Limited only the empty outline. The legend below shows which of the two is a match; the EDID check under it (IF TV ON AUTO) predicts from the display\u2019s EDID and the Pi\u2019s AVI infoframe how the display decodes with its range on Auto. On a mismatch, set the display\u2019s HDMI range or black level to the signal\u2019s range (or Auto). FULL showing only faintly on a Limited signal can also mean Brightness is far too high: check Black Clipping.',
+ hdr_steps:'<b>HDR Steps (HDR10)</b> &mdash; Grey bars at absolute luminances up to the Max Luma (MaxDML) that is applied, each at its exact PQ code; the plate names the luminance and the code under every bar. A display that clips below the mastering peak shows the bars above its own peak alike: the last bar you can tell from its neighbour is where it clips. It is drawn again when you apply signal settings. Available in HDR10 only, with a Max Luma from 1 to 10,000 cd/m&sup2;.',
+ hdr_metadata_cycle:'<b>HDR Metadata Cycle (HDR10)</b> &mdash; The same bars up to 10,000 cd/m&sup2;, unchanged, while the mastering peak (MaxDML) and MaxCLL on the cable step through 600, 1000, 2000, 4000 and 10,000 every 6 seconds; the caption names the step. A display whose tone mapping follows the metadata changes the look of the bars with each step, one that ignores it does not. MaxFALL is lowered to the step&rsquo;s MaxCLL where it would be above it. The values you set come back when the cycle ends: another pattern or stop, applied settings, calibration software connecting, or by itself after 30 minutes. Available in HDR10 only.',
  overscan:'<b>Overscan</b> &mdash; Border lines at 0%, 2.5%, and 5% from screen edges with corner L-brackets and center crosshair. Use HDMI RGB output, and all lines should be visible &mdash; if not, disable overscan in your TV settings.',
 };
 const DIAG_UPLOAD_SENTINEL='__upload__';
@@ -3292,6 +3294,19 @@ function diagVideoRangePref(){
 function diagVideoRangePrefSet(v){
  try{ localStorage.setItem('diagVideoRange', v==='full'?'full':'limited'); }catch(_e){}
 }
+// "Play at the clip's frame rate" (Pi video player): on unless switched off.
+function diagVideoMatchRatePref(){
+ try{ return localStorage.getItem('diagVideoMatchRate')!=='0'; }catch(_e){}
+ return true;
+}
+function diagVideoMatchRatePrefSet(on){
+ try{ localStorage.setItem('diagVideoMatchRate', on?'1':'0'); }catch(_e){}
+}
+function diagVideoMatchRateInit(){
+ const box=document.getElementById('diagVideoMatchRate');
+ if(box) box.checked=diagVideoMatchRatePref();
+}
+if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',diagVideoMatchRateInit); else diagVideoMatchRateInit();
 // Ask the user (only at upload time) which range to author the extracted
 // frames at. Remembers the last choice. Renders into the upload-status area.
 function diagPromptVideoRange(){
@@ -3453,8 +3468,12 @@ async function diagShowUploadedAsset(kind,filename,forcePlay){
  activePattern=token;
  diagSetInfoHtml(diagAssetInfoHtml(kind,filename));
  const body={name:kind==='video'?'uploaded_diag_video':'uploaded_diag_image',filename:filename,signal_mode:getVal('signal_mode'),max_luma:document.getElementById('max_luma').value};
+ if(kind==='video'){
+  const rateBox=document.getElementById('diagVideoMatchRate');
+  body.match_frame_rate=rateBox?!!rateBox.checked:diagVideoMatchRatePref();
+ }
  const r=await fetchJSON('/api/pattern',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
- if(r&&r.status==='ok'){toast('Pattern: '+diagAssetDisplayLabel(filename));pgDiagRemember(diagAssetDisplayLabel(filename),'',()=>diagShowUploadedAsset(kind,filename,true));pgSetHeaderPattern(diagAssetDisplayLabel(filename));}
+ if(r&&r.status==='ok'){toast('Pattern: '+diagAssetDisplayLabel(filename)+(r.video_mode?' \u2013 '+r.video_mode:''));pgDiagRemember(diagAssetDisplayLabel(filename),'',()=>diagShowUploadedAsset(kind,filename,true));pgSetHeaderPattern(diagAssetDisplayLabel(filename));}
  else toast(pgFailMsg('Couldn\u2019t show the pattern',r),true);
 }
 async function diagHandleAssetSelect(kind){
@@ -3842,7 +3861,7 @@ async function applySettings(){
    // No answer: the Pi may have taken the settings or not. Nothing from
    // before stands; the output and the Pi's settings are read again (the
    // config poll waits while the fields hold edits), the edits stay.
-   applySettingsModalError('No answer from PGenerator+. Reading the settings and the output again\u2026','Apply not confirmed',true,'unknown');
+   applySettingsModalError('No answer from rampecho. Reading the settings and the output again\u2026','Apply not confirmed',true,'unknown');
    pgSignalWireDrop(); pgSignalChecking=true; pgRenderFieldWire();
    pgSignalSummaryRefresh();
    pgApplyResync(before,{report:true});
@@ -3870,7 +3889,7 @@ async function pgApplyResync(before,opts){
  if(opts.gen!==pgApplyResyncGen) return false;
  if(!pi||typeof pi!=='object'||pi.status==='error'||!('max_bpc' in pi)){
   if(opts.tries<10) again();
-  else if(opts.report) pgApplyResyncReport('Still no answer from PGenerator+.','Apply not confirmed','unknown');
+  else if(opts.report) pgApplyResyncReport('Still no answer from rampecho.','Apply not confirmed','unknown');
   return false;
  }
  // The fields as they are now (edits made since the apply included).
@@ -4077,7 +4096,9 @@ async function playlistLoad(){
 }
 function playlistSchedule(){
  if(playlistPollTimer) clearTimeout(playlistPollTimer);
- const visible=!document.hidden&&document.getElementById('playlistCard')&&document.getElementById('playlistCard').offsetParent!==null;
+ // The Glow theme shows the lists a second time, on Output (#glowListsCard): its locks and "On screen" are read at the same pace.
+ const shown=id=>{ const e=document.getElementById(id); return !!e&&e.offsetParent!==null; };
+ const visible=!document.hidden&&(shown('playlistCard')||shown('glowListsCard'));
  const active=playlistActive()||(playlistData&&playlistData.tvmenu&&playlistData.tvmenu.view);
  playlistPollTimer=setTimeout(playlistLoad,active?(visible?1500:5000):(visible?15000:60000));
 }
@@ -4404,7 +4425,7 @@ async function selftestCopyReport(){
  const st=selftestState;
  if(!st||!st.scenarios) return;
  const ver=(document.getElementById('verDisplay')||{}).textContent||'';
- const lines=['PGenerator+ '+ver+' signal self-test: '+(st.state||'')+(st.resolution?' at '+st.resolution:'')+(st.finished?' ('+new Date(st.finished*1000).toISOString()+')':''),st.message||''];
+ const lines=['rampecho '+ver+' signal self-test: '+(st.state||'')+(st.resolution?' at '+st.resolution:'')+(st.finished?' ('+new Date(st.finished*1000).toISOString()+')':''),st.message||''];
  st.scenarios.forEach(r=>{
   lines.push('');
   lines.push(r.group+' '+r.label+' '+r.depth+'-bit: '+(SELFTEST_STATUS_TEXT[r.status]||r.status)+(r.total?' '+r.passed+'/'+r.total:''));
@@ -4436,7 +4457,7 @@ document.addEventListener('DOMContentLoaded',function(){
 });
 
 async function confirmReboot(){
- if(!await pgConfirm({title:'Reboot device?',body:'PGenerator+ restarts and the WebUI is unreachable for about a minute.',acceptLabel:'Reboot Pi',destructive:true})) return;
+ if(!await pgConfirm({title:'Reboot device?',body:'rampecho restarts and the WebUI is unreachable for about a minute.',acceptLabel:'Reboot Pi',destructive:true})) return;
  rebootDevice();
 }
 async function rebootDevice(){
@@ -4448,7 +4469,7 @@ async function rebootDevice(){
 }
 
 // Restart progress: the update dialog's card for a Pi restart. It follows
-// /api/ping: the old boot id means PGenerator+ is still shutting down, no
+// /api/ping: the old boot id means rampecho is still shutting down, no
 // answer means the Pi is restarting, a new boot id means it is back (reload).
 // Without the old id (no ping before the request, no id in the reply) an
 // answer proves nothing: the dialog says so and leaves the reload to the user.
@@ -4499,11 +4520,11 @@ function pgRebootProgress(bootId){
   d.value=Math.max(d.value,v);
   card.classList.toggle('is-done',d.result==='done');
   card.classList.toggle('is-timeout',d.result==='timeout'||d.result==='unconfirmed');
-  card.querySelector('.upd-title').textContent={running:'Restarting the Pi',done:'The Pi is back',timeout:'The restart is taking too long',unconfirmed:'PGenerator+ answers again'}[d.result];
+  card.querySelector('.upd-title').textContent={running:'Restarting the Pi',done:'The Pi is back',timeout:'The restart is taking too long',unconfirmed:'rampecho answers again'}[d.result];
   card.querySelector('.rb-hint').textContent=run?'Usually about a minute':'';
   const msg=d.result==='done'?'Reloading the page…':(d.result==='timeout'?'The Pi has not answered after 4 minutes.'
    :(d.result==='unconfirmed'?'This page could not tell which start was running before, so it cannot confirm the restart.'
-   :(d.step===0?'Shutting down PGenerator+…':'The Pi is restarting — this page reconnects automatically.')));
+   :(d.step===0?'Shutting down rampecho…':'The Pi is restarting — this page reconnects automatically.')));
   const msgEl=card.querySelector('.upd-msg');
   if(msgEl.textContent!==msg) msgEl.textContent=msg;
   pgSetFill(card.querySelector('.upd-bar-fill'),d.value);
@@ -4632,7 +4653,7 @@ async function applyMemory(){
  const ok=await pgConfirmReboot({
   title:cma?'Change the graphics memory pool?':'Change the GPU memory?',
   from:from?mb(from):'',to:mb(to),
-  body:'PGenerator+ restarts the Pi to apply it. Patterns and calibration software disconnect until it is back; this page reconnects on its own.'
+  body:'rampecho restarts the Pi to apply it. Patterns and calibration software disconnect until it is back; this page reconnects on its own.'
  });
  if(!ok){ sel.value=from||sel.value; return; }
  const before=await fetchJSON('/api/ping',{_quiet:true,_timeoutMs:3000});
@@ -4960,7 +4981,7 @@ async function cecScan(){
    html+='</tr>';
   });
   html+='</table>';
-  html+='<div style="margin-top:4px;color:var(--text2)">PGenerator+: '+pgHtmlEsc(r.data.self.phys)+' (logical '+pgHtmlEsc(r.data.self.log)+')</div>';
+  html+='<div style="margin-top:4px;color:var(--text2)">rampecho: '+pgHtmlEsc(r.data.self.phys)+' (logical '+pgHtmlEsc(r.data.self.log)+')</div>';
   el.innerHTML=html;
   pgSyncDrawerIfOpen();
   loadCecStatus();
@@ -5394,13 +5415,19 @@ function pgUpdateLayoutControls(){
 }
 // Theme ids: each one is a palette over one of the two base themes, so the
 // light-mode overrides and data-theme checks keep working for every palette.
-const PG_THEMES={dark:'dark',light:'light',oled:'dark',graphite:'dark',nord:'dark',amber:'dark',contrast:'dark',paper:'light',natrium:'dark','natrium-light':'light',volt:'dark',scope:'dark',ultraviolet:'dark'};
-let pgThemeId='dark';
+// Every theme has the Glow look (data-skin="glow": layout, faces, tiles,
+// the dashboard); a theme gives only the colours. data-theme-id names the
+// theme; Glow's colours are its own (data-theme-id="glow") over the Dark
+// base and carry no data-palette. The inline script in webui.html holds the
+// same list and the same default.
+const PG_THEMES={glow:'dark',dark:'dark',light:'light',oled:'dark',graphite:'dark',nord:'dark',amber:'dark',paper:'light',natrium:'dark','natrium-light':'light',volt:'dark',scope:'dark',ultraviolet:'dark'};
+const PG_THEME_DEFAULT='glow';
+let pgThemeId=PG_THEME_DEFAULT;
 function pgReadThemeMode(){
  try{
   const saved=localStorage.getItem(PG_THEME_STORAGE_KEY);
-  return Object.prototype.hasOwnProperty.call(PG_THEMES,saved)?saved:'dark';
- }catch(e){ return 'dark'; }
+  return Object.prototype.hasOwnProperty.call(PG_THEMES,saved)?saved:PG_THEME_DEFAULT;
+ }catch(e){ return PG_THEME_DEFAULT; }
 }
 function pgThemeColor(token,fallback){
  try{
@@ -5438,11 +5465,13 @@ function pgRedrawChartsForTheme(){
  }));
 }
 function pgApplyThemeMode(mode,options){
- pgThemeId=Object.prototype.hasOwnProperty.call(PG_THEMES,mode)?mode:'dark';
+ pgThemeId=Object.prototype.hasOwnProperty.call(PG_THEMES,mode)?mode:PG_THEME_DEFAULT;
  pgThemeMode=PG_THEMES[pgThemeId];
  const root=document.documentElement;
  root.setAttribute('data-theme',pgThemeMode);
- if(pgThemeId===pgThemeMode) root.removeAttribute('data-palette');
+ root.setAttribute('data-skin','glow');
+ root.setAttribute('data-theme-id',pgThemeId);
+ if(pgThemeId==='glow'||pgThemeId===pgThemeMode) root.removeAttribute('data-palette');
  else root.setAttribute('data-palette',pgThemeId);
  pgUpdateThemeControls();
  if(!(options&&options.initial)){
@@ -5497,7 +5526,8 @@ async function pgSyncBootscreenTheme(force){
   if(!retry){
    const cur=await fetchJSON('/api/ui/bootscreen-theme',{_quiet:true});
    if(!current()||!cur||cur.status!=='ok') return;
-   if(cur.theme&&cur.theme!==theme) return;
+   // Another browser's theme stays; one that no longer exists (High Contrast) is replaced.
+   if(cur.theme&&cur.theme!==theme&&Object.prototype.hasOwnProperty.call(PG_THEMES,cur.theme)) return;
    if(cur.theme===theme&&Object.keys(colors).every(k=>cur.colors&&cur.colors[k]===colors[k])) return;
   }
   const r=await fetchJSON('/api/ui/bootscreen-theme',{method:'POST',_quiet:true,headers:{'Content-Type':'application/json'},body:JSON.stringify({theme,colors})});
@@ -6486,10 +6516,10 @@ function pgRenderSpdInfoframe(r){
   lines.push('Product: '+(text(12,28)||'-'));
   lines.push('Source type: '+(PG_SPD_SOURCE_TYPES[b[28]]||('0x'+b[28].toString(16))));
  }
- // The PGenerator+ vc4 module never writes it (srcversion ...RQ3V1SPD).
+ // The rampecho vc4 module never writes it (srcversion ...RQ3V1SPD).
  const sent=r.link?r.link.spd_sent:-1;
  if(sent===1) lines.push('On the wire: yes');
- else if(sent===0) lines.push('On the wire: no'+(r.spd?'':' (never sent by PGenerator+)'));
+ else if(sent===0) lines.push('On the wire: no'+(r.spd?'':' (never sent by rampecho)'));
  dd.innerHTML='';
  lines.forEach((line,i)=>{ if(i) dd.appendChild(document.createElement('br')); dd.appendChild(document.createTextNode(line)); });
 }
@@ -6868,7 +6898,7 @@ async function applyUpdate(){
   title:r.latest?'Install v'+r.latest+'?':'Install update now?',
   from:r.current?'v'+r.current:'',to:r.latest?'v'+r.latest:'',
   notesNode:notes?pgReleaseNotesNode(notes):null,
-  body:'PGenerator+ restarts; stop any running measurement or session first. Your settings stay, and the current files come back automatically if the installation fails.',
+  body:'rampecho restarts; stop any running measurement or session first. Your settings stay, and the current files come back automatically if the installation fails.',
   acceptLabel:r.latest?'Install v'+r.latest:'Install Update',
   acceptClass:'btn-primary'
  });
@@ -6961,7 +6991,7 @@ async function installSelectedRelease(){
   title:cmp<0?'Roll back to v'+v+'?':(cmp===0?'Reinstall v'+v+'?':'Install v'+v+'?'),
   from:cur?'v'+cur:'',to:'v'+v,
   notesNode:relNotes?pgReleaseNotesNode(relNotes):null,
-  body:'PGenerator+ restarts; stop any running measurement or session first. Your settings stay, and the current files come back automatically if the installation fails.'
+  body:'rampecho restarts; stop any running measurement or session first. Your settings stay, and the current files come back automatically if the installation fails.'
    +(cmp<0?' Files added by newer versions stay on the device.':''),
   acceptLabel:cmp<0?'Roll back':(cmp===0?'Reinstall':'Install'),
   acceptClass:cmp>0?'btn-primary':'btn-warning'
@@ -7045,7 +7075,7 @@ function pgUpdateRender(d){
  const c=d.card,run=d.result==='running';
  let step=PG_UPD_PHASE_STEP[d.phase];
  if(step==null) step=d.step;
- // PGenerator+ (and with it this WebUI) is stopped from the install on, so an
+ // rampecho (and with it this WebUI) is stopped from the install on, so an
  // unanswered poll after the backup is the restart, not an error.
  if(run&&d.offline&&d.step>=2) step=4;
  if(d.result==='done') step=5;
@@ -7063,7 +7093,7 @@ function pgUpdateRender(d){
  if(d.result==='done') msg='Reloading the page\u2026';
  else if(d.result==='timeout') msg='It has not finished after 15 minutes.';
  else if(!run) msg=d.message||'';
- else if(d.offline) msg=d.step>=2?'PGenerator+ is restarting \u2014 this page reconnects automatically.':'Waiting for PGenerator+ to answer\u2026';
+ else if(d.offline) msg=d.step>=2?'rampecho is restarting \u2014 this page reconnects automatically.':'Waiting for rampecho to answer\u2026';
  else msg=(d.message||'Working')+'\u2026';
  const msgEl=c.querySelector('.upd-msg');
  if(msgEl.textContent!==msg) msgEl.textContent=msg;
@@ -7089,8 +7119,8 @@ function pgUpdateRender(d){
   li.querySelector('.sr-only').textContent={done:', done',current:', in progress',failed:', failed',stalled:', not finished',pending:''}[st];
  });
  const note=c.querySelector('.upd-note');
- const noteText=d.result==='failed'?(d.startFailed?'':'The previous version was kept. Try again. If it fails again, download the logs with Download Logs and attach them to an issue on GitHub (BlackJoker90/PGenerator-Plus).')
-  :(d.result==='timeout'?'Reload the page to see which version is running now. If it is still the old one, download the logs with Download Logs and attach them to an issue on GitHub (BlackJoker90/PGenerator-Plus).':'');
+ const noteText=d.result==='failed'?(d.startFailed?'':'The previous version was kept. Try again. If it fails again, download the logs with Download Logs and attach them to an issue on GitHub (BlackJoker90/rampecho).')
+  :(d.result==='timeout'?'Reload the page to see which version is running now. If it is still the old one, download the logs with Download Logs and attach them to an issue on GitHub (BlackJoker90/rampecho).':'');
  note.textContent=noteText;
  note.hidden=!noteText;
  if(d.actionsFor!==d.result){
@@ -7136,7 +7166,7 @@ function pgUpdateRender(d){
   }
  } else if(d.result==='done') setUpdateStatus(title+'. Reloading the page\u2026','ok');
  else if(d.result==='timeout') setUpdateStatus('The update has not finished after 15 minutes. Reload the page to see which version is running now.','warn');
- else setUpdateStatus(d.startFailed?d.message:'The update didn\u2019t install'+(d.message?': '+d.message.replace(/([^.!?])$/,'$1.'):'.')+' The previous version was kept. Try again. If it fails again, download the logs with Download Logs and attach them to an issue on GitHub (BlackJoker90/PGenerator-Plus).','error');
+ else setUpdateStatus(d.startFailed?d.message:'The update didn\u2019t install'+(d.message?': '+d.message.replace(/([^.!?])$/,'$1.'):'.')+' The previous version was kept. Try again. If it fails again, download the logs with Download Logs and attach them to an issue on GitHub (BlackJoker90/rampecho).','error');
 }
 async function runUpdate(version,info){
  // One install at a time: the buttons are disabled too, this guards the rest.
@@ -7228,12 +7258,12 @@ async function systemBackupWaitForReboot(){
   // browsers can miss a short outage, so reload once the normal reboot window
   // has elapsed even if every individual ping happened to land while online.
   if(sawOffline||Date.now()-started>=30000){
-   systemBackupSetStatus('PGenerator+ is back online. Reloading...',false);
+   systemBackupSetStatus('rampecho is back online. Reloading...',false);
    location.reload();
    return;
   }
  }
- systemBackupSetStatus('Could not confirm that PGenerator+ restarted. Reload this page after the device is back online.',true);
+ systemBackupSetStatus('Could not confirm that rampecho restarted. Reload this page after the device is back online.',true);
 }
 async function exportSystemSettings(){
  const btn=document.getElementById('exportSystemSettingsBtn');
@@ -7270,11 +7300,11 @@ async function importSystemSettingsFile(file){
  const input=document.getElementById('systemSettingsImportFile');
  if(!file)return;
  if(!/\.pgbackup$/i.test(String(file.name||''))){
-  systemBackupSetStatus('Select a PGenerator+ .pgbackup file.',true);
+  systemBackupSetStatus('Select a rampecho .pgbackup file.',true);
   if(input)input.value='';
   return;
  }
- const accepted=await pgConfirm({acceptLabel:'Import backup',destructive:true,title:'Import this PGenerator+ system backup?',body:'Matching system settings, profiles and custom diagnostic media will be replaced. Existing history and media with different names will be preserved. A local rollback backup will be created first. Stop all measurements and calibration work before continuing.'});
+ const accepted=await pgConfirm({acceptLabel:'Import backup',destructive:true,title:'Import this rampecho system backup?',body:'Matching system settings, profiles and custom diagnostic media will be replaced. Existing history and media with different names will be preserved. A local rollback backup will be created first. Stop all measurements and calibration work before continuing.'});
  if(!accepted){if(input)input.value='';return;}
  const btn=document.getElementById('importSystemSettingsBtn');
  if(btn){btn.disabled=true;btn.textContent='Importing...';}
@@ -7298,10 +7328,10 @@ async function importSystemSettingsFile(file){
     const count=Number(result.restored_files)||0;
     systemBackupSetStatus('Import complete. Restored '+count+' files. Reboot to apply all settings.',false);
     toast('System backup imported');
-    if(await pgConfirm({title:'System backup imported',body:'Reboot PGenerator+ now to apply all restored settings?',acceptLabel:'Reboot Pi',cancelLabel:'Later',destructive:true})){
+    if(await pgConfirm({title:'System backup imported',body:'Reboot rampecho now to apply all restored settings?',acceptLabel:'Reboot Pi',cancelLabel:'Later',destructive:true})){
      const reboot=await fetchJSON('/api/reboot',{method:'POST'});
      if(!reboot||reboot.status!=='ok')throw new Error(reboot&&reboot.message?reboot.message:'Could not start reboot');
-     systemBackupSetStatus('Rebooting PGenerator+...',false);
+     systemBackupSetStatus('Rebooting rampecho...',false);
      systemBackupWaitForReboot();
     }
    }
@@ -15686,7 +15716,7 @@ function meterSpyderXNativeModeHelp(){
  if(mode==='Standard LED') purpose='This is ArgyllCMS display type -y e for white LED backlit LCDs.';
  else if(mode==='Wide Gamut LED') purpose='This is ArgyllCMS display type -y b for RGB LED backlit LCDs.';
  else if(mode==='GB-R LED') purpose='This is ArgyllCMS display type -y i for GB-R phosphor LED backlit LCDs.';
- else purpose='This is ArgyllCMS display type -y l, its default General LCD/CCFL calibration. PGenerator+ uses General as the fallback when the selected display has no matching SpyderX built-in mode, including OLED, QD-OLED, plasma, projector, and CRT.';
+ else purpose='This is ArgyllCMS display type -y l, its default General LCD/CCFL calibration. rampecho uses General as the fallback when the selected display has no matching SpyderX built-in mode, including OLED, QD-OLED, plasma, projector, and CRT.';
  return 'The Display Type selection chooses the SpyderX built-in calibration. '+purpose+' SpyderX does not support CCSS spectral profiles in ArgyllCMS. For a display without a matching built-in mode, use a CCMX created for this SpyderX and display.';
 }
 
@@ -16076,7 +16106,7 @@ function meterCcssCreateUpdateCopy(){
   ? 'Measures both meters and calculates the correction matrix from their XYZ results.'
   : (method==='json'
     ? 'Imports the JSON format exported by the former software XYZ Correction Matrix tool and converts it into a meter profile.'
-    : 'Enter the matrix values directly. PGenerator+ will package them as a CCMX that ArgyllCMS applies to the selected meter.');
+    : 'Enter the matrix values directly. rampecho will package them as a CCMX that ArgyllCMS applies to the selected meter.');
  if(methodSection) methodSection.style.display=mode==='ccmx'?'':'none';
  if(referenceSection) referenceSection.style.display=suppliedMatrix?'none':'';
  if(targetSection) targetSection.style.display=mode==='ccmx'?'':'none';
@@ -16534,7 +16564,7 @@ function meterBuildCcmxContent(name,target,matrix,displayType,method){
   'DISPLAY_TYPE_BASE_ID "1"',
   'DISPLAY_TYPE_REFRESH "'+refresh+'"',
   'REFERENCE "'+reference+'"',
-  'ORIGINATOR "PGenerator+"',
+  'ORIGINATOR "rampecho"',
   'CREATED "'+new Date().toUTCString()+'"',
   'COLOR_REP "XYZ"',
   '',

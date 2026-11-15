@@ -68,11 +68,20 @@ struct fb_fix_screeninfo {
 #define THEME "/var/lib/PGenerator/ui/bootscreen.theme"
 
 /* Colours: the WebUI theme the user picked, written by the WebUI to THEME
- * (bootscreen.theme: "key=#rrggbb" lines). Without it, or for a missing or
- * malformed key, the WebUI's dark theme on the splash background. */
+ * (bootscreen.theme: "theme=<id>" and "key=#rrggbb" lines). Without it, or
+ * for a missing or malformed key, the WebUI's default theme, Glow: these are
+ * the values its pgBootscreenColors() sends (webui-app.js). */
 static struct {
 	uint32_t bg, text, text2, accent, fill, track, edge, done, idle;
-} th = { 0x101018, 0xe0e0e8, 0x888898, 0x5b7fff, 0x4a68e8, 0x20202d, 0x2a2a3a, 0x4caf50, 0x55556a };
+} th = { 0x0b0a09, 0xc9c5c0, 0xa09b95, 0xff6b1a, 0xff6b1a, 0x1c1a19, 0x272523, 0x5fb878, 0x6b6661 };
+
+/* The ground of the Glow look (draw_ground), which every WebUI theme has
+ * (webui-layout.css --glow-ground): Glow's own orange for "theme=glow" and
+ * when there is no theme file (Glow is the default); the theme's accent for
+ * every other "theme=<id>"; none for High Contrast (its --glow-ground is the
+ * plain --bg) and for a file that names no theme. */
+enum { GROUND_NONE, GROUND_GLOW, GROUND_ACCENT };
+static int ground = GROUND_GLOW;
 
 #define FPS 30
 #define BOOT_TIMEOUT 150.0   /* no renderer after this: leave the logo */
@@ -146,8 +155,16 @@ static void load_theme(const char *path)
 	FILE *f = fopen(path, "r");
 	if (!f)
 		return;
+	ground = GROUND_NONE;
 	char line[128];
 	while (fgets(line, sizeof(line), f)) {
+		if (!strncmp(line, "theme=", 6)) {
+			line[strcspn(line, "\r\n")] = 0;
+			const char *id = line + 6;
+			ground = !strcmp(id, "glow") ? GROUND_GLOW
+			       : (!*id || !strcmp(id, "contrast")) ? GROUND_NONE : GROUND_ACCENT;
+			continue;
+		}
 		char *eq = strchr(line, '=');
 		if (!eq || eq[1] != '#') continue;
 		*eq = 0;
@@ -418,9 +435,46 @@ static void make_layout(layout_t *L, int mode)
 	L->dyn_y1 = L->steps_y + L->nsteps * STEP_ROW;
 }
 
+/* The ground of the Glow look (webui-layout.css --glow-ground), on th.bg: a
+ * dot grid, the dot colour at .16 out to 1 px and gone at 1.5 px, centred in
+ * 14 px tiles; over it the glow colour at .16 from the bottom-right corner
+ * (900x620 px ellipse, gone at 60 %), and on top one of .20 from the top-left
+ * corner (900x520 px, gone at 62 %). Glow: dots rgba(255,140,70), glow
+ * rgba(255,107,26); any other theme: both its accent. CSS pixels are scaled
+ * to the proportions of a 1280 px wide page. Glow's brightest point is about
+ * #3c1d0c: no bright area on an OLED. tools/bootscreen/make_splash.py draws
+ * Glow's ground into splash.fb. */
+static void draw_ground(uint32_t *buf)
+{
+	const uint32_t dot = ground == GROUND_GLOW ? 0xff8c46 : th.accent;
+	const uint32_t glow = ground == GROUND_GLOW ? 0xff6b1a : th.accent;
+	const float s = W / 1280.0f;
+	const float pitch = 14 * s, r0 = 1 * s, r1 = 1.5f * s;
+	const float tlx = 900 * s, tly = 520 * s, brx = 900 * s, bry = 620 * s;
+	for (int y = 0; y < H; y++) {
+		for (int x = 0; x < W; x++) {
+			float px = x + 0.5f, py = y + 0.5f;
+			uint32_t c = buf[y * W + x];
+			float dx = fmodf(px, pitch) - pitch / 2, dy = fmodf(py, pitch) - pitch / 2;
+			float d = sqrtf(dx * dx + dy * dy);
+			float a = d <= r0 ? 0.16f : (d >= r1 ? 0 : 0.16f * (r1 - d) / (r1 - r0));
+			c = mix(c, dot, (int)(a * 255 + 0.5f));
+			float ex = (W - px) / brx, ey = (H - py) / bry, e = sqrtf(ex * ex + ey * ey);
+			if (e < 0.60f)
+				c = mix(c, glow, (int)(0.16f * (1 - e / 0.60f) * 255 + 0.5f));
+			ex = px / tlx; ey = py / tly; e = sqrtf(ex * ex + ey * ey);
+			if (e < 0.62f)
+				c = mix(c, glow, (int)(0.20f * (1 - e / 0.62f) * 255 + 0.5f));
+			buf[y * W + x] = c;
+		}
+	}
+}
+
 static void draw_base(const layout_t *L)
 {
 	fill(base, 0, 0, W, H, th.bg);
+	if (ground != GROUND_NONE)
+		draw_ground(base);
 	put_rgba565(base, sp("logo"), L->logo_x, L->logo_y);
 }
 

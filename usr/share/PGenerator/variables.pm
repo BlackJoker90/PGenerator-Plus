@@ -222,6 +222,9 @@ $var_dir="/var/lib/PGenerator/";
 # renderer stuck in the HDMI driver stays "running", but then no player can
 # take DRM either).
 $video_starting_file="${var_dir}video_starting";
+# What play_video did about the frame rate of the clip it was asked to
+# match (pattern.pm): text for the log and the WebUI's answer, "" otherwise.
+$video_mode_note="";
 $pattern_templates="$var_dir/tmp";
 $pattern_video="$var_dir/video";
 $pattern_images="$var_dir/images";
@@ -297,6 +300,10 @@ $pattern_generator="/usr/sbin/PGeneratord";
 # see renderer_reconfigure_in_place in command.pm).
 $renderer_features_file="/var/lib/PGenerator/running/renderer-features";
 $renderer_default_range_file="/var/lib/PGenerator/running/default-rgb-quant-range";
+# Which spelling of a picture's path the pattern file uses now
+# (pattern_pictures_spelled in pattern.pm). No extension: clean_pattern_files
+# removes the pictures of running/ by theirs.
+$picture_spelling_file="/var/lib/PGenerator/running/picture-spelling";
 # Notice for the WebUI (id, title, text lines), shown once per browser as a
 # popup; written by the daemon, read by /api/stats.
 $webui_notice_file="/var/lib/PGenerator/running/webui-notice";

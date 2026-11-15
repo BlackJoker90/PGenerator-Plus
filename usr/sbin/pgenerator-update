@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# pgenerator-update — PGenerator+ OTA update via GitHub Releases
+# pgenerator-update — rampecho OTA update via GitHub Releases
 #
 # Usage:
 #   pgenerator-update check          — check for new version, print JSON
@@ -16,6 +16,10 @@
 #      (path overridable via UPDATE_CHANNEL_FILE)
 #   4. BigShoots/PGenerator-Plus
 # Values that are not a plain owner/repo are ignored with a log entry.
+# A renamed repository keeps working: GitHub answers the old name's API
+# URLs with a 301 to the new one, which curl -L follows (checked 2026-11-13
+# for releases/latest, releases/tags/<tag> and releases?per_page=), and the
+# assets are picked by file name, not by the URL's owner/repo.
 #
 # Each release may carry one OTA tarball per device target; the one matching
 # this device is selected (detect_update_target, override PGEN_UPDATE_TARGET):
@@ -566,7 +570,7 @@ list_releases() {
    my $has=0;
    for my $a (@{$rel->{assets}||[]}) {
     my $n=$a->{name}//"";
-    next if($n!~/\.tar\.gz$/i || $n!~/^pgenerator[-_]?plus[-_]v?[0-9]/i);
+    next if($n!~/\.tar\.gz$/i || $n!~/^(?:pgenerator[-_]?plus|rampecho)[-_]v?[0-9]/i);
     if($target eq "pi5-bookworm-armhf") { $has=1 if($n=~/pi5[-_]bookworm[-_]armhf\.tar\.gz$/i); }
     else { $has=1 if($n!~/pi5/i); }
    }
@@ -604,18 +608,21 @@ release_field() {
    # both. No match means no asset (never fall back to another target).
    #   pi4-biasi:          pgenerator-plus-<ver>.tar.gz (optional -pi4-biasi)
    #   pi5-bookworm-armhf: pgenerator-plus-<ver>-pi5-bookworm-armhf.tar.gz
+   # rampecho-<ver>... is accepted too, for a later switch of the asset name;
+   # releases keep pgenerator-plus-* while devices with an older updater
+   # (which only knows that name) are in the field.
    if(ref($rel->{assets}) eq "ARRAY") {
     for my $asset (@{$rel->{assets}}) {
      next if(ref($asset) ne "HASH");
      my $url = $asset->{browser_download_url} // "";
      my $name = $asset->{name} // "";
      next if($url !~ /\.tar\.gz$/i);
-     next if($name !~ /^pgenerator[-_]?plus[-_]v?[0-9]/i);
+     next if($name !~ /^(?:pgenerator[-_]?plus|rampecho)[-_]v?[0-9]/i);
      my $match = 0;
      if($target eq "pi5-bookworm-armhf") {
-      $match = 1 if($name =~ /^pgenerator[-_]?plus[-_]v?[0-9][0-9A-Za-z._]*[-_]pi5[-_]bookworm[-_]armhf\.tar\.gz$/i);
+      $match = 1 if($name =~ /^(?:pgenerator[-_]?plus|rampecho)[-_]v?[0-9][0-9A-Za-z._]*[-_]pi5[-_]bookworm[-_]armhf\.tar\.gz$/i);
      } else {
-      $match = 1 if($name =~ /^pgenerator[-_]?plus[-_]v?[0-9][0-9A-Za-z._]*(?:[-_]pi4[-_]biasi)?\.tar\.gz$/i
+      $match = 1 if($name =~ /^(?:pgenerator[-_]?plus|rampecho)[-_]v?[0-9][0-9A-Za-z._]*(?:[-_]pi4[-_]biasi)?\.tar\.gz$/i
        && $name !~ /pi5/i);
      }
      if($match) {
@@ -1137,7 +1144,7 @@ case "$cmd" in
   # The new files stay only once the new version answers on its API; a
   # failed start rolls back like any other failure after the stop.
   APPLY_STARTED=1
-  set_update_state restarting "Starting PGenerator+ $latest"
+  set_update_state restarting "Starting rampecho $latest"
   if ! /etc/init.d/PGenerator start 2>/dev/null 9>&-; then
    log_msg "ERROR: PGenerator restart command failed after update"
    echo "ERROR: PGenerator restart failed after update"
@@ -1147,7 +1154,7 @@ case "$cmd" in
   if ! wait_for_local_api 60; then
    log_msg "ERROR: PGenerator API did not recover after updating to $latest"
    echo "ERROR: PGenerator did not come back after update"
-   LAST_ERROR="PGenerator+ $latest did not start"
+   LAST_ERROR="rampecho $latest did not start"
    exit 1
   fi
   APPLY_DONE=1

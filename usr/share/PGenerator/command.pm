@@ -1223,6 +1223,24 @@ sub pattern_generator_restart_unless_current (@) {
  return 1;
 }
 
+# A picture on screen is not written again here (its pattern text is the
+# old signal's). The renderer makes its texture again in the new window from
+# the pixels it holds, and reads the file after the window's first flip
+# where the new output asks for other pixels (picture_cache.h). Read at the
+# output 2026-11-14: White Clipping, HDR Steps and G1 Warm-Up on screen after
+# a bare SIGHUP and across 8 <-> 10 bit, and the alignment plate a
+# calibration client's own change replays (calman_replay_last_pattern) after
+# every CONF_LEVEL:Bits. The change waits for that texture: 0.15 to 0.6 s
+# with an 8-bit picture at 1080p, 0.35 s with a float texture (HDR Steps,
+# the HDR Metadata Cycle's plates), 1.0 to 1.7 s with one at 2160p (0.15 to
+# 0.2 s with no picture; read 2026-11-15).
+# A renderer without the picture cache (md5 cdbb0bca... and before) lost the
+# picture with its window: the next pattern that names a picture was loaded
+# by another spelling of its path (pattern_pictures_spelled), not across a
+# change of the window's bit depth (max_bpc, 4:2:2 at 8 bit), where it set
+# its window up once more after that load; for HDR Steps, whose BITS follow
+# the depth, the WebUI's apply loads a pattern without a picture first
+# (webui_renderer_forget_pictures). Both stay for such a renderer.
 sub renderer_reconfigure_in_place (@) {
  my ($changed,$dv_before)=@_;
  my %in_place_keys=map{$_=>1} qw(color_format rgb_quant_range colorimetry max_bpc eotf
@@ -1305,6 +1323,10 @@ sub renderer_reconfigure_in_place (@) {
   close($lock) if($lock);
   return 0;
  }
+ # The renderer builds its window anew from here on, also when its answer
+ # comes too late to count: pictures get their next spelling. Under the
+ # lock, as two reconfigures at once would both read the same number.
+ &pattern_pictures_respell();
  my $result=0;
  my $reason="no acknowledgement within 3s";
  my $deadline=$t0+3;
@@ -1541,6 +1563,36 @@ sub signal_mode_info (@) {
  return $preferred || $first || {};
 }
 
+# The mode a clip of $rate (N/D frames a second) plays in when it is to
+# play at its own frame rate: the size and scan of the configured mode
+# $conf_mode (a signal_mode_info hash), at the clip's rate or the lowest
+# whole multiple of it the display lists. Never a higher pixel clock than
+# the configured mode's: the link was set up for that one. An interlaced
+# configured mode keeps its timing. undef: stay in the configured mode.
+sub signal_mode_for_frame_rate (@) {
+ my ($conf_mode,$rate,$out)=@_;
+ return undef if(ref($conf_mode) ne "HASH" || !defined($conf_mode->{timing}) || $conf_mode->{interlaced});
+ return undef if(!$conf_mode->{width} || !$conf_mode->{height} || !$conf_mode->{clock_khz});
+ return undef if(!defined($rate) || $rate !~ /^([1-9]\d{0,6})\/([1-9]\d{0,6})\z/);
+ my $fps=$1/$2;
+ return undef if($fps < 1 || $fps > 300);
+ $out=`timeout 3 $modetest -c 2>/dev/null` if(!defined $out);
+ $out="" if(!defined $out);
+ my ($best,$best_k);
+ for(my $i=0;$i<512;$i++) {
+  my $m=&signal_mode_info($i,$out);
+  last if(ref($m) ne "HASH" || !%$m);
+  next if(!defined($m->{timing}) || !defined($m->{video_refresh}) || $m->{interlaced});
+  next if($m->{width} != $conf_mode->{width} || $m->{height} != $conf_mode->{height});
+  next if($m->{clock_khz} > $conf_mode->{clock_khz});
+  my $k=int($m->{video_refresh}/$fps+0.5);
+  # 24 and 24/1.001 differ by a thousandth: a fifth of that is the same rate.
+  next if($k < 1 || $k > 5 || abs($m->{video_refresh}-$k*$fps) > $k*$fps*0.0002);
+  ($best,$best_k)=($m,$k) if(!defined($best_k) || $k < $best_k);
+ }
+ return $best;
+}
+
 # Signal mode from the flags the renderer reads.
 sub signal_mode_from_conf (@) {
  my $conf=shift;
@@ -1631,6 +1683,12 @@ sub signal_applied_snapshot_write (@) {
  my $conf=shift || \%pgenerator_conf;
  lock($signal_applied_guard);
  my %f=map {("conf_$_"=>defined($conf->{$_}) ? "$conf->{$_}" : "")} (@signal_conf_keys,@signal_metadata_keys);
+ # During an HDR Metadata Cycle the conf holds a step's metadata: what a
+ # refused apply goes back to is what was set before the cycle.
+ if(defined(&webui_hdr_cycle_user_values)) {
+  my $user=&webui_hdr_cycle_user_values($conf);
+  $f{"conf_$_"}=$user->{$_} for(keys %$user);
+ }
  $f{time}=time();
  return 1 if(&_signal_state_write($signal_applied_file,%f));
  # A later refusal then goes back to an older snapshot, or refuses without
@@ -2040,6 +2098,75 @@ sub renderer_unlock () {
  return if($renderer_lock_depth <= 0 || --$renderer_lock_depth);
  close($renderer_lock_fh) if($renderer_lock_fh);
  undef $renderer_lock_fh;
+}
+
+# perl counts the users of every descriptor in one table for all threads
+# (PL_perlio_fd_refcnt) and grows it, to the next multiple of 16 above a
+# descriptor it does not hold yet, with realloc() under PL_perlio_mutex
+# (perl 5.20 perlio.c, PerlIOUnix_refcnt_inc). fork() in glibc 2.21 runs malloc's handler first,
+# which takes every arena, and then perl's, which takes PL_perlio_mutex
+# (sysdeps/nptl/fork.c: newest handler first; perl registers its own in
+# main(), before its first malloc()). So a thread that opens a handle on a
+# descriptor beyond the table while another thread forks waits for the
+# arena with the mutex held, the forking thread waits for the mutex with
+# the arena held, and neither comes back: every other thread queues up
+# behind malloc and the daemon answers nothing, not even /api/ping, until
+# the watchdog restarts it. Read on the Pi 2026-11-15 from the stacks of a
+# hung process: fork -> Perl_atfork_lock on the one side,
+# PerlIOUnix_refcnt_inc -> realloc on the other; MALLOC_ARENA_MAX=1 does
+# not prevent it, the main arena is enough.
+#
+# So the table is grown once, before a thread exists, to the highest
+# descriptor this process may have: a handle is opened on that descriptor
+# and closed again. After that perl does not allocate under the mutex for
+# any descriptor up to it (the table does not shrink). Returns the
+# descriptor the table reaches, -1 when none could be made; no descriptor
+# stays open and none that is in use is touched (F_DUPFD takes a free
+# one). Descriptors beyond the table that are in use at this moment are
+# not covered, nor are any above 2^20: the start line then names the
+# highest descriptor the limit allows beside what the table reaches
+# (perlio_descriptor_limit, webui_malloc_arena_report).
+sub perlio_descriptor_table_presize (@) {
+ require POSIX;
+ require Fcntl;
+ open(my $src,"<","/dev/null") or return -1;
+ # The highest descriptor the limit allows, by bisection: F_DUPFD fails
+ # at and beyond the limit. 2^20 descriptors is a table of 4 MiB, more
+ # are not covered.
+ my ($good,$bad)=(-1,1048576);
+ while($bad-$good > 1) {
+  my $try=int(($good+$bad)/2);
+  my $got=fcntl($src,Fcntl::F_DUPFD(),$try);
+  if(defined($got)) {
+   POSIX::close(int($got));
+   $good=$try;
+  } else {
+   $bad=$try;
+  }
+ }
+ my $reached=-1;
+ if($good >= 0) {
+  my $got=fcntl($src,Fcntl::F_DUPFD(),$good);
+  if(defined($got)) {
+   $got=int($got);
+   if(open(my $top,"<&=",$got)) {
+    $reached=$got;
+    close($top);
+   } else {
+    POSIX::close($got);
+   }
+  }
+ }
+ close($src);
+ return $reached;
+}
+
+# The number of descriptors this process may have open (the soft limit),
+# -1 when it cannot be told.
+sub perlio_descriptor_limit (@) {
+ require POSIX;
+ my $limit=eval { POSIX::sysconf(POSIX::_SC_OPEN_MAX()) };
+ return (defined($limit) && $limit=~/^\d+$/) ? int($limit) : -1;
 }
 
 # A forked child shares the open lock descriptions of every thread of its
@@ -2540,7 +2667,14 @@ sub process_pid(@) {
 ###############################################
 #        Pattern Clean Files Function         #
 ###############################################
+# The name of the pattern the last wipe removed with the pattern file ("" for
+# one without a name, a client's patch); an empty or missing pattern file
+# leaves it as it is. Per thread. Read by the WebUI apply that draws its
+# plate again after a renderer restart (webui_restart_renderer_locked): a
+# pattern asked for while the renderer was down is the newer one.
+our $clean_files_pattern_name;
 sub clean_files(@) {
+ $clean_files_pattern_name=&webui_pattern_current_name() if(-s $command_file && defined(&webui_pattern_current_name));
  # Meter settings are durable user preferences (meter ports, custom series,
  # grey profiles). The blanket $var_dir wipe below deleted the persist copy on
  # EVERY daemon restart, so settings only survived when an open browser tab

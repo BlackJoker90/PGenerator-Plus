@@ -1270,6 +1270,52 @@ sub webui_spawn_detached (@) {
  return 0;
 }
 
+# A fork of this threaded daemon that closes what it inherited does so past
+# Perl (POSIX::close): the handles on those descriptors are another thread's,
+# or lie in frames the fork never returns to. Perl goes on counting them, by
+# descriptor number (PL_perlio_fd_refcnt: one count for each handle of every
+# thread), and a handle opened later on such a number is not the only one to
+# it: close() leaves the descriptor open, and the close of a pipe does not
+# wait for its command (perl 5.20, perlio.c PerlIOUnix_close and util.c
+# my_pclose).
+# Read on the Pi 4, 2026-11-15: the cycle's worker held two record files it
+# had closed (descriptors 3 and 4), and the first plate drawn ahead, whose
+# pipe to convert got number 3, gave up 0.7 s after it had started convert,
+# two seconds before the picture was there.
+# So each such number is taken out of use: /dev/null stays open on it.
+# $max: the highest descriptor that was open at the fork (none above it is
+# counted, so the search ends at the first number above it that Perl
+# closes). Returns how many numbers were taken. Only for a process with one
+# thread, and after it has closed what it inherited.
+sub webui_fork_plug_counted_fds (@) {
+ my $max=shift;
+ require POSIX;
+ $max=1023 if(!defined($max) || $max!~/^\d+$/);
+ my (@clean,$plugged);
+ $plugged=0;
+ for(1..1024) {
+  # (an open takes the lowest number that is free)
+  open(my $probe,"<","/dev/null") or last;
+  my $n=fileno($probe);
+  close($probe);
+  last if(!defined($n));
+  # Still open after its close: a counted number. It stays as it is.
+  # (Asked with dup: POSIX::fstat opens a handle of its own to ask.)
+  my $dup=POSIX::dup($n);
+  if(defined($dup)) {
+   POSIX::close($dup);
+   $plugged++;
+   next;
+  }
+  last if($n > $max);
+  # A number Perl closes: held while the ones above it are tried.
+  open(my $hold,"<","/dev/null") or last;
+  push(@clean,$hold);
+ }
+ close($_) for(@clean);
+ return $plugged;
+}
+
 # A detached worker may have waited while another process started video.
 # Serialize the entire restart and re-read the root record, never forked vars.
 sub webui_complete_renderer_restart (@) {
@@ -15734,6 +15780,9 @@ our @webui_hdr_cycle_keys=qw(max_luma max_cll max_fall);
 our $webui_hdr_cycle_minutes=30;
 our $webui_hdr_cycle_stale=60;
 our ($webui_hdr_cycle_watchdog_next,$webui_hdr_cycle_watchdog_seen,$webui_hdr_cycle_watchdog_since)=(0,"",0);
+# The record ("token/step") whose pending metadata an end has dealt with
+# although the record itself could not be removed (webui_hdr_cycle_end_locked).
+our $webui_hdr_cycle_pending_done :shared="";
 # Where the worker reaches the daemon: webui_http binds 80, 8080 when that
 # fails.
 our @webui_hdr_cycle_ports=(80,8080);
@@ -15750,11 +15799,11 @@ sub webui_hdr_cycle_lock (@) {
 }
 
 # Whoever takes the lock to end the cycle or to draw another pattern says
-# so before it waits: a step holds the lock while it waits for its plate
-# (webui_hdr_cycle_await_plate) and for the renderer, and cannot see who
-# waits behind it otherwise. The step then does not hand its metadata to the
-# renderer any more and ends its cycle. The mark goes once the lock is had,
-# and with a cycle's start (one left by a waiter that died).
+# so before it waits: a step holds the lock while the daemon draws its plate
+# (the cycle's first round) and while the renderer takes its metadata, and
+# cannot see who waits behind it otherwise. A step that finds the mark does
+# not go on and ends its cycle. The mark goes once the lock is had, and with
+# a cycle's start (one left by a waiter that died).
 sub webui_hdr_cycle_asked_file (@) { return "$var_dir/hdrcycle/asked"; }
 sub webui_hdr_cycle_lock_to_end (@) {
  my $mark=&webui_hdr_cycle_asked_file();
@@ -15768,10 +15817,15 @@ sub webui_hdr_cycle_lock_to_end (@) {
  return $lock;
 }
 
-# {token,step,saved_<key>,cycle_<key>,prev_<key>} or undef: no file, or one
-# that is not whole (written through a rename, so only a foreign or damaged
-# file). cycle_: the value of the step being written or last written;
-# prev_: the one before it.
+# {token,step,saved_<key>,cycle_<key>,prev_<key>,pending,shown,claim} or
+# undef: no file, or one that is not whole (written through a rename, so
+# only a foreign or damaged file). cycle_: the value of the step being
+# written or last written; prev_: the one before it. pending: the keys of a
+# step whose plate went first and whose metadata the renderer has not been
+# handed yet (webui_hdr_cycle_apply_step), with shown: what the renderer had
+# reported as shown before that plate was written (webui_renderer_presented),
+# and claim: the number of the last request for the output when that step
+# began (output_request_latest).
 sub webui_hdr_cycle_state_read (@) {
  open(my $fh,"<",&webui_hdr_cycle_state_file()) or return undef;
  my %s;
@@ -15786,6 +15840,10 @@ sub webui_hdr_cycle_state_read (@) {
    return undef if(defined($s{"${kind}_$k"}) && $s{"${kind}_$k"}!~/^[0-9.]{1,16}$/);
   }
  }
+ my $key=join("|",@webui_hdr_cycle_keys);
+ return undef if(defined($s{"pending"}) && $s{"pending"}!~/^(?:$key)(?:,(?:$key))*$/);
+ return undef if(defined($s{"shown"}) && $s{"shown"}!~/^\d+ \d+$/);
+ return undef if(defined($s{"claim"}) && $s{"claim"}!~/^\d{1,18}$/);
  return \%s;
 }
 
@@ -15800,6 +15858,9 @@ sub webui_hdr_cycle_state_write (@) {
   for my $kind ("cycle","prev") {
    $text.="${kind}_$k=".$s->{"${kind}_$k"}."\n" if(defined($s->{"${kind}_$k"}));
   }
+ }
+ for my $k ("pending","shown","claim") {
+  $text.="$k=".$s->{$k}."\n" if(defined($s->{$k}) && $s->{$k} ne "");
  }
  $text.="end=1\n";
  my $tmp="$file.$$.tmp";
@@ -15829,6 +15890,13 @@ sub webui_hdr_cycle_begin (@) {
  # step's in their place.
  return "" if(-e &webui_hdr_cycle_state_file());
  unlink(&webui_hdr_cycle_asked_file());
+ # (and a plate a worker that died was drawing ahead; one that still draws
+ # is younger)
+ {
+  (my $ahead=&webui_pattern_diag_image_file("hdr_metadata_cycle_0"))=~s/_0(\.[a-z]+)$/_*.ahead$1/;
+  my @left=glob($ahead);
+  unlink(grep { my @st=stat($_); @st && time()-$st[9] > 120 } @left);
+ }
  my %s=(token => sprintf("%08x%08x",time() & 0xffffffff,int(rand(0xffffffff))), step => 0);
  for my $k (@webui_hdr_cycle_keys) {
   my $v=defined($pgenerator_conf{$k}) ? "$pgenerator_conf{$k}" : "";
@@ -15882,10 +15950,12 @@ sub webui_hdr_cycle_user_values (@) {
 # is put back), then the conf, then, with no picture on screen, the reload
 # in place. Returns ("",$peak), or the reason it did not happen; the caller
 # holds the lock and ends the cycle on a reason. With a picture on screen
-# the reload is the caller's, after the step's plate: the third value is
-# then the keys the renderer has to take, {key => 1}.
+# the step's plate goes first and its metadata follow in a request of their
+# own (webui_hdr_cycle_metadata_part): the record names them as pending, and
+# the third value is true. $claim (optional): the number of the last request
+# for the output when the step began, kept for that second request.
 sub webui_hdr_cycle_apply_step (@) {
- my ($token,$step)=@_;
+ my ($token,$step,$claim)=@_;
  my $s=&webui_hdr_cycle_state_read();
  return ("this metadata cycle has ended",0) if(!$s || $s->{"token"} ne $token);
  require PGHdrPatterns;
@@ -15906,22 +15976,34 @@ sub webui_hdr_cycle_apply_step (@) {
   $s->{"prev_$k"}=$s->{"cycle_$k"} if(defined($s->{"cycle_$k"}));
   $s->{"cycle_$k"}=$values->{$k};
  }
+ # What the step before left for the renderer (its second request never
+ # came) goes with this step's.
+ $changed{$_}=1 for(grep { $_ ne "" } split(/,/,$s->{"pending"} // ""));
+ delete @{$s}{"pending","shown","claim"};
  $s->{"step"}=$step;
- return ("the cycle's record could not be written",0) if(!&webui_hdr_cycle_state_write($s));
- return ("",$peak) if(!@writes);
- return ("the HDR metadata could not be written",0) if(!&normalize_conf_write("HDR Metadata Cycle",@writes));
- # A renderer that is not running reads the conf when it starts.
- return ("",$peak) if(!&pattern_generator_is_running());
  # A picture on screen (the plate of the step before, HDR Steps at a
  # cycle's start): the renderer keeps it across the change, so the step's
- # plate goes first and the caller hands the metadata over once it is on
- # screen (webui_hdr_cycle_await_plate). This order is for the renderer
- # shipped with it (picture_cache.h): one without the picture cache loses
- # the plate with the change and shows code 0 until the next step, and the
- # daemon has no way to tell the two apart (renderer-features names
- # sighup-reconfigure only).
- my $on_screen=&webui_pattern_file_text();
- return ("",$peak,\%changed) if(defined($on_screen) && $on_screen=~/^IMAGE=/m);
+ # plate goes first and the metadata are handed over once it is on screen.
+ # This order is for the renderer shipped with it (picture_cache.h): one
+ # without the picture cache loses the plate with the change and shows code
+ # 0 until the next step, and the daemon has no way to tell the two apart
+ # (renderer-features names sighup-reconfigure only).
+ # A renderer that is not running reads the conf when it starts.
+ my ($running,$plate_first)=(&pattern_generator_is_running() ? 1 : 0,0);
+ if(%changed && $running) {
+  my $on_screen=&webui_pattern_file_text();
+  if(defined($on_screen) && $on_screen=~/^IMAGE=/m) {
+   $plate_first=1;
+   $s->{"pending"}=join(",",grep { $changed{$_} } @webui_hdr_cycle_keys);
+   my $shown=&webui_renderer_presented();
+   $s->{"shown"}=$shown if($shown ne "");
+   $s->{"claim"}=int($claim) if(defined($claim) && "$claim"=~/^\d{1,18}$/);
+  }
+ }
+ return ("the cycle's record could not be written",0) if(!&webui_hdr_cycle_state_write($s));
+ return ("the HDR metadata could not be written",0) if(@writes && !&normalize_conf_write("HDR Metadata Cycle",@writes));
+ return ("",$peak) if(!%changed || !$running);
+ return ("",$peak,1) if($plate_first);
  # No picture on screen: the metadata first, and the plate comes under
  # them. (The plate is then the first picture after a pattern without one,
  # which the renderer reads at two draws: a change in place asked for after
@@ -15945,44 +16027,78 @@ sub webui_hdr_cycle_apply_step (@) {
 # was read (1.3 s at 1080p); the black of the link between two plates, and
 # the bars were gone for 1.45 s of each step.
 # The plate is waited for: the renderer takes no signal while it reads a
-# file, and a change in place gives it 3 s (renderer_reconfigure_in_place).
-# $before: what the renderer had shown before the plate was written
-# (webui_renderer_presented). At most $webui_hdr_cycle_plate_wait seconds; a
-# renderer that does not report the plate by then is asked for the change
-# all the same. About ten times a second:
-# - $taken (optional) gives a reason: the output was taken by someone who
-#   did not wait (a patch of calibration software, a video). The plate will
-#   not come, the wait ends.
-# - $asked (optional) is true: someone waits for the cycle's lock
-#   (webui_hdr_cycle_lock_to_end). The cycle will end, and its end needs
-#   the renderer too, which takes nothing before it has read the plate
-#   (3.5 to 5.4 s at 2160p): the plate is waited for a little longer,
-#   $webui_hdr_cycle_asked_wait seconds from then, and no longer.
-# The caller asks for the output once more after the wait, and only then
-# for the change.
+# file (3.5 to 5.4 s for a plate at 2160p), and a change in place gives it
+# 3 s (renderer_reconfigure_in_place).
+# The step is two requests, and the wait lies between them, in the cycle's
+# worker (webui_hdr_cycle_worker_metadata): the first writes the record, the
+# conf and the plate, the second hands the metadata to the renderer
+# (webui_hdr_cycle_metadata_part). Neither the cycle's lock nor the worker
+# of the renderer's requests is held while the renderer reads the plate, so
+# another pattern, a key of the remote or applied settings do not queue
+# behind a step for that time (as one request a step held both for up to
+# 5.6 s at 2160p, read 2026-11-15, and a pattern posted over loopback was
+# dropped as too old after 8 s).
+#
+# Waits until the renderer reports another picture as shown than $before
+# (webui_renderer_presented), at most $max seconds (default
+# $webui_hdr_cycle_plate_wait). $taken (optional), asked about ten times a
+# second, gives a reason to wait no longer: the plate will not come.
+# Returns "" when the renderer reported it, otherwise why not: $taken's
+# reason, or "no report" after $max seconds.
 our $webui_hdr_cycle_plate_wait=12;
-our $webui_hdr_cycle_asked_wait=4;
+# How long the cycle's end waits for a plate the renderer is still reading
+# before it asks for its own change (webui_hdr_cycle_end_locked).
+our $webui_hdr_cycle_end_wait=4;
 sub webui_hdr_cycle_await_plate (@) {
- my ($before,$taken,$asked)=@_;
- my $until=&webui_hdr_cycle_clock()+$webui_hdr_cycle_plate_wait;
- my ($turn,$yields)=(0,0);
+ my ($before,$taken,$max)=@_;
+ $before="" if(!defined($before));
+ my $until=&webui_hdr_cycle_clock()+(defined($max) ? $max : $webui_hdr_cycle_plate_wait);
+ my $turn=0;
  while(1) {
   my $now=&webui_renderer_presented();
-  return if($now ne "" && $now ne $before);
-  if(++$turn % 5 == 0) {
-   return if($taken && $taken->() ne "");
-   if($asked && !$yields && $asked->()) {
-    $yields=1;
-    my $soon=&webui_hdr_cycle_clock()+$webui_hdr_cycle_asked_wait;
-    $until=$soon if($soon < $until);
-   }
+  return "" if($now ne "" && $now ne $before);
+  if(++$turn % 5 == 0 && $taken) {
+   my $why=$taken->();
+   return $why if($why ne "");
   }
-  if(&webui_hdr_cycle_clock() >= $until) {
-   &log("HDR Metadata Cycle: the renderer did not report the plate within ${webui_hdr_cycle_plate_wait}s; the metadata follow all the same") if(!$yields);
-   return;
-  }
+  return "no report" if(&webui_hdr_cycle_clock() >= $until);
   select(undef,undef,undef,0.02);
  }
+}
+
+# The second request of a step whose plate went first: the metadata the
+# record names as pending go to the renderer. The caller (webui_pattern)
+# holds the lock, has found the cycle to be $token's and has asked $gone
+# (who has the output, "" while it is the cycle's) once. Returns the
+# answer's body. A request for a step that has nothing pending (a second
+# one for the same step, one a later step has overtaken) changes nothing.
+sub webui_hdr_cycle_metadata_part (@) {
+ my ($token,$step,$gone)=@_;
+ my $s=&webui_hdr_cycle_state_read();
+ return '{"status":"error","message":"This metadata cycle has ended"}' if(!$s || $s->{"token"} ne $token);
+ my %changed=map { $_ => 1 } grep { $_ ne "" } split(/,/,$s->{"pending"} // "");
+ return '{"status":"ok","pattern":"hdr_metadata_cycle","unchanged":true}' if(!%changed || int($s->{"step"}) != int($step));
+ my $why="";
+ # (the record goes on naming them as pending until it is written anew: an
+ # end that comes first is told that the renderer has them)
+ my $handed=&renderer_reconfigure_in_place(\%changed) ? {handed => 1} : undef;
+ $why="the renderer did not take the HDR metadata without a restart" if(!$handed);
+ # The output is asked for once more after the wait for the renderer: the
+ # metadata of a step are not left under what came meanwhile.
+ my $taken=$gone ? $gone->() : "";
+ if($taken ne "") {
+  &webui_hdr_cycle_end_locked($taken,1,$token,undef,$handed);
+  return '{"status":"error","message":"'.&_webui_json_escape("The HDR Metadata Cycle ended: $taken").'"}';
+ }
+ if($why eq "") {
+  delete @{$s}{"pending","shown","claim"};
+  $why="the cycle's record could not be written" if(!&webui_hdr_cycle_state_write($s));
+ }
+ if($why ne "") {
+  &webui_hdr_cycle_end_locked("step $step: $why",1,$token,undef,$handed);
+  return '{"status":"error","message":"'.&_webui_json_escape("The HDR Metadata Cycle stopped: $why.").'"}';
+ }
+ return '{"status":"ok","pattern":"hdr_metadata_cycle","metadata":true}';
 }
 
 # Ends the cycle: puts back each value the conf still holds from the cycle
@@ -16018,9 +16134,14 @@ sub webui_hdr_cycle_clear_plate (@) {
 # The same with the lock held by the caller. $token (optional): only that
 # cycle is ended, another one that replaced it is left alone. $keep_plate:
 # the caller draws another pattern next; otherwise a plate of the cycle
-# still on screen is cleared.
+# still on screen is cleared. $is (optional, a hash): what the caller knows
+# of the metadata the record names as pending:
+# - unwritten => N: the caller is the request of step N and has not written
+#   that step's plate (it gave way, or failed, before);
+# - handed => 1: the renderer has taken them (the caller asked it).
 sub webui_hdr_cycle_end_locked (@) {
- my ($why,$reload,$token,$keep_plate)=@_;
+ my ($why,$reload,$token,$keep_plate,$is)=@_;
+ $is={} if(ref($is) ne "HASH");
  my $file=&webui_hdr_cycle_state_file();
  return 0 if(!-e $file);
  my $s=&webui_hdr_cycle_state_read();
@@ -16039,16 +16160,49 @@ sub webui_hdr_cycle_end_locked (@) {
   push(@writes,$k,$s->{"saved_$k"});
   $changed{$k}=1;
  }
+ # The metadata of a step whose plate went first and that the renderer has
+ # not been handed yet (pending): the conf holds them, the renderer those of
+ # the step before. Where the values to put back are that step's, nothing is
+ # written, and the renderer has to take them all the same.
+ my @pending=grep { $_ ne "" } split(/,/,$s->{"pending"} // "");
+ # Not when the renderer has them: the request that handed them over ends
+ # the cycle, or an end before this one dealt with them and could not
+ # remove the record (asked again at every pattern and by the watchdog, it
+ # would hand them to the renderer each time).
+ my $mark="$s->{token}/$s->{step}";
+ @pending=() if($is->{"handed"} || $webui_hdr_cycle_pending_done eq $mark);
+ # That step's plate has gone to the renderer, which reads it, or has. Not
+ # when the step's own request ends the cycle before it wrote the plate:
+ # the plate before is on screen, and no other comes. (What the pattern
+ # file names now does not tell: a client that takes no lock, HCFR or
+ # Resolve on port 85, may have written its patch over the plate while the
+ # renderer still reads it.)
+ my $plate_out=(@pending && !(defined($is->{"unwritten"}) && int($s->{"step"}) == int($is->{"unwritten"}))) ? 1 : 0;
  if(@writes && !&normalize_conf_write("HDR Metadata Cycle",@writes)) {
   &log("HDR Metadata Cycle: the HDR metadata could not be put back ($why); the record stays for the next attempt");
+  # (the record goes on naming as pending what the renderer has taken)
+  $webui_hdr_cycle_pending_done=$mark if($is->{"handed"});
   return 0;
  }
- &log("HDR Metadata Cycle: $file could not be removed ($!)") if(!unlink($file));
+ my $left=0;
+ if(!unlink($file)) {
+  &log("HDR Metadata Cycle: $file could not be removed ($!)");
+  $left=1;
+ }
  &webui_hdr_cycle_clear_plate() if(!$keep_plate);
- &log("HDR Metadata Cycle: ended ($why)".(@writes ? ", put back ".join(" ",map { "$writes[2*$_]=".($writes[2*$_+1] eq "" ? "(unset)" : $writes[2*$_+1]) } 0..(@writes/2-1)) : ", the HDR metadata was already as before"));
+ &log("HDR Metadata Cycle: ended ($why)".(@writes ? ", put back ".join(" ",map { "$writes[2*$_]=".($writes[2*$_+1] eq "" ? "(unset)" : $writes[2*$_+1]) } 0..(@writes/2-1)) : ", the HDR metadata was already as before")
+  .(@pending ? "; the renderer had not been handed ".join(",",@pending)." of step $s->{step}" : ""));
+ $changed{$_}=1 for(@pending);
  if($reload && %changed && &pattern_generator_is_running() && int($pgenerator_conf{"is_hdr"} || 0) == 1) {
+  # A step whose metadata had not followed its plate yet: the renderer may
+  # still be reading that plate, and it takes no signal until it has. Asked
+  # at once, the change would run into its 3 s and end in a restart of the
+  # renderer; the plate is waited for first, for a few seconds.
+  &webui_hdr_cycle_await_plate($s->{"shown"},undef,$webui_hdr_cycle_end_wait) if($plate_out);
   &pattern_generator_restart_unless_current("HDR Metadata Cycle end") if(!&renderer_reconfigure_in_place(\%changed));
  }
+ # (a renderer that is not running reads the conf when it starts)
+ $webui_hdr_cycle_pending_done=$left ? $mark : "";
  return 1;
 }
 
@@ -16089,7 +16243,8 @@ sub webui_hdr_cycle_watchdog (@) {
 }
 
 # POST /api/hdr-cycle/step, the worker's way in: a step of the cycle whose
-# token it carries, or its end ("cycle_end"). Its own path, not /api/pattern:
+# token it carries, the metadata of a step whose plate went first
+# ("cycle_part"), or the cycle's end ("cycle_end"). Its own path, not /api/pattern:
 # a pattern posted over loopback is a calibration worker's patch, queued
 # ahead of the others and dropped once a newer one has run
 # (webui_route_is_loopback_pattern); a step must neither jump that queue nor
@@ -16105,7 +16260,11 @@ sub webui_hdr_cycle_route (@) {
   return &webui_hdr_cycle_end($why,1,$token) ? '{"status":"ok","ended":true}' : '{"status":"error","message":"The HDR Metadata Cycle could not be ended"}';
  }
  return '{"status":"error","message":"Missing cycle step"}' if($body!~/"cycle_step"\s*:\s*(\d{1,9})\s*[,}]/);
- return &webui_pattern('{"name":"hdr_metadata_cycle","cycle_token":"'.$token.'","cycle_step":'.int($1).'}');
+ my $step=int($1);
+ # "cycle_part":"metadata": the second request of a step whose plate went
+ # first (webui_hdr_cycle_metadata_part).
+ my $part=($body=~/"cycle_part"\s*:\s*"metadata"/) ? ',"cycle_part":"metadata"' : "";
+ return &webui_pattern('{"name":"hdr_metadata_cycle","cycle_token":"'.$token.'","cycle_step":'.$step.$part.'}');
 }
 
 # One POST /api/hdr-cycle/step over loopback. Returns the answer's body, ""
@@ -16162,46 +16321,108 @@ sub webui_hdr_cycle_post (@) {
 # ($webui_vsif_spawn); stdio stays for the log, unbuffered, as the worker
 # ends without Perl's cleanup (its handles name descriptors closed here).
 sub webui_hdr_cycle_spawn (@) {
- my $token=shift;
+ my ($token,$plate)=@_;
  require POSIX;
  return &webui_spawn_detached(sub {
-  # Above 1023 only what /proc lists (Linux): a daemon with a higher limit.
-  my @above;
+  # What is open (Linux: /proc lists it). Above 1023 only that is closed: a
+  # daemon with a higher limit.
+  my @open;
   if(opendir(my $fds,"/proc/self/fd")) {
-   @above=grep { /^\d+$/ && $_ > 1023 } readdir($fds);
+   @open=grep { /^\d+$/ } readdir($fds);
    closedir($fds);
   }
-  POSIX::close($_) for(3..1023,@above);
+  POSIX::close($_) for(3..1023,grep { $_ > 1023 } @open);
+  # The numbers Perl still counts handles on are not used again: the worker
+  # and the processes it starts open and close files, a socket and the pipe
+  # to convert, and a close must be one (webui_fork_plug_counted_fds).
+  my ($max)=sort { $b <=> $a } @open;
+  &webui_fork_plug_counted_fds($max);
   select(STDOUT);
   $|=1;
-  eval { &webui_hdr_cycle_worker($token) };
+  eval { &webui_hdr_cycle_worker($token,$plate) };
   POSIX::_exit(0);
  });
 }
+# The second half of step $step, if its plate went first: waits, in the
+# worker and with nothing of the daemon held, until the renderer has shown
+# the plate, then asks the daemon to hand the metadata over. A renderer that
+# does not report the plate within $webui_hdr_cycle_plate_wait seconds is
+# asked all the same. The wait also ends when the plate will not come:
+# another pattern in the pattern file, a video. The daemon is asked then
+# too: its request finds the same, says why and ends the cycle. (Only what
+# lies in files is looked at here: this process is the fork of a threaded
+# one, and a lock on what the threads share could wait forever.)
+# Returns 1 (done, or nothing was pending), 0 (the daemon did not take it:
+# the caller asks for the cycle's end), undef when the cycle is gone.
+sub webui_hdr_cycle_worker_metadata (@) {
+ my ($token,$step)=@_;
+ my $s=&webui_hdr_cycle_state_read();
+ return undef if(!$s || $s->{"token"} ne $token);
+ return 1 if(($s->{"pending"} // "") eq "");
+ my $why=&webui_hdr_cycle_await_plate($s->{"shown"},sub {
+  return "the cycle has ended" if(!&webui_hdr_cycle_owned($token));
+  return "another pattern is on screen" if(&webui_pattern_current_name() ne "hdr_metadata_cycle");
+  return "a video has the output" if(&video_record_present() || -e $video_starting_file);
+  return "";
+ });
+ return undef if(!&webui_hdr_cycle_owned($token));
+ &log("HDR Metadata Cycle: the renderer did not report the plate of step $step within ${webui_hdr_cycle_plate_wait}s; the metadata follow all the same") if($why eq "no report");
+ my $answer=&webui_hdr_cycle_post('{"cycle_token":"'.$token.'","cycle_step":'.int($step).',"cycle_part":"metadata"}');
+ return 1 if($answer=~/"status"\s*:\s*"ok"/);
+ &log("HDR Metadata Cycle: the metadata of step $step were not taken (".($answer eq "" ? "no answer" : substr($answer,0,200)).")");
+ return 0;
+}
+
 sub webui_hdr_cycle_worker (@) {
- my $token=shift;
+ my ($token,$plate)=@_;
  # The clock of the watchdog (webui_hdr_cycle_clock): a wall clock that is
  # set back would hold the next step back by as much, and the watchdog
  # would end a cycle whose worker is alive.
  my $start=&webui_hdr_cycle_clock();
  my $last=int($webui_hdr_cycle_minutes*60/$webui_hdr_cycle_seconds);
  my $step=0;
+ # The request that started the cycle started this worker before it wrote
+ # the pattern file, and holds the cycle's lock until it has: once the lock
+ # was had, the pattern file is the cycle's, or the cycle is gone. Before
+ # that the file names the pattern the cycle was started over, and the wait
+ # for the first plate (webui_hdr_cycle_worker_metadata) would take it for
+ # another pattern on screen and ask for the metadata while the renderer
+ # still reads the plate.
+ { my $started=&webui_hdr_cycle_lock(); }
+ # The plate of the next step is drawn ahead of its request, while this one
+ # is on screen ($plate: what a plate of this cycle is drawn for; without
+ # it the request draws its own). $ahead: the process that draws it.
+ my $ahead=&webui_hdr_cycle_ahead_start($token,$plate,1);
+ # The cycle's first step is the request that started it; the metadata it
+ # left for its plate are this worker's to ask for.
+ my $taken=&webui_hdr_cycle_worker_metadata($token,0);
+ return if(!defined($taken));
  while(1) {
-  $step++;
-  my $at=$start+$step*$webui_hdr_cycle_seconds;
-  # A step that overran its period: the next follows at once, the ones
-  # after it keep the new beat instead of catching up in a burst.
-  my $now=&webui_hdr_cycle_clock();
-  if($now > $at) { $start+=$now-$at; $at=$now; }
-  while((my $left=$at-&webui_hdr_cycle_clock()) > 0) {
-   select(undef,undef,undef,$left < 0.25 ? $left : 0.25);
-   return if(!&webui_hdr_cycle_owned($token));
-  }
-  return if(!&webui_hdr_cycle_owned($token));
-  my $why=($step > $last) ? "time" : "";
+  my $why=$taken ? "" : "worker";
   if($why eq "") {
+   $step++;
+   my $at=$start+$step*$webui_hdr_cycle_seconds;
+   # A step that overran its period: the next follows at once, the ones
+   # after it keep the new beat instead of catching up in a burst.
+   my $now=&webui_hdr_cycle_clock();
+   if($now > $at) { $start+=$now-$at; $at=$now; }
+   while((my $left=$at-&webui_hdr_cycle_clock()) > 0) {
+    select(undef,undef,undef,$left < 0.25 ? $left : 0.25);
+    return if(!&webui_hdr_cycle_owned($token));
+   }
+   return if(!&webui_hdr_cycle_owned($token));
+   $why="time" if($step > $last);
+  }
+  if($why eq "") {
+   # (the step's plate is drawn, or will not be: the request sees which)
+   if($ahead) { waitpid($ahead,0); $ahead=0; }
    my $answer=&webui_hdr_cycle_post('{"cycle_token":"'.$token.'","cycle_step":'.$step.'}');
-   next if($answer=~/"status"\s*:\s*"ok"/);
+   if($answer=~/"status"\s*:\s*"ok"/) {
+    $ahead=&webui_hdr_cycle_ahead_start($token,$plate,$step+1);
+    $taken=&webui_hdr_cycle_worker_metadata($token,$step);
+    return if(!defined($taken));
+    next;
+   }
    &log("HDR Metadata Cycle: step $step not shown (".($answer eq "" ? "no answer" : substr($answer,0,200)).")");
    $why="worker";
   }
@@ -16402,35 +16623,131 @@ sub webui_hdr_steps_plate (@) {
  return &webui_pattern_image_pattern($w,$h,$img);
 }
 
-# The picture of the cycle's step $index (peak $peak) into $img: the pattern
-# text, "" when the picture could not be written. A picture that is already
-# the one asked for is kept ($img.sig names what the file holds, written
-# after it), so a step is a conf write and a pattern load, not a redraw.
-sub webui_hdr_cycle_plate (@) {
- my ($img,$w,$h,$bits,$lim,$index,$peak)=@_;
+# What the picture of the cycle's step $index (peak $peak) holds, in a line:
+# kept next to the picture ($img.sig, written after it), so a picture that
+# is already the one asked for is not drawn again.
+sub webui_hdr_cycle_plate_sig (@) {
+ my ($w,$h,$bits,$lim,$index,$peak)=@_;
  require PGHdrPatterns;
  my @peaks=PGHdrPatterns::hdr_cycle_peaks();
- my $sig=join(",",$w,$h,$bits,$lim ? 1 : 0,$index,scalar(@peaks),$peak,$webui_hdr_cycle_seconds,$PGHdrPatterns::VERSION);
+ return join(",",$w,$h,$bits,$lim ? 1 : 0,$index,scalar(@peaks),$peak,$webui_hdr_cycle_seconds,$PGHdrPatterns::VERSION);
+}
+
+# 1 when $img is the picture $sig names.
+sub webui_hdr_cycle_plate_is (@) {
+ my ($img,$sig)=@_;
  my @pic=stat($img);
  my @mark=stat("$img.sig");
- if(@pic && $pic[7] > 0 && @mark && $mark[9] >= $pic[9] && open(my $fh,"<","$img.sig")) {
-  my $have=<$fh>;
-  close($fh);
-  $have="" if(!defined($have));
-  $have=~s/[\r\n]+$//;
-  return &webui_pattern_image_pattern($w,$h,$img) if($have eq $sig);
- }
- unlink("$img.sig");
- my $pat=&webui_hdr_plate_pattern($img,$w,$h,{
+ return 0 if(!@pic || $pic[7] <= 0 || !@mark || $mark[9] < $pic[9]);
+ open(my $fh,"<","$img.sig") or return 0;
+ my $have=<$fh>;
+ close($fh);
+ $have="" if(!defined($have));
+ $have=~s/[\r\n]+$//;
+ return ($have eq $sig) ? 1 : 0;
+}
+
+# Draws that picture into $file. Returns the pattern text, "" when it could
+# not be written.
+sub webui_hdr_cycle_plate_draw (@) {
+ my ($file,$w,$h,$bits,$lim,$index,$peak)=@_;
+ require PGHdrPatterns;
+ my @peaks=PGHdrPatterns::hdr_cycle_peaks();
+ return &webui_hdr_plate_pattern($file,$w,$h,{
   bits => $bits, limited => $lim, levels => [PGHdrPatterns::hdr_cycle_levels()], title => "HDR METADATA CYCLE",
   lines => ["MAXDML $peak  MAXCLL $peak CD/M2","STEP ".($index+1)."/".scalar(@peaks)."  EVERY $webui_hdr_cycle_seconds S",
    "ST 2084 PQ  $bits BIT  ".&webui_hdr_plate_range_name($lim)." RANGE"]});
+}
+
+sub webui_hdr_cycle_plate_sig_write (@) {
+ my ($img,$sig)=@_;
+ open(my $fh,">","$img.sig") or return 0;
+ my $ok=(print $fh "$sig\n") ? 1 : 0;
+ $ok=0 if(!close($fh));
+ unlink("$img.sig") if(!$ok);
+ return $ok;
+}
+
+# The picture of the cycle's step $index (peak $peak) into $img: the pattern
+# text, "" when the picture could not be written. A picture that is already
+# the one asked for is kept, so a step is a conf write and a pattern load,
+# not a redraw.
+sub webui_hdr_cycle_plate (@) {
+ my ($img,$w,$h,$bits,$lim,$index,$peak)=@_;
+ my $sig=&webui_hdr_cycle_plate_sig($w,$h,$bits,$lim,$index,$peak);
+ return &webui_pattern_image_pattern($w,$h,$img) if(&webui_hdr_cycle_plate_is($img,$sig));
+ unlink("$img.sig");
+ my $pat=&webui_hdr_cycle_plate_draw($img,$w,$h,$bits,$lim,$index,$peak);
  return "" if($pat eq "");
- if(open(my $fh,">","$img.sig")) {
-  print $fh "$sig\n";
-  close($fh);
- }
+ &webui_hdr_cycle_plate_sig_write($img,$sig);
  return $pat;
+}
+
+# The plate of step $step, drawn ahead of the step's request. Drawing one
+# takes the daemon about 1.5 s at 1080p and 4 s at 2160p (read on the Pi 4,
+# 2026-11-15), and a step's request holds the cycle's lock and the worker of
+# the renderer's requests for as long: in a cycle's first round, where no
+# plate is there yet, another pattern waited behind it for that time, and
+# then for the renderer to read a plate nobody wanted any more. The cycle's
+# worker has it drawn while the step before is on screen, so the request
+# finds it. $plate: {w,h,bits,lim}, as the cycle's first request drew its
+# own. Runs in a process of the worker's (webui_hdr_cycle_ahead_start).
+# - The picture is drawn into a file of its own and moved into place: the
+#   request never finds a picture half written.
+# - It is put into place under the cycle's lock and only while the cycle is
+#   still $token's: a worker whose cycle has ended (its plate would be one
+#   of another signal) leaves the file to the cycle that runs.
+# - Never over the picture the pattern file names.
+# If it is not there in time, or not the picture the request asks for (the
+# line next to it says what it holds), the request draws it as before.
+# Returns 1 when the picture is there, 0 otherwise.
+sub webui_hdr_cycle_plate_ahead (@) {
+ my ($token,$plate,$step)=@_;
+ return 0 if(ref($plate) ne "HASH");
+ require PGHdrPatterns;
+ my @peaks=PGHdrPatterns::hdr_cycle_peaks();
+ my $index=int($step) % scalar(@peaks);
+ my ($w,$h,$bits,$lim)=map { $plate->{$_} } qw(w h bits lim);
+ my $img=&webui_pattern_diag_image_file("hdr_metadata_cycle_$index");
+ my $sig=&webui_hdr_cycle_plate_sig($w,$h,$bits,$lim,$index,$peaks[$index]);
+ return 1 if(&webui_hdr_cycle_plate_is($img,$sig));
+ (my $new=$img)=~s/(\.[a-z]+)$/.$$.ahead$1/;
+ return 0 if($new eq $img);
+ if(&webui_hdr_cycle_plate_draw($new,$w,$h,$bits,$lim,$index,$peaks[$index]) eq "") {
+  unlink($new);
+  return 0;
+ }
+ my $ok=0;
+ my $lock=&webui_hdr_cycle_lock();
+ # (the pattern file may name it by another spelling: pattern_pictures_spelled)
+ my $on_screen=&pattern_pictures_spelled(&webui_pattern_file_text(),0);
+ if($lock && &webui_hdr_cycle_owned($token) && !(defined($on_screen) && $on_screen=~/^IMAGE=\Q$img\E$/m)) {
+  unlink("$img.sig");
+  $ok=1 if(rename($new,$img) && &webui_hdr_cycle_plate_sig_write($img,$sig));
+ }
+ unlink($new);
+ return $ok;
+}
+
+# Starts webui_hdr_cycle_plate_ahead in a process of its own, so the worker
+# goes on waiting for the plate on screen meanwhile. Returns its pid; 0 when
+# there is nothing to draw, or no process.
+sub webui_hdr_cycle_ahead_start (@) {
+ my ($token,$plate,$step)=@_;
+ return 0 if(ref($plate) ne "HASH");
+ require PGHdrPatterns;
+ require POSIX;
+ my @peaks=PGHdrPatterns::hdr_cycle_peaks();
+ my $index=int($step) % scalar(@peaks);
+ my $img=&webui_pattern_diag_image_file("hdr_metadata_cycle_$index");
+ return 0 if(&webui_hdr_cycle_plate_is($img,&webui_hdr_cycle_plate_sig((map { $plate->{$_} } qw(w h bits lim)),$index,$peaks[$index])));
+ my $pid=fork();
+ return 0 if(!defined($pid));
+ if(!$pid) {
+  eval { &webui_hdr_cycle_plate_ahead($token,$plate,$step) };
+  POSIX::_exit(0);
+ }
+ return $pid;
 }
 
 # Draws one of the two plates into $img. Returns the pattern text, "" when
@@ -16471,14 +16788,15 @@ sub webui_pattern (@) {
  # other request for a pattern ends the cycle and puts its metadata back
  # before it draws. The lock is held to the end of this request, so a step
  # and the end of its cycle never interleave.
- my ($cycle_token,$cycle_step,$cycle_new,$cycle_lock,$cycle_generation,$cycle_metadata)=("",0,0,undef,undef,undef);
+ my ($cycle_token,$cycle_step,$cycle_new,$cycle_lock,$cycle_generation)=("",0,0,undef,undef);
  # A step does not own the output: a patch from calibration software (no
  # lock, its own request number), a video or another request can come while
- # it draws. Asked at its start, again right before it writes the metadata
- # and the pattern, and for a plate that went first: once it is on screen,
- # before its metadata, and once more after these were taken; "" while the
- # cycle still has the output. $cycle_taken: by someone who did not wait for
- # the lock; $cycle_asked: someone waits for it (webui_hdr_cycle_lock_to_end).
+ # it draws. Asked at its start and again right before it writes the
+ # metadata and the pattern; for a plate that went first, by the request
+ # that brings its metadata: at its start (the plate is on screen then) and
+ # once more after the renderer took them; "" while the cycle still has the
+ # output. $cycle_taken: by someone who did not wait for the lock;
+ # $cycle_asked: someone waits for it (webui_hdr_cycle_lock_to_end).
  my $cycle_taken=sub {
   return "" if($cycle_token eq "" || $cycle_new);
   return "another request has the output" if(defined($cycle_generation) && &output_request_latest() != $cycle_generation);
@@ -16513,11 +16831,21 @@ sub webui_pattern (@) {
    # software or a video start does not go through here).
    return '{"status":"error","message":"This metadata cycle has ended"}' if(!&webui_hdr_cycle_owned($cycle_token));
    $cycle_generation=&output_request_latest() if(defined(&output_request_latest));
+   # The metadata of a step whose plate went first: a request of their own,
+   # but one step. Who has asked for the output since that step began
+   # counts, as for a step in one request.
+   my $cycle_part=($body=~/"cycle_part"\s*:\s*"metadata"/) ? 1 : 0;
+   if($cycle_part) {
+    my $s=&webui_hdr_cycle_state_read();
+    $cycle_generation=int($s->{"claim"}) if($s && defined($s->{"claim"}));
+   }
    my $gone=$cycle_gone->();
    if($gone ne "") {
     &webui_hdr_cycle_end_locked($gone,1,$cycle_token);
     return '{"status":"error","message":"'.&_webui_json_escape("The HDR Metadata Cycle ended: $gone").'"}';
    }
+   # Nothing is drawn: the plate is on screen.
+   return &webui_hdr_cycle_metadata_part($cycle_token,$cycle_step,$cycle_gone) if($cycle_part);
   }
   undef $cycle_lock if($name ne "hdr_metadata_cycle");
  }
@@ -16696,20 +17024,23 @@ sub webui_pattern (@) {
    my @peaks=PGHdrPatterns::hdr_cycle_peaks();
    my $index=$cycle_step % scalar(@peaks);
    # One picture file per step: the file on screen is never the one being
-   # written. The picture file first: the step's plate and its metadata
-   # follow each other at once (webui_hdr_cycle_apply_step).
+   # written. The picture file first: the record and the conf of the step
+   # follow at once, its metadata with them or, over a picture, in a request
+   # of their own once the plate is on screen (webui_hdr_cycle_apply_step).
    $img=&webui_pattern_diag_image_file("hdr_metadata_cycle_$index");
    $pat=&webui_hdr_cycle_plate($img,$w,$h,$bits,$lim,$index,$peaks[$index]);
    my $why=($pat eq "") ? "the plate could not be drawn" : $cycle_gone->();
-   ($why,undef,$cycle_metadata)=&webui_hdr_cycle_apply_step($cycle_token,$cycle_step) if($why eq "");
+   # (a new cycle's request has taken its own number above)
+   my $claim=defined($cycle_generation) ? $cycle_generation : defined(&output_request_latest) ? &output_request_latest() : undef;
+   ($why)=&webui_hdr_cycle_apply_step($cycle_token,$cycle_step,$claim) if($why eq "");
    # The timer of a new cycle starts before its plate is drawn: a plate
    # that names a step is never left without the worker behind it.
    if($why eq "" && $cycle_new) {
     my $token=$cycle_token;
-    $why="its timer could not be started" if(!&webui_hdr_cycle_spawn($token));
+    $why="its timer could not be started" if(!&webui_hdr_cycle_spawn($token,{w => $w, h => $h, bits => $bits, lim => $lim}));
    }
    if($why ne "") {
-    &webui_hdr_cycle_end_locked("step $cycle_step: $why",1,$cycle_token);
+    &webui_hdr_cycle_end_locked("step $cycle_step: $why",1,$cycle_token,undef,{unwritten => $cycle_step});
     return '{"status":"error","message":"'.&_webui_json_escape("The HDR Metadata Cycle stopped: $why.").'"}';
    }
   }
@@ -16842,7 +17173,7 @@ elsif($pat eq "" && $name eq "uploaded_diag_video") {
  # output, and the step gives way to it below.
  if(($cycle_token eq "" || $cycle_new) && !&video_program_stop()) {
   &log("WebUI: pattern $name not shown, the video could not be ended");
-  &webui_hdr_cycle_end_locked("the video could not be ended",1,$cycle_token) if($cycle_token ne "");
+  &webui_hdr_cycle_end_locked("the video could not be ended",1,$cycle_token,undef,{unwritten => $cycle_step}) if($cycle_token ne "");
   return '{"status":"error","message":"'.&webui_video_not_ended_message().'"}';
  }
  # Ensure the C renderer binary is running (auto-start on first pattern)
@@ -16851,7 +17182,7 @@ elsif($pat eq "" && $name eq "uploaded_diag_video") {
   Time::HiRes::sleep(0.5);
   if(!&pattern_generator_is_running()) {
    &log("WebUI: renderer failed to start for pattern $name");
-   &webui_hdr_cycle_end_locked("the renderer did not start",0,$cycle_token) if($cycle_token ne "");
+   &webui_hdr_cycle_end_locked("the renderer did not start",0,$cycle_token,undef,{unwritten => $cycle_step}) if($cycle_token ne "");
    return '{"status":"error","message":"Pattern renderer failed to start"}';
   }
  }
@@ -16901,38 +17232,15 @@ elsif($pat eq "" && $name eq "uploaded_diag_video") {
  {
   my $gone=$cycle_gone->();
   if($gone ne "") {
-   &webui_hdr_cycle_end_locked($gone,1,$cycle_token);
+   &webui_hdr_cycle_end_locked($gone,1,$cycle_token,undef,{unwritten => $cycle_step});
    return '{"status":"error","message":"'.&_webui_json_escape("The HDR Metadata Cycle ended: $gone").'"}';
   }
  }
- # (what the renderer has shown so far, for a step of the cycle that waits
- # for its plate)
- my $shown_before=$cycle_metadata ? &webui_renderer_presented() : "";
  if(!&pattern_file_write($pat)) {
-  &webui_hdr_cycle_end_locked("the pattern could not be written",1,$cycle_token) if($cycle_token ne "");
+  &webui_hdr_cycle_end_locked("the pattern could not be written",1,$cycle_token,undef,{unwritten => $cycle_step}) if($cycle_token ne "");
   return '{"status":"error","message":"Pattern could not be written (see the log)"}';
  }
  &create_return_file();
- # HDR Metadata Cycle, a step over a picture: its plate is written, now its
- # metadata. The output is asked for after each of the two waits: once the
- # plate is on screen, before the renderer is asked for the metadata (they
- # do not go under a patch that came meanwhile), and after it took them.
- if($cycle_metadata) {
-  &webui_hdr_cycle_await_plate($shown_before,$cycle_taken,$cycle_asked);
-  my ($gone,$why)=($cycle_gone->(),"");
-  if($gone eq "") {
-   $why="the renderer did not take the HDR metadata without a restart" if(!&renderer_reconfigure_in_place($cycle_metadata));
-   $gone=$cycle_gone->();
-  }
-  if($gone ne "") {
-   &webui_hdr_cycle_end_locked($gone,1,$cycle_token);
-   return '{"status":"error","message":"'.&_webui_json_escape("The HDR Metadata Cycle ended: $gone").'"}';
-  }
-  if($why ne "") {
-   &webui_hdr_cycle_end_locked("step $cycle_step: $why",1,$cycle_token);
-   return '{"status":"error","message":"'.&_webui_json_escape("The HDR Metadata Cycle stopped: $why.").'"}';
-  }
- }
  # Record what is now on screen for the simulated meter. Patch/stabilization
  # captured raw codes above; named solid fields map to their 8-bit authoring
  # values; everything else (ramps, bars, images) is marked complex.

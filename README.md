@@ -182,7 +182,7 @@ Signal Mode, Bit Depth, Color Format and Range each have a **Sent** line: what t
 
 ## ⚖️ At a glance: fork vs. original
 
-| | Original ([BigShoots](https://github.com/BigShoots/PGenerator-Plus) 2.12.1) | **This fork (2.13.x)** |
+| | Original ([BigShoots](https://github.com/BigShoots/PGenerator-Plus) 2.12.1) | **This fork (3.0)** |
 |---|---|---|
 | 10-bit pattern codes | quantised through 8 bit on the way to the GPU | **sent at full 10-bit precision** |
 | RGB Limited output | kernel compression CSC after the framebuffer | **bit-exact** (patched vc4, verified by scanout readback) |
@@ -244,7 +244,7 @@ Signal Mode, Bit Depth, Color Format and Range each have a **Sent** line: what t
 <td colspan="2" valign="top"><img src="screenshots/webui-system.png" alt="System workspace: Device Info with CPU, memory and temperature meters and tiles for board, hostname, resolution, uptime, RAM and network, plus the GPU Memory and Scaling Type selects, and Software Update below"/><br/><p align="center"><sub>System: CPU, memory and temperature at a glance, the device facts, GPU memory and CPU Scaling Type set right in their tiles, and the OTA update</sub></p></td>
 </tr>
 <tr>
-<td colspan="2" valign="top"><img src="screenshots/webui-live-info.png" alt="Output workspace with the signal settings, the Range with Calman and Dolby Vision with Calman options, and the Live Information drawer open: the output as measured, decoded AVI, DRM and SPD infoframes, and HDMI-CEC"/><br/><p align="center"><sub>Output on Desktop with the two Calman options, and Live Information: the output as measured, the infoframes the Pi sends, decoded and updated as the signal changes, and HDMI-CEC with the TV remote</sub></p></td>
+<td colspan="2" valign="top"><img src="screenshots/webui-live-info.png" alt="Output workspace with the Pi ports, signal presets and the signal settings as tiles, each with what is sent, and the Live Information drawer open: the output as measured, decoded AVI, DRM and SPD infoframes, and HDMI-CEC"/><br/><p align="center"><sub>Output on Desktop: the signal settings as tiles, each with what the generator sends, and Live Information: the output as measured, the infoframes the Pi sends, decoded and updated as the signal changes, and HDMI-CEC with the TV remote</sub></p></td>
 </tr>
 <tr>
 <td colspan="2" valign="top"><img src="screenshots/webui-selftest.png" alt="Signal self-test in Output: all 12 modes bit-exact (SDR, HDR10, HLG, Dolby Vision), with link details and the drawn swatches per mode"/><br/><p align="center"><sub>Signal self-test, right below Display Settings: every mode read back from the scanout on a real Pi 4, bit-exact in 12 of 12</sub></p></td>
@@ -301,17 +301,17 @@ Signal Mode, Bit Depth, Color Format and Range each have a **Sent** line: what t
 
 ### 🔀 Coming from the original project?
 
-OTA updates stay within one `MAJOR.MINOR` family. 2.13 needs a new kernel module, so a Pi on upstream 2.12.x cannot update to the fork over the air. To switch:
+OTA updates stay within one `MAJOR.MINOR` family, with one bridge: 2.13 goes to 3.0. 2.13 needs a new kernel module, so a Pi on upstream 2.12.x cannot update to the fork over the air. To switch:
 
 1. Export your settings with **Export System Settings** in the Web UI.
 2. Flash the latest fork image (see above).
-3. Import the backup, then use **Check for Updates** to reach the newest 2.13.x.
+3. Import the backup, then use **Check for Updates** to reach the newest release. A Pi on 2.13.51 or older is offered 2.13.52 first; check again from there to get 3.0.
 
 From then on the Pi follows this fork's releases. The update source is `usr/share/PGenerator/update-channel`, and an `update_repo=owner/repo` line in `PGenerator.conf` overrides it.
 
 ### ⬆️ Updating
 
-- **Web UI:** **System → Software Update → Check for Updates → Install Update.** The dialog shows the release notes and download progress, then restarts the service. The release dropdown also lets you reinstall the current release or roll back to an earlier one.
+- **Web UI:** **System → Software Update → Check for Updates → Install Update.** The dialog shows the release notes and download progress, then restarts the service. The release dropdown also lets you reinstall the current release or roll back to an earlier one; from 3.0 that includes the 2.13.x releases. Coming from 2.13.51 or older, install 2.13.52 first: only from there does the updater offer 3.0.
 - **SSH** (`root` / `PGenerator!!$`):
 
   ```bash

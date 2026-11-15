@@ -1616,6 +1616,65 @@ sub webui_restart_renderer_locked (@) {
  return 0;
 }
 
+# Whether this process runs in secure-execution mode: 1 or 0 from AT_SECURE
+# in its auxiliary vector, "" when the vector cannot be read. A program
+# started with a file capability or set-id is in that mode, and there
+# glibc 2.21 does not read MALLOC_ARENA_MAX (malloc/arena.c, ptmalloc_init),
+# whatever the environment says. The kernel hides the vector of such a
+# process from its own user (not dumpable, the file belongs to root), so ""
+# on the device means the same.
+sub webui_process_secure_execution (@) {
+ my $file=shift;
+ $file="/proc/self/auxv" if(!defined($file) || $file eq "");
+ open(my $fh,"<",$file) or return "";
+ binmode($fh);
+ my $data="";
+ my $got=read($fh,$data,65536);
+ close($fh);
+ return "" if(!defined($got));
+ # Pairs of native unsigned longs, ended by type 0 (AT_NULL); 23 is
+ # AT_SECURE (elf.h).
+ my $pair=2*length(pack("L!",0));
+ for(my $at=0;$at+$pair <= length($data);$at+=$pair) {
+  my ($type,$value)=unpack("L! L!",substr($data,$at,$pair));
+  return $value ? 1 : 0 if($type == 23);
+  last if($type == 0);
+ }
+ return "";
+}
+
+# What the start line says about the two guards against a wedge at fork:
+# the allocator variable and whether glibc read it, and how far perl's
+# descriptor table was grown ahead (command.pm,
+# perlio_descriptor_table_presize) against the highest descriptor the
+# limit allows. On the device the first half reads "not known": the init
+# script starts perl with a file capability, and such a process may not
+# read its own auxiliary vector (read on the Pi 2026-11-15: the file
+# belongs to root, mode 0400, AT_SECURE 1 when root reads it).
+sub webui_malloc_arena_report (@) {
+ my ($arena,$secure,$reaches,$limit)=@_;
+ $arena="unset" if(!defined($arena));
+ $secure="" if(!defined($secure));
+ my $line="malloc_arena_max=$arena";
+ if($arena ne "unset" && $secure eq "1") {
+  $line.=" NOT read by glibc: secure-execution mode, perl started with a file capability";
+ } elsif($arena ne "unset" && $secure ne "0") {
+  $line.=", not known whether glibc read it: no AT_SECURE readable, as in secure-execution mode";
+ }
+ my $table="perl's descriptor table NOT grown ahead";
+ if(defined($reaches) && $reaches=~/^\d+$/) {
+  $table="perl's descriptor table reaches $reaches";
+  if(defined($limit) && $limit=~/^\d+$/ && $limit > 0) {
+   # The table ends at a multiple of 16 (perlio.c, S_more_refcounted_fds):
+   # one that reaches 254 holds 255 as well.
+   $table.=" of ".($limit-1).": NOT every descriptor covered" if($limit-1 > ($reaches | 15));
+  } else {
+   $table.=", descriptor limit not known";
+  }
+ }
+ return "$line, $table";
+}
+
 sub webui_http (@) {
  $SIG{PIPE}='IGNORE';
  my $http_port=80;
@@ -1681,10 +1740,13 @@ sub webui_http (@) {
  # malloc arena creation (see the MALLOC_ARENA_MAX notes in PGeneratord.pl and
  # etc/init.d/PGenerator). $0 assignment in daemon.pm rewrites the process
  # title over /proc/PID/environ, so the environment cannot be read back from
- # outside afterwards -- this line is the only field-visible proof that the
- # mitigation is active in a running daemon.
- my $arena=defined($ENV{"MALLOC_ARENA_MAX"}) ? $ENV{"MALLOC_ARENA_MAX"} : "unset";
- &log("WebUI: request lanes started ($WEBUI_WORKER_POOL_SIZE serialized + $WEBUI_FAST_WORKER_COUNT fast + $WEBUI_COMPUTE_WORKER_COUNT compute + $WEBUI_TV_WORKER_COUNT tv + $WEBUI_METER_WORKER_COUNT meter + $WEBUI_RENDERER_WORKER_COUNT renderer, malloc_arena_max=$arena)");
+ # outside afterwards -- this line is the field-visible word on the
+ # mitigation in a running daemon. The variable alone proved nothing: a
+ # daemon started with a file capability on perl logged it and ran with
+ # eight arenas, so the line also says whether glibc read it, as far as
+ # the process can tell, and how far perl's descriptor table reaches.
+ my $arena=&webui_malloc_arena_report($ENV{"MALLOC_ARENA_MAX"},&webui_process_secure_execution(),$perlio_descriptor_table_reaches,&perlio_descriptor_limit());
+ &log("WebUI: request lanes started ($WEBUI_WORKER_POOL_SIZE serialized + $WEBUI_FAST_WORKER_COUNT fast + $WEBUI_COMPUTE_WORKER_COUNT compute + $WEBUI_TV_WORKER_COUNT tv + $WEBUI_METER_WORKER_COUNT meter + $WEBUI_RENDERER_WORKER_COUNT renderer, $arena)");
 
  # A worker is committed only once a COMPLETE request header has arrived.
  #

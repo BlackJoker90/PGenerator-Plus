@@ -114,6 +114,14 @@ case "$1" in
         # then the list (glibc bug 19182, fixed in 2.23). With one arena none
         # is ever created, so the inversion cannot form. The daemon also
         # re-execs itself with this set when launched by any other path.
+        # glibc does not read the variable in this start: the capability
+        # set above puts perl in secure-execution mode, and there
+        # ptmalloc_init skips it (read on the Pi 2026-11-15: AT_SECURE 1,
+        # eight arenas). The wedge seen in the field is another one,
+        # between fork and perl's descriptor table, and the daemon prevents
+        # it itself (command.pm, perlio_descriptor_table_presize); the
+        # variable counts only in a start without the capability, and
+        # so does the paragraph above.
         setsid sudo -u $PGENERATOR_USER_GROUP env MALLOC_ARENA_MAX=1 $PROGRAM_DAEMON_SOCKET
         setcap cap_net_bind_service=-ep $PERL
         # No fb0 blank here: it switched the HDMI output off (the TV lost

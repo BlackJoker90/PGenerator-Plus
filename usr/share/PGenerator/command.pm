@@ -2100,6 +2100,75 @@ sub renderer_unlock () {
  undef $renderer_lock_fh;
 }
 
+# perl counts the users of every descriptor in one table for all threads
+# (PL_perlio_fd_refcnt) and grows it, to the next multiple of 16 above a
+# descriptor it does not hold yet, with realloc() under PL_perlio_mutex
+# (perl 5.20 perlio.c, PerlIOUnix_refcnt_inc). fork() in glibc 2.21 runs malloc's handler first,
+# which takes every arena, and then perl's, which takes PL_perlio_mutex
+# (sysdeps/nptl/fork.c: newest handler first; perl registers its own in
+# main(), before its first malloc()). So a thread that opens a handle on a
+# descriptor beyond the table while another thread forks waits for the
+# arena with the mutex held, the forking thread waits for the mutex with
+# the arena held, and neither comes back: every other thread queues up
+# behind malloc and the daemon answers nothing, not even /api/ping, until
+# the watchdog restarts it. Read on the Pi 2026-11-15 from the stacks of a
+# hung process: fork -> Perl_atfork_lock on the one side,
+# PerlIOUnix_refcnt_inc -> realloc on the other; MALLOC_ARENA_MAX=1 does
+# not prevent it, the main arena is enough.
+#
+# So the table is grown once, before a thread exists, to the highest
+# descriptor this process may have: a handle is opened on that descriptor
+# and closed again. After that perl does not allocate under the mutex for
+# any descriptor up to it (the table does not shrink). Returns the
+# descriptor the table reaches, -1 when none could be made; no descriptor
+# stays open and none that is in use is touched (F_DUPFD takes a free
+# one). Descriptors beyond the table that are in use at this moment are
+# not covered, nor are any above 2^20: the start line then names the
+# highest descriptor the limit allows beside what the table reaches
+# (perlio_descriptor_limit, webui_malloc_arena_report).
+sub perlio_descriptor_table_presize (@) {
+ require POSIX;
+ require Fcntl;
+ open(my $src,"<","/dev/null") or return -1;
+ # The highest descriptor the limit allows, by bisection: F_DUPFD fails
+ # at and beyond the limit. 2^20 descriptors is a table of 4 MiB, more
+ # are not covered.
+ my ($good,$bad)=(-1,1048576);
+ while($bad-$good > 1) {
+  my $try=int(($good+$bad)/2);
+  my $got=fcntl($src,Fcntl::F_DUPFD(),$try);
+  if(defined($got)) {
+   POSIX::close(int($got));
+   $good=$try;
+  } else {
+   $bad=$try;
+  }
+ }
+ my $reached=-1;
+ if($good >= 0) {
+  my $got=fcntl($src,Fcntl::F_DUPFD(),$good);
+  if(defined($got)) {
+   $got=int($got);
+   if(open(my $top,"<&=",$got)) {
+    $reached=$got;
+    close($top);
+   } else {
+    POSIX::close($got);
+   }
+  }
+ }
+ close($src);
+ return $reached;
+}
+
+# The number of descriptors this process may have open (the soft limit),
+# -1 when it cannot be told.
+sub perlio_descriptor_limit (@) {
+ require POSIX;
+ my $limit=eval { POSIX::sysconf(POSIX::_SC_OPEN_MAX()) };
+ return (defined($limit) && $limit=~/^\d+$/) ? int($limit) : -1;
+}
+
 # A forked child shares the open lock descriptions of every thread of its
 # parent; flock locks belong to those, so the child would hold a lock it
 # does not know about and block on its own next renderer_lock(). Call this

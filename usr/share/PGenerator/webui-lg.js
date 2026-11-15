@@ -32,7 +32,7 @@ function lgRenderCurrentInput(){
   return;
  }
  if(!state.currentInputChecked){
-  el.textContent='Checking...';
+  el.textContent='Checking…';
   el.style.color='var(--text2)';
   el.title='';
   return;
@@ -590,8 +590,9 @@ function lgRevealPinEntry(){
  // On Tablet the TV Control body sits inside the Network card
  const lgBody=document.getElementById('lgStatusBadge');
  const card=(legacyInput&&legacyInput.closest('.card'))||(lgBody&&lgBody.closest('.card'))||document.querySelector('.card[data-widget="lg"]');
- if(card&&card.classList.contains('collapsed')){
-  card.classList.remove('collapsed');
+ if(card&&(card.classList.contains('collapsed')||card.classList.contains('is-collapsing'))){
+  if(typeof pgCardSetCollapsed==='function') pgCardSetCollapsed(card,false,true);
+  else card.classList.remove('collapsed');
   try{
    const key=card.dataset.collapseKey||card.id||card.getAttribute('data-widget');
    if(key){
@@ -784,16 +785,16 @@ function lgDismissDetectedPrompt(){
 		 const cardSelect=document.getElementById('lgDeviceList');
 	 const promptStatus=document.getElementById('lgConnectScanStatus');
 	 const cardStatus=document.getElementById('lgCardScanStatus');
-			 if(promptSelect) promptSelect.innerHTML='<option value="">Scanning...</option>';
+			 if(promptSelect) promptSelect.innerHTML='<option value="">Scanning…</option>';
 			 if(cardSelect) {
-			  cardSelect.innerHTML='<div style="height:30px;display:flex;align-items:center;padding:0 10px;color:var(--text2)">Scanning...</div>';
+			  cardSelect.innerHTML='<div style="height:30px;display:flex;align-items:center;padding:0 10px;color:var(--text2)">Scanning…</div>';
 			  cardSelect.style.height='90px';
 			  cardSelect.style.maxHeight='90px';
 			  cardSelect.style.overflowY='hidden';
 			 }
 			 if(promptSelect) { promptSelect.size=1; promptSelect.style.minHeight=''; }
-	 if(promptStatus) promptStatus.textContent='Scanning the local network for LG WebOS TVs...';
-	 if(cardStatus) cardStatus.textContent='Scanning the local network for LG WebOS TVs...';
+	 if(promptStatus) promptStatus.textContent='Scanning the local network for LG WebOS TVs…';
+	 if(cardStatus) cardStatus.textContent='Scanning the local network for LG WebOS TVs…';
 	 // Saved pairings render instantly (no probes) so the operator can
 	 // see and forget stored TVs without waiting for discovery; the full
 	 // scan below then replaces the list (it includes the saved entries).
@@ -803,8 +804,8 @@ function lgDismissDetectedPrompt(){
 	  if(s&&Array.isArray(s.devices)&&s.devices.length){
 	   lgRenderScanResults(s);
 	   savedShown=true;
-	   if(promptStatus) promptStatus.textContent='Saved TVs shown. Scanning for more...';
-	   if(cardStatus) cardStatus.textContent='Saved TVs shown. Scanning the network for more...';
+	   if(promptStatus) promptStatus.textContent='Saved TVs shown. Scanning for more…';
+	   if(cardStatus) cardStatus.textContent='Saved TVs shown. Scanning the network for more…';
 	  }
 	 }catch(e){}
 	 try{
@@ -1415,7 +1416,7 @@ async function lgConnect(){
  // already up (show() ran synchronously above); transitions to
  // success/error on the result.
  async function runSavedKeyConnect(allowPinFallback){
-  if(button){button.disabled=true;button.textContent='Connecting...';}
+  if(button){button.disabled=true;button.textContent='Connecting…';}
   const commandHandle=lgBeginCommand('Connecting to LG TV');
   let pinFallback=false;
   try{
@@ -1471,7 +1472,7 @@ async function lgConnect(){
  // Returns true when a key is in place and the caller should go on to the
  // saved-key connect; false when it already reported the failure and bailed.
  async function runPinPairing(){
-  if(button){button.disabled=true;button.textContent='Starting Pairing...';}
+  if(button){button.disabled=true;button.textContent='Starting Pairing…';}
   const commandHandle=lgBeginCommand('Starting LG PIN pairing');
   try{
    await lgStartPinPairing();
@@ -1556,7 +1557,7 @@ async function lgStartPinPairing(){
  const ip=input?input.value.trim():'';
  const pairingMode=lgSelectedPairingMode();
 	 if(ip&&!/^\d+\.\d+\.\d+\.\d+$/.test(ip)){toast('Enter a valid LG TV IP','err');return;}
-	 if(button){button.disabled=true;button.textContent='Starting Pairing...';}
+	 if(button){button.disabled=true;button.textContent='Starting Pairing…';}
 	 const commandHandle=lgBeginCommand('Starting LG PIN pairing');
 	 try{
 	   toast('Starting LG PIN pairing. Watch the TV for a PIN.');
@@ -2022,7 +2023,7 @@ function lgRenderCalHistoryInto(el){
 
 async function lgRefreshCalHistory(){
  const hosts=[document.getElementById('lgCalHistoryBodyDesktop'),document.getElementById('lgCalHistoryBodyModal')];
- hosts.forEach(h=>{ if(h) h.innerHTML='Loading history...'; });
+ hosts.forEach(h=>{ if(h) h.innerHTML='Loading history…'; });
  try{
   const r=await fetchJSON('/api/lg/calibration-history?_='+Date.now(),{_quiet:true,_timeoutMs:12000,cache:'no-store'});
   lgCalHistoryCache=(r&&r.status==='ok'&&Array.isArray(r.items))?r.items:[];

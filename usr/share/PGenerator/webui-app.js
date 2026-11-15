@@ -6,6 +6,18 @@ let caps=null;
 // Bluetooth radio on (true), off or absent (false), not read yet (null);
 // set by loadBluetooth, read by the device info tiles.
 var pgBtPowered=null;
+
+// A motion token from :root (".15s" or "150ms") in milliseconds, for a timer
+// that has to end together with a CSS transition. The fallback stands in
+// when the token is missing or unreadable.
+function pgMotionMs(name,fallback){
+ try{
+  const v=getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+  const n=parseFloat(v);
+  if(isFinite(n)&&n>=0) return /ms$/.test(v)?n:n*1000;
+ }catch(e){}
+ return fallback;
+}
 const IFACE_NAMES={
  eth0:'Ethernet',
  usb0:'Ethernet (USB)',
@@ -710,7 +722,7 @@ function updateLgCommandBusyUi(){
 	 const text=document.getElementById('lgCommandStatusText');
 	 const elapsed=document.getElementById('lgCommandElapsed');
 	 if(box) box.style.display=active?'flex':'none';
-	 if(text) text.textContent=label+'...';
+	 if(text) text.textContent=label+'…';
 	 if(elapsed) elapsed.textContent=active?lgFormatBusyElapsed(startedAt):'';
 	 if(typeof syncMeterLgRgbBusyIndicator==='function') syncMeterLgRgbBusyIndicator();
 	 if(active) setConnectionBusyStatus('LG TV');
@@ -2388,7 +2400,7 @@ async function hdmiRecheck(){
   const p=r&&r.status==='ok'?r.port:null;
   if(p){
    if(p.faster&&!p.renderer_elsewhere){
-    toast('Still on '+p.label+' \u2014 for '+p.faster.max_mode+' move the cable to '+p.faster.label,'error');
+    toast('Still on '+p.label+'; for '+p.faster.max_mode+', move the cable to '+p.faster.label,'error');
    }else{
     btn.textContent='Restarting output\u2026';
     // The renderer takes the first connected connector when it starts.
@@ -2396,7 +2408,7 @@ async function hdmiRecheck(){
     // Verdicts read before the restart belong to the output as it was.
     pgSignalWireDrop(); pgSignalChecking=true; pgRenderFieldWire();
     hdmiIgnore();
-    toast('Display on '+p.label+' \u2014 output restarted');
+    toast('Display on '+p.label+': output restarted');
     setTimeout(function(){ pgSignalSummaryRefresh(); if(typeof loadModes==='function') loadModes(true); },8000);
    }
    ok=true;break;
@@ -2404,7 +2416,7 @@ async function hdmiRecheck(){
   await new Promise(res=>setTimeout(res,2000));
  }
  btn.disabled=false;btn.textContent='Recheck';
- if(!ok) toast('Could not reach the display port state \u2014 try refreshing the page','error');
+ if(!ok) toast('Could not reach the display port state: try refreshing the page','error');
 }
 function hdmiShowOverlay(){
  document.getElementById('hdmiOverlay').classList.add('active');
@@ -2437,6 +2449,7 @@ function pgShowDaemonNotice(notice){
  if(seen===notice.id||document.getElementById('pgDaemonNotice')) return;
  const root=document.createElement('div');
  root.id='pgDaemonNotice';
+ root.className='pg-modal-in';
  root.setAttribute('role','alertdialog');
  root.setAttribute('aria-modal','true');
  root.setAttribute('aria-labelledby','pgDaemonNoticeTitle');
@@ -3142,7 +3155,7 @@ const DIAG_DESCRIPTIONS={
  range_check:'<b>Range Check (SDR)</b> &mdash; Shows whether the display decodes the signal in the range the Pi sends; the caption names the range on the cable. A display that decodes Full shows a dark grey panel with the word FULL, one that decodes Limited only the empty outline. The legend below shows which of the two is a match; the EDID check under it (IF TV ON AUTO) predicts from the display\u2019s EDID and the Pi\u2019s AVI infoframe how the display decodes with its range on Auto. On a mismatch, set the display\u2019s HDMI range or black level to the signal\u2019s range (or Auto). FULL showing only faintly on a Limited signal can also mean Brightness is far too high: check Black Clipping.',
  hdr_steps:'<b>HDR Steps (HDR10)</b> &mdash; Grey bars at absolute luminances up to the Max Luma (MaxDML) that is applied, each at its exact PQ code; the plate names the luminance and the code under every bar. A display that clips below the mastering peak shows the bars above its own peak alike: the last bar you can tell from its neighbour is where it clips. It is drawn again when you apply signal settings. Available in HDR10 only, with a Max Luma from 1 to 10,000 cd/m&sup2;.',
  hdr_metadata_cycle:'<b>HDR Metadata Cycle (HDR10)</b> &mdash; The same bars up to 10,000 cd/m&sup2;, unchanged, while the mastering peak (MaxDML) and MaxCLL on the cable step through 600, 1000, 2000, 4000 and 10,000 every 6 seconds; the caption names the step. A display whose tone mapping follows the metadata changes the look of the bars with each step, one that ignores it does not. MaxFALL is lowered to the step&rsquo;s MaxCLL where it would be above it. The values you set come back when the cycle ends: another pattern or stop, applied settings, calibration software connecting, or by itself after 30 minutes. Available in HDR10 only.',
- overscan:'<b>Overscan</b> &mdash; Border lines at 0%, 2.5%, and 5% from screen edges with corner L-brackets and center crosshair. Use HDMI RGB output, and all lines should be visible &mdash; if not, disable overscan in your TV settings.',
+ overscan:'<b>Overscan</b> &mdash; Border lines at 0%, 2.5%, and 5% from screen edges with corner L-brackets and center crosshair. Use HDMI RGB output, and all lines should be visible; if not, disable overscan in your TV settings.',
 };
 const DIAG_UPLOAD_SENTINEL='__upload__';
 const DIAG_UPLOAD_CHUNK_BYTES=192*1024;
@@ -3190,12 +3203,12 @@ function diagRenderAssetSelect(kind,selectedValue){
  const sel=document.getElementById(diagAssetSelectId(kind));
  if(!sel) return;
  const files=Array.isArray(diagCustomAssets[kind])?diagCustomAssets[kind]:[];
- const placeholder=kind==='video'?'Custom Diagnostic Video...':'Custom Diagnostic Image...';
+ const placeholder=kind==='video'?'Custom Diagnostic Video…':'Custom Diagnostic Image…';
  let html='<option value="">'+placeholder+'</option>';
  files.forEach(filename=>{
   html+='<option value="'+filename+'">'+diagAssetDisplayLabel(filename)+'</option>';
  });
- html+='<option value="'+DIAG_UPLOAD_SENTINEL+'">Upload '+kind+'...</option>';
+ html+='<option value="'+DIAG_UPLOAD_SENTINEL+'">Upload '+kind+'…</option>';
  sel.innerHTML=html;
  if(selectedValue&&files.includes(selectedValue)) sel.value=selectedValue;
  else if(sel.dataset.lastSelected&&files.includes(sel.dataset.lastSelected)) sel.value=sel.dataset.lastSelected;
@@ -3423,7 +3436,7 @@ async function diagUploadVideoSequence(videoFilename,file,range){
     const blob=await diagCanvasToBlob(canvas,'image/png');
    const b64=await diagBlobToBase64(blob);
    const percent=Math.min(100,Math.round(((i+1)/frameCount)*100));
-   diagUpdateUploadStatus('Preparing video frames... '+percent+'%');
+   diagUpdateUploadStatus('Preparing video frames… '+percent+'%');
    const r=await fetchJSON('/api/diagnostic/video-sequence',{
     method:'POST',
     headers:{'Content-Type':'application/json'},
@@ -3442,7 +3455,7 @@ async function diagUploadVideoSequence(videoFilename,file,range){
 async function diagUploadAsset(kind,file){
  if(!file||!file.size) throw new Error('Choose a file to upload');
  const uploadId=kind+'_'+Date.now().toString(36)+'_'+Math.random().toString(36).slice(2,8);
- diagUpdateUploadStatus('Uploading '+file.name+'...');
+ diagUpdateUploadStatus('Uploading '+file.name+'…');
  for(let offset=0; offset<file.size; offset+=DIAG_UPLOAD_CHUNK_BYTES){
   const chunk=file.slice(offset,offset+DIAG_UPLOAD_CHUNK_BYTES);
   const b64=await diagBlobToBase64(chunk);
@@ -3455,7 +3468,7 @@ async function diagUploadAsset(kind,file){
    _timeoutMs:20000
   });
   if(!r||r.status!=='ok') throw new Error(r&&r.message?r.message:'Upload failed');
-  diagUpdateUploadStatus('Uploading '+file.name+'... '+percent+'%');
+  diagUpdateUploadStatus('Uploading '+file.name+'… '+percent+'%');
   if(isFinal) return r;
  }
  throw new Error('Upload failed');
@@ -4524,7 +4537,7 @@ function pgRebootProgress(bootId){
   card.querySelector('.rb-hint').textContent=run?'Usually about a minute':'';
   const msg=d.result==='done'?'Reloading the page…':(d.result==='timeout'?'The Pi has not answered after 4 minutes.'
    :(d.result==='unconfirmed'?'This page could not tell which start was running before, so it cannot confirm the restart.'
-   :(d.step===0?'Shutting down rampecho…':'The Pi is restarting — this page reconnects automatically.')));
+   :(d.step===0?'Shutting down rampecho…':'The Pi is restarting. This page reconnects automatically.')));
   const msgEl=card.querySelector('.upd-msg');
   if(msgEl.textContent!==msg) msgEl.textContent=msg;
   pgSetFill(card.querySelector('.upd-bar-fill'),d.value);
@@ -4591,7 +4604,7 @@ async function shutdownDevice(){
  if(!await pgConfirm({title:'Power off the Pi?',body:'The WebUI will become unreachable until you power-cycle the device.',acceptLabel:'Power off Pi',destructive:true})) return;
  _powerOffRequested=true;
  setPowerButtonState(false);
- toast('Shutting down...');
+ toast('Shutting down…');
  await flushMeterSettings(3000);
  try{ await fetchJSON('/api/power',{method:'POST'}); }catch(e){}
 }
@@ -4784,7 +4797,7 @@ async function applyGovernor(){
 }
 
 async function scanWifi(){
- document.getElementById('wifiList').innerHTML='<div class="spinner"></div> Scanning...';
+ document.getElementById('wifiList').innerHTML='<div class="spinner"></div> Scanning…';
  const nets=await fetchJSON('/api/wifi/scan');
  const list=document.getElementById('wifiList');
  if(!nets||!nets.length){list.innerHTML='<div style="color:var(--text2)">No networks found</div>';return;}
@@ -4821,12 +4834,12 @@ function hideWifiForm(){document.getElementById('wifiConnect').className='hidden
 async function connectWifi(){
  const ssid=document.getElementById('wifiSsid').value;
  const psk=document.getElementById('wifiPsk').value;
- const btn=event.target;btn.disabled=true;btn.textContent='Connecting...';
+ const btn=event.target;btn.disabled=true;btn.textContent='Connecting…';
  const r=await fetchJSON('/api/wifi/connect',{method:'POST',
   // The Pi answers after the join and the DHCP lease: up to 60 s (#22).
   headers:{'Content-Type':'application/json'},body:JSON.stringify({ssid,psk}),_timeoutMs:70000});
  if(r&&r.status==='ok'){
-  toast((r.message||('Connecting to '+ssid))+'...');
+  toast((r.message||('Connecting to '+ssid))+'…');
   hideWifiForm();
   // Poll long enough for association plus DHCP lease acquisition.
   let attempts=0;
@@ -4840,7 +4853,7 @@ async function connectWifi(){
     toast('Connected to '+ssid+bandInfo+sigInfo+' - '+ws.ip);
     loadInfo();
    }else if(ws&&ws.wpa_state==='COMPLETED'&&ws.ssid===ssid&&attempts===4){
-    toast('Connected to '+ssid+', waiting for IP...');
+    toast('Connected to '+ssid+', waiting for IP…');
    }else if(attempts>=40){
     clearInterval(poll);
     if(ws&&ws.wpa_state==='COMPLETED'&&ws.ip) toast('Connected to '+ws.ssid+' - '+ws.ip);
@@ -4862,7 +4875,7 @@ async function disconnectWifi(){
  }
  const r=await fetchJSON('/api/wifi/disconnect',{method:'POST'});
  if(r&&r.status==='ok'){
-  toast('Disconnecting WiFi...');
+  toast('Disconnecting WiFi…');
   hideWifiForm();
   setTimeout(()=>{loadInfo();if(btn) btn.disabled=false;},1500);
  }else{
@@ -4949,7 +4962,7 @@ async function cecCmd(cmd){
 
 async function cecScan(){
   const el=document.getElementById('cecDeviceList');
-  el.innerHTML='Scanning... (may take 15-30s)';
+  el.innerHTML='Scanning… (may take 15-30s)';
   pgSyncDrawerIfOpen();
   const r=await fetchJSON('/api/cec/scan',{_timeoutMs:30000});
  if(r&&r.status==='ok'&&r.data&&r.data.devices){
@@ -5597,8 +5610,10 @@ function pgSyncCardCollapseForLayout(){
  let state={};
  try{ state=JSON.parse(localStorage.getItem('cardCollapse')||'{}')||{}; }catch(e){ state={}; }
  document.querySelectorAll('.card[data-collapse-key]').forEach(card=>{
-  if(pgLayoutEffective==='desktop') card.classList.remove('collapsed');
-  else card.classList.toggle('collapsed',!!state[card.dataset.collapseKey]);
+  const collapse=pgLayoutEffective!=='desktop'&&!!state[card.dataset.collapseKey];
+  // At once, and ending a fold a click may have started.
+  if(typeof pgCardSetCollapsed==='function') pgCardSetCollapsed(card,collapse,true);
+  else card.classList.toggle('collapsed',collapse);
  });
 }
 function meterPlace3dLutWorkspaceForLayout(){
@@ -5683,8 +5698,8 @@ function meterSync3dLutWorkspaceUi(){
   :'Select a profiling series to begin.';
  if(picker){
   picker.title=selected&&seriesName
-   ?('Selected: '+seriesName+' — click to choose another profiling series')
-   :'Choose a 3D LUT profiling series to measure (lattice / skeleton / hybrid) — same method chooser and descriptions as the standalone 3D LUT AutoCal';
+   ?('Selected: '+seriesName+'. Click to choose another profiling series.')
+   :'Choose a 3D LUT profiling series to measure (lattice, skeleton or hybrid)';
  }
  if(button){
   const busy=!!window._configApplyPending||meterActionPending||meterSeriesRunning||meterAutoCalRunning||meterLg3dAutoCalRunning||meterFullAutoCalRunning||meterContinuousActive;
@@ -6284,7 +6299,7 @@ function pgSyncDesktopUtilityDrawer(){
  pgUtilitySetText(spd,pgUtilityInfoframeText('spdDecoded','spdIF'));
  const cec=document.getElementById('cecStatus');
  const cecOut=document.getElementById('desktopUtilityCecStatus');
- pgUtilitySetText(cecOut,cec?String(cec.innerText||cec.textContent||'Checking...').trim():'Checking...');
+ pgUtilitySetText(cecOut,cec?String(cec.innerText||cec.textContent||'Checking…').trim():'Checking…');
  pgUtilitySetText(document.getElementById('desktopUtilityCecDevices'),pgUtilityCecDevicesText(document.getElementById('cecDeviceList')));
  const deviceRows=[['CPU Usage',String((document.getElementById('cpuUsageValue')||{}).textContent||'--%').trim()],['Memory Usage',String((document.getElementById('memUsageValue')||{}).textContent||'--%').trim()],['Temp',String((document.getElementById('deviceInfoTemperature')||{}).textContent||'--').trim()]];
  const info=document.getElementById('infoGrid');
@@ -6764,7 +6779,7 @@ async function checkUpdate(manual,background){
  if(!background) loadReleaseList();
  const btn=document.getElementById('checkUpdateBtn');
  if(btn) btn.disabled=true;
- setUpdateStatus('Checking GitHub for updates...','',true);
+ setUpdateStatus('Checking GitHub for updates…','',true);
  let r=null;
  try{ r=await fetchJSON('/api/update/check'+(manual?'?fresh=1':''),{_quiet:true,_timeoutMs:30000}); }
  finally{ if(btn) btn.disabled=false; }
@@ -6816,7 +6831,7 @@ async function checkUpdate(manual,background){
   document.getElementById('updateBtn').classList.remove('update-pulse');
   setUpdateStatus('');
   pgMarkCurrentTile('latest','v'+r.current+' is the latest version (checked '+checkedAt+')');
-  if(manual) toast('No update available — v'+r.current+' is the latest version.');
+  if(manual) toast('No update available: v'+r.current+' is the latest version.');
  }
 }
 let _updateChecked=false;
@@ -7093,7 +7108,7 @@ function pgUpdateRender(d){
  if(d.result==='done') msg='Reloading the page\u2026';
  else if(d.result==='timeout') msg='It has not finished after 15 minutes.';
  else if(!run) msg=d.message||'';
- else if(d.offline) msg=d.step>=2?'rampecho is restarting \u2014 this page reconnects automatically.':'Waiting for rampecho to answer\u2026';
+ else if(d.offline) msg=d.step>=2?'rampecho is restarting. This page reconnects automatically.':'Waiting for rampecho to answer\u2026';
  else msg=(d.message||'Working')+'\u2026';
  const msgEl=c.querySelector('.upd-msg');
  if(msgEl.textContent!==msg) msgEl.textContent=msg;
@@ -7208,7 +7223,7 @@ async function runUpdate(version,info){
 }
 async function submitLogs(){
  const btn=document.getElementById('submitLogsBtn');
- btn.disabled=true;btn.textContent='Collecting...';
+ btn.disabled=true;btn.textContent='Collecting…';
  try{
   const res=await fetch('/api/submit_logs',{method:'POST'});
   if(res.ok){
@@ -7258,7 +7273,7 @@ async function systemBackupWaitForReboot(){
   // browsers can miss a short outage, so reload once the normal reboot window
   // has elapsed even if every individual ping happened to land while online.
   if(sawOffline||Date.now()-started>=30000){
-   systemBackupSetStatus('rampecho is back online. Reloading...',false);
+   systemBackupSetStatus('rampecho is back online. Reloading…',false);
    location.reload();
    return;
   }
@@ -7267,8 +7282,8 @@ async function systemBackupWaitForReboot(){
 }
 async function exportSystemSettings(){
  const btn=document.getElementById('exportSystemSettingsBtn');
- if(btn){btn.disabled=true;btn.textContent='Creating Backup...';}
- systemBackupSetStatus('Collecting settings, playlists, profiles, calibration history and custom diagnostic media...',false);
+ if(btn){btn.disabled=true;btn.textContent='Creating Backup…';}
+ systemBackupSetStatus('Collecting settings, playlists, profiles, calibration history and custom diagnostic media…',false);
  try{
   const response=await fetch('/api/system-backup/export',{method:'POST'});
   if(!response.ok){
@@ -7307,7 +7322,7 @@ async function importSystemSettingsFile(file){
  const accepted=await pgConfirm({acceptLabel:'Import backup',destructive:true,title:'Import this rampecho system backup?',body:'Matching system settings, profiles and custom diagnostic media will be replaced. Existing history and media with different names will be preserved. A local rollback backup will be created first. Stop all measurements and calibration work before continuing.'});
  if(!accepted){if(input)input.value='';return;}
  const btn=document.getElementById('importSystemSettingsBtn');
- if(btn){btn.disabled=true;btn.textContent='Importing...';}
+ if(btn){btn.disabled=true;btn.textContent='Importing…';}
  const chunkSize=512*1024;
  const uploadId='system_backup_'+Date.now().toString(36)+'_'+Math.random().toString(36).slice(2,10);
  let offset=0;
@@ -7316,7 +7331,7 @@ async function importSystemSettingsFile(file){
    const end=Math.min(file.size,offset+chunkSize);
    const content=await diagBlobToBase64(file.slice(offset,end));
    const isFinal=end===file.size;
-   systemBackupSetStatus('Uploading backup... '+Math.round(100*end/file.size)+'%',false);
+   systemBackupSetStatus('Uploading backup… '+Math.round(100*end/file.size)+'%',false);
    const response=await fetch('/api/system-backup/import',{
     method:'POST',headers:{'Content-Type':'application/json'},
     body:JSON.stringify({upload_id:uploadId,filename:file.name,offset:offset,total_size:file.size,is_final:isFinal,content:content})
@@ -7331,7 +7346,7 @@ async function importSystemSettingsFile(file){
     if(await pgConfirm({title:'System backup imported',body:'Reboot rampecho now to apply all restored settings?',acceptLabel:'Reboot Pi',cancelLabel:'Later',destructive:true})){
      const reboot=await fetchJSON('/api/reboot',{method:'POST'});
      if(!reboot||reboot.status!=='ok')throw new Error(reboot&&reboot.message?reboot.message:'Could not start reboot');
-     systemBackupSetStatus('Rebooting rampecho...',false);
+     systemBackupSetStatus('Rebooting rampecho…',false);
      systemBackupWaitForReboot();
     }
    }
@@ -7559,6 +7574,7 @@ function pgPrompt(opts){
   if(old) old.remove();
   const root=document.createElement('div');
   root.id='pgPromptModal';
+  root.className='pg-modal-in';
   root.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,0.55);z-index:100001;display:flex;align-items:center;justify-content:center;padding:20px;box-sizing:border-box';
   const opener=document.activeElement;
   const card=document.createElement('div');
@@ -16180,7 +16196,7 @@ function meterCcssCreateSetStartingFeedback(starting,format){
  }
  if(startBtn){
   const supplied=meterCcssCreateFormatValue()==='ccmx'&&meterCcssCreateMethodValue()!=='measure';
-  startBtn.textContent=starting?'Starting...':(supplied?'Create CCMX':'Start Creation');
+  startBtn.textContent=starting?'Starting…':(supplied?'Create CCMX':'Start Creation');
   if(starting){
    startBtn.dataset.starting='1';
    startBtn.disabled=true;
@@ -16197,7 +16213,7 @@ function meterCcssCreateSetStartingFeedback(starting,format){
  }
  if(progress&&starting){
   const profileType=String(format||meterCcssCreateFormatValue()||'ccss').toUpperCase();
-  progress.textContent='Starting '+profileType+' creation...';
+  progress.textContent='Starting '+profileType+' creation…';
   progress.dataset.starting='1';
  }else if(progress&&progress.dataset.starting==='1'){
   progress.textContent='Select a profile type and the required meter or meters, then start.';
@@ -16263,9 +16279,9 @@ function meterRenderCcssCreateChoices(){
  if(referenceLabel) referenceLabel.textContent=mode==='ccss'?'Reference Spectrophotometer':'Reference Meter';
  if(!meterCcssCreateInventoryReady){
   wrap.innerHTML='';
-  status.textContent=needsReference?'Checking connected reference meters...':'No reference meter is required for a supplied matrix.';
+  status.textContent=needsReference?'Checking connected reference meters…':'No reference meter is required for a supplied matrix.';
   if(targetWrap) targetWrap.innerHTML='';
-  if(targetStatus) targetStatus.textContent=mode==='ccmx'?'Checking connected colorimeters...':'';
+  if(targetStatus) targetStatus.textContent=mode==='ccmx'?'Checking connected colorimeters…':'';
   meterCcssCreateUpdateStartState();
   return;
  }
@@ -17168,7 +17184,7 @@ function meterRecoverSeries(s){
   document.getElementById('meterStopBtn').style.display='';
   document.getElementById('meterReadSeriesBtn').classList.remove('btn-secondary');
   document.getElementById('meterReadSeriesBtn').classList.add('btn-success');
-  document.getElementById('meterProgressLabel').textContent=s.current_name||'Running...';
+  document.getElementById('meterProgressLabel').textContent=s.current_name||'Running…';
   document.getElementById('meterDot').style.background='var(--orange)';
   if(meterSeriesPolling) clearInterval(meterSeriesPolling);
   meterSeriesPolling=setInterval(meterPollSeries,meterSeriesPollIntervalMs);
@@ -19363,7 +19379,7 @@ function meterSetWorkflowProgress(status,options){
  const workflow=opts.workflow||'';
  const pct=meterWorkflowPercent(status,workflow);
  const stepText=meterWorkflowStepText(status);
- let text=opts.label||(status&&(status.current_name||status.message))||'Running...';
+ let text=opts.label||(status&&(status.current_name||status.message))||'Running…';
  if(workflow==='full') text='Full Auto Cal: '+meterFullAutoCalStageLabel()+(text?(' - '+text):'');
  if(stepText) text+=' '+stepText;
  if(progress) progress.style.display='grid';
@@ -19413,7 +19429,7 @@ async function meterSignalManualPromptReady(){
  if(meterReadySignalPending||!meterManualPromptAwaiting) return;
  const progressEl=document.getElementById('meterProgressLabel');
  meterReadySignalPending=true;
- if(progressEl) progressEl.textContent='Resuming measurement...';
+ if(progressEl) progressEl.textContent='Resuming measurement…';
  meterUpdateReadButtons();
  try{
   const r=await fetchJSON('/api/meter/read/ready',{method:'POST',_timeoutMs:5000});
@@ -19479,7 +19495,7 @@ function meterSpectroSetupStepText(step){
  return ({calibrate_tile:'Step 1 of 2: Calibrate on the white tile',calibrate_dark:'Step 1 of 2: Dark calibration',position_screen:'Step 2 of 2: Aim at the screen',calibrate_retry:'Calibration retry'})[step]||'Setup';
 }
 function meterSpectroSetupWorkingText(step){
- return ({calibrate_tile:'Calibrating the meter on its tile. Please wait...',calibrate_dark:'Calibrating the meter black reference. Please wait...',position_screen:'Preparing the measurement...',calibrate_retry:'Retrying meter calibration. Please wait...'})[step]||'Preparing the meter. Please wait...';
+ return ({calibrate_tile:'Calibrating the meter on its tile. Please wait…',calibrate_dark:'Calibrating the meter black reference. Please wait…',position_screen:'Preparing the measurement…',calibrate_retry:'Retrying meter calibration. Please wait…'})[step]||'Preparing the meter. Please wait…';
 }
 // Driven by the read-result poll. Shows the modal during status:"setup",
 // updates per step, hides it otherwise.
@@ -19561,9 +19577,9 @@ async function meterCalibrateSelectedMeter(){
  meterActionPending=true;
  meterUpdateReadButtons();
  const button=document.getElementById('meterCalibrateBtn');
- if(button) button.textContent='Calibrating...';
+ if(button) button.textContent='Calibrating…';
  document.getElementById('meterDot').style.background='var(--orange)';
- meterSpectroSetupApply({keepBusy:true,message:'Preparing meter calibration...'},'/api/meter/setup/ack');
+ meterSpectroSetupApply({keepBusy:true,message:'Preparing meter calibration…'},'/api/meter/setup/ack');
  try{
   const payload=meterMeasurementSignalContext({
    display_type:getEffectiveDisplayType(),
@@ -19654,7 +19670,7 @@ async function meterReadOnce(){
  if(meterActionPending){toast('The meter is busy with another reading. Wait for it to finish, or stop it first.',true);return;}
  if(!(await meterEnsureDetected())){toast('No meter detected. Plug in the meter, wait a few seconds for it to appear, then try again.',true);return;}
  if(!(await meterCalibrationRequirePatternProvider())) return;
- if(meterSeriesRunning){toast('Series scan is running \u2014 stop it first',true);return;}
+ if(meterSeriesRunning){toast('Series scan is running: stop it first',true);return;}
  if(!meterEnsureAppliedGeneratorSettings()) return;
  const requestedStep=meterClonePatchStep(meterCurrentPatchStep);
  const referenceWhiteStep=meterReferenceWhitePromptStep(requestedStep);
@@ -19865,7 +19881,7 @@ async function meterContinuousLoop(){
 	    meterContinuousRetryDelayMs=Math.min(2000,Math.max(500,(meterContinuousRetryDelayMs||50)*2));
 	    nextDelay=meterContinuousRetryDelayMs;
 	    const label=document.getElementById('meterProgressLabel');
-	    if(label) label.textContent='Starting meter session...';
+	    if(label) label.textContent='Starting meter session…';
 	    if(meterContinuousActive) meterContinuousTimer=setTimeout(meterContinuousLoop,nextDelay);
 	    return;
 	   }
@@ -20193,10 +20209,10 @@ async function meterSyncSeriesAfterReady(previousLabel,timeoutMs){
 }
 
 async function meterResetUSB(){
- toast('Resetting USB...');
+ toast('Resetting USB…');
  const r=await fetchJSON('/api/meter/reset',{method:'POST',_timeoutMs:15000});
  if(r&&r.status==='ok'){
-  toast('USB reset done, checking meter...');
+  toast('USB reset done, checking meter…');
   await new Promise(r=>setTimeout(r,2000));
   await meterCheckStatus();
   if(meterDetected) toast('Meter reconnected!');
@@ -20769,7 +20785,7 @@ function meterUpdateReadButtons(){
  if(readSeriesBtn){
   if(!meterSeriesRunning&&!meterActionPending) readSeriesBtn.innerHTML=meterReadSeriesButtonLabel();
   readSeriesBtn.disabled=!seriesControlsOk||!meterDetected||settingsDirty||busy;
-  readSeriesBtn.title=!meterDetected?noMeterTitle:window._configApplyPending?'Applying settings...':settingsDirty?'Apply & Restart first so measurements match the live signal mode':busy?'Meter operation already in progress':(on3dLutTab&&!has3dLutSeries?'Select a 3D LUT series first':'');
+  readSeriesBtn.title=!meterDetected?noMeterTitle:window._configApplyPending?'Applying settings…':settingsDirty?'Apply & Restart first so measurements match the live signal mode':busy?'Meter operation already in progress':(on3dLutTab&&!has3dLutSeries?'Select a 3D LUT series first':'');
  }
  if(readOnceBtn) readOnceBtn.style.display=(show&&!continuousUiActive&&!on3dLutTab)?'':'none';
  if(continuousBtn) continuousBtn.style.display=(show&&!on3dLutTab)?'':'none';
@@ -20782,7 +20798,7 @@ function meterUpdateReadButtons(){
   readSelectionBtn.innerHTML='&#9654; Read Selection ('+selectionCount+')';
   readSelectionBtn.disabled=!showSelection||!meterDetected||settingsDirty||busy;
   readSelectionBtn.title=!meterDetected?noMeterTitle
-   :window._configApplyPending?'Applying settings...'
+   :window._configApplyPending?'Applying settings…'
    :settingsDirty?'Apply & Restart first so measurements match the live signal mode'
    :busy?'Meter operation already in progress'
    :'Read only the selected patches in thumbnail order';
@@ -20867,11 +20883,11 @@ function meterUpdateReadButtons(){
  if(autoCalTarget) autoCalTarget.disabled=busy&&meterAutoCalPhase!=='confirm';
  if(readOnceBtn){
   readOnceBtn.disabled=!hasSelection||!meterDetected||settingsDirty||busy;
-  readOnceBtn.title=!meterDetected?noMeterTitle:window._configApplyPending?'Applying settings...':settingsDirty?'Apply & Restart first so measurements match the live signal mode':busy?'Meter operation already in progress':'';
+  readOnceBtn.title=!meterDetected?noMeterTitle:window._configApplyPending?'Applying settings…':settingsDirty?'Apply & Restart first so measurements match the live signal mode':busy?'Meter operation already in progress':'';
  }
  if(continuousBtn){
     continuousBtn.disabled=!hasSelection||!meterDetected||settingsDirty||busy;
-    continuousBtn.title=!meterDetected?noMeterTitle:window._configApplyPending?'Applying settings...':settingsDirty?'Apply & Restart first so measurements match the live signal mode':busy?'Meter operation already in progress':'';
+    continuousBtn.title=!meterDetected?noMeterTitle:window._configApplyPending?'Applying settings…':settingsDirty?'Apply & Restart first so measurements match the live signal mode':busy?'Meter operation already in progress':'';
  }
  if(stopBtn){
     const showStop=meterSeriesRunning||meterAutoCalRunning||meterLg3dAutoCalRunning||meterFullAutoCalRunning||!!window._meterToneMapBusy||continuousUiActive||meterSeriesAwaitingReady||meterManualPromptAwaiting;
@@ -20882,13 +20898,13 @@ function meterUpdateReadButtons(){
   const readyVisible=meterSeriesAwaitingReady&&meterSelectedMeasurementRequiresReady()&&!meterSeriesSpectroSetupActive;
   readyBtn.style.display=readyVisible?'':'none';
   readyBtn.disabled=!readyVisible||meterReadySignalPending;
-  readyBtn.textContent=meterReadySignalPending?'Sending...':'Device Ready';
+  readyBtn.textContent=meterReadySignalPending?'Sending…':'Device Ready';
  }
  if(manualPromptBtn){
     const promptVisible=meterManualPromptAwaiting;
     manualPromptBtn.style.display=promptVisible?'':'none';
     manualPromptBtn.disabled=!promptVisible||meterReadySignalPending;
-    manualPromptBtn.textContent=meterReadySignalPending?'Sending...':meterManualPromptActionLabel();
+    manualPromptBtn.textContent=meterReadySignalPending?'Sending…':meterManualPromptActionLabel();
 	   }
  meterSyncBusyStatusDot();
  try{ meterSync3dLutWorkspaceUi(); }catch(e){}
@@ -22033,7 +22049,7 @@ function meterSelectAutoCalToneMap(){
   fetchJSON('/api/pattern',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:'stop'}),_quiet:true,_timeoutMs:5000}).catch(()=>{});
  }catch(e){}
  meterToneMapSetLiveY(null);
- meterToneMapSetStatus('Idle — press Measure & Upload for a short white flash + peak read, then tone-map upload.');
+ meterToneMapSetStatus('Idle. Press Measure & Upload for a short white flash + peak read, then tone-map upload.');
  meterUpdateToneMapPanelVisibility();
  meterUpdateReadButtons();
  if(typeof meterUpdateSeriesTabUi==='function') meterUpdateSeriesTabUi();
@@ -22161,8 +22177,8 @@ async function meterStartToneMapMeasureUpload(){
  window._meterToneMapBusy=true;
  try{ meterUpdateReadButtons(); }catch(e){}
  const btn=document.getElementById('meterToneMapMeasureUploadBtn');
- if(btn){ btn.disabled=true; btn.textContent='Measuring...'; }
- meterToneMapSetStatus('Short white flash — measuring peak (then off immediately)...');
+ if(btn){ btn.disabled=true; btn.textContent='Measuring…'; }
+ meterToneMapSetStatus('Short white flash: measuring peak (then off immediately)…');
  meterToneMapSetLiveY(null);
  let peak=null;
  try{
@@ -22172,15 +22188,15 @@ async function meterStartToneMapMeasureUpload(){
  }
  if(!(Number.isFinite(peak)&&peak>0)){
   toast('Couldn\u2019t measure the 100% white peak. Check that the meter is connected and placed on the screen, then try again.',true);
-  meterToneMapSetStatus('Measurement failed — check meter placement and try again.',true);
+  meterToneMapSetStatus('Measurement failed: check meter placement and try again.',true);
   window._meterToneMapBusy=false;
   if(btn){ btn.disabled=false; btn.textContent='\u25B6 Measure & Upload'; }
   try{ meterUpdateReadButtons(); }catch(e){}
   return;
  }
  meterToneMapSetLiveY(peak);
- meterToneMapSetStatus('Measured '+peak.toFixed(1)+' cd/m\u00B2 (white off) — uploading HDR tone map...');
- if(btn) btn.textContent='Uploading...';
+ meterToneMapSetStatus('Measured '+peak.toFixed(1)+' cd/m\u00B2 (white off). Uploading HDR tone map…');
+ if(btn) btn.textContent='Uploading…';
  const pictureMode=(typeof meterLgPictureModeValue==='function')?meterLgPictureModeValue():'';
  // Optional DPG from last greyscale/full-autocal state (same session binding as Full AutoCal).
  let dpg=null;
@@ -24157,7 +24173,8 @@ function meterCloseLutTools(){
   if(immediate===true||m.classList.contains('no-motion')){ m.remove(); return; }
   m.classList.remove('is-open');
   m.classList.add('is-closing');
-  setTimeout(()=>m.remove(),100);
+  // Removed once the close transition (--duration-quick) has run.
+  setTimeout(()=>m.remove(),typeof pgMotionMs==='function'?pgMotionMs('--duration-quick',150):150);
  }
  function choose(i){
   const li=items[i];

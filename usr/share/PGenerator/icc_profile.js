@@ -1156,7 +1156,7 @@ function meterIccSyncUi(){
   const meterReady=!!(meterDetected&&selectedMeter&&displayControl&&displayControl.options.length&&profileControl&&profileControl.options.length);
   const generatorUnavailable=usesCompanion&&!meterIccCompanionConnected;
   start.disabled=!meterReady||generatorUnavailable||busy||invalidPatchSet;
-  start.textContent=meterIccBuildPending?'Building Profile...':(meterIccStarting||meterIccRunning?'Profiling...':'Start Profiling');
+  start.textContent=meterIccBuildPending?'Building Profile…':(meterIccStarting||meterIccRunning?'Profiling…':'Start Profiling');
   start.setAttribute('aria-busy',(meterIccStarting||meterIccRunning||meterIccBuildPending)?'true':'false');
   const startReason=!meterDetected?'Connect a meter first':!meterReady?'Waiting for the meter settings to finish loading':invalidPatchSet?('Increase total patches to at least '+patchMinimum):usesCompanion&&!meterIccCompanionConnected?'Start Patch Companion on the target computer before profiling':busy?'A meter operation is already running':!usesCompanion&&!localMode.matches?'Start profiling to review and apply the required output mode':'Start the ICC profiling measurements';
   start.title='';
@@ -1813,9 +1813,9 @@ function meterIccFineTuneProgressRender(){
  if(!s) return;
  const esc=value=>String(value==null?'':value).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
  const passLabel=document.getElementById('meterIccFineTunePassLabel');
- if(passLabel) passLabel.textContent=s.pass>0?('Pass '+s.pass+' of up to '+s.maxPasses):'Preparing session...';
+ if(passLabel) passLabel.textContent=s.pass>0?('Pass '+s.pass+' of up to '+s.maxPasses):'Preparing session…';
  const fileLabel=document.getElementById('meterIccFineTuneFile');
- if(fileLabel) fileLabel.textContent='Fine-tuning '+s.file+' — each pass applies the current profile, measures it, corrects it, and re-checks until improvement stops. The best measured pass is kept.';
+ if(fileLabel) fileLabel.textContent='Fine-tuning '+s.file+'. Each pass applies the current profile, measures it, corrects it, and re-checks until improvement stops. The best measured pass is kept.';
  const list=document.getElementById('meterIccFineTuneSteps');
  if(list){
   const colors={pending:'var(--text2)',active:'var(--warning)',done:'var(--success)',error:'var(--danger)',skipped:'var(--text2)'};
@@ -1842,7 +1842,7 @@ function meterIccFineTuneProgressOpen(file,tuneColor,maxPasses){
   ]};
  if(tuneColor===false){
   const color=meterIccFineTuneProgress.steps.find(step=>step.key==='color');
-  if(color){ color.state='skipped'; color.detail='Skipped — this profile tunes from grey reads alone'; }
+  if(color){ color.state='skipped'; color.detail='Skipped: this profile tunes from grey reads alone'; }
  }
  meterIccFineTuneProgressRender();
  const modal=document.getElementById('meterIccFineTuneModal');
@@ -1897,7 +1897,7 @@ let meterIccFineTuneCancelRequested=false;
 
 function meterIccFineTuneCancel(){
  meterIccFineTuneCancelRequested=true;
- meterIccFineTuneProgressNote('Cancel requested — stopping after the current step and keeping the best measured pass.');
+ meterIccFineTuneProgressNote('Cancel requested: stopping after the current step and keeping the best measured pass.');
  // Abort an in-flight meter read so the session notices promptly.
  fetchJSON('/api/meter/stop',{method:'POST',_quiet:true,_timeoutMs:5000});
  meterIccFineTuneProgressHide();
@@ -2000,7 +2000,7 @@ async function meterIccStartClosedLoopFineTune(file,button,profile,source){
  const stem=String(file||'').replace(/\.icc$/i,'').replace(/-ClosedLoop(?:-\d+)?$/,'');
  const name=stem+'-ClosedLoop';
  const original=button?button.textContent:'Fine tune';
- if(button){ button.disabled=true; button.textContent='Closed-loop...'; }
+ if(button){ button.disabled=true; button.textContent='Closed-loop…'; }
  meterIccCompanionProfileRestoreMode=meterIccCompanionCorrectionValue();
  meterIccCompanionCorrectionInitialized=true;
  const info=meterIccProfileInfo('windows-hdr');
@@ -2029,7 +2029,7 @@ async function meterIccStartClosedLoopFineTune(file,button,profile,source){
  };
  if(build.avg_deviation) meterIccRunConfig.avg_deviation=build.avg_deviation;
  const status=document.getElementById('meterIccStatus');
- if(status) status.textContent='Closed-loop Fine Tune: building a null MHC2 seed from the saved characterization...';
+ if(status) status.textContent='Closed-loop Fine Tune: building a null MHC2 seed from the saved characterization…';
  const stopButton=document.getElementById('meterIccStopBtn');
  if(stopButton) stopButton.style.display='';
  meterIccStarting=true;
@@ -2106,7 +2106,7 @@ async function meterIccFineTuneProfile(file,button,tuneMode,tuneColor,tuneMhc2){
    // later pass is a residual/recovery edit and must be gentler so one noisy
    // toe or exact-white read cannot swing the MHC2 curve back past the target.
    const passDamping=pass===1?0.5:0.35;
-   if(button) button.textContent='Pass '+pass+': applying...';
+   if(button) button.textContent='Pass '+pass+': applying…';
    meterIccFineTuneProgressPass(pass);
    meterIccFineTuneProgressStep('apply','active','Installing '+currentFile+' on the target computer and applying it to the display');
    await installOnTarget(currentFile);
@@ -2118,7 +2118,7 @@ async function meterIccFineTuneProfile(file,button,tuneMode,tuneColor,tuneMhc2){
    // acknowledged only after the Companion has completed the handoff and
    // presented the calibrated frame again.
    meterIccFineTuneProgressStep('apply','done','Installed '+currentFile+'; confirming the calibrated HDR response with the first measurement patch');
-   meterIccFineTuneProgressStep('grey','active','Starting the grey ladder reads...');
+   meterIccFineTuneProgressStep('grey','active','Starting the grey ladder reads…');
    // Measure the 66% pipeline canary first. DXGI can report "composed" on a
    // healthy AMD HDR path, so the measured PQ response is authoritative. A
    // genuinely tone-mapped path is rejected after one read instead of after
@@ -2183,8 +2183,8 @@ async function meterIccFineTuneProfile(file,button,tuneMode,tuneColor,tuneMhc2){
    // cells around each measured colour as well as the grey corridor.
    let colorReadings=[];
    if(TUNE_COLOR){
-    if(button) button.textContent='Pass '+pass+': colour...';
-    meterIccFineTuneProgressStep('color','active','Starting the colour patch reads...');
+    if(button) button.textContent='Pass '+pass+': colour…';
+    meterIccFineTuneProgressStep('color','active','Starting the colour patch reads…');
     const ccBody=Object.assign({},body);
     delete ccBody.custom_series; delete ccBody.custom_steps;
     ccBody.points=30;
@@ -2200,9 +2200,9 @@ async function meterIccFineTuneProfile(file,button,tuneMode,tuneColor,tuneMhc2){
       if(state&&(state.status==='error'||state.status==='stopped')) break;
      }
     }
-    meterIccFineTuneProgressStep('color','done',colorReadings.length?('Measured '+colorReadings.length+' colour patches'):'No colour readings — continuing with grey corrections only');
+    meterIccFineTuneProgressStep('color','done',colorReadings.length?('Measured '+colorReadings.length+' colour patches'):'No colour readings: continuing with grey corrections only');
    }
-   if(button) button.textContent='Pass '+pass+': tuning...';
+   if(button) button.textContent='Pass '+pass+': tuning…';
    meterIccFineTuneProgressStep('tune','active','Computing corrections and writing '+outStem+'.icc (damping '+passDamping+')');
    const result=await fetchJSON('/api/icc/finetune',{method:'POST',headers:{'Content-Type':'application/json'},
     body:JSON.stringify({file:currentFile,readings,color_readings:colorReadings,damping:passDamping,output:outStem,target_de:TARGET_DE,target_color_de:2.0,session,pass}),_timeoutMs:1800000});
@@ -2218,12 +2218,12 @@ async function meterIccFineTuneProfile(file,button,tuneMode,tuneColor,tuneMhc2){
    const passEntry=passes[passes.length-1];
    const passSummary='worst grey '+(Number.isFinite(passEntry.worst)?passEntry.worst.toFixed(2):'--')+' dE'
     +(passEntry.color_mean==null?'':(', colour mean '+passEntry.color_mean.toFixed(2)));
-   meterIccFineTuneProgressStep('tune','done','Corrections computed — measured '+passSummary);
+   meterIccFineTuneProgressStep('tune','done','Corrections computed: measured '+passSummary);
    meterIccFineTuneProgressNote('Pass '+pass+': '+passSummary+(passEntry.converged?' (converged)':''));
-   meterIccFineTuneProgressStep('evaluate','active','Checking convergence...');
+   meterIccFineTuneProgressStep('evaluate','active','Checking convergence…');
    if(result.converged){
     // The currently applied profile already meets the tolerance everywhere.
-    meterIccFineTuneProgressStep('evaluate','done','Converged — the applied profile meets the tolerance everywhere');
+    meterIccFineTuneProgressStep('evaluate','done','Converged: the applied profile meets the tolerance everywhere');
     break;
    }
    // Measured convergence: the grey axis keeps creeping down for a few
@@ -2242,31 +2242,31 @@ async function meterIccFineTuneProfile(file,button,tuneMode,tuneColor,tuneMhc2){
     // made the advertised FineTuned profile byte-identical to its parent.
     if(Number.isFinite(score)&&Number.isFinite(priorWorst)&&score>priorWorst*1.03){
      if(pass<MAX_PASSES){
-      meterIccFineTuneProgressStep('evaluate','done','This pass regressed — measuring the damped recovery candidate in pass '+(pass+1));
+      meterIccFineTuneProgressStep('evaluate','done','This pass regressed: measuring the damped recovery candidate in pass '+(pass+1));
       currentFile=outStem+'.icc';
       continue;
      }
-     meterIccFineTuneProgressStep('evaluate','done','Pass budget reached after a regression — keeping the best measured pass');
+     meterIccFineTuneProgressStep('evaluate','done','Pass budget reached after a regression: keeping the best measured pass');
      break;
     }
     const greyStalled=!Number.isFinite(grey)||!Number.isFinite(greyWas)||grey>greyWas*0.97;
     const colStalled=!Number.isFinite(col)||!Number.isFinite(colWas)||col>colWas*0.97;
     if(greyStalled&&colStalled){
-     meterIccFineTuneProgressStep('evaluate','done','No meaningful improvement over the last pass — stopping and keeping the best pass');
+     meterIccFineTuneProgressStep('evaluate','done','No meaningful improvement over the last pass: stopping and keeping the best pass');
      break;
     }
    }
-   meterIccFineTuneProgressStep('evaluate','done',pass<MAX_PASSES?('Still improving — continuing to pass '+(pass+1)):'Pass budget reached — keeping the best measured pass');
+   meterIccFineTuneProgressStep('evaluate','done',pass<MAX_PASSES?('Still improving: continuing to pass '+(pass+1)):'Pass budget reached: keeping the best measured pass');
    currentFile=outStem+'.icc';
   }
   if(!sessionStarted) throw new Error('Fine-tune session produced no measured checkpoint');
-  if(button) button.textContent='Keeping best measured pass...';
-  meterIccFineTuneProgressStep('finalize','active','Restoring the best measured profile from the session checkpoints...');
+  if(button) button.textContent='Keeping best measured pass…';
+  meterIccFineTuneProgressStep('finalize','active','Restoring the best measured profile from the session checkpoints…');
   const selected=await fetchJSON('/api/icc/finetune',{method:'POST',headers:{'Content-Type':'application/json'},
    body:JSON.stringify({action:'finalize',file:currentFile,output:outStem,session}),_timeoutMs:180000});
   if(!selected||selected.status!=='ok') throw new Error(selected&&selected.message||'Could not restore the best measured profile');
   const selectedFile=String(selected.file||outStem+'.icc');
-  meterIccFineTuneProgressStep('finalize','active','Reapplying '+selectedFile+' so Windows reloads the selected MHC2 state...');
+  meterIccFineTuneProgressStep('finalize','active','Reapplying '+selectedFile+' so Windows reloads the selected MHC2 state…');
   await installOnTarget(selectedFile);
   finalized=true;
   meterIccFineTuneProgressStep('finalize','done','Kept and reapplied pass '+Number(selected.best_pass||0)+' as '+selectedFile);
@@ -2285,7 +2285,7 @@ async function meterIccFineTuneProfile(file,button,tuneMode,tuneColor,tuneMhc2){
   // A failed later read must not strand the unverified candidate written by
   // the preceding pass. Best-effort finalization restores the checkpoint.
   if(sessionStarted&&!finalized){
-   meterIccFineTuneProgressStep('finalize','active','Restoring the best measured checkpoint...');
+   meterIccFineTuneProgressStep('finalize','active','Restoring the best measured checkpoint…');
    try{
     await fetchJSON('/api/icc/finetune',{method:'POST',headers:{'Content-Type':'application/json'},
      body:JSON.stringify({action:'finalize',file:currentFile,output:outStem,session}),_timeoutMs:180000});
@@ -2307,6 +2307,7 @@ function meterIccShowFineTuneReport(parent,result,passes){
  if(previous) previous.remove();
  const overlay=document.createElement('div');
  overlay.id='meterIccFineTuneReport';
+ overlay.className='pg-modal-in';
  overlay.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.72);z-index:10024;display:flex;align-items:center;justify-content:center;padding:18px;box-sizing:border-box;';
  const card=document.createElement('div');
  // Wide two-column card: the long measured-grey ladder gets its own column so
@@ -2387,7 +2388,7 @@ function meterIccShowFineTuneReport(parent,result,passes){
 async function meterIccInstallProfile(file,button){
  if(!meterIccCompanionConnected){ toast('Start Patch Companion on the target computer first','err'); return; }
  const original=button?button.textContent:'Install & Apply';
- if(button){ button.disabled=true; button.textContent='Installing...'; }
+ if(button){ button.disabled=true; button.textContent='Installing…'; }
  try{
   const queued=await fetchJSON('/api/icc/companion/profile-install',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({file})});
   if(!queued||queued.status!=='ok'||!queued.job) throw new Error(queued&&queued.message||'Could not queue profile installation');
@@ -2411,7 +2412,7 @@ let meterIccCubeResult=null;
 
 async function meterIccConvertProfileToCube(file,button){
  const original=button?button.textContent:'3D LUT';
- if(button){ button.disabled=true; button.textContent='Converting...'; }
+ if(button){ button.disabled=true; button.textContent='Converting…'; }
  try{
   // The Pi samples the 65^3 lattice point by point through the profile's
   // BToA tables; allow minutes rather than the default fetch timeout.
@@ -3054,7 +3055,7 @@ async function meterIccApplyProfileForActiveMhc2(file,correctionMode='system'){
     await meterIccPushCompanionDisplaySettings(false,correctionMode,'fullscreen');
    await meterIccAwaitAppliedTransform(file,baselineRevision);
    const status=document.getElementById('meterIccStatus');
-   if(status) status.textContent='Profile applied. Verifying the effective transform is stable before measuring...';
+   if(status) status.textContent='Profile applied. Verifying the effective transform is stable before measuring…';
    await meterIccVerifyInstalledTransformSettled();
    return;
   }
@@ -3159,7 +3160,7 @@ function meterIccSetProgress(label,current,total){
  if(wrap) wrap.style.display='';
  if(labelEl) labelEl.textContent=label||'Measuring';
  const determinate=Number(total)>0;
- if(count) count.textContent=determinate?(Math.max(0,Number(current)||0)+' / '+Math.max(0,Number(total)||0)):'Working...';
+ if(count) count.textContent=determinate?(Math.max(0,Number(current)||0)+' / '+Math.max(0,Number(total)||0)):'Working…';
  if(fill){
   fill.classList.toggle('indeterminate',!determinate);
   fill.style.transform=determinate?('scaleX('+(Math.max(0,Math.min(100,100*current/total))/100)+')'):'';
@@ -3290,7 +3291,7 @@ async function meterIccStart(){
   };
   const avgDeviation=meterIccAvgDeviationValue();
   if(avgDeviation) baseRunConfig.avg_deviation=avgDeviation;
-  if(status) status.textContent='Checking for compatible completed ICC measurements...';
+  if(status) status.textContent='Checking for compatible completed ICC measurements…';
   const previousReuse=await meterIccPreviousReusableReadings(reuseSignature,type);
   const previousReadings=previousReuse.readings;
   if(startToken!==meterIccStartToken) throw new Error('ICC profiling stopped');
@@ -3323,7 +3324,7 @@ async function meterIccStart(){
    }catch(error){
     if(error&&error.icc_cancelled) throw error;
     if(!meterIccMissingPreconditionAnchors(error)) throw error;
-    if(status) status.textContent='The saved run is incomplete. Checking which required display pre-read patches can be reused...';
+    if(status) status.textContent='The saved run is incomplete. Checking which required display pre-read patches can be reused…';
     meterIccSetProgress('Checking required pre-read patches',0,34);
     const preReadSteps=meterIccStampReuseSignature(await meterIccGenerateSteps(type,meterIccPreReadSettings(),false),reuseSignature);
     const preReadMatches=meterIccMatchReusableReadings(preReadSteps,previousReadings,reuseSignature);
@@ -3349,7 +3350,7 @@ async function meterIccStart(){
    }
   }
   if(!steps.length){
-   if(status) status.textContent=usePreRead?'Generating the 34-patch display pre-read...':'Generating an optimized '+meterIccProfileModelInfo(profileModel).label+' patch set...';
+   if(status) status.textContent=usePreRead?'Generating the 34-patch display pre-read…':'Generating an optimized '+meterIccProfileModelInfo(profileModel).label+' patch set…';
    meterIccSetProgress(usePreRead?'Preparing display pre-read':'Optimizing patch set',0,usePreRead?34:patchSettings.patch_count);
    steps=meterIccStampReuseSignature(usePreRead
     ?await meterIccGenerateSteps(type,meterIccPreReadSettings(),false)
@@ -3383,7 +3384,7 @@ async function meterIccStart(){
   }
   if(startToken!==meterIccStartToken) throw new Error('ICC profiling stopped');
   if(stage==='precondition'&&!measurementSteps.length&&preconditionReusedReadings.length){
-   if(status) status.textContent='All required display pre-read patches were reused. Generating the optimized profile set...';
+   if(status) status.textContent='All required display pre-read patches were reused. Generating the optimized profile set…';
    await meterIccContinueAfterPreRead([],status);
    return;
   }
@@ -3391,14 +3392,14 @@ async function meterIccStart(){
    meterIccStarting=false;
    meterActionPending=false;
    if(stopButton) stopButton.style.display='none';
-   if(status) status.textContent='All '+reusedReadings.length+' requested patches were reused. Building the ICC profile...';
+   if(status) status.textContent='All '+reusedReadings.length+' requested patches were reused. Building the ICC profile…';
    await meterIccBuild(reusedReadings);
    return;
   }
-  if(status) status.textContent='Connecting to the meter...';
+  if(status) status.textContent='Connecting to the meter…';
   meterIccSetProgress(reusedReadings.length?('Reusing '+reusedReadings.length+' patches; starting meter'):(usedPreviousPreRead?'Previous display pre-read reused; starting meter':'Starting meter'),0,measurementSteps.length);
   await meterIccLaunchMeasurementSeries(measurementSteps,type,patternProvider);
-  if(status) status.textContent=stage==='precondition'?'Display pre-read started. Waiting for the first patch...':(reusedReadings.length?('Reused '+reusedReadings.length+' patches. Measuring '+measurementSteps.length+' remaining patches...'):(usedPreviousPreRead?('Previous measurements supplied the display pre-read. Measuring '+measurementSteps.length+' new patches...'):'Measurement series started. Waiting for the first patch...'));
+  if(status) status.textContent=stage==='precondition'?'Display pre-read started. Waiting for the first patch…':(reusedReadings.length?('Reused '+reusedReadings.length+' patches. Measuring '+measurementSteps.length+' remaining patches…'):(usedPreviousPreRead?('Previous measurements supplied the display pre-read. Measuring '+measurementSteps.length+' new patches…'):'Measurement series started. Waiting for the first patch…'));
   await meterIccPoll();
  }catch(error){
   meterIccStarting=false;
@@ -3420,7 +3421,7 @@ async function meterIccContinueAfterPreRead(newReadings,status){
  const measuredPreRead=meterIccProfileReadings(newReadings);
  const reusedPreRead=Array.isArray(config.precondition_reused_readings)?config.precondition_reused_readings:[];
  const completePreRead=[...reusedPreRead,...measuredPreRead];
- if(status) status.textContent='Pre-read complete. Building a temporary display model and optimizing the final patch set...';
+ if(status) status.textContent='Pre-read complete. Building a temporary display model and optimizing the final patch set…';
  meterIccSetProgress('Optimizing for the measured display',completePreRead.length,config.patch_settings.patch_count);
  const finalSteps=meterIccStampReuseSignature(await meterIccGeneratePreconditionedSteps(completePreRead,config),config.reuse_signature);
  if(Number(config.start_token)!==meterIccStartToken) throw new Error('ICC profiling stopped');
@@ -3439,18 +3440,18 @@ async function meterIccContinueAfterPreRead(newReadings,status){
   meterActionPending=false;
   const stopButton=document.getElementById('meterIccStopBtn');
   if(stopButton) stopButton.style.display='none';
-  if(status) status.textContent='All '+matches.reused.length+' optimized profile patches were reused. Building the ICC profile...';
+  if(status) status.textContent='All '+matches.reused.length+' optimized profile patches were reused. Building the ICC profile…';
   await meterIccBuild(matches.reused);
   return;
  }
  if(status) status.textContent=matches.reused.length
-  ?('Reused '+matches.reused.length+' optimized profile patches. Restarting the meter for '+matches.pending.length+' missing patches...')
-  :'Display-aware patch set ready. Restarting the meter for the profile measurements...';
+  ?('Reused '+matches.reused.length+' optimized profile patches. Restarting the meter for '+matches.pending.length+' missing patches…')
+  :'Display-aware patch set ready. Restarting the meter for the profile measurements…';
  meterIccSetProgress(matches.reused.length?('Reusing '+matches.reused.length+' profile patches; restarting meter'):'Restarting meter',0,matches.pending.length);
  await meterIccLaunchMeasurementSeries(matches.pending,config.profile_type,config.pattern_provider);
  if(status) status.textContent=matches.reused.length
-  ?('Reused '+matches.reused.length+' patches. Measuring '+matches.pending.length+' remaining patches...')
-  :'Profile measurement series started. Waiting for the first patch...';
+  ?('Reused '+matches.reused.length+' patches. Measuring '+matches.pending.length+' remaining patches…')
+  :'Profile measurement series started. Waiting for the first patch…';
  setTimeout(meterIccPoll,0);
 }
 
@@ -3480,7 +3481,7 @@ async function meterIccPoll(){
   }
   if(!['complete','cancelled','error','cleared'].includes(String(state.status||'').toLowerCase())) return;
   terminalTransition=true;
-  if(status) status.textContent=state.status==='complete'?'Measurement stage complete. Retrieving the readings...':'ICC profiling is stopping...';
+  if(status) status.textContent=state.status==='complete'?'Measurement stage complete. Retrieving the readings…':'ICC profiling is stopping…';
   if(state.status==='complete'){
    const completeState=await fetchJSON('/api/meter/series/status',{_quiet:true,_timeoutMs:120000});
    if(!completeState||completeState.status!=='complete') throw new Error('Could not retrieve completed ICC measurements');
@@ -3510,7 +3511,7 @@ async function meterIccPoll(){
     meterIccVerifyActiveSentinelDrift(activeReadings);
     meterIccRunConfig.mhc2_readings=activeReadings;
     meterIccRunConfig.stage='mhc2-provisional';
-    if(status) status.textContent='Active Windows path measured. Building the peak probe profile...';
+    if(status) status.textContent='Active Windows path measured. Building the peak probe profile…';
     await meterIccBuild(meterIccRunConfig.raw_profile_readings||[]);
    }else if(meterIccRunConfig&&meterIccRunConfig.stage==='mhc2-peak'){
     const peakReadings=meterIccProfileReadings(state.readings);
@@ -3519,7 +3520,7 @@ async function meterIccPoll(){
     const refineSteps=meterIccMhc2PeakRefineSteps(peakReadings);
     meterIccRunConfig.stage='mhc2-refine';
     meterIccRunConfig.steps=refineSteps;
-    if(status) status.textContent='Peak response measured. Refining the neutral shoulder...';
+    if(status) status.textContent='Peak response measured. Refining the neutral shoulder…';
     meterIccSetProgress('Starting MHC2 peak refinement',0,refineSteps.length);
     await meterIccLaunchMeasurementSeries(refineSteps,meterIccRunConfig.profile_type,'companion');
    }else if(meterIccRunConfig&&meterIccRunConfig.stage==='mhc2-refine'){
@@ -3527,7 +3528,7 @@ async function meterIccPoll(){
     if(refineReadings.length!==7) throw new Error('The Windows MHC2 peak refinement is incomplete');
     meterIccRunConfig.mhc2_readings=[...(meterIccRunConfig.mhc2_readings||[]),...refineReadings];
     meterIccRunConfig.stage='mhc2-feedback-provisional';
-    if(status) status.textContent='Building the provisional final MHC2 profile for applied-path verification...';
+    if(status) status.textContent='Building the provisional final MHC2 profile for applied-path verification…';
     await meterIccBuild(meterIccRunConfig.raw_profile_readings||[]);
    }else if(meterIccRunConfig&&meterIccRunConfig.stage==='mhc2-feedback-base'){
     const feedbackReadings=meterIccProfileReadings(state.readings);
@@ -3653,7 +3654,7 @@ async function meterIccPoll(){
     meterIccExpectMeasuredStage(readings,'The cLUT negative blue feedback probe');
     meterIccRunConfig.mhc2_readings=[...(meterIccRunConfig.mhc2_readings||[]),...readings];
     meterIccRunConfig.stage='mhc2-final';
-    if(status) status.textContent='Windows MHC2 and cLUT responses verified. Building the final ICC profile...';
+    if(status) status.textContent='Windows MHC2 and cLUT responses verified. Building the final ICC profile…';
     await meterIccBuild(meterIccRunConfig.raw_profile_readings||[]);
    }else{
     await meterIccBuild([...(meterIccRunConfig&&Array.isArray(meterIccRunConfig.reused_readings)?meterIccRunConfig.reused_readings:[]),...meterIccProfileReadings(state.readings)]);
@@ -3746,7 +3747,7 @@ async function meterIccBuild(readings){
   if(meterIccRunConfig&&meterIccRunConfig.stage==='mhc2-seed'){
    meterIccRunConfig.mhc2_seed_file=response.file;
    meterIccRunConfig.stage='mhc2-provisional';
-   if(status) status.textContent='Null MHC2 seed ready. Building the peak probe profile...';
+   if(status) status.textContent='Null MHC2 seed ready. Building the peak probe profile…';
    await meterIccBuild(meterIccRunConfig.raw_profile_readings||profileReadings);
    continuedWithActiveMhc2=true;
    return;
@@ -3757,10 +3758,10 @@ async function meterIccBuild(readings){
    meterIccRunConfig.mhc2_seed_file=response.file;
    meterIccRunConfig.stage='mhc2-active';
    meterIccRunConfig.steps=activeSteps;
-   if(status) status.textContent='Initial profile built. Applying it to measure the active Windows MHC2 path...';
+   if(status) status.textContent='Initial profile built. Applying it to measure the active Windows MHC2 path…';
    meterIccSetProgress('Applying initial MHC2 profile',0,activeSteps.length);
    await meterIccApplyProfileForActiveMhc2(response.file);
-   if(status) status.textContent='Initial profile applied. Measuring '+activeSteps.length+' active Windows MHC2 patches...';
+   if(status) status.textContent='Initial profile applied. Measuring '+activeSteps.length+' active Windows MHC2 patches…';
    meterIccSetProgress('Starting active Windows MHC2 characterization',0,activeSteps.length);
    await meterIccLaunchMeasurementSeries(activeSteps,meterIccRunConfig.profile_type,'companion');
    continuedWithActiveMhc2=true;
@@ -3771,7 +3772,7 @@ async function meterIccBuild(readings){
    meterIccRunConfig.mhc2_provisional_file=response.file;
    meterIccRunConfig.stage='mhc2-peak';
    meterIccRunConfig.steps=peakSteps;
-   if(status) status.textContent='Peak probe profile built. Measuring the proposed neutral shoulder...';
+   if(status) status.textContent='Peak probe profile built. Measuring the proposed neutral shoulder…';
    meterIccSetProgress('Applying null MHC2 profile for peak probes',0,peakSteps.length);
    await meterIccApplyProfileForActiveMhc2(meterIccRunConfig.mhc2_seed_file);
    meterIccSetProgress('Starting MHC2 peak probes',0,peakSteps.length);
@@ -3795,8 +3796,8 @@ async function meterIccBuild(readings){
    meterIccRunConfig.stage=resumeNegative?'mhc2-feedback-r-minus':'mhc2-feedback-base';
    meterIccRunConfig.steps=steps;
    if(status) status.textContent=resumeNegative
-    ?'Applying the first negative MHC2 response probe...'
-    :'Applying the provisional final MHC2 profile for closed-loop verification...';
+    ?'Applying the first negative MHC2 response probe…'
+    :'Applying the provisional final MHC2 profile for closed-loop verification…';
    meterIccSetProgress('Applying provisional final MHC2 profile',0,steps.length);
    await meterIccApplyProfileForActiveMhc2(resumeNegative?profiles.R_minus:profiles.base);
    meterIccSetProgress('Measuring applied MHC2 response',0,steps.length);
@@ -3910,7 +3911,7 @@ async function meterIccStop(){
  try{
   await fetchJSON('/api/meter/stop',{method:'POST',_timeoutMs:5000});
   const status=document.getElementById('meterIccStatus');
-  if(status) status.textContent='Stopping after the current meter operation...';
+  if(status) status.textContent='Stopping after the current meter operation…';
  }finally{
   if(stop) stop.disabled=false;
  }

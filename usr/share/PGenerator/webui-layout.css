@@ -438,7 +438,7 @@ body.layout-tablet .update-btn-more{display:none}
 .tablet-jump-nav{display:none}
 body.layout-tablet .tablet-jump-nav:not([hidden]){display:flex;position:fixed;left:0;right:0;bottom:0;z-index:60;gap:2px;padding:4px max(6px,env(safe-area-inset-right)) calc(4px + env(safe-area-inset-bottom)) max(6px,env(safe-area-inset-left));background:var(--surface-header);border-top:1px solid var(--border);box-shadow:0 -6px 18px var(--shadow);overflow-x:auto;overscroll-behavior-x:contain;scrollbar-width:none;justify-content:safe center}
 body.layout-tablet .tablet-jump-nav::-webkit-scrollbar{display:none}
-.tablet-nav-btn{flex:0 0 auto;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;min-width:64px;min-height:52px;padding:4px 10px;border:0;border-radius:var(--r-md);background:transparent;color:var(--text2);font:inherit;font-size:var(--fs-xs);font-weight:600;line-height:1.1;white-space:nowrap;cursor:pointer;transition:background .16s,color .16s}
+.tablet-nav-btn{flex:0 0 auto;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;min-width:64px;min-height:52px;padding:4px 10px;border:0;border-radius:var(--r-md);background:transparent;color:var(--text2);font:inherit;font-size:var(--fs-xs);font-weight:600;line-height:1.1;white-space:nowrap;cursor:pointer;transition:background .16s ease-out,color .16s ease-out}
 .tablet-nav-btn .desktop-nav-icon{flex:0 0 20px}
 .tablet-nav-btn[aria-current="page"]{background:var(--selected-bg);color:var(--text-primary);box-shadow:none}
 .tablet-nav-btn[aria-current="page"] .desktop-nav-icon{color:var(--accent)}
@@ -459,7 +459,7 @@ body.layout-tablet .tablet-jump-nav.is-compact:not([hidden]){justify-content:str
 .tablet-more-group+.tablet-more-group{margin-top:4px;padding-top:4px;border-top:1px solid var(--border)}
 .tablet-more-label{padding:6px 12px 2px;color:var(--text-muted);font-size:var(--fs-2xs);font-weight:700;line-height:1.4;}
 .tablet-nav-sep{flex:0 0 1px;align-self:center;height:28px;margin:0 4px;background:var(--border)}
-.tablet-more-item{display:flex;align-items:center;gap:12px;min-height:48px;padding:0 12px;border:0;border-radius:var(--r-md);background:transparent;color:var(--text2);font:inherit;font-size:.875rem;font-weight:600;text-align:left;cursor:pointer;transition:background .16s,color .16s}
+.tablet-more-item{display:flex;align-items:center;gap:12px;min-height:48px;padding:0 12px;border:0;border-radius:var(--r-md);background:transparent;color:var(--text2);font:inherit;font-size:.875rem;font-weight:600;text-align:left;cursor:pointer;transition:background .16s ease-out,color .16s ease-out}
 .tablet-more-item .desktop-nav-icon{flex:0 0 20px}
 .tablet-more-item[aria-current="page"]{background:color-mix(in srgb,var(--text-primary) 10%,transparent);color:var(--text-primary)}
 [data-theme="light"] .tablet-more-item[aria-current="page"]{color:var(--text-primary)}
@@ -1498,4 +1498,15 @@ body.layout-desktop .status-bar:has(.status-diff){column-gap:12px}
  :root[data-skin="glow"][data-theme] :is(.setting-tiles > .field,.dashboard > .card,.signal-overview > *,#hdrSignalFields > .field,.glow-pl,.info-item){outline:1px solid ButtonBorder;outline-offset:-1px}
  :root[data-skin="glow"][data-theme] :is(.setting-tiles > .field:has(:focus-visible:not(.meter-help-tip)),#hdrSignalFields > .field:has(:focus-visible)){outline:2px solid Highlight;outline-offset:2px}
  .glow-ring path{forced-color-adjust:none}
+}
+/* Reduced motion for the parts without a guard of their own: switches, chevrons
+   and progress fills take their new state at once, the apply spinner stands
+   still and the apply check is drawn whole. The two luminance fills carry
+   their transition inline, hence !important. */
+@media(prefers-reduced-motion:reduce){
+ .apply-settings-spinner{animation:none}
+ .apply-settings-check svg path{animation:none;stroke-dashoffset:0}
+ .pg-switch-thumb,.meter-config-toggle,.card h2::after,.card h2 .btn-reset,.desktop-sidebar-toggle .desktop-sidebar-chevron,.meter-thumbs-nav,
+ .meter-fill,.meter-autocal-progress-fill,.meter-workflow-progress-fill,.meter-3dlut-measure-fill{transition:none}
+ #meterToneMapLuminanceFill,#meterAutoCalLuminanceFill{transition:none!important}
 }

@@ -28,7 +28,7 @@ function meterRenderCustomSeriesManager(){
   scope.textContent=showAll
    ?('Showing all '+scoped.length+' '+categoryLabel+' series (every mode and range).')
    :('Showing '+modeKey.toUpperCase()+' · '+(rangeKey==='full'?'Full':'Limited')+' '+categoryLabel+' series for your current output'
-     +(hidden>0?(' — '+hidden+' other-mode/range series hidden (tick “Show all”).'):'.'));
+     +(hidden>0?('. '+hidden+' other-mode/range series hidden (tick “Show all”).'):'.'));
  }
  if(!listed.length){
   const createHint=meterCustomSeriesManagerCategory==='3dlut'
@@ -387,7 +387,7 @@ function meterRenderCubePreview(parsed,filename){
    +'<div>Domain: '+fmt3(parsed.domainMin)+' &rarr; '+fmt3(parsed.domainMax)+' &middot; Values: '+Number(parsed.valueMin).toFixed(4)+' .. '+Number(parsed.valueMax).toFixed(4)+'</div>'
    +'<div>Neutral axis: black '+fmt3(parsed.neutral[0])+' &middot; mid '+fmt3(mid)+' &middot; white '+fmt3(parsed.neutral[parsed.neutral.length-1])+'</div>'
    +'<div>Neutral monotonic: '+(parsed.monotonic?'<span style="color:var(--green)">yes</span>':'<span style="color:var(--red)">NO</span>')+'</div>'
-   +'<div style="margin-top:6px;color:var(--text2)">Preview only &mdash; this LUT is not applied to the display.</div>'
+   +'<div style="margin-top:6px;color:var(--text2)">Preview only: this LUT is not applied to the display.</div>'
    +'<div class="btn-row" style="margin-top:8px"><button class="btn btn-sm btn-secondary" onclick="meterViewImportedLutIn3d()" title="Render the previewed LUT as a 3D cube (input lattice vs LUT output positions)">View in 3D</button><button class="btn btn-sm btn-secondary" onclick="meterDownloadPreviewedCubeAs3dl()" title="Convert the previewed LUT and download as Autodesk/Kodak .3dl">Download as .3dl</button></div>';
  }
  panel.innerHTML=html;
@@ -422,7 +422,7 @@ function meterImportCubeFile(evt){
   meterLastCubePreview={parsed:parsed,filename:file.name,text:String(reader.result||'')};
   meterRenderCubePreview(parsed,file.name);
   if(parsed.ok) toast('.cube parsed: '+parsed.size+'³, '+(parsed.monotonic?'neutral OK':'neutral NOT monotonic'),!parsed.monotonic);
-  else toast('.cube file is invalid — see preview panel',true);
+  else toast('.cube file is invalid: see the preview panel',true);
  };
  reader.readAsText(file);
 }
@@ -439,7 +439,7 @@ async function meterLoadSolvedLutList(){
   // The server lists by filename (oldest timestamp first, converted icc_*
   // names sorted apart); the history reads newest-first like profile history.
   luts.sort((a,b)=>(Number(b&&b.mtime||0)-Number(a&&a.mtime||0))||String(a&&a.name||'').localeCompare(String(b&&b.name||'')));
-  if(!luts.length){ panel.textContent='No solved LUTs yet — Build 3D LUT or run 3D LUT AutoCal to create one.'; return []; }
+  if(!luts.length){ panel.textContent='No solved LUTs yet. Build 3D LUT or run 3D LUT AutoCal to create one.'; return []; }
   const esc=(s)=>String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;');
   const escJs=(s)=>String(s==null?'':s).replace(/\\/g,'\\\\').replace(/'/g,"\\'").replace(/\r?\n/g,' ');
   panel.innerHTML=luts.map(l=>{
@@ -1048,7 +1048,7 @@ function meterLutSolveDonePrompt(name,how,state){
   const nodes=(sz===17)?'4,913':(sz===33)?'35,937':String(sz*sz*sz);
   summary.innerHTML='<div style="font-weight:600;color:var(--text)">'+esc(meterLutSolveDoneName)+'</div>'
    +'<div>'+esc(sz)+'&sup3; export ('+esc(nodes)+' nodes) &middot; '+esc(how||'')+'</div>'
-   +'<div style="margin-top:6px">Choose a download format — the LUT also stays under Solved LUTs in LUT Tools.</div>';
+   +'<div style="margin-top:6px">Choose a download format. The LUT also stays under Solved LUTs in LUT Tools.</div>';
  }
  const cubeBtn=document.getElementById('lutSolveDoneDownloadCubeBtn');
  const d3Btn=document.getElementById('lutSolveDoneDownload3dlBtn');
@@ -2771,7 +2771,7 @@ async function meterSelectSeries(type,points,opts){
  const key=type+'-'+points;
  if(meterSeriesRunning){
   if(meterActiveSeriesKey===key){
-   toast('Series scan is running — stop it before reloading this chart',true);
+   toast('Series scan is running: stop it before reloading this chart',true);
    meterRestoreActiveSeriesControls();
    return false;
   }
@@ -3501,7 +3501,7 @@ function meterGreyTvBusyHtml(){
 	 const elapsed=(typeof lgFormatBusyElapsed==='function')?lgFormatBusyElapsed(startedAt):'';
 	 return '<div class="meter-lg-rgb-busy" id="meterLgRgbBusy">'
 	  +'<span class="spinner"></span>'
-	  +'<span class="meter-lg-rgb-busy-text" id="meterLgRgbBusyText">'+escape(label)+'...</span>'
+	  +'<span class="meter-lg-rgb-busy-text" id="meterLgRgbBusyText">'+escape(label)+'…</span>'
 	  +'<span class="meter-lg-rgb-busy-time" id="meterLgRgbBusyElapsed">'+escape(elapsed)+'</span>'
 	  +'</div>';
 	}
@@ -3517,7 +3517,7 @@ function syncMeterLgRgbBusyIndicator(){
 	 const elapsed=document.getElementById('meterLgRgbBusyElapsed');
 	 const label=meterLgGreyBusy?(meterLgGreyBusyLabel||'LG white-balance write'):((typeof lgBusyLabel==='function')?lgBusyLabel():'Communicating with LG TV');
 	 const startedAt=meterLgGreyBusy?meterLgGreyBusyStartedAt:window._lgCommandBusyStartedAt;
-	 if(text) text.textContent=label+'...';
+	 if(text) text.textContent=label+'…';
 	 if(elapsed) elapsed.textContent=(typeof lgFormatBusyElapsed==='function')?lgFormatBusyElapsed(startedAt):'';
 	 box.style.display=active?'flex':'none';
 	}
@@ -3705,7 +3705,7 @@ function meterRenderGreyTvControls(reading){
  }
  const state=meterLgGreyState||{status:'idle',picture:null,message:'',needsRepair:false};
  if((state.status==='loading'||state.status==='idle')&&!state.picture&&!seriesReadOnly){
-  host.innerHTML='<div style="height:100%;display:flex;align-items:center;justify-content:center;text-align:center;font-size:var(--fs-2xs);color:var(--text2);padding:8px">Loading...</div>';
+  host.innerHTML='<div style="height:100%;display:flex;align-items:center;justify-content:center;text-align:center;font-size:var(--fs-2xs);color:var(--text2);padding:8px">Loading…</div>';
   if(meta) meta.textContent='LG '+target.label;
   return;
  }
@@ -4166,7 +4166,7 @@ function meterAutoCalUpdatePanelLightUi(){
  const range=document.getElementById('meterAutoCalPanelLightRange');
  const input=document.getElementById('meterAutoCalPanelLightInput');
  if(labelEl) labelEl.textContent=label;
- if(valueEl) valueEl.textContent=String(displayValue)+(panelBusy?' ...':(queued?' queued':''));
+ if(valueEl) valueEl.textContent=String(displayValue)+(panelBusy?' …':(queued?' queued':''));
  if(range&&Number.isFinite(numericValue)&&document.activeElement!==range) range.value=String(Math.round(numericValue));
  if(input&&Number.isFinite(numericValue)&&document.activeElement!==input) input.value=String(Math.round(numericValue));
  const continueBtn=document.getElementById('meterAutoCalContinueBtn');
@@ -4177,8 +4177,8 @@ function meterAutoCalUpdatePanelLightUi(){
  const text=document.getElementById('meterAutoCalBrightnessText');
  if(!text) return;
  let suffix='';
- if(panelBusy) suffix=' (updating...)';
- else if(queued) suffix=' (queued...)';
+ if(panelBusy) suffix=' (updating…)';
+ else if(queued) suffix=' (queued…)';
  else if(!meterAutoCalPanelLight.key&&meterAutoCalPanelLight.lastError) suffix=' ('+meterAutoCalPanelLight.lastError+')';
  text.textContent=label+': '+displayValue+suffix;
 }
@@ -4797,7 +4797,7 @@ function meterAutoCalSetOverlay(active,status){
  if(resetBtn){
   resetBtn.style.display=(showDisclaimer&&!meterAutoCalPreflightResetDone)?'':'none';
   resetBtn.disabled=!!meterAutoCalResetInProgress;
-  resetBtn.textContent=meterAutoCalResetInProgress?'Resetting...':'Reset';
+  resetBtn.textContent=meterAutoCalResetInProgress?'Resetting…':'Reset';
  }
  if(disclaimerBtn) disclaimerBtn.style.display=(showDisclaimer&&meterAutoCalPreflightResetDone)?'':'none';
  if(continueBtn) continueBtn.style.display=showLuminance?'':'none';
@@ -4845,7 +4845,7 @@ function meterAutoCalSetOverlay(active,status){
   const current=Math.max(0,Number(status.current_step)||0);
   pgSetFill(fill,total>0?current/total*100:0);
  }else{
-  if(text) text.textContent='Preparing...';
+  if(text) text.textContent='Preparing…';
   pgSetFill(fill,0);
  }
  meterUpdateReadButtons();
@@ -5166,7 +5166,7 @@ async function meterAutoCalResetDdc(){
  // do not bother with the SDR-style reset at all.
  if(!hdrWorkflow){
  for(let attempt=1;attempt<=3;attempt++){
-  meterAutoCalSetOverlay(true,{current_name:'Performing LG picture mode reset...',message:'Resetting the active picture mode before Auto Cal'+(attempt>1?' (retry '+attempt+'/3)':'')});
+  meterAutoCalSetOverlay(true,{current_name:'Performing LG picture mode reset…',message:'Resetting the active picture mode before Auto Cal'+(attempt>1?' (retry '+attempt+'/3)':'')});
   try{
    pictureModeReset=await fetchJSON('/api/lg/picture-settings/reset',{
     method:'POST',
@@ -5227,7 +5227,7 @@ async function meterAutoCalResetDdc(){
   };
  } else {
  for(let attempt=1;attempt<=3;attempt++){
-  meterAutoCalSetOverlay(true,{current_name:'Performing LG picture mode reset...',message:'Clearing DDC calibration data before Auto Cal'+(attempt>1?' (retry '+attempt+'/3)':'')});
+  meterAutoCalSetOverlay(true,{current_name:'Performing LG picture mode reset…',message:'Clearing DDC calibration data before Auto Cal'+(attempt>1?' (retry '+attempt+'/3)':'')});
   try{
    response=await fetchJSON('/api/lg/picture-settings/set',{
     method:'POST',
@@ -5299,7 +5299,7 @@ async function meterAutoCalHdrCalmanReset(pictureMode){
  let response=null;
  let lastMessage='Unable to run the LG HDR calibration reset.';
  for(let attempt=1;attempt<=3;attempt++){
-  meterAutoCalSetOverlay(true,{current_name:'Performing LG HDR reset...',message:'Preparing HDR calibration state'+(attempt>1?' (retry '+attempt+'/3)':'')});
+  meterAutoCalSetOverlay(true,{current_name:'Performing LG HDR reset…',message:'Preparing HDR calibration state'+(attempt>1?' (retry '+attempt+'/3)':'')});
   try{
    response=await fetchJSON(METER_LG_HDR_CALMAN_RESET_ENDPOINT,{
     method:'POST',
@@ -5333,7 +5333,7 @@ async function meterAutoCalDvCalmanReset(pictureMode){
  let response=null;
  let lastMessage='Unable to run the LG Dolby Vision calibration reset.';
  for(let attempt=1;attempt<=3;attempt++){
-  meterAutoCalSetOverlay(true,{current_name:'Performing LG Dolby Vision reset...',message:'Preparing Dolby Vision calibration state'+(attempt>1?' (retry '+attempt+'/3)':'')});
+  meterAutoCalSetOverlay(true,{current_name:'Performing LG Dolby Vision reset…',message:'Preparing Dolby Vision calibration state'+(attempt>1?' (retry '+attempt+'/3)':'')});
   try{
    response=await fetchJSON(METER_LG_DV_CALMAN_RESET_ENDPOINT,{
     method:'POST',
@@ -5362,7 +5362,7 @@ async function meterAutoCalSdrCalmanReset(pictureMode){
  let response=null;
  let lastMessage='Unable to run the LG SDR calibration reset.';
  for(let attempt=1;attempt<=3;attempt++){
-  meterAutoCalSetOverlay(true,{current_name:'Performing LG SDR reset...',message:'Preparing SDR calibration state'+(attempt>1?' (retry '+attempt+'/3)':'')});
+  meterAutoCalSetOverlay(true,{current_name:'Performing LG SDR reset…',message:'Preparing SDR calibration state'+(attempt>1?' (retry '+attempt+'/3)':'')});
   try{
    response=await fetchJSON(METER_LG_SDR_CALMAN_RESET_ENDPOINT,{
     method:'POST',
@@ -5397,7 +5397,7 @@ async function meterAutoCalReset3dLutBaseline(){
  let response=null;
  let lastMessage='Unable to reset LG 3D LUT.';
  for(let attempt=1;attempt<=3;attempt++){
-  meterAutoCalSetOverlay(true,{current_name:'Resetting LG 3D LUT...',message:'Writing '+(hdrWorkflow?'BT.2020 ':'')+'unity 3D LUT baseline before greyscale'+(attempt>1?' (retry '+attempt+'/3)':'')});
+  meterAutoCalSetOverlay(true,{current_name:'Resetting LG 3D LUT…',message:'Writing '+(hdrWorkflow?'BT.2020 ':'')+'unity 3D LUT baseline before greyscale'+(attempt>1?' (retry '+attempt+'/3)':'')});
   try{
    response=await fetchJSON('/api/lg/3d-lut/reset',{
     method:'POST',
@@ -5463,7 +5463,7 @@ async function meterAutoCalResetWithRecovery(name,fn,hint){
    }
    if(choice==='skip') continue;        // Retry -> re-run fn() (including its own 3 internal attempts)
    meterAutoCalResetSkipped=name;       // Continue anyway -> record non-silently
-   toast(name+' skipped — continuing Auto Cal.',true);
+   toast(name+' skipped. Auto Cal continues.',true);
    return null;
   }
  }
@@ -5488,7 +5488,7 @@ async function meterAutoCalRunPreflightReset(){
   const resetBtnNow=document.getElementById('meterAutoCalResetBtn');
   if(resetBtnNow){
    resetBtnNow.disabled=true;
-   resetBtnNow.textContent='Resetting...';
+   resetBtnNow.textContent='Resetting…';
   }
  }catch(e){}
  try{
@@ -5558,7 +5558,7 @@ async function meterAutoCalRunPreflightReset(){
     skipped:(meterAutoCalResetSkipped!=='')?meterAutoCalResetSkipped:null
    };
    if(meterAutoCalResetSkipped!==''){
-    meterAutoCalResetNotice=(meterAutoCalResetSkipped+' was skipped — Auto Cal is continuing, but the calibration may build on prior data.');
+    meterAutoCalResetNotice=(meterAutoCalResetSkipped+' was skipped. Auto Cal is continuing, but the calibration may build on prior data.');
    }
    meterFullAutoCalConfig={...(meterFullAutoCalConfig||meterFullAutoCalDefaultConfig()),preflightReset:resetSummary};
    meterFullAutoCalReportData=meterFullAutoCalReportData||meterFullAutoCalDefaultReportData();
@@ -5626,7 +5626,7 @@ async function meterAutoCalLuminanceSetupLoop(whiteStep){
  meterAutoCalSetOverlay(true,{phase:'luminance',current_name:'Set 100% luminance',message:'Watch the live 100% white reading, adjust '+panelKind+', then click Continue when ready.'});
  meterAutoCalResetPanelLightState();
  meterAutoCalUpdatePanelLightUi();
- meterAutoCalSetOverlay(true,{phase:'luminance',current_name:'Set 100% luminance',message:'Loading the LG '+panelKind+' control before the live white read...'});
+ meterAutoCalSetOverlay(true,{phase:'luminance',current_name:'Set 100% luminance',message:'Loading the LG '+panelKind+' control before the live white read…'});
  await meterAutoCalLoadPanelLightValue(true);
  meterAutoCalUpdatePanelLightUi();
  await meterDisplayPatch(whiteStep,{fresh:false});
@@ -5639,7 +5639,7 @@ async function meterAutoCalLuminanceSetupLoop(whiteStep){
   const startedPanelLightWrite=meterAutoCalProcessQueuedPanelLight();
   meterAutoCalUpdatePanelLightUi();
   if(startedPanelLightWrite||meterAutoCalPanelLightBlocksMeterRead()){
-   meterAutoCalSetOverlay(true,{phase:'luminance',current_name:'Set 100% luminance',message:'Waiting for '+panelKind+' change before the next meter read...'});
+   meterAutoCalSetOverlay(true,{phase:'luminance',current_name:'Set 100% luminance',message:'Waiting for '+panelKind+' change before the next meter read…'});
    await meterAutoCalWaitForPanelLightIdle(30000);
    // Brief TV settle only — the next meter read uses a short delay_ms too.
    await meterAutoCalSleep(120);
@@ -5676,7 +5676,7 @@ async function meterAutoCalLuminanceSetupLoop(whiteStep){
 	  readPayload.require_device_ready=meterSelectedMeasurementRequiresReady();
 	  meterAutoCalLuminanceReadBusy=true;
 	  meterAutoCalUpdatePanelLightUi();
-	  if(!lastReading) meterAutoCalSetOverlay(true,{phase:'luminance',current_name:'Set 100% luminance',message:'Starting live white meter read...'});
+	  if(!lastReading) meterAutoCalSetOverlay(true,{phase:'luminance',current_name:'Set 100% luminance',message:'Starting live white meter read…'});
 	  let result=null;
   try{
    result=await meterStartSingleRead(readPayload,()=>{
@@ -6132,7 +6132,7 @@ function meterAutoCalRestoreSavedState(){
  meterAutoCalPhase=String(saved.phase||'running');
  if(meterAutoCalPhase!=='complete'&&meterAutoCalPhase!=='error') meterAutoCalPhase='running';
  if(!meterAutoCalPolling) meterAutoCalPolling=setInterval(meterPollAutoCal,1500);
- meterSetWorkflowProgress({status:'running',current_step:0,total_steps:1,current_name:'Reconnecting to LG Auto Cal...'},{workflow:'greyscale',label:'Reconnecting to LG Auto Cal...'});
+ meterSetWorkflowProgress({status:'running',current_step:0,total_steps:1,current_name:'Reconnecting to LG Auto Cal…'},{workflow:'greyscale',label:'Reconnecting to LG Auto Cal…'});
  return true;
 }
 
@@ -6452,6 +6452,7 @@ function meterShowChoiceModal(options){
   if(existing) existing.remove();
   const root=document.createElement('div');
   root.id='meterAutoCalChoiceModal';
+  root.className='pg-modal-in';
   root.setAttribute('data-meter-autocal-choice','1');
   root.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,0.55);z-index:100001;display:flex;align-items:center;justify-content:center;padding:20px;box-sizing:border-box';
   // Remember the opener so focus can return to it when the dialog closes.
@@ -6714,13 +6715,13 @@ async function meterAutoCalPromptHdrToneMapUpload(status,source,options){
  if(typeof meterEnsureDetected==='function'){
   try{ await meterEnsureDetected(); }catch(e){}
  }
- toast('Measuring 100% white for HDR tone map...');
+ toast('Measuring 100% white for HDR tone map…');
  let measuredPeak=null;
  try{
   measuredPeak=await meterAutoCalMeasureHdrPeakLuminance(typeof meterLgPictureModeValue==='function'?meterLgPictureModeValue():'',sigMode);
  }catch(e){ measuredPeak=null; }
  if(!(Number.isFinite(measuredPeak)&&measuredPeak>0)){
-  toast('Could not measure 100% white peak \u2014 skipping HDR tone map upload',true);
+  toast('Could not measure 100% white peak: skipping HDR tone map upload',true);
   const payload={user_choice:'skipped',reason:'no-fresh-peak',peak_luminance:inLoopPeak,in_loop_peak:inLoopPeak,source:source||'wizard'};
   meterAutoCalPersistHdrToneMapChoice(runId,payload);
   meterAutoCalRecordHdrToneMapReport(payload);
@@ -7173,7 +7174,7 @@ function meterFullAutoCalRestoreSavedState(){
   const series=meterFullAutoCalReportSeries();
   meterSeriesRunning=true;
   if(!meterSeriesPolling) meterSeriesPolling=setInterval(meterPollSeries,meterSeriesPollIntervalMs);
-  meterSetWorkflowProgress({status:'running',current_step:0,total_steps:series.length,current_name:'Reconnecting to '+meterFullAutoCalStageLabel()+'...'},{workflow:'full',label:'Reconnecting to '+meterFullAutoCalStageLabel()+'...'});
+  meterSetWorkflowProgress({status:'running',current_step:0,total_steps:series.length,current_name:'Reconnecting to '+meterFullAutoCalStageLabel()+'…'},{workflow:'full',label:'Reconnecting to '+meterFullAutoCalStageLabel()+'…'});
  }else{
   meterAutoCalRunning=true;
   meterAutoCalPhase='running';
@@ -7366,7 +7367,7 @@ function meterFullAutoCalResolveConfirm(accepted){
   if(el) el.style.display='none';
  });
  const text=document.getElementById('meterAutoCalStatusText');
- if(text) text.textContent='Preparing...';
+ if(text) text.textContent='Preparing…';
  if(resolver) resolver(result);
 }
 
@@ -7717,7 +7718,7 @@ function meterFullAutoCalReportEntries(){
    entries.push({title:'Pre-Cal '+item.label,snapshot:data&&data.pre?data.pre[item.key]:null});
   });
  }else if(hasPost){
-  entries.push({title:'Pre-Cal Measurements',notice:'No Pre-Cal (“before”) measurements were captured for this run. Pre-Cal charts are only recorded by the Full AutoCal wizard’s Pre-Cal step at the start of a run — a run that was resumed or adopted after a page reload, or standalone/manual series reads, are not captured into this report.'});
+  entries.push({title:'Pre-Cal Measurements',notice:'No Pre-Cal (“before”) measurements were captured for this run. Pre-Cal charts are only recorded by the Full AutoCal wizard’s Pre-Cal step at the start of a run. A run that was resumed or adopted after a page reload and standalone/manual series reads are not captured into this report.'});
  }
  series.forEach(item=>{
   if(hasPost||!hasPre&&!anyPre) entries.push({title:'Post-Cal '+item.label,snapshot:data&&data.post?data.post[item.key]:null});
@@ -7801,7 +7802,7 @@ async function meterFullAutoCalGeneratePostReport(){
  const series=meterFullAutoCalReportSeries();
  const btn=document.getElementById('meterFullAutoCalPostReportBtn');
  const skipBtn=document.getElementById('meterFullAutoCalSkipReportBtn');
- if(btn){btn.disabled=true;btn.textContent='Reading Post-Cal...';}
+ if(btn){btn.disabled=true;btn.textContent='Reading Post-Cal…';}
  if(skipBtn) skipBtn.disabled=true;
  meterAutoCalRunning=false;
  meterAutoCalPhase='';
@@ -9133,7 +9134,7 @@ let completeStatus=r;
     const label=document.getElementById('meterProgressLabel');
     const progress=document.getElementById('meterProgress');
     if(progress) progress.style.display='';
-    if(label) label.textContent=(fullGreyscaleActive?'Full Auto Cal: ':'')+'Reconnecting to LG Auto Cal status...';
+    if(label) label.textContent=(fullGreyscaleActive?'Full Auto Cal: ':'')+'Reconnecting to LG Auto Cal status…';
    }
   }
  }finally{
@@ -9268,7 +9269,7 @@ async function meterStartAutoCal(options){
   if(typeof saveMeterSettings==='function') saveMeterSettings();
  meterSetActiveSeriesChartContext();
  document.getElementById('meterExportRow').style.display='';
- meterSetWorkflowProgress({status:'running',current_step:0,total_steps:adjustable.length||26,current_name:'LG Auto Cal setup...'},{workflow:fullWorkflow?'full':'greyscale',label:'LG Auto Cal setup...'});
+ meterSetWorkflowProgress({status:'running',current_step:0,total_steps:adjustable.length||26,current_name:'LG Auto Cal setup…'},{workflow:fullWorkflow?'full':'greyscale',label:'LG Auto Cal setup…'});
  const sortedSteps=meterGreyscaleSeriesSteps(meterSeriesSteps);
  meterBuildPatchThumbs(sortedSteps,new Set(),null);
  drawAllChartsPreset(sortedSteps);
@@ -9703,7 +9704,7 @@ async function meterAutoCalConfirmAndStart(){
  meterAutoCalPhase='running';
  meterActionPending=true;
  meterAutoCalSetOverlay(true,{
-  current_name:'Starting RGB Auto Cal...',
+  current_name:'Starting RGB Auto Cal…',
   message:hdrWorkflow
    ? 'HDR 100% will set the ST 2084 peak reference'
    : 'Launching the greyscale calibration\u2026',
@@ -10119,7 +10120,7 @@ function meterLg3dProfilingExplain(source){
   hybrid3:'Hybrid 3³ (recommended) — exactly 63 profile patches\n\nSkeleton WRGB (45) plus a 3×3×3 volume cube (27 nodes on axes 0/50/100%). Nine nodes appear in both sets and are measured once, so 45 + 27 − 9 = 63.\n\nEdges give multi-level primaries; the volume adds real interior mixes for residual corrections. Full 33³ upload still. Greyscale diagonal remains identity. Best default balance of time vs interior colour sampling.',
   hybrid5:'Hybrid 5³ — exactly 161 profile patches\n\nSkeleton WRGB (45) plus a 5×5×5 volume cube (125 nodes). After name-dedupe against the skeleton: 45 + 125 − 9 = 161.\n\nMore interior samples than Hybrid 3³ (axes at 0/25/50/75/100%). Longer run; use when 3³ still leaves mid-sat error. Full 33³ upload; greyscale diagonal identity.',
   hybrid9:'Hybrid 9³ — exactly 765 profile patches\n\nSkeleton WRGB (45) plus a 9×9×9 volume cube (729 nodes). After name-dedupe: 45 + 729 − 9 = 765.\n\nDense volume sampling. Slow (on the order of a full 9³ lattice plus the skeleton). Prefer when maximum measured interior detail matters more than time. Full 33³ upload; greyscale diagonal identity.',
-  lattice:'Lattice series (full volume only)\n\nMeasures an N×N×N RGB cube only — no multi-level WRGB skeleton. Built-in sizes: 3³ = 27, 5³ = 125, 9³ = 729, 17³ = 4,913 patches (plus any custom lattice you created). Choose the series below.\n\nPure volume profile. Level-dependent pure-primary behaviour must be inferred from the cube nodes alone. Full 33³ upload; greyscale diagonal identity when residuals are on (default).',
+  lattice:'Lattice series (full volume only)\n\nMeasures an N×N×N RGB cube only, without the multi-level WRGB skeleton. Built-in sizes: 3³ = 27, 5³ = 125, 9³ = 729, 17³ = 4,913 patches (plus any custom lattice you created). Choose the series below.\n\nPure volume profile. Level-dependent pure-primary behaviour must be inferred from the cube nodes alone. Full 33³ upload; greyscale diagonal identity when residuals are on (default).',
   imported:'Imported .cube — 0 profile patches (upload only)\n\nNo meter, no profile, no solve. Resamples a .cube from LUT Tools (or the live import preview) to the LG 33³ 12-bit payload and uploads it to the active picture mode.\n\nUse when you already have a finished LUT file and only need to push it to the TV.'
  };
  return map[src]||map.hybrid3;
@@ -10271,7 +10272,7 @@ function meterLg3dSelectSeriesChanged(){
  if(explain){
   if(src==='matrix'){
    explain.textContent=(meterLg3dHdrMatrixOnly()
-    ?'HDR10 matrix only — Calman supports matrix for HDR 3D LUTs.\n\n'
+    ?'HDR10: matrix only. Calman supports the matrix for HDR 3D LUTs.\n\n'
     :'')
     +'Matrix (5-point) — white, red, green, blue, and black.\n\nLoads a 5-patch series on the 3D LUT tab. Use Build 3D LUT to measure those patches and solve a corrective cube for download (or use 3D LUT AutoCal on the AutoCal tab to measure, solve, and upload to the TV).';
   } else {
@@ -10339,7 +10340,7 @@ async function meterConfirmLg3dSelectSeries(){
   try{ meterUpdateReadButtons(); }catch(e){}
   try{ meterSync3dLutWorkspaceUi(); }catch(e){}
   if(startBuild) setTimeout(function(){ meterBuild3dLutSeries(); },40);
-  else toast('Matrix 5-point series loaded — use Build 3D LUT to measure and solve');
+  else toast('Matrix 5-point series loaded: use Build 3D LUT to measure and solve');
   return;
  }
  const latSel=document.getElementById('meterLg3dSelSeriesLattice');
@@ -10373,7 +10374,7 @@ async function meterLg3dPopulateImportedLuts(){
  }catch(e){}
  sel.innerHTML=opts.length
   ? opts.map(o=>'<option value="'+esc(o.value)+'">'+esc(o.label)+'</option>').join('')
-  : '<option value="">No .cube available — import one in LUT Tools</option>';
+  : '<option value="">No .cube available: import one in LUT Tools</option>';
  if(prev&&opts.some(o=>o.value===prev)) sel.value=prev;
 }
 
@@ -10938,7 +10939,7 @@ async function meterPollLg3dAutoCal(options){
     const label=document.getElementById('meterProgressLabel');
     const progress=document.getElementById('meterProgress');
     if(progress) progress.style.display='';
-    if(label) label.textContent=(full3dActive?'Full Auto Cal: ':'')+'Reconnecting to 3D LUT AutoCal status...';
+    if(label) label.textContent=(full3dActive?'Full Auto Cal: ':'')+'Reconnecting to 3D LUT AutoCal status…';
    }
   }
  }finally{
@@ -11042,7 +11043,7 @@ async function meterStartLg3dAutoCal(options){
  }
  if(!(options&&options.skipConfirm)){
   const message=method==='imported'
-   ? 'Upload the selected .cube to the TV as-is? It is resampled to the LG 33-point payload — no measurement, no solve. This replaces the current 3D LUT for the active picture mode.'
+   ? 'Upload the selected .cube to the TV as-is? It is resampled to the LG 33-point payload, with no measurement and no solve. This replaces the current 3D LUT for the active picture mode.'
    : (signalMode==='hdr10'?'HDR10':'LG')+' 3D LUT AutoCal '
      +(meterLg3dIsVolumeMethod(method)?'profiles '+latticePatches.length+' patches ('+String(latticeSeries&&latticeSeries.name||method)+') and ':'')
      +'assumes the greyscale AutoCal has already been completed. Continue with color-only 3D LUT calibration from the current TV state?';
@@ -11210,7 +11211,7 @@ refresh_rate:getMeterRefreshRate()||undefined,
  }
  meterActionPending=true;
  meterLg3dAutoCalRunning=true;
- meterSetWorkflowProgress({status:'running',current_step:0,total_steps:(method==='ramp'?65:(meterLg3dIsVolumeMethod(method)?(latticePatches?latticePatches.length:1):(method==='imported'?1:5))),current_name:'Starting LG 3D LUT AutoCal...'},{workflow:fullWorkflow?'full':'3d-lut',label:'Starting LG 3D LUT AutoCal...'});
+ meterSetWorkflowProgress({status:'running',current_step:0,total_steps:(method==='ramp'?65:(meterLg3dIsVolumeMethod(method)?(latticePatches?latticePatches.length:1):(method==='imported'?1:5))),current_name:'Starting LG 3D LUT AutoCal…'},{workflow:fullWorkflow?'full':'3d-lut',label:'Starting LG 3D LUT AutoCal…'});
  meterUpdateReadButtons();
  try{
   await meterStopContinuous();
@@ -11534,7 +11535,7 @@ async function meterBuild3dLutSeries(){
  const prefSize=meterSolveCubeSizePref(33);
  const ok=await meterShowChoiceModal({
   title:'Build 3D LUT',
-  body:'Measure '+(n||'?')+' patches for "'+String(series.name||series.kind||'series')+'" ('+signalMode+'), then solve a corrective 3D LUT for download.\n\nNothing is uploaded to the display — when the solve finishes you can download .cube or .3dl for host apps (Resolve, madVR, etc.).\n\nCube size only affects the downloadable export file (not measurement count). Larger cubes take longer to build after the reads finish.',
+  body:'Measure '+(n||'?')+' patches for "'+String(series.name||series.kind||'series')+'" ('+signalMode+'), then solve a corrective 3D LUT for download.\n\nNothing is uploaded to the display. When the solve finishes, you can download .cube or .3dl for host apps (Resolve, madVR, etc.).\n\nCube size only affects the downloadable export file (not measurement count). Larger cubes take longer to build after the reads finish.',
   acceptLabel:'Start measurement',
   cancelLabel:'Cancel',
   radios:[meterSolveCubeSizeRadios(prefSize)],
@@ -11775,7 +11776,7 @@ async function meterRunSeries(options){
  meterExecutedSeriesId=null;
  document.getElementById('meterExportRow').style.display='';
  document.getElementById('meterProgress').style.display='';
- document.getElementById('meterProgressLabel').textContent='Connecting to meter...';
+ document.getElementById('meterProgressLabel').textContent='Connecting to meter…';
  document.getElementById('meterReadSeriesBtn').innerHTML=meterBuild3dLutPending?'&#9209; Building 3D LUT…':(meterSeriesSelectionRunActive?'&#9209; Reading Selection':'&#9209; Reading Series');
  document.getElementById('meterReadSeriesBtn').classList.remove('btn-secondary');
  document.getElementById('meterReadSeriesBtn').classList.add('btn-success');
@@ -12757,7 +12758,7 @@ function meterBuildPatchThumbs(sortedSteps,completedIres,currentIre){
   const border=(isGrey&&customGreyscaleThumbs)?'1px solid var(--border)':'0';
   const padX=isGrey?'2px':'1px';
   const flexStyle=scrollMode?('flex:0 0 '+thumbWidth+'px;min-width:'+thumbWidth+'px;'):'flex:1 1 0;min-width:0;';
-  thumb.style.cssText=flexStyle+'display:flex;align-items:center;justify-content:center;height:28px;border:'+border+';border-radius:3px;cursor:pointer;box-sizing:border-box;font-size:'+fontSize+';font-weight:700;user-select:none;transition:box-shadow .2s;text-align:center;line-height:1.1;padding:0 '+padX;
+  thumb.style.cssText=flexStyle+'display:flex;align-items:center;justify-content:center;height:28px;border:'+border+';border-radius:3px;cursor:pointer;box-sizing:border-box;font-size:'+fontSize+';font-weight:700;user-select:none;transition:box-shadow .2s ease-out;text-align:center;line-height:1.1;padding:0 '+padX;
   thumb.style.setProperty('--patch-bg',bgColor);
   thumb.style.setProperty('--patch-fg',textColor);
    thumb.textContent=label;
@@ -18545,7 +18546,7 @@ async function meterGenerateReport(){
  // activation. Report preparation awaits chart redraws; opening the window
  // afterward is treated by browsers as an unsolicited pop-up.
  const pdfWin=(format==='pdf')?window.open('','_blank'):null;
- if(format==='pdf'&&!pdfWin){toast('Pop-up blocked — allow pop-ups to create PDF',true);return;}
+ if(format==='pdf'&&!pdfWin){toast('Pop-up blocked: allow pop-ups to create the PDF',true);return;}
  const btn=document.getElementById('meterReportGenerateBtn');
  if(btn){btn.disabled=true;btn.textContent='Generating…';}
  const restore={
@@ -18590,7 +18591,7 @@ async function meterGenerateReport(){
   pdfWin.document.write(html);
   pdfWin.document.close();
   setTimeout(()=>{pdfWin.focus();pdfWin.print();},400);
-  toast('Print dialog opened — choose Save as PDF');
+  toast('Print dialog opened: choose Save as PDF');
  } else {
   const blob=new Blob([html],{type:'text/html'});
   meterDownloadBlob(blob,filename);
@@ -18977,7 +18978,7 @@ async function meterExportCSV(){
  const whiteR=meterFindSeriesWhiteReading(sorted)
   ||(meterWhiteReading&&!meterWhiteReading.synthetic_target&&meterReadingHasLuminance(meterWhiteReading)?meterWhiteReading:null)
   ||sorted.find(r=>Math.abs(Number(r.ire)-100)<0.05&&meterReadingHasLuminance(r));
- if(!whiteR){toast('No 100% white reading \u2014 run a full series first',true);return;}
+ if(!whiteR){toast('No 100% white reading: run a full series first',true);return;}
  // Reference pre-reads are deliberately hidden from charts, but an exported
  // result must be self-contained. Put the measured black first and retain a
  // separate measured white reference when it is not already a series row.
@@ -19275,7 +19276,7 @@ async function meterNewSession(){
  if(!await pgConfirm({title:'Start a new session?',body:'This clears all chart data and series.',acceptLabel:'Clear & start new',destructive:true})) return;
  try{ meterClearResults(); }catch(e){}
  try{ if(typeof meterClearWorkflowProgress==='function') meterClearWorkflowProgress(); }catch(e){}
- toast('New session — charts cleared');
+ toast('New session: charts cleared');
 }
 
 async function meterClearResults(){
@@ -19537,7 +19538,7 @@ document.getElementById('ccssUploadBtn').addEventListener('click',async function
  const name=document.getElementById('ccssName').value.trim();
  if(!file||!name){toast('Select a file and enter a name',true);return;}
  const status=document.getElementById('ccssUploadStatus');
- status.textContent='Uploading...';
+ status.textContent='Uploading…';
  this.disabled=true;
  try{
   const buf=await file.arrayBuffer();
@@ -19830,8 +19831,8 @@ async function ccssExportSelected(){
  const format=meterCorrectionProfileFormat(entry)==='ccmx'?'ccmx':String(formatSelect&&formatSelect.value||'ccss');
  const prevText=btn?btn.textContent:'Export';
  if(btn) btn.disabled=true;
- if(btn) btn.textContent='Preparing...';
- ccssExportSetStatus('Building '+format.toUpperCase()+' download...',false);
+ if(btn) btn.textContent='Preparing…';
+ ccssExportSetStatus('Building '+format.toUpperCase()+' download…',false);
  try{
   const res=await fetch('/api/ccss/export',{
    method:'POST',
@@ -19879,7 +19880,7 @@ async function deleteSelectedCustomCcss(){
  const btn=document.getElementById('ccssDeleteSelectedBtn');
  const prevText=btn?btn.textContent:'Delete Profile';
  if(btn) btn.disabled=true;
- if(btn) btn.textContent='Deleting...';
+ if(btn) btn.textContent='Deleting…';
  try{
   const ok=await deleteCustomCcss(entry.name);
   if(ok) ccssExportSetStatus('Deleted '+entry.name,false);
@@ -19937,7 +19938,7 @@ function ccssPreviewPopulateOptions(files){
  const select=document.getElementById('ccssPreviewSelect');
  if(!select) return;
  const previous=select.value||ccssPreviewActiveValue||ccssPreviewCurrentDisplayValue()||(customCcssFile?('custom\t'+customCcssFile):'');
- select.innerHTML='<option value="">Choose installed meter profile...</option>';
+ select.innerHTML='<option value="">Choose installed meter profile…</option>';
  const customGroup=document.createElement('optgroup');
  customGroup.label='Custom';
  const systemGroup=document.createElement('optgroup');
@@ -19979,7 +19980,7 @@ async function ccssPreviewLoadByValue(value,quiet){
  ccssSyncCustomListHighlight();
  ccssExportSyncControls();
  const meta=document.getElementById('ccssPreviewMeta');
- if(meta) meta.textContent='Loading '+ccssFormatDropdownLabel(entry)+'...';
+ if(meta) meta.textContent='Loading '+ccssFormatDropdownLabel(entry)+'…';
  const payload=await fetchJSON('/api/ccss/preview',{
   method:'POST',
   headers:{'Content-Type':'application/json'},
@@ -20321,7 +20322,7 @@ function populateMeterCcssProfileSelect(wizardId){
   sel.innerHTML='';
   const editorOpt=document.createElement('option');
   editorOpt.value='custom_editor';
-  editorOpt.textContent='Profile Editor...';
+  editorOpt.textContent='Profile Editor…';
   sel.appendChild(editorOpt);
   const autoOpt=document.createElement('option');
   autoOpt.value='';
@@ -21429,6 +21430,58 @@ document.getElementById('meterTargetGamma').addEventListener('change',()=>{
 
 updateMeterTargetWhitepointVisibility();
 
+// Fold or unfold a card. A click resizes it: the height runs from what is on
+// screen to what the new state gives (--duration-fast, --ease-out). Folding
+// keeps the body shown and clips it until the height has run, with the
+// chevron already turned (.is-collapsing), so the content is not dropped
+// before the card shrinks. A second click part-way starts from the height on
+// screen. instant (layout sync, a script opening a card), reduced motion, a
+// card that is not laid out or a browser without element.animate switch at
+// once.
+function pgCardSetCollapsed(card,collapse,instant){
+ if(!card) return;
+ const running=card._pgCollapseAnim;
+ const from=instant?0:card.getBoundingClientRect().height;
+ if(running){
+  card._pgCollapseAnim=null;
+  running.cancel();
+  card.style.overflow=card._pgCollapseOverflow||'';
+ }
+ card.classList.remove('is-collapsing');
+ card.classList.toggle('collapsed',!!collapse);
+ let reduce=false;
+ try{ reduce=!!(window.matchMedia&&window.matchMedia('(prefers-reduced-motion: reduce)').matches); }catch(e){}
+ if(instant||reduce||typeof card.animate!=='function'||!(from>0)) return;
+ const to=card.getBoundingClientRect().height;
+ if(!(to>0)||Math.abs(to-from)<1) return;
+ if(collapse){ card.classList.remove('collapsed'); card.classList.add('is-collapsing'); }
+ let anim=null;
+ const duration=pgMotionMs('--duration-fast',250);
+ try{
+  const root=getComputedStyle(document.documentElement);
+  const easing=root.getPropertyValue('--ease-out').trim()||'ease-out';
+  card._pgCollapseOverflow=card.style.overflow;
+  card.style.overflow='hidden';
+  anim=card.animate([{height:from+'px'},{height:to+'px'}],{duration,easing});
+ }catch(e){ anim=null; }
+ const settle=()=>{
+  card.style.overflow=card._pgCollapseOverflow||'';
+  if(card.classList.contains('is-collapsing')){ card.classList.remove('is-collapsing'); card.classList.add('collapsed'); }
+ };
+ if(!anim){ settle(); return; }
+ card._pgCollapseAnim=anim;
+ // The finish event waits for a rendered frame (a background tab draws
+ // none), so a timer settles the card too; whichever comes first wins.
+ const done=()=>{
+  if(card._pgCollapseAnim!==anim) return;
+  card._pgCollapseAnim=null;
+  anim.cancel();
+  settle();
+ };
+ anim.onfinish=done;
+ setTimeout(done,duration+60);
+}
+
 // Wire up collapsible card headers. Click the h2 of any .card to toggle.
 // Persist state in localStorage so reloads keep the user's layout.
 function initCardCollapse(){
@@ -21447,10 +21500,12 @@ function initCardCollapse(){
    if(document.body.classList.contains('layout-desktop')) return;
    // Don't toggle if the click was on a control or the card-reorder handle
     if(ev.target.closest('button,input,select,a,[data-no-collapse],.drag-handle')) return;
-   card.classList.toggle('collapsed');
+   // The state the click asks for: a card that is folding counts as folded.
+   const collapse=!(card.classList.contains('collapsed')||card.classList.contains('is-collapsing'));
+   pgCardSetCollapsed(card,collapse);
    try{
     const s=JSON.parse(localStorage.getItem('cardCollapse')||'{}')||{};
-    s[key]=card.classList.contains('collapsed');
+    s[key]=collapse;
     localStorage.setItem('cardCollapse',JSON.stringify(s));
    }catch(e){}
   });

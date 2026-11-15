@@ -1,7 +1,7 @@
 </head>
 <body>
 
-<div id="hdmiOverlay" role="dialog" aria-modal="true" aria-labelledby="hdmiOverlayTitle">
+<div id="hdmiOverlay" class="pg-modal-in" role="dialog" aria-modal="true" aria-labelledby="hdmiOverlayTitle">
  <div class="hdmi-box">
   <h2 id="hdmiOverlayTitle">HDMI port</h2>
   <p id="hdmiOverlayText"></p>
@@ -437,8 +437,8 @@ __PG_LOGO_DARK__
        <div class="diag-custom-asset">
         <div class="diag-custom-picker">
          <select id="diagCustomVideoSelect" aria-label="Custom diagnostic video" class="inline-select diag-select" onchange="diagHandleAssetSelect('video')">
-          <option value="">Custom Diagnostic Video...</option>
-          <option value="__upload__">Upload video...</option>
+          <option value="">Custom Diagnostic Video…</option>
+          <option value="__upload__">Upload video…</option>
          </select>
          <button id="diagCustomVideoDelete" class="btn btn-sm btn-secondary diag-asset-delete" type="button" onclick="diagDeleteSelectedAsset('video')" title="Delete the selected video" aria-label="Delete the selected custom diagnostic video" disabled><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16"/><path d="M9 7V4.5h6V7"/><path d="M6.5 7l1 12.5h9l1-12.5"/><path d="M10 11v5"/><path d="M14 11v5"/></svg></button>
         </div>
@@ -452,8 +452,8 @@ __PG_LOGO_DARK__
        <div class="diag-custom-asset">
         <div class="diag-custom-picker">
          <select id="diagCustomImageSelect" aria-label="Custom diagnostic image" class="inline-select diag-select" onchange="diagHandleAssetSelect('image')">
-          <option value="">Custom Diagnostic Image...</option>
-          <option value="__upload__">Upload image...</option>
+          <option value="">Custom Diagnostic Image…</option>
+          <option value="__upload__">Upload image…</option>
          </select>
          <button id="diagCustomImageDelete" class="btn btn-sm btn-secondary diag-asset-delete" type="button" onclick="diagDeleteSelectedAsset('image')" title="Delete the selected image" aria-label="Delete the selected custom diagnostic image" disabled><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16"/><path d="M9 7V4.5h6V7"/><path d="M6.5 7l1 12.5h9l1-12.5"/><path d="M10 11v5"/><path d="M14 11v5"/></svg></button>
         </div>
@@ -555,7 +555,7 @@ __PG_LOGO_DARK__
     <div class="meter-ccss-profile-row field">
      <label>Meter Profile (CCSS / CCMX) <span class="meter-help-tip" id="meterCorrectionProfileHelp" title="CCSS profiles are reusable spectral display corrections for compatible colorimeters. CCMX profiles are meter-specific correction matrices. Choose No Correction for the meter's native response." aria-label="Meter correction profile help">?</span></label>
      <div class="meter-ccss-profile-control-row">
-      <select id="meterCcssProfile"><option value="custom_editor">Profile Editor...</option><option value="">Auto (technology default)</option><option value="none">No Correction</option></select>
+      <select id="meterCcssProfile"><option value="custom_editor">Profile Editor…</option><option value="">Auto (technology default)</option><option value="none">No Correction</option></select>
       <div id="meterCcssCapabilityNote" style="display:none;font-size:var(--fs-2xs);color:var(--text2)">SpyderX supports matching CCMX profiles, but not CCSS profiles.</div>
      </div>
     </div>
@@ -880,7 +880,7 @@ __PG_LOGO_DARK__
            per-lattice quick buttons were replaced by a single Select series…
            picker that reuses the standalone 3D LUT AutoCal method chooser and
            its descriptions. The LUT cube visual lives in LUT Tools. -->
-      <button class="btn btn-sm btn-secondary" id="meter3dLutSelectSeriesBtn" onclick="meterOpenLg3dSelectSeriesModal()" title="Choose a 3D LUT profiling series to measure (lattice / skeleton / hybrid) — same method chooser and descriptions as the standalone 3D LUT AutoCal">Select series&hellip;</button>
+      <button class="btn btn-sm btn-secondary" id="meter3dLutSelectSeriesBtn" onclick="meterOpenLg3dSelectSeriesModal()" title="Choose a 3D LUT profiling series to measure (lattice, skeleton or hybrid)">Select series&hellip;</button>
       <button class="btn btn-sm btn-secondary" id="meterCustomSeriesBtn3dLut" onclick="meterOpenCustomSeriesManager('3dlut')" title="Load, create, edit, import and export custom lattice series">Custom Series</button>
       <button class="btn btn-sm btn-primary" id="meter3dLutWorkspaceBuildBtn" onclick="meterDesktop3dLutBuildFlow()">Build 3D LUT</button>
       <span id="meterCustomSeriesLoaded3dLut" style="display:none;align-self:center;font-size:var(--fs-xs);color:var(--text2);padding:0 4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:180px"></span>
@@ -904,7 +904,7 @@ __PG_LOGO_DARK__
       <div style="font-size:1.35rem;font-weight:700;color:var(--text)"><span id="meterToneMapLiveY">--</span> <span style="font-size:var(--fs-sm);font-weight:500;color:var(--text2)">cd/m&sup2;</span></div>
      </div>
      <div style="height:18px;background:var(--surface-field);border:1px solid var(--border);border-radius:4px;overflow:hidden">
-      <div id="meterToneMapLuminanceFill" style="height:100%;width:100%;background:#fff;transform:scaleX(0);transform-origin:left;transition:transform .2s cubic-bezier(.23,1,.32,1)"></div>
+      <div id="meterToneMapLuminanceFill" style="height:100%;width:100%;background:#fff;transform:scaleX(0);transform-origin:left;transition:transform .2s var(--ease-out)"></div>
      </div>
      <div id="meterToneMapStatusText" style="font-size:var(--fs-xs);color:var(--text2);margin-top:8px">Select Measure &amp; Upload to measure peak and upload the tone map.</div>
     </div>
@@ -999,7 +999,7 @@ __PG_LOGO_DARK__
    <span id="meterProgressPercent" class="meter-workflow-progress-percent"></span>
   </div>
 
-  <div id="meterGreyProfileModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:10000;align-items:center;justify-content:center;padding:18px;box-sizing:border-box">
+  <div id="meterGreyProfileModal" class="pg-modal-in" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:10000;align-items:center;justify-content:center;padding:18px;box-sizing:border-box">
    <div style="width:min(720px,100%);max-height:90vh;overflow:auto;background:var(--surface-modal);border:1px solid var(--border);border-radius:10px;padding:14px;box-sizing:border-box">
     <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:10px;flex-wrap:wrap">
     <div style="min-width:0">
@@ -1040,7 +1040,7 @@ __PG_LOGO_DARK__
    </div>
   </div>
 
-  <div id="meterCustomSeriesModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:10000;align-items:center;justify-content:center;padding:18px;box-sizing:border-box">
+  <div id="meterCustomSeriesModal" class="pg-modal-in" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:10000;align-items:center;justify-content:center;padding:18px;box-sizing:border-box">
    <div class="meter-modal-scroll" style="width:min(1120px,96vw);max-height:90vh;overflow-y:auto;overflow-x:hidden;background:var(--surface-modal);border:1px solid var(--border);border-radius:10px;padding:14px;box-sizing:border-box">
     <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:10px;flex-wrap:wrap">
      <div style="min-width:0">
@@ -1085,7 +1085,7 @@ __PG_LOGO_DARK__
    </div>
   </div>
 
-  <div id="meterCustomSeriesManagerModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:10000;align-items:center;justify-content:center;padding:18px;box-sizing:border-box">
+  <div id="meterCustomSeriesManagerModal" class="pg-modal-in" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:10000;align-items:center;justify-content:center;padding:18px;box-sizing:border-box">
    <div style="width:min(940px,100%);max-height:90vh;overflow:auto;background:var(--surface-modal);border:1px solid var(--border);border-radius:10px;padding:14px;box-sizing:border-box">
     <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:10px;flex-wrap:wrap">
      <div id="meterCustomSeriesManagerTitle" style="font-size:var(--fs-lg);font-weight:700;color:var(--text-primary)">Custom Series</div>
@@ -1122,13 +1122,13 @@ __PG_LOGO_DARK__
    </div>
   </div>
 
-  <div id="meterImportWizardModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:10001;align-items:center;justify-content:center;padding:18px;box-sizing:border-box">
+  <div id="meterImportWizardModal" class="pg-modal-in" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:10001;align-items:center;justify-content:center;padding:18px;box-sizing:border-box">
    <div style="width:min(940px,100%);max-height:90vh;overflow:auto;background:var(--surface-modal);border:1px solid var(--border);border-radius:10px;padding:14px;box-sizing:border-box">
     <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:10px;flex-wrap:wrap">
      <div style="font-size:var(--fs-lg);font-weight:700;color:var(--text-primary)">Import Patch Series</div>
      <button class="btn btn-sm btn-secondary" onclick="meterCloseImportWizard()">Close</button>
     </div>
-    <div style="font-size:var(--fs-sm);color:var(--text2);margin-bottom:8px">Choose the source format, pick the file, then review before importing. CalMAN CCFX files can hold many series — you pick which to import and set each one's name, bit depth and SDR/HDR.</div>
+    <div style="font-size:var(--fs-sm);color:var(--text2);margin-bottom:8px">Choose the source format, pick the file, then review before importing. CalMAN CCFX files can hold many series: you pick which to import and set each one's name, bit depth and SDR/HDR.</div>
     <div class="btn-row" style="margin:0 0 10px 0;align-items:center;gap:10px;flex-wrap:wrap">
      <label style="font-size:var(--fs-sm);color:var(--text-primary);display:inline-flex;gap:4px;align-items:center;cursor:pointer"><input type="radio" name="meterImpFmt" value="calman_csv" checked onchange="meterImportWizardFormatChanged()"> CalMAN CSV</label>
      <label style="font-size:var(--fs-sm);color:var(--text-primary);display:inline-flex;gap:4px;align-items:center;cursor:pointer"><input type="radio" name="meterImpFmt" value="colourspace_csv" onchange="meterImportWizardFormatChanged()"> ColourSpace CSV</label>
@@ -1148,7 +1148,7 @@ __PG_LOGO_DARK__
 
   <!--__PG_ICC_PROFILE_HTML__-->
   <span id="meterLutToolsHome" hidden></span>
-  <div id="meterLutToolsModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:10000;align-items:center;justify-content:center;padding:18px;box-sizing:border-box">
+  <div id="meterLutToolsModal" class="pg-modal-in" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:10000;align-items:center;justify-content:center;padding:18px;box-sizing:border-box">
    <div class="meter-modal-scroll" style="width:min(720px,100%);max-height:90vh;overflow-y:auto;overflow-x:hidden;background:var(--surface-modal);border:1px solid var(--border);border-radius:10px;padding:14px;box-sizing:border-box">
     <div class="meter-lut-tools-head" style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:10px;flex-wrap:wrap">
      <div style="font-size:var(--fs-lg);font-weight:700;color:var(--text-primary)">3D LUT Tools</div>
@@ -1168,7 +1168,7 @@ __PG_LOGO_DARK__
       <label style="font-size:var(--fs-2xs);color:var(--text2);cursor:pointer;user-select:none;display:inline-flex;align-items:center;gap:4px" title="Show the hollow input-node target boxes and their displacement connectors. Off = only the LUT's output positions.">
        <input type="checkbox" id="lutCubeShowTargets" checked onchange="meterLutCubeDraw()" style="vertical-align:middle"> Targets
       </label>
-      <label style="font-size:var(--fs-2xs);color:var(--text2);cursor:pointer;user-select:none;display:inline-flex;align-items:center;gap:4px" title="Render every node of the LUT instead of the 9-per-axis subset. Large LUTs (33³/65³) draw tens of thousands of markers — rotation may be slow.">
+      <label style="font-size:var(--fs-2xs);color:var(--text2);cursor:pointer;user-select:none;display:inline-flex;align-items:center;gap:4px" title="Render every node of the LUT instead of the 9-per-axis subset. Large LUTs (33³/65³) draw tens of thousands of markers, so rotation may be slow.">
        <input type="checkbox" id="lutCubeFullLattice" onchange="meterLutCubeDraw()" style="vertical-align:middle"> Full lattice
       </label>
       <label style="font-size:var(--fs-2xs);color:var(--text2);cursor:pointer;user-select:none;display:inline-flex;align-items:center;gap:4px" title="Relative size of the hollow target boxes and filled output dots. 1 = default size.">
@@ -1185,7 +1185,7 @@ __PG_LOGO_DARK__
    </div>
   </div>
 
-  <div id="lutSolveProgressModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:100050;align-items:center;justify-content:center;padding:18px;box-sizing:border-box">
+  <div id="lutSolveProgressModal" class="pg-modal-in" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:100050;align-items:center;justify-content:center;padding:18px;box-sizing:border-box">
    <div style="width:min(440px,100%);background:var(--surface-modal);border:1px solid var(--border);border-radius:10px;padding:20px;box-sizing:border-box;text-align:center">
     <div class="apply-settings-spinner" style="margin:0 auto 14px"></div>
     <div id="lutSolveProgressTitle" style="font-size:var(--fs-lg);font-weight:700;color:var(--text-primary);margin-bottom:8px">Building 3D LUT</div>
@@ -1196,7 +1196,7 @@ __PG_LOGO_DARK__
     <div id="lutSolveProgressDetail" style="font-size:var(--fs-2xs);color:var(--text2);margin-top:10px;line-height:1.4">&nbsp;</div>
    </div>
   </div>
-  <div id="meterBuild3dLutMeasureModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:100040;align-items:center;justify-content:center;padding:18px;box-sizing:border-box">
+  <div id="meterBuild3dLutMeasureModal" class="pg-modal-in" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:100040;align-items:center;justify-content:center;padding:18px;box-sizing:border-box">
    <div class="meter-3dlut-measure-card">
     <div class="meter-3dlut-measure-status">
      <strong>Measuring 3D LUT profile</strong>
@@ -1209,7 +1209,7 @@ __PG_LOGO_DARK__
     </div>
    </div>
   </div>
-  <div id="lutSolveDoneModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:100050;align-items:center;justify-content:center;padding:18px;box-sizing:border-box">
+  <div id="lutSolveDoneModal" class="pg-modal-in" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:100050;align-items:center;justify-content:center;padding:18px;box-sizing:border-box">
    <div style="width:min(520px,100%);background:var(--surface-modal);border:1px solid var(--border);border-radius:10px;padding:16px;box-sizing:border-box">
     <div style="font-size:var(--fs-lg);font-weight:700;color:var(--text-primary);margin-bottom:8px">3D LUT solved</div>
     <div id="lutSolveDoneSummary" style="font-size:var(--fs-sm);color:var(--text2);margin-bottom:12px;line-height:1.5"></div>
@@ -1221,7 +1221,7 @@ __PG_LOGO_DARK__
     </div>
    </div>
   </div>
-  <div id="meterLg3dStartModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:10001;align-items:center;justify-content:center;padding:18px;box-sizing:border-box">
+  <div id="meterLg3dStartModal" class="pg-modal-in" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:10001;align-items:center;justify-content:center;padding:18px;box-sizing:border-box">
    <div style="width:min(620px,100%);max-height:90vh;overflow:auto;background:var(--surface-modal);border:1px solid var(--border);border-radius:10px;padding:16px;box-sizing:border-box">
     <div style="font-size:var(--fs-lg);font-weight:700;color:var(--text-primary);margin-bottom:8px">3D LUT AutoCal</div>
     <div style="font-size:var(--fs-sm);color:var(--text2);line-height:1.45;margin-bottom:14px">Choose how the display is profiled before the 3D LUT is solved and uploaded. Greyscale / 1D should already be calibrated. Regardless of profiling method, the worker always generates and uploads a full 33&sup3; (35,937-node) 12-bit payload for the active picture mode. Patch counts below are the profile measurements only.</div>
@@ -1262,10 +1262,10 @@ __PG_LOGO_DARK__
     </div>
    </div>
   </div>
-  <div id="meterLg3dSelectSeriesModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:10001;align-items:center;justify-content:center;padding:18px;box-sizing:border-box">
+  <div id="meterLg3dSelectSeriesModal" class="pg-modal-in" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:10001;align-items:center;justify-content:center;padding:18px;box-sizing:border-box">
    <div style="width:min(620px,100%);max-height:90vh;overflow:auto;background:var(--surface-modal);border:1px solid var(--border);border-radius:10px;padding:16px;box-sizing:border-box">
     <div style="font-size:var(--fs-lg);font-weight:700;color:var(--text-primary);margin-bottom:8px">Select 3D LUT Series</div>
-    <div style="font-size:var(--fs-sm);color:var(--text2);line-height:1.45;margin-bottom:14px">Choose a profiling series to measure. It uses the same method chooser as the standalone 3D LUT AutoCal; the descriptions below note what each set samples.</div>
+    <div style="font-size:var(--fs-sm);color:var(--text2);line-height:1.45;margin-bottom:14px">Choose a profiling series to measure. Each description below says what its set samples.</div>
     <label style="display:block;font-size:var(--fs-xs);color:var(--text2);margin-bottom:6px;">Profiling method</label>
     <select id="meterLg3dSelSeriesSource" onchange="meterLg3dSelectSeriesChanged()" style="width:100%;max-width:100%;background:var(--surface-inset);border:1px solid var(--border);border-radius:6px;color:var(--text-primary);padding:8px 10px;box-sizing:border-box;margin-bottom:10px">
      <option value="matrix">Matrix (5-point) — 5 patches, fastest</option>
@@ -1287,7 +1287,7 @@ __PG_LOGO_DARK__
     </div>
    </div>
   </div>
-  <div id="meterLatticeGenModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:10001;align-items:center;justify-content:center;padding:18px;box-sizing:border-box">
+  <div id="meterLatticeGenModal" class="pg-modal-in" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:10001;align-items:center;justify-content:center;padding:18px;box-sizing:border-box">
    <div style="width:min(560px,100%);max-height:90vh;overflow:auto;background:var(--surface-modal);border:1px solid var(--border);border-radius:10px;padding:14px;box-sizing:border-box">
     <div id="meterLatticeGenTitle" style="font-size:var(--fs-lg);font-weight:700;color:var(--text-primary);margin-bottom:10px">Generate Lattice Series</div>
     <div style="font-size:var(--fs-2xs);color:var(--text2);margin-bottom:10px">Creates an N&times;N&times;N RGB cube patch sequence (plus optional greyscale ramp) for the current signal mode. Export it for CalMAN/ColourSpace or measure it here.</div>
@@ -1316,7 +1316,7 @@ __PG_LOGO_DARK__
       </select>
      </label>
      <label class="sel-stack">
-      <span>Node spacing <span class="meter-help-tip" title="Signal-uniform: classic equal code steps. Light-uniform: node values spaced evenly in decoded LIGHT up to the mastering peak (corners still hit 100% signal). In HDR/PQ, signal-uniform mixes decode to near-primary light ratios and crowd the gamut edge — light-uniform fills the chroma interior with the same patch count." aria-label="Node spacing help">?</span></span>
+      <span>Node spacing <span class="meter-help-tip" title="Signal-uniform: classic equal code steps. Light-uniform: node values spaced evenly in decoded LIGHT up to the mastering peak (corners still hit 100% signal). In HDR/PQ, signal-uniform mixes decode to near-primary light ratios and crowd the gamut edge; light-uniform fills the chroma interior with the same patch count." aria-label="Node spacing help">?</span></span>
       <select id="meterLatticeSpacing" onchange="meterLatticeGenSyncReadout()" style="background:var(--surface-inset);border:1px solid var(--border);border-radius:4px;color:var(--text-primary);padding:6px;box-sizing:border-box">
        <option value="signal" selected>Signal-uniform</option>
        <option value="light">Light-uniform</option>
@@ -1336,7 +1336,7 @@ __PG_LOGO_DARK__
   </div>
 
   <!-- CCSS create/editor: reparented to document.body on open so they beat the AutoCal mask (same trap as spectro setup when nested under .dashboard). -->
-  <div id="meterCcssCreateModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:10050;align-items:center;justify-content:center;padding:18px;box-sizing:border-box">
+  <div id="meterCcssCreateModal" class="pg-modal-in" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:10050;align-items:center;justify-content:center;padding:18px;box-sizing:border-box">
    <div style="width:min(580px,100%);max-height:90vh;overflow:auto;background:var(--surface-modal);border:1px solid var(--border);border-radius:10px;padding:14px;box-sizing:border-box">
     <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:10px;flex-wrap:wrap">
      <div>
@@ -1417,7 +1417,7 @@ __PG_LOGO_DARK__
    </div>
   </div>
 
-  <div id="customCcssEditorModal" onclick="if(event.target===this&&!document.body.classList.contains('layout-desktop')) meterCloseCustomCcssEditor()" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.74);z-index:10050;align-items:center;justify-content:center;padding:18px;box-sizing:border-box">
+  <div id="customCcssEditorModal" class="pg-modal-in" onclick="if(event.target===this&&!document.body.classList.contains('layout-desktop')) meterCloseCustomCcssEditor()" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.74);z-index:10050;align-items:center;justify-content:center;padding:18px;box-sizing:border-box">
    <div class="ccss-editor-dialog">
     <div class="ccss-editor-head">
      <div>
@@ -1447,7 +1447,7 @@ __PG_LOGO_DARK__
      <section class="ccss-editor-panel ccss-viewer-panel" aria-labelledby="ccssViewerTitle">
       <div class="card-section-head"><h3 class="card-section-title" id="ccssViewerTitle"><svg class="card-section-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 20h18M4 17c2.5 0 3-11 5.5-11s3 8 5 8 2.5-5 5.5-5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>Profile Viewer</h3></div>
       <select id="ccssPreviewSelect" class="ccss-input" aria-label="Installed meter profile">
-       <option value="">Choose installed meter profile...</option>
+       <option value="">Choose installed meter profile…</option>
       </select>
       <div class="ccss-viewer-tools">
        <label class="ccss-lock-toggle" title="Keep every CCSS preview on the same 380 to 780 nm wavelength scale">
@@ -1772,7 +1772,7 @@ __PG_LOGO_DARK__
    <div class="session-format-note" id="meterHcfrSessionStatus">HCFR v17 export; supported historical CHC versions can be imported. Output changes are never applied automatically.</div>
   </section>
 
-  <div id="meterReportOverlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:10000;align-items:center;justify-content:center;padding:16px">
+  <div id="meterReportOverlay" class="pg-modal-in" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:10000;align-items:center;justify-content:center;padding:16px">
    <div style="width:min(460px,96vw);background:#111522;border:1px solid #2d3348;border-radius:10px;padding:14px;box-shadow:0 12px 40px rgba(0,0,0,.45)">
     <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px">
      <div style="font-size:var(--fs-lg);font-weight:700;color:var(--text)">Generate Measurement Report</div>
@@ -1969,7 +1969,7 @@ __PG_LOGO_DARK__
  <div class="card" data-widget="cec" data-desktop-workspace="connectivity" data-tablet-only data-desktop-order="30" draggable="true">
   <h2><span class="drag-handle"><svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true" fill="currentColor"><circle cx="9" cy="6" r="1.6"/><circle cx="15" cy="6" r="1.6"/><circle cx="9" cy="12" r="1.6"/><circle cx="15" cy="12" r="1.6"/><circle cx="9" cy="18" r="1.6"/><circle cx="15" cy="18" r="1.6"/></svg></span>HDMI-CEC</h2>
   <div style="display:flex;align-items:center;gap:12px;margin-bottom:8px">
-   <span id="cecStatus" style="font-size:var(--fs-md);color:var(--text2)">Checking...</span>
+   <span id="cecStatus" style="font-size:var(--fs-md);color:var(--text2)">Checking…</span>
   </div>
   <div class="cec-remote" role="group" aria-label="TV remote">
    <button class="btn btn-sm btn-primary" type="button" onclick="cecCmd('on')" title="Wake TV and switch to rampecho input"><svg class="btn-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v8"/><path d="M6.6 6.6a8 8 0 1 0 10.8 0"/></svg>Power On</button>
@@ -2162,7 +2162,7 @@ __PG_LOGO_DARK__
   </section>
   <section class="desktop-utility-section">
    <h3>HDMI-CEC</h3>
-   <div class="desktop-utility-cec-status" id="desktopUtilityCecStatus">Checking...</div>
+   <div class="desktop-utility-cec-status" id="desktopUtilityCecStatus">Checking…</div>
    <div class="desktop-utility-cec-actions cec-remote" role="group" aria-label="TV remote">
     <button class="btn btn-sm btn-primary" type="button" onclick="cecCmd('on')" title="Wake TV and switch to rampecho input"><svg class="btn-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v8"/><path d="M6.6 6.6a8 8 0 1 0 10.8 0"/></svg>Power On</button>
     <button class="btn btn-sm btn-secondary" type="button" onclick="cecCmd('off')" title="Put TV in standby"><svg class="btn-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z"/></svg>Standby</button>
@@ -2190,7 +2190,7 @@ __PG_LOGO_DARK__
 </div>
 
   <!-- Spectro setup wizard: kept at body level (sibling of the AutoCal overlay) so its z-index beats the AutoCal mask; inside the Calibration card it was stacking-capped behind it. -->
-  <div id="meterSpectroSetupModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.74);z-index:10001;align-items:center;justify-content:center;padding:18px;box-sizing:border-box">
+  <div id="meterSpectroSetupModal" class="pg-modal-in" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.74);z-index:10001;align-items:center;justify-content:center;padding:18px;box-sizing:border-box">
    <div style="width:min(460px,100%);background:var(--surface-modal);border:1px solid var(--border);border-radius:12px;padding:18px;box-sizing:border-box;box-shadow:0 18px 60px rgba(0,0,0,.45)">
     <div id="meterSpectroSetupTitle" style="font-size:var(--fs-lg);font-weight:700;color:var(--text-primary);margin-bottom:4px">Meter Setup</div>
     <div id="meterSpectroSetupStepLabel" style="font-size:var(--fs-xs);color:var(--text2);margin-bottom:10px">Step</div>
@@ -2201,10 +2201,10 @@ __PG_LOGO_DARK__
     </div>
    </div>
   </div>
-<div class="meter-autocal-mask" id="meterAutoCalOverlay" aria-hidden="true">
+<div class="meter-autocal-mask pg-modal-in" id="meterAutoCalOverlay" aria-hidden="true">
  <div class="meter-autocal-card">
 	  <div class="meter-autocal-title">LG Auto Cal</div>
-	  <div class="meter-autocal-status" id="meterAutoCalStatusText">Preparing...</div>
+	  <div class="meter-autocal-status" id="meterAutoCalStatusText">Preparing…</div>
 	  <div id="meterAutoCalUseCaseBox" class="meter-autocal-step-box" style="display:none;margin:-2px 0 12px 0;padding:12px;border:1px solid var(--border);border-radius:6px;background:var(--surface-inset)">
 	   <div style="font-size:var(--fs-md);color:var(--text);font-weight:700;margin-bottom:6px">What will this display be used for?</div>
 	   <div style="font-size:var(--fs-sm);color:var(--text2);line-height:1.45;margin-bottom:10px">This sets the HDMI output format the calibration will be built on. Pick the one that matches how the display is normally fed.</div>
@@ -2255,7 +2255,7 @@ __PG_LOGO_DARK__
       <div style="font-size:1.4rem;font-weight:700;color:var(--text)"><span id="meterAutoCalLiveY">--</span> <span style="font-size:var(--fs-sm);font-weight:500;color:var(--text2)">cd/m&sup2;</span></div>
      </div>
      <div style="height:18px;background:var(--surface-field);border:1px solid var(--border);border-radius:4px;overflow:hidden">
-      <div id="meterAutoCalLuminanceFill" style="height:100%;width:100%;background:#fff;transform:scaleX(0);transform-origin:left;transition:transform .2s cubic-bezier(.23,1,.32,1)"></div>
+      <div id="meterAutoCalLuminanceFill" style="height:100%;width:100%;background:#fff;transform:scaleX(0);transform-origin:left;transition:transform .2s var(--ease-out)"></div>
      </div>
      <div id="meterAutoCalBrightnessText" style="font-size:var(--fs-xs);color:var(--text2);margin-top:8px">Panel light: --</div>
     </div>
@@ -2382,7 +2382,7 @@ __PG_LOGO_DARK__
      banner only appears AFTER the restart completes, ~3-5s later). The
      modal stays up until the apply flow finishes (success or error) and
      auto-dismisses on success. -->
-<div class="apply-settings-mask" id="applySettingsOverlay" aria-hidden="true">
+<div class="apply-settings-mask pg-modal-in" id="applySettingsOverlay" aria-hidden="true">
  <div class="apply-settings-card">
   <div class="apply-settings-icon" id="applySettingsIcon" aria-hidden="true">
    <span class="apply-settings-spinner" aria-hidden="true"></span>
@@ -2411,7 +2411,7 @@ __PG_LOGO_DARK__
      looked like it just stopped. Reuses the Apply Settings card styling and
      its green check; dismissed by the operator rather than on a timer, so a
      failure message cannot disappear before it is read. -->
-<div class="apply-settings-mask" id="dvProfileDoneOverlay" aria-hidden="true">
+<div class="apply-settings-mask pg-modal-in" id="dvProfileDoneOverlay" aria-hidden="true">
  <div class="apply-settings-card">
   <div class="apply-settings-icon" id="dvProfileDoneIcon" aria-hidden="true">
    <span class="apply-settings-check" aria-hidden="true"><svg viewBox="0 0 70 70" xmlns="http://www.w3.org/2000/svg"><path d="M14 36 L28 50 L56 18"/></svg></span>
@@ -2435,7 +2435,7 @@ __PG_LOGO_DARK__
      card around in the background. On success the spinner flips to
      the same large green check used by the Apply Settings modal. On
      error the modal stays red so the operator can read the message. -->
-<div class="apply-settings-mask" id="lgConnectOverlay" aria-hidden="true">
+<div class="apply-settings-mask pg-modal-in" id="lgConnectOverlay" aria-hidden="true">
  <div class="apply-settings-card lg-connect-card">
   <div class="apply-settings-icon" id="lgConnectIcon" aria-hidden="true">
    <span class="apply-settings-spinner" aria-hidden="true"></span>
@@ -2474,7 +2474,7 @@ __PG_LOGO_DARK__
      state-wise) but meterActionPending blocks clicks for the whole
      stop RTT, so the page feels frozen with no explanation. Same
      skeleton as Apply Settings / LG Connect (spinner mask). -->
-<div class="apply-settings-mask" id="meterStopOverlay" aria-hidden="true">
+<div class="apply-settings-mask pg-modal-in" id="meterStopOverlay" aria-hidden="true">
  <div class="apply-settings-card">
   <div class="apply-settings-icon" id="meterStopIcon" aria-hidden="true">
    <span class="apply-settings-spinner" aria-hidden="true"></span>

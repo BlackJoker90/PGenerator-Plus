@@ -477,7 +477,7 @@ github_get() {
 
 # Message of a GitHub error JSON, or a generic one.
 github_error_message() {
- printf '%s' "$1" | perl -MJSON::PP -e 'local $/; my $j=eval { JSON::PP::decode_json(<STDIN>) }; my $m=(ref($j) eq "HASH" ? $j->{message} : "") // ""; print($m ne "" ? $m : "Cannot reach GitHub");'
+ printf '%s' "$1" | perl -MJSON::PP -e 'binmode(STDOUT,":utf8"); local $/; my $j=eval { JSON::PP::decode_json(<STDIN>) }; my $m=(ref($j) eq "HASH" ? $j->{message} : "") // ""; print($m ne "" ? $m : "Cannot reach GitHub");'
 }
 
 # ── Fetch latest release info from GitHub ──
@@ -494,6 +494,10 @@ get_latest_release() {
 # bridge (<= 2.13.51, whose updater only reads "latest") move to 2.13.52
 # first. When the list cannot be read or holds nothing reachable, the answer
 # is "latest" as before.
+# Every Perl step here prints GitHub's decoded text as UTF-8 again (->utf8,
+# binmode): plain print writes characters below 256 as Latin-1, so notes
+# with only "×" or "é" became invalid UTF-8, the next decode_json failed
+# and the release was skipped (t/update_utf8.t).
 pick_update_release() {
  local current="$1" list line ver json first_any=""
  OUTSIDE_VERSION=""
@@ -521,7 +525,7 @@ pick_update_release() {
     push @r,[$ver,$rel];
    }
    for my $e (sort { $vk->($b->[0]) cmp $vk->($a->[0]) } @r) {
-    print $e->[0],"\t",JSON::PP->new->canonical->encode($e->[1]),"\n";
+    print $e->[0],"\t",JSON::PP->new->utf8->canonical->encode($e->[1]),"\n";
    }')
   [ -z "$first_any" ] || OUTSIDE_VERSION="$first_any"
  fi
@@ -582,7 +586,7 @@ list_releases() {
   my $vk=sub { join(".",map { sprintf("%06d",$_) } split(/\./,$_[0])) };
   @out=sort { $vk->($b->{version}) cmp $vk->($a->{version}) } @out;
   splice(@out,$limit) if(@out>$limit);
-  print JSON::PP->new->canonical->encode({status=>"ok",current=>$current,family=>$family,releases=>\@out});
+  print JSON::PP->new->utf8->canonical->encode({status=>"ok",current=>$current,family=>$family,releases=>\@out});
  ' "$current" "$(major_version "$current")" "${UPDATE_TARGET:-pi4-biasi}" "$limit" $(reachable_families "$current")
 }
 
@@ -644,6 +648,7 @@ release_field() {
   } else {
    $value = $rel->{$key} // "";
   }
+  binmode(STDOUT,":utf8");
   print $value;
  ' "$key" "${UPDATE_TARGET:-pi4-biasi}"
 }

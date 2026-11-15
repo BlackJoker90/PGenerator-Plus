@@ -191,6 +191,11 @@ MY_REPO = "BlackJoker90/rampecho"
 # update through), so a command that still names it reaches the same repo.
 MY_OLD_REPO = "BlackJoker90/PGenerator-Plus"
 ONLY_MINE = "Everything goes only to %s, never to upstream BigShoots or any other repo (CLAUDE.md)." % MY_REPO
+# A repository of the old name, as a command would name the one it creates:
+# bare (gh takes the logged-in owner) or with our owner.
+OLD_NAME_AGAIN = re.compile(r"^(?:%s/)?%s(?:\.git)?/*$" % tuple(re.escape(x) for x in MY_OLD_REPO.split("/")), re.I)
+NEVER_OLD_NAME = ("%s would create a repository named %s again: that ends GitHub's redirect to %s, and devices on "
+                  "2.13.x could no longer update (CLAUDE.md)." % ("%s", MY_OLD_REPO, MY_REPO))
 GH_URL = re.compile(r"^(?:[a-z+]+://)?(?:[^/@]+@)?(?:www\.)?github\.com[:/]+([^/\s]+)/([^/\s?#]+)", re.I)
 URL_LIKE = re.compile(r"^(?:[a-z+]+://|git@|(?:www\.)?github\.com[:/])\S*$", re.I)
 GH_REST = re.compile(r"^(?:https?://)?(?:api|uploads)\.github\.com(?:/|$)", re.I)
@@ -1029,6 +1034,11 @@ def check_gh_api(args, st):
     path, method, fields = gh_api_args(args)
     if not (method not in ("GET", "HEAD") if method else fields):
         return
+    # a repository's own path (PATCH renames it) or one that creates one
+    if re.match(r"^(?:repos/[^/]+/[^/]+|user/repos|orgs/[^/]+/repos)/*$", rest_path(path), re.I) and \
+            any(f.startswith("name=") and OLD_NAME_AGAIN.match(f[5:].strip("\"'")) for f in fields):
+        st.deny(P_ORIGIN, NEVER_OLD_NAME % "gh api")
+        return
     if rest_path(path) != "graphql":
         check_api_path(path, "gh api", st)
         return
@@ -1049,6 +1059,19 @@ def check_gh(a, st):
     group, sub = (words + ["", ""])[:2]
     if helped or not group or group in GH_FREE or not sub or sub in GH_READS:
         return
+    if group == "repo" and sub in ("create", "rename", "fork"):
+        # the name the new or renamed repository gets: the argument of create
+        # and rename, --fork-name of fork (a fork without it takes the
+        # source's name, and a foreign source is refused below)
+        named = words[2:] if sub != "fork" else []
+        for j, x in enumerate(a):
+            if x == "--fork-name" and j + 1 < len(a):
+                named.append(a[j + 1])
+            elif x.startswith("--fork-name="):
+                named.append(x.split("=", 1)[1])
+        if any(OLD_NAME_AGAIN.match(x) for x in named):
+            st.deny(P_ORIGIN, NEVER_OLD_NAME % ("gh repo %s" % sub))
+            return
     if sub == "clone" and group in ("repo", "gist"):       # `gh label clone` writes
         return
     if sub in GH_NESTED and words[2:3] and words[2] in GH_READS:

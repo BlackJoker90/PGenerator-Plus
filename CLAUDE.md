@@ -1,4 +1,4 @@
-# PGenerator+ (BlackJoker90 fork)
+# rampecho (BlackJoker90's fork of PGenerator+)
 
 Raspberry Pi 4 HDMI pattern generator for display calibration. Perl daemon
 (`usr/sbin/PGeneratord` → `usr/share/PGenerator/*.pm`), C++ openFrameworks
@@ -162,10 +162,13 @@ a turn while a snapshot is open.
 
 ## Git and releases
 
-- Nothing ever goes to a repo other than BlackJoker90/PGenerator-Plus: no
+- Nothing ever goes to a repo other than BlackJoker90/rampecho: no
   push, PR, issue, comment or release. `origin` is upstream BigShoots.
   Push only with `git push fork main`.
-- Every `gh` write names the repo (`-R BlackJoker90/PGenerator-Plus`; `gh
+- The repository was BlackJoker90/PGenerator-Plus until 2026-11-15. GitHub
+  redirects the old name, and devices on 2.13.x update through that
+  redirect: never create a repository of the old name again.
+- Every `gh` write names the repo (`-R BlackJoker90/rampecho`; `gh
   repo edit`, `sync`, `delete` and the like take it as argument).
   `pi_guard.py` refuses what it can read as going elsewhere, in Bash only;
   it is a net for slips, not a proof.
@@ -173,7 +176,7 @@ a turn while a snapshot is open.
   target from `GH_REPO`, then the `remote.*.gh-resolved` mark, then the
   remote names, where `origin` beats `fork` (read in its app bundle). The
   missing mark is the likely way BigShoots #61 was opened. A new clone
-  needs `gh repo set-default BlackJoker90/PGenerator-Plus`, which sets the
+  needs `gh repo set-default BlackJoker90/rampecho`, which sets the
   mark, and `git remote set-url --push origin
   PUSH-DISABLED-only-BlackJoker90-fork`, also in
   `vendor/ArgyllCMS_ICC4.4` (its remote is BigShoots/ArgyllCMS_ICC4.4).

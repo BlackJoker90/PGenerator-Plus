@@ -27,7 +27,8 @@ Deny (the reason goes back to Claude):
   - an init-script stop/restart in a command that names a path the init
     script pkills (it would kill its own shell);
   - writing pgen-pi's busy state by hand;
-  - anything that goes to another repo than BlackJoker90/PGenerator-Plus:
+  - anything that goes to another repo than BlackJoker90/rampecho (until
+    2026-11-15 BlackJoker90/PGenerator-Plus, which redirects to it):
     pushes to origin (upstream BigShoots) or any other remote, gh writes
     (pr, issue, release, repo, api ...) that do not name the fork, API
     POSTs by curl/wget, and undoing the block on origin's push URL.
@@ -183,7 +184,12 @@ STATE_WRITE = "pgen-pi's busy state is written by `pgen-pi busy` only, after it 
 # The only repo anything may go to. Without the gh default (the gh-resolved
 # mark) T3's PR button picks origin, the likely way BigShoots #61 was opened
 # (2026-11-05). T3 posts to the API itself: this guard does not see that call.
-MY_REPO = "BlackJoker90/PGenerator-Plus"
+MY_REPO = "BlackJoker90/rampecho"
+# The repository's name until the rename of 2026-11-15. GitHub redirects it
+# to MY_REPO for git, gh and the API as long as no repository of that name
+# is created again (never do that: it breaks the redirect devices on 2.13.x
+# update through), so a command that still names it reaches the same repo.
+MY_OLD_REPO = "BlackJoker90/PGenerator-Plus"
 ONLY_MINE = "Everything goes only to %s, never to upstream BigShoots or any other repo (CLAUDE.md)." % MY_REPO
 GH_URL = re.compile(r"^(?:[a-z+]+://)?(?:[^/@]+@)?(?:www\.)?github\.com[:/]+([^/\s]+)/([^/\s?#]+)", re.I)
 URL_LIKE = re.compile(r"^(?:[a-z+]+://|git@|(?:www\.)?github\.com[:/])\S*$", re.I)
@@ -931,7 +937,7 @@ def judge_one(a, redir, heredocs, loc, st, depth):
 def is_mine(target):
     m = GH_URL.match(target)
     name = "%s/%s" % m.groups() if m else target
-    return re.sub(r"(?:\.git)?/*$", "", name).lower() == MY_REPO.lower()
+    return re.sub(r"(?:\.git)?/*$", "", name).lower() in (MY_REPO.lower(), MY_OLD_REPO.lower())
 
 
 def gh_words(args):

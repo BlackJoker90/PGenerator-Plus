@@ -181,8 +181,9 @@ a turn while a snapshot is open.
   PUSH-DISABLED-only-BlackJoker90-fork`, also in
   `vendor/ArgyllCMS_ICC4.4` (its remote is BigShoots/ArgyllCMS_ICC4.4).
 - Releases are OTA packages (`tools/release-ota.sh`); a flashable image
-  only for boot/base-system changes. The release script refuses untracked
-  runtime files: `git add` new files first.
+  only for boot/base-system changes or when the maintainer asks. The
+  release script refuses untracked runtime files: `git add` new files first.
+
 - README follows the product without being asked: when something
   fundamental is added or changed (a new setting, workspace, card, endpoint,
   signal mode or behaviour a user would notice), update `README.md` in the
@@ -193,3 +194,51 @@ a turn while a snapshot is open.
   never describes something users cannot install yet.
 - Commits, pushes, releases, reboots and deploys need the maintainer's OK.
 - Code comments, commit messages and repo docs are in English.
+
+## Building a flashable image
+
+Pi 4 images are built in the Parallels VM `pgen-build` by
+`tools/image-build/run-in-vm.sh` (background: `tools/BUILD-IMAGE-PI4.md`).
+It builds the working tree of `MAC_REPO` (default: the main checkout)
+onto the v2.12.1 base in `/root/pgbase`, runs `prove` as root, fscks the
+result, checks version, renderer, `drm_override.so` and the patched
+`vc4.ko` (md5 hard-coded in the script: update it with the module),
+compresses with xz, copies the `.img.xz` and `_sha256.txt` to
+`$MAC_REPO/build/` and deletes the copies in the VM.
+
+- An image of a released version is built from that tag, never from
+  `main`: `git clone` the main checkout (a clone, not a worktree: the
+  script needs a `.git` directory) to `/Users/fabio/pgen-image-<ver>`,
+  `git checkout v<ver>`, `git remote set-url --push origin PUSH-DISABLED`,
+  then copy in the local-only `tools/`, `build/runtime-cache/` and `t/`.
+- `t/` is not versioned: run `prove -j8 -Q -r t` in the clone first. A
+  red file there is acceptable only if it tests code after the tag (birth
+  time `stat -f %SB` after the release's `publishedAt`, and a later commit
+  it belongs to); remove those from the clone's `t/` and name them. Any
+  other red stops the build.
+- Start it detached and poll the log:
+  `prlctl exec pgen-build 'MAC_REPO=/media/psf/Home/pgen-image-<ver> nohup bash /media/psf/Home/pgen-image-<ver>/tools/image-build/run-in-vm.sh > /root/image-build-<ver>.log 2>&1 &'`
+  Wait for `^ERROR` or `] Done: ` in the log (a `pgrep -f run-in-vm`
+  watcher matches its own command line and never ends). `t/` runs there
+  as root on Linux: a test that needs macOS or a non-root user skips
+  there, it does not fail.
+  The log must end in "Output image OK" and "Done", and must not say
+  "node not found" (nodejs is installed in the VM since 2026-11-16; the
+  release checks parse the WebUI JS with it).
+- GitHub limits assets to 2 GiB: split the `.img.xz` into `.001` (1992294400
+  bytes) and `.002`, write `<name>.img.xz.sha256` for the joined file, upload
+  the three with `gh release upload v<ver> -R BlackJoker90/rampecho`, then
+  compare sizes and GitHub's per-asset sha256 digest with the local parts.
+- Notes: add a "Flashing the image" section (join, check, flash; Export /
+  Import System Settings) with `gh release edit --notes-file`; on a release
+  that is not "latest" pass `--latest=false`.
+- From 3.0.2 the image boots without the initramfs: the builder runs
+  `update-migrations.d/3.0.2-boot-no-initramfs.sh` on it (the script OTA
+  devices run), and `run-in-vm.sh` checks `root=PARTUUID`, the commented
+  initramfs line and that `/boot/loader/boot_dir` (the WebUI's copy of the
+  boot files) equals the boot partition. An image of an older tag keeps
+  the initramfs.
+- An image serves its MAJOR.MINOR family: the updater only offers updates
+  within it (`same_ota_family`), so a device of another family re-flashes.
+- Afterwards: the VM copy is gone (the script deletes it); the Mac copies in
+  `build/` and the clone are deleted on the maintainer's word.

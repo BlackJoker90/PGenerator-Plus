@@ -139,6 +139,7 @@ rc_PGenerator_start () {
  fi
  # End Patch for RPI 3 Model B Plus to fix bluetooth mac address 
  rm -f "$DHCP_STARTING" "$DHCP_STARTED"
+ PGENERATOR_START_PID=""
  if [ "$1" == "start" ]; then
   # The last boots only; the daemon (user pgenerator) appends to it too.
   [ -f "$BOOT_TIMES" ] && tail -n 400 "$BOOT_TIMES" > "$BOOT_TIMES.tmp" && mv "$BOOT_TIMES.tmp" "$BOOT_TIMES"
@@ -205,7 +206,40 @@ rc_PGenerator_start () {
   swapon -a
   mount -a
   pgen_mark "disks mounted"
-  
+
+  # USB reliability: kill the runtime-PM race that masquerades as "USB
+  # Overloaded". On the Pi 400 the colorimeter and the internal keyboard
+  # share one VL817 hub. The kernel default (usbcore.autosuspend=2) lets
+  # idle devices runtime-suspend; when that races with enumeration or a
+  # SET_ADDRESS handshake you get "error -71/-32", "not responding to setup
+  # address", and "attempt power cycle" log lines. Those are timing /
+  # signal-integrity faults, NOT real over-current, but they were being
+  # surfaced as a "USB Overloaded" badge. Disabling autosuspend and pinning
+  # the hub + children awake removes the race at the source. The 99-colorimeter
+  # udev rule re-applies power/control=on on hotplug; this covers the global
+  # module param and any device that enumerates before udev settles.
+  # Set before PGenerator starts, as it was when PGenerator came last.
+  if [ -w /sys/module/usbcore/parameters/autosuspend ]; then
+   echo -1 > /sys/module/usbcore/parameters/autosuspend 2>/dev/null
+  fi
+  for ctl in /sys/bus/usb/devices/*/power/control; do
+   [ -w "$ctl" ] && echo on > "$ctl" 2>/dev/null
+  done
+
+  # scaling governor mode (before PGenerator: its start is the CPU-bound
+  # part of the boot)
+  /bin/echo $SCALING_GOVERNOR > /sys/devices/system/cpu/cpu0/cpufreq/scaling_governor
+
+  # PGenerator (HDMI picture, WebUI, pattern ports) needs none of what
+  # follows: Bluetooth, the USB gadget, WiFi and dhcpd. It starts here, in
+  # the background, and they come up beside it (measured 2026-11-16: they
+  # took 8.5 s of uptime before PGenerator started). Its mDNS responder
+  # joins interfaces that come up later within 30 s (webui_mdns), the LG
+  # start scan waits for the default route (lg_startup_scan_worker).
+  pgen_mark "PGenerator start"
+  ( /etc/init.d/PGenerator restart; pgen_mark "PGenerator start returned" ) </dev/null &
+  PGENERATOR_START_PID=$!
+
   # start for bluetooth
   rmmod btusb
   modprobe btusb
@@ -350,27 +384,6 @@ rc_PGenerator_start () {
    bluetoothctl power off >/dev/null 2>&1
   fi
 
-  # USB reliability: kill the runtime-PM race that masquerades as "USB
-  # Overloaded". On the Pi 400 the colorimeter and the internal keyboard
-  # share one VL817 hub. The kernel default (usbcore.autosuspend=2) lets
-  # idle devices runtime-suspend; when that races with enumeration or a
-  # SET_ADDRESS handshake you get "error -71/-32", "not responding to setup
-  # address", and "attempt power cycle" log lines. Those are timing /
-  # signal-integrity faults, NOT real over-current, but they were being
-  # surfaced as a "USB Overloaded" badge. Disabling autosuspend and pinning
-  # the hub + children awake removes the race at the source. The 99-colorimeter
-  # udev rule re-applies power/control=on on hotplug; this covers the global
-  # module param and any device that enumerates before udev settles.
-  if [ -w /sys/module/usbcore/parameters/autosuspend ]; then
-   echo -1 > /sys/module/usbcore/parameters/autosuspend 2>/dev/null
-  fi
-  for ctl in /sys/bus/usb/devices/*/power/control; do
-   [ -w "$ctl" ] && echo on > "$ctl" 2>/dev/null
-  done
-
-  # scaling governor mode
-  /bin/echo $SCALING_GOVERNOR > /sys/devices/system/cpu/cpu0/cpufreq/scaling_governor
- 
  fi
 
  # create dhcpd file
@@ -397,10 +410,14 @@ rc_PGenerator_start () {
   ip route del default dev eth0 2>/dev/null || true
  fi
 
- # PGenerator 
- pgen_mark "PGenerator start"
- /etc/init.d/PGenerator restart
- pgen_mark "PGenerator start returned"
+ # PGenerator: started above in a boot; the sync below waits for its start.
+ if [ -n "$PGENERATOR_START_PID" ]; then
+  wait "$PGENERATOR_START_PID"
+ else
+  pgen_mark "PGenerator start"
+  /etc/init.d/PGenerator restart
+  pgen_mark "PGenerator start returned"
+ fi
 
  # At the end a sync
  /bin/sync

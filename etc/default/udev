@@ -1,0 +1,7 @@
+DAEMON_ARGUMENT=""
+# /etc/init.d/udev (BiasiLinux base image) sleeps SLEEP_SECONDS (2 when
+# unset) after "udevadm trigger; udevadm settle" in rcS. settle already
+# waits until every queued event is handled, so the sleep only delays the
+# boot: rcS, rcPGenerator, the WebUI and the picture all came 2 s later.
+# The initramfs has its own copy of this file and is not changed by it.
+SLEEP_SECONDS=0

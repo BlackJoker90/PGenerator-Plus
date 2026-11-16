@@ -809,7 +809,12 @@ def cmd_reboot(args):
         die("usage: pgen-pi reboot", 2)
     require_idle("reboot")
     log_action("reboot")
-    ssh("setsid sh -c 'sleep 2; reboot' </dev/null >/dev/null 2>&1 &", capture=True)
+    # The WebUI's way (/api/reboot): PGenerator_cmd.pl REBOOT stops the
+    # renderer and hands the HDMI link back as RGB before it reboots, and
+    # marks the shutdown in boot-times.log. A plain reboot left YCbCr set,
+    # and the TV showed the shutdown's zero pixels as green (2026-11-16).
+    # Plain reboot only if that one has not taken the Pi down in 30 s.
+    ssh("setsid sh -c 'sleep 2; [ -x /usr/bin/PGenerator_cmd.pl ] && PG_CMD=UkVCT09U /usr/bin/PGenerator_cmd.pl; sleep 30; reboot' </dev/null >/dev/null 2>&1 &", capture=True)
     sys.stdout.write("reboot requested; waiting for the Pi to go and come back ...\n")
     t, gone = time.time(), False
     while time.time() - t < 300:

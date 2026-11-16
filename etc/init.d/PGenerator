@@ -22,10 +22,21 @@ PGENERATOR_PID_DIR="/var/run/PGenerator"
 DEVICES_VIDEO="/dev/vhci /dev/vchiq"
 PERL="/usr/bin/perl"
 FB0_BLANK_FILE="/sys/class/graphics/fb0/blank"
+BOOT_TIMES="/var/log/PGenerator/boot-times.log"
+
+# One line "<uptime> init: <step>" in $BOOT_TIMES, as rcPGenerator's
+# pgen_mark and the daemon's boot_time_mark (command.pm). Only into the
+# file rcPGenerator made for the daemon's user: created here (as root,
+# e.g. by an update's start) the daemon could not write to it.
+init_mark () {
+ [ -f "$BOOT_TIMES" ] || return 0
+ echo "$(cut -d' ' -f1 /proc/uptime) init: $*" >> "$BOOT_TIMES" 2>/dev/null
+}
 
 case "$1" in
     start)
         echo -n "Starting $PROGRAM_NAME..."
+        init_mark "start"
         # Self-heal privileged command access after OTA installs. If a prior
         # archive left the sudoers include with the wrong mode/owner, meter
         # detection, reboot, and update actions from the WebUI will fail.
@@ -86,6 +97,7 @@ case "$1" in
         if [ -x /usr/bin/pgen_test_edid ]; then
          mkdir -p /var/log/PGenerator 2>/dev/null
          /usr/bin/pgen_test_edid apply >/var/log/PGenerator/test-edid.log 2>&1 || true
+         init_mark "test EDID done"
         fi
         # Pre-set the HDR_OUTPUT_METADATA connector property from
         # /etc/PGenerator/PGenerator.conf so the LG C2 (and other LG OLEDs)
@@ -122,6 +134,7 @@ case "$1" in
         # it itself (command.pm, perlio_descriptor_table_presize); the
         # variable counts only in a start without the capability, and
         # so does the paragraph above.
+        init_mark "daemon launch"
         setsid sudo -u $PGENERATOR_USER_GROUP env MALLOC_ARENA_MAX=1 $PROGRAM_DAEMON_SOCKET
         setcap cap_net_bind_service=-ep $PERL
         # No fb0 blank here: it switched the HDMI output off (the TV lost

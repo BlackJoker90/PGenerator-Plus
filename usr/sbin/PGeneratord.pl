@@ -94,6 +94,9 @@ do "lg.pm"            || die "Error";
 do "webui.pm"         || die "Error";
 do "bash.pm"          || die "Error";
 do "serial.pm"        || die "Error";
+# How long perl took to read and compile the modules (boot-times.log; the
+# init script marks when it launched perl).
+&boot_time_mark("daemon: modules loaded");
 
 #############################################
 #        perl's descriptor table            #

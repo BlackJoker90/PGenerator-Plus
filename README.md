@@ -157,7 +157,8 @@ mDNS answers AAAA queries with an NSEC record, so clients do not wait for an IPv
 
 - Start and restart show an **animated progress screen on the TV** that follows the real boot steps in the colours of the WebUI theme you picked, and the WebUI follows a restart in its own dialog and reloads once the Pi is back.
 - A renderer restart in YCbCr no longer flashes the screen green.
-- **Faster start and reboot**: the WebUI answers about 25 s after the kernel starts, 10 s sooner than in earlier releases, and a reboot from the WebUI is back about 11 s sooner (USB network detection runs in the background, the WiFi driver is reloaded only when it failed, the WebUI starts before the renderer); every step is logged with its uptime in `/var/log/PGenerator/boot-times.log`.
+- **Faster start and reboot**: the WebUI answers about 8.5 s after the kernel starts and the start picture is on the TV at about 11 s (3.0.1: about 21 s and 23 to 25 s). rampecho starts before Bluetooth and WiFi, udev no longer sleeps at start, USB network detection runs in the background, the WiFi driver is reloaded only when it failed, and the WebUI starts before the renderer; every step is logged with its uptime in `/var/log/PGenerator/boot-times.log`.
+- **Boot without the initramfs** (from 3.0.2, on a Pi 4 with its system on the SD card): the kernel mounts the system partition itself, by its PARTUUID, which saves about 4 s in the kernel and 2.5 s in the firmware. The update changes `cmdline.txt` and `config.txt` on the boot partition and takes effect after the next reboot; it keeps the old files as `cmdline.txt.initramfs` and `config.txt.initramfs` and leaves `initramfs.gz` in place. To go back, copy the two `.initramfs` files over `cmdline.txt` and `config.txt` (from a computer, on the SD card's boot partition) and reboot.
 - **Download Logs** replaces the old log upload.
 
 </details>
@@ -378,7 +379,7 @@ rampecho: **serialized**: one renderer, no crash
 
 **Start and restart**<br/>
 Original: static splash, WebUI just goes offline<br/>
-rampecho: **animated progress on the TV** (real boot steps, in the WebUI theme), restart dialog in the WebUI that reconnects by itself; WebUI up about 25 s after the kernel starts
+rampecho: **animated progress on the TV** (real boot steps, in the WebUI theme), restart dialog in the WebUI that reconnects by itself; WebUI up about 8.5 s after the kernel starts (Pi 4 boots without the initramfs)
 
 **CPU scaling governor**<br/>
 Original: fixed in `/etc/default/rcPGenerator`<br/>

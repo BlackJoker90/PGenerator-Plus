@@ -927,11 +927,28 @@ sub lg_startup_scan_prepare (@) {
  if(open(my $fh,">",$running)) { print $fh time()."\n"; close($fh); }
 }
 
+# Seconds since the boot (/proc/uptime), a large number when unreadable.
+sub lg_uptime_seconds (@) {
+ my $file=shift;
+ $file="/proc/uptime" if(!defined($file) || $file eq "");
+ open(my $fh,"<",$file) or return 1e9;
+ my $line=<$fh>;
+ close($fh);
+ return (defined($line) && $line=~/^(\d+(?:\.\d+)?)/) ? $1+0 : 1e9;
+}
+
 sub lg_startup_scan_worker (@) {
  my ($running,$result_file)=&lg_startup_scan_paths();
  # Let renderer and USB meter initialization get their first turn before the
  # network sweep begins. This thread never owns the WebUI listening socket.
  sleep(2);
+ # In a boot the daemon starts before the network is up (rcPGenerator
+ # brings up WiFi and dhcpd beside it), and the sweep reads its subnet
+ # from the default route: wait for that, up to 30 s, while the system is
+ # young. A daemon restarted later has its route at once.
+ for(my $i=0;$i<60 && !&lg_default_lan_subnets() && &lg_uptime_seconds() < 180;$i++) {
+  select(undef,undef,undef,0.5);
+ }
  my $result=eval { &lg_scan_devices() };
  if(ref($result) ne "HASH") {
   $result={status=>"error",devices=>[],message=>"Automatic LG TV scan failed"};

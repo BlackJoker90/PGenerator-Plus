@@ -250,6 +250,7 @@ sub webui_mdns (@) {
  # Track joined interfaces so we can re-join after hotplug events.
  my %mdns_joined; # key="ifindex:<n>" or "iface:<name>" value=route hashref
  my $mdns_join_time=0;
+ my $mdns_none_logged=0;
 
  my $mdns_route_key=sub {
   my $route=shift;
@@ -324,7 +325,13 @@ sub webui_mdns (@) {
     $mdns_drop->($mdns_joined{$key});
     delete $mdns_joined{$key};
     }
-    &log("mDNS: no active IPv4 interfaces found for multicast join") if(!@routes && !keys %mdns_joined);
+    # Said once while it lasts: in a boot the first minutes rejoin every 2 s.
+    if(!@routes && !keys %mdns_joined) {
+     &log("mDNS: no active IPv4 interfaces found for multicast join") if(!$mdns_none_logged);
+     $mdns_none_logged=1;
+    } else {
+     $mdns_none_logged=0;
+    }
     $mdns_join_time=time();
    };
    $mdns_rejoin->();
@@ -334,10 +341,14 @@ sub webui_mdns (@) {
    my $sel=IO::Select->new($sock);
  while(1) {
   # Re-join multicast groups periodically to handle hotplug
-  if(time() - $mdns_join_time >= $MDNS_REJOIN_INTERVAL) {
+  # In a boot the daemon starts before WiFi and dhcpd (rcPGenerator), so an
+  # interface can get its address after the first join: look every 2 s
+  # while the system is young, then every 30 s.
+  my $rejoin_interval=(&lg_uptime_seconds() < 180) ? 2 : $MDNS_REJOIN_INTERVAL;
+  if(time() - $mdns_join_time >= $rejoin_interval) {
    $mdns_rejoin->();
   }
-  my @ready=$sel->can_read($MDNS_REJOIN_INTERVAL);
+  my @ready=$sel->can_read($rejoin_interval);
   next if(!@ready);
   my $buf="";
   my $from=recv($sock, $buf, 4096, 0);

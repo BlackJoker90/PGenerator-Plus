@@ -2192,6 +2192,39 @@ sub pgen_drop_inherited_locks () {
  $renderer_lock_depth=0;
 }
 
+# The start black (PatternStart): boot, /api/restart and hotplug draw it on
+# every renderer start. Video black on Limited links (see
+# pattern_start_black in daemon.pm). "window;background": the template's
+# 640x360 window sits on a full-screen background, and both need the black.
+sub pattern_start_draw (@) {
+ my ($start_black,$start_range,$start_max)=defined(&pattern_start_black) ? &pattern_start_black() : ("0,0,0","",0);
+ return &get_pattern($test_template_command,"$pattern_start","$start_black;$start_black","pattern_generator_start",$start_range,$start_max);
+}
+
+# 1 when a start that keeps running/ (no_clean_files) has to draw the start
+# black itself. Standard Dolby Vision carries its metadata in the picture:
+# the renderer embeds it in the frame it draws for a pattern, and with no
+# pattern it draws nothing (ofApp.cpp draw(), entered == 0). The frame then
+# carries no Dolby metadata and a display waiting for it stays in SDR until
+# the next pattern. The WebUI apply restarts this way after its stop
+# emptied running/. A pattern a caller wrote before the start (the one
+# load_new_pattern_file starts the renderer for) stays, and a renderer that
+# did not come up gets nothing (load_new_pattern_file's retries start it
+# again). Low-latency DV (metadata in the infoframe) and SDR clear their
+# idle frame to black themselves.
+# Not while this thread draws it already: a renderer that died before that
+# draw's load gets started again by the load's retry ladder, whose stop
+# emptied running/; drawing in that nested start would start the next
+# ladder, without end.
+our $pattern_start_drawing=0;
+sub pattern_start_needed_for_dv (@) {
+ return 0 if($pattern_start_drawing);
+ return 0 if(!&dv_standard_active());
+ return 0 if(-s $command_file);
+ return 0 if(!&pattern_generator_is_running());
+ return 1;
+}
+
 sub pattern_generator_start(@) {
  my $no_clean_files = shift;
  my $use_drm_override=1;
@@ -2359,11 +2392,12 @@ sub pattern_generator_start(@) {
  &apply_hdr_metadata_helper();
  unlink("$info_dir/GET_PGENERATOR_IS_EXECUTED.info");
  if(!$no_clean_files) {
-  # Video black on Limited links (see pattern_start_black in daemon.pm).
-  # "window;background": the template's 640x360 window sits on a full-screen
-  # background, and both need the black.
-  my ($start_black,$start_range,$start_max)=defined(&pattern_start_black) ? &pattern_start_black() : ("0,0,0","",0);
-  &get_pattern($test_template_command,"$pattern_start","$start_black;$start_black","pattern_generator_start",$start_range,$start_max);
+  local $pattern_start_drawing=1;
+  &pattern_start_draw();
+ } elsif(&pattern_start_needed_for_dv()) {
+  &log("Renderer: Standard Dolby Vision started without a pattern; drawing the start black so the display gets the Dolby metadata");
+  local $pattern_start_drawing=1;
+  &pattern_start_draw();
  }
  &video_recovery_notice_clear() if(&pattern_generator_is_running());
  &renderer_unlock();

@@ -1583,6 +1583,9 @@ sub webui_restart_renderer_locked (@) {
   # (reported on an XGIMI Titan projector) the picture then stays SDR
   # until the next pattern write forces a flip. Hold the apply modal
   # until the blob is actually staged so "applied" means "on the wire".
+  # Standard DV's metadata is in the picture, which a renderer without a
+  # pattern does not draw: its start draws the start black for it
+  # (pattern_start_needed_for_dv, command.pm).
   if($pgenerator_conf{"dv_status"} eq "1" && $is_kms) {
    &webui_renderer_restart_status_write($restart_id,"starting","Waiting for the Dolby Vision infoframe to reach the display.");
    if(&webui_wait_for_dovi_wire(15)) {
@@ -15138,10 +15141,13 @@ sub webui_pattern_current_name (@) {
  return $current;
 }
 
+# The start black (PatternStart) is the idle output too: a renderer start
+# draws it where no pattern is (boot, hotplug, and in standard Dolby Vision
+# every start, pattern_start_needed_for_dv).
 sub webui_pattern_idle_refresh_allowed (@) {
  return (1,"") if(!-f $command_file);
  my $current=&webui_pattern_current_name();
- return (1,$current) if($current eq "" || $current eq "stop" || $current eq "stabilization");
+ return (1,$current) if($current eq "" || $current eq "stop" || $current eq "stabilization" || $current eq $pattern_start);
  return (0,$current);
 }
 

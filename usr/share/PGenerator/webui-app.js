@@ -5896,17 +5896,20 @@ let pgTabletNavPinned='';
 let pgTabletWorkspace='output';
 function pgTabletWorkspaceAnchors(){
  const first={};
- // Measure with the workspace filter lifted: a card hidden only because
- // another workspace is open still counts as available.
+ // Read with the workspace filter lifted: a card hidden only because another
+ // workspace is open still counts as available. Only the computed display is
+ // read (a style pass, no layout): laying the page out with every
+ // workspace's cards shown moved the scroll position in WebKit, and the nav
+ // syncs on every toolbar slide and card change, so iPhones jumped.
  document.body.classList.add('pg-tablet-measuring');
- document.querySelectorAll('.dashboard > .card[data-desktop-workspace]').forEach(card=>{
+ document.querySelectorAll('.dashboard > .card[data-desktop-workspace]').forEach((card,index)=>{
   const workspace=card.getAttribute('data-desktop-workspace');
-  if(!Object.prototype.hasOwnProperty.call(PG_DESKTOP_WORKSPACES,workspace)||!card.getClientRects().length) return;
-  const top=card.getBoundingClientRect().top;
-  if(!first[workspace]||top<first[workspace].top) first[workspace]={workspace:workspace,card:card,top:top};
+  if(!Object.prototype.hasOwnProperty.call(PG_DESKTOP_WORKSPACES,workspace)||first[workspace]) return;
+  if(getComputedStyle(card).display==='none') return;
+  first[workspace]={workspace:workspace,card:card,index:index};
  });
  document.body.classList.remove('pg-tablet-measuring');
- return Object.keys(first).map(key=>first[key]).sort((a,b)=>a.top-b.top);
+ return Object.keys(first).map(key=>first[key]).sort((a,b)=>a.index-b.index);
 }
 function pgTabletNavOffset(){
  const header=document.querySelector('.header');

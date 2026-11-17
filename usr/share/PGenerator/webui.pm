@@ -12018,6 +12018,118 @@ sub webui_logs_bundle_patch_logs (@) {
  return @out;
 }
 
+# The daemon's own logs for the diagnostic report. Why a renderer did not
+# start is written only there: its start output (the renderer's first
+# lines, e.g. a failed drmSetMaster), the daemon's debug log, the stderr of
+# the daemon's worker, and the boot timeline ("daemon: renderer not
+# running"). Bookworm (Pi 5) has no /var/log/syslog: the journal of the
+# current boot stands in for it there (pgenerator reads it as a member of
+# systemd-journal). Paths and the journalctl binary can be given for tests.
+sub webui_logs_bundle_runtime_logs (@) {
+ my %o=@_;
+ my @logs=(
+  ["Boot Times",$o{boot_times} || $boot_times_file || "/var/log/PGenerator/boot-times.log","tail",200],
+  ["Renderer Start Output",$o{renderer} || "/tmp/renderer-spawn.log","head",300],
+  ["Daemon stderr",$o{stderr} || "/tmp/pg_stderr.log","tail",200],
+  ["Daemon Log",$o{debug} || $log_file || "/tmp/pgenerator_debug.log","tail",1000],
+ );
+ my @out;
+ foreach my $log (@logs) {
+  my ($title,$path,$end,$lines)=@$log;
+  my $which=($end eq "head") ? "first" : "last";
+  if(! -f $path) {
+   push @out, "", "--- $title ($path) ---", "(none found)";
+   next;
+  }
+  my $size=-s $path;
+  $size=0 if(!defined $size);
+  push @out, "", "--- $title ($path, $size bytes, $which $lines lines) ---";
+  my $text;
+  if(open(my $fh,"-|",$end,"-n",$lines,"--",$path)) {
+   local $/;
+   $text=<$fh>;
+   close($fh);
+  }
+  $text="" if(!defined $text);
+  chomp($text);
+  push @out, ($text ne "") ? $text : "(unreadable or empty)";
+ }
+ # The journal only of the units that start rampecho, its boot screen and
+ # its access point, from notice up: the whole journal carries sshd, sudo,
+ # logind and WiFi lines with user names and earlier SSIDs, which the
+ # sanitizer does not find there, and the daemon's own stdout (info) would
+ # repeat the daemon log. "Failed to start ..." is logged under the unit.
+ my $journalctl=$o{journalctl};
+ if(!defined $journalctl) {
+  ($journalctl)=grep { -x $_ } ("/bin/journalctl","/usr/bin/journalctl");
+ }
+ if(defined $journalctl && $journalctl ne "" && -x $journalctl) {
+  my @units=qw(rcPGenerator.service PGenerator.service pgenerator-dhcp.service pgen-bootscreen.service hostapd.service);
+  push @out, "", "--- Journal (this boot, rampecho units and hostapd, notice and up, last 300 lines) ---";
+  push @out, &_webui_logs_bundle_command_output("timeout","10",$journalctl,"-b","--no-pager","-p","notice","-n","300",map(("-u",$_),@units));
+ }
+ my $systemctl=$o{systemctl};
+ if(!defined $systemctl) {
+  ($systemctl)=grep { -x $_ } ("/bin/systemctl","/usr/bin/systemctl");
+ }
+ if(defined $systemctl && $systemctl ne "" && -x $systemctl) {
+  push @out, "", "--- Failed Units ---";
+  my $failed=&_webui_logs_bundle_command_output("timeout","10",$systemctl,"--failed","--no-legend","--plain","--no-pager");
+  push @out, ($failed eq "(unreadable or empty)") ? "(none)" : $failed;
+ }
+ return @out;
+}
+
+# A command's stdout and stderr as one text (a refused journal read says
+# why on stderr), or "(unreadable or empty)". List form, no shell.
+sub _webui_logs_bundle_command_output (@) {
+ my @cmd=@_;
+ my $text;
+ my $pid=open(my $fh,"-|");
+ if(defined $pid && $pid == 0) {
+  open(STDERR,">&",\*STDOUT);
+  exec(@cmd) or POSIX::_exit(127);
+ }
+ if(defined $pid) {
+  local $/;
+  $text=<$fh>;
+  close($fh);
+ }
+ $text="" if(!defined $text);
+ chomp($text);
+ return ($text ne "") ? $text : "(unreadable or empty)";
+}
+
+# The EDID of the first HDMI connector that has one, as the report shows it
+# (serial removed). Read in perl: xxd is not on every image (the Pi 5
+# Bookworm base has none, so the report said "display not connected" with a
+# display attached). The card number differs by board (Pi 4 card1, Pi 5
+# card0).
+sub webui_logs_bundle_edid (@) {
+ my $pattern=shift || "/sys/class/drm/card*-HDMI-A-1/edid";
+ my ($raw,$path)=("","");
+ foreach my $p (glob($pattern)) {
+  next if(!open(my $fh,"<:raw",$p));
+  local $/;
+  my $d=<$fh>;
+  close($fh);
+  if(defined $d && $d ne "") { ($raw,$path)=($d,$p); last; }
+ }
+ return ("(no EDID — display not connected)") if($raw eq "");
+ my @out=(&webui_sanitize_edid_hex(unpack("H*",$raw)));
+ push @out, "", "--- EDID Decoded ---";
+ my $decoded;
+ if(open(my $fh,"-|","timeout","5","edid-decode",$path)) {
+  local $/;
+  $decoded=<$fh>;
+  close($fh);
+ }
+ $decoded="" if(!defined $decoded);
+ chomp($decoded);
+ push @out, ($decoded ne "") ? $decoded : "(edid-decode unavailable)";
+ return @out;
+}
+
 sub webui_create_logs_bundle (@) {
  my $ts=time();
  my $tmp="/tmp/pg_diag_${ts}.txt";
@@ -12065,16 +12177,7 @@ sub webui_create_logs_bundle (@) {
  push @out, "", "--- HDMI Mode ---";
  push @out, `timeout 5 $modetest -c 2>/dev/null | head -80`; chomp($out[$#out]);
  push @out, "", "--- EDID ---";
- my $edid_hex=`timeout 5 cat /sys/class/drm/card?-HDMI-A-1/edid 2>/dev/null | xxd -p 2>/dev/null`;
- chomp($edid_hex);
- if($edid_hex) {
-  push @out, &webui_sanitize_edid_hex($edid_hex);
-  push @out, "", "--- EDID Decoded ---";
-  push @out, `timeout 5 edid-decode /sys/class/drm/card?-HDMI-A-1/edid 2>&1`;
-  chomp($out[$#out]);
- } else {
-  push @out, "(no EDID — display not connected)";
- }
+ push @out, &webui_logs_bundle_edid();
 
  # Infoframes
  push @out, "", "--- HDMI Infoframes (dmesg) ---";
@@ -12323,6 +12426,9 @@ sub webui_create_logs_bundle (@) {
  push @out, `grep -i PGeneratord /var/log/syslog* /var/log/messages* 2>/dev/null | tail -n 500`;
  chomp($out[$#out]);
  push @out, `tail -n 200 /var/log/daemon.log 2>/dev/null`; chomp($out[$#out]);
+
+ # The daemon's and the renderer's own logs, the journal where there is one
+ push @out, &webui_logs_bundle_runtime_logs();
 
  # dmesg tail
  push @out, "", "--- dmesg (last 200 lines) ---";

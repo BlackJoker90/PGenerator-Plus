@@ -45,9 +45,10 @@ sub _finite_number {
  my ($value)=@_;
  return undef if(!defined($value) || ref($value) || !looks_like_number($value));
  my $number=$value+0;
- return undef if($number != $number
-  || $number > 1.7976931348623157e308
-  || $number < -1.7976931348623157e308);
+ # Inf*0 and NaN*0 are NaN, which is != 0. No DBL_MAX literal: perl 5.20 on
+ # the Pi evaluates 1.7976931348623157e308 to Inf, so a bound check against
+ # it let "inf" and 1e400 through (a stimulus "inf" drew white).
+ return undef if($number != $number || $number*0 != 0);
  return $number;
 }
 

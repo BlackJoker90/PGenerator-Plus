@@ -960,6 +960,61 @@ function lgDisplayControlScalar(value){
  return vals.every(v=>v===vals[0])?vals[0]:'mixed';
 }
 
+// A key is "not available on this TV" only when the last read came back
+// without a value for it and the TV itself refused it: the backend lists the
+// TV's answer in unsupported_picture_keys (C5, webOS 11.2.0: "500 Application
+// error: Some keys are not allowed for the request", "There is no matched
+// result from DB"; AVS #51 diag log). A key the backend did not read
+// (ddc-only generations skip colorTemperature), a timeout or "No value
+// returned by TV" says nothing about the TV, and stays a "--" control. Before
+// the first read there are no reasons yet (lgDisplayControlInvalidate clears
+// them with the values), and a read that brought back no value at all says
+// nothing about single keys.
+// "not allowed" counts only for the key it names: the TV lists the refused
+// keys in "( ... )", and an older backend handed a batch's text to keys whose
+// single read had no answer of its own.
+function lgDisplayControlRefusedBy(key,reason){
+ const text=String(reason||'');
+ if(/no matched result/i.test(text)) return true;
+ if(!/not allowed for the request/i.test(text)) return false;
+ const list=text.match(/not allowed for the request[^(]*\(([^()]*)\)/i);
+ return !list||list[1].split(/[\s,]+/).indexOf(key)>=0;
+}
+function lgDisplayControlHasValue(key){
+ const value=lgDisplayControlScalar(lgDisplayControlCurrentValue(key));
+ return value!==null&&value!==undefined;
+}
+
+function lgDisplayControlUnavailable(key){
+ if(lgDisplayControlHasValue(key)) return false;
+ const reasons=(lgDisplayControlCapabilities&&lgDisplayControlCapabilities.unsupportedKeys)||{};
+ if(!lgDisplayControlRefusedBy(key,reasons[key])) return false;
+ return LG_DISPLAY_CONTROL_KEYS.some(lgDisplayControlHasValue);
+}
+
+// LG's picture API sets an OLED's panel brightness through the key
+// "backlight" (Auto Cal uses it so: webui-workspace.js
+// meterAutoCalPanelLightCandidates). A C5 on webOS 11.2.0 refuses
+// oledLight and oledPixelBrightness (AVS #51 diag log, 2026-11-16), so the
+// live slider is "backlight"; it gets the name of the TV's own menu, OLED
+// Pixel Brightness, while neither OLED key gives a value of its own. The
+// model comes from the read itself (system_info.modelName, "OLED65C5AUA.DUSQLJR"
+// in the diag log), else from the pairing status.
+function lgDisplayControlIsOled(){
+ const state=window.lgStatusState||{};
+ const caps=lgDisplayControlCapabilities||{};
+ const model=String(caps.modelName||state.modelName||state.model_name||state.displayName||'').toUpperCase();
+ return /OLED/.test(model);
+}
+
+function lgDisplayControlLabel(meta){
+ if(meta&&meta.key==='backlight'&&lgDisplayControlHasValue('backlight')&&lgDisplayControlIsOled()
+  &&lgDisplayControlUnavailable('oledLight')&&lgDisplayControlUnavailable('oledPixelBrightness')){
+  return 'OLED Pixel Brightness';
+ }
+ return meta?meta.label:'';
+}
+
 function lgDisplayControlOptionHtml(meta,value){
  const raw=String(value==null?'':value);
  const seen={};
@@ -993,20 +1048,30 @@ function lgDisplayControlRender(){
  if(resetBtn) resetBtn.disabled=modeActionsDisabled;
  if(applyAllBtn) applyAllBtn.disabled=modeActionsDisabled;
  if(!grid) return;
+ const note=document.getElementById('lgDisplayControlUnavailable');
  const connected=lgDisplayControlConnected();
  if(!connected){
   grid.innerHTML='';
+  if(note){ note.textContent=''; note.style.display='none'; }
   lgDisplayControlSetStatus('Connect display',false);
   return;
  }
  let html='';
+ const unavailable=[];
+ // While "backlight" stands for the OLED panel brightness, the refused
+ // oledLight/oledPixelBrightness keys are that same setting, not a missing one.
+ const backlightIsPanel=lgDisplayControlLabel({key:'backlight',label:'Backlight'})!=='Backlight';
  LG_DISPLAY_CONTROL_ITEMS.forEach(meta=>{
+  if(lgDisplayControlUnavailable(meta.key)){
+   if(!(backlightIsPanel&&(meta.key==='oledLight'||meta.key==='oledPixelBrightness'))) unavailable.push(meta.label);
+   return;
+  }
   const value=lgDisplayControlScalar(lgDisplayControlCurrentValue(meta.key));
   const supported=value!==null&&value!==undefined;
   const disabled=(!supported||lgDisplayControlPending)?' disabled':'';
   const displayValue=supported?String(value):'--';
   html+='<div class="lg-display-control-item" data-lg-display-control="'+lgEscapeHtml(meta.key)+'">';
-  html+='<div class="lg-display-control-top"><div class="lg-display-control-label">'+lgEscapeHtml(meta.label)+'</div><div class="lg-display-control-value" id="lgDcValue_'+lgEscapeHtml(meta.key)+'">'+lgEscapeHtml(displayValue)+'</div></div>';
+  html+='<div class="lg-display-control-top"><div class="lg-display-control-label">'+lgEscapeHtml(lgDisplayControlLabel(meta))+'</div><div class="lg-display-control-value" id="lgDcValue_'+lgEscapeHtml(meta.key)+'">'+lgEscapeHtml(displayValue)+'</div></div>';
   html+='<div class="lg-display-control-row">';
   if(meta.type==='number'){
    const numeric=Number(value);
@@ -1019,6 +1084,10 @@ function lgDisplayControlRender(){
   html+='</div></div>';
  });
  grid.innerHTML=html;
+ if(note){
+  note.textContent=unavailable.length?('Not available on this TV: '+unavailable.join(', ')):'';
+  note.style.display=unavailable.length?'':'none';
+ }
  lgDisplayControlSetStatus(lgDisplayControlError||(lgDisplayControlLoaded?'Picture controls loaded':'Refresh settings'),!!lgDisplayControlError);
 }
 
@@ -1058,7 +1127,8 @@ async function lgDisplayControlRefresh(force){
 	   lgDisplayControlValues=r.picture_settings||{};
 	   lgDisplayControlCapabilities={
 	    supportedKeys:Array.isArray(r.supported_picture_keys)?r.supported_picture_keys:[],
-	    unsupportedKeys:(r.unsupported_picture_keys&&typeof r.unsupported_picture_keys==='object')?r.unsupported_picture_keys:{}
+	    unsupportedKeys:(r.unsupported_picture_keys&&typeof r.unsupported_picture_keys==='object')?r.unsupported_picture_keys:{},
+	    modelName:(r.system_info&&typeof r.system_info.modelName==='string')?r.system_info.modelName:''
 	   };
 	   lgDisplayControlLoaded=true;
    lgDisplayControlError='';
@@ -1091,12 +1161,13 @@ async function lgDisplayControlCommit(key){
   if(!Number.isFinite(value)) return;
   value=Math.max(Number(meta.min),Math.min(Number(meta.max),value));
  }
+ const label=lgDisplayControlLabel(meta);
  const previousValue=lgDisplayControlValues[key];
  lgDisplayControlValues[key]=value;
  lgDisplayControlPending=true;
  lgDisplayControlError='';
  lgDisplayControlRender();
- const commandHandle=lgBeginCommand('Changing '+meta.label);
+ const commandHandle=lgBeginCommand('Changing '+label);
  let refreshAfter=false;
  try{
   const settings={};
@@ -1118,15 +1189,15 @@ async function lgDisplayControlCommit(key){
    }
    lgDisplayControlLoaded=true;
    lgDisplayControlError='';
-   toast(meta.label+' updated');
+   toast(label+' updated');
   }else{
    lgDisplayControlValues[key]=previousValue;
-   toast(pgFailMsg('Couldn\u2019t change '+meta.label+' on the TV',r,'Check that the TV is on and on the same network as the Pi, then try again.'),'err');
+   toast(pgFailMsg('Couldn\u2019t change '+label+' on the TV',r,'Check that the TV is on and on the same network as the Pi, then try again.'),'err');
    refreshAfter=true;
   }
  }catch(e){
   lgDisplayControlValues[key]=previousValue;
-  toast('Couldn\u2019t change '+meta.label+' on the TV. '+pgErrText(e),'err');
+  toast('Couldn\u2019t change '+label+' on the TV. '+pgErrText(e),'err');
   refreshAfter=true;
  }finally{
   lgEndCommand(commandHandle);

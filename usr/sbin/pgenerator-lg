@@ -1372,7 +1372,14 @@ sub lg_picture_get_workflow (@) {
      $settings{$setting_key}=$single->{"payload"}{"settings"}{$setting_key};
     }
    } else {
-    $unsupported{$key}=$single_message||$message||"Unsupported picture setting";
+    # The key's own answer, never the batch's: a C5 fails every batch with
+    # "Some keys are not allowed for the request. ( <first refused key> )",
+    # and a key whose single read timed out would otherwise inherit that
+    # text and read as refused by the TV (WebUI Display Control lists such
+    # keys as "Not available on this TV").
+    # No HASH = timeout or a dropped connection (lg_request returns undef
+    # for both), so no time is named.
+    $unsupported{$key}=$single_message||((ref($single) eq "HASH") ? "No value returned by TV" : "No answer from TV");
    }
   }
   return (\%settings,{

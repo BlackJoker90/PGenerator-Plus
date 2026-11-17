@@ -15918,6 +15918,13 @@ function meterPopulateRoleSelects(meters,detectedPort){
     option.textContent=meterOptionLabel(meter);
     select.appendChild(option);
    });
+   // No meter: the field says so instead of standing empty (audit 2026-11-16).
+   if(!meterInventory.length){
+    const none=document.createElement('option');
+    none.value='';
+    none.textContent='No meter connected';
+    select.appendChild(none);
+   }
    select.disabled=meterInventory.length===0;
    // Keep the operator's current meter selected if it is still connected;
    // otherwise fall back to the detected meter, then the first listed.
@@ -16047,6 +16054,17 @@ function meterParseCcmxMatrixJson(rawText){
   return numeric;
  }));
 }
+
+// A file field drawn by the page (.file-pick in webui-body.html): its line says the chosen file, or that
+// there is none, in the page's language; the browser's own button and text are hidden.
+function pgFilePickSync(input){
+ const box=input&&input.closest?input.closest('.file-pick'):null;
+ const name=box?box.querySelector('.file-pick-name'):null;
+ if(!name) return;
+ const f=input.files&&input.files[0];
+ name.textContent=f?f.name:'No file chosen';
+}
+document.addEventListener('change',e=>{ const t=e.target; if(t&&t.classList&&t.classList.contains('file-pick-input')) pgFilePickSync(t); },true);
 
 function meterCcssCreateImportJson(evt){
  const file=evt&&evt.target&&evt.target.files?evt.target.files[0]:null;
@@ -16425,7 +16443,7 @@ function meterOpenCcssCreateModal(){
  const methodSel=document.getElementById('meterCcssCreateMethod');
  if(methodSel) methodSel.value=/^(?:json|manual)$/.test(meterCcssCreateMethod)?meterCcssCreateMethod:'measure';
  const jsonInput=document.getElementById('meterCcssCreateJsonInput');
- if(jsonInput) jsonInput.value='';
+ if(jsonInput){ jsonInput.value=''; pgFilePickSync(jsonInput); }
  const jsonStatus=document.getElementById('meterCcssCreateJsonStatus');
  if(jsonStatus){
   jsonStatus.textContent='Choose a JSON file exported by the former PGenerator+ XYZ Correction Matrix tool.';

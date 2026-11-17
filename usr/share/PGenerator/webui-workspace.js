@@ -592,6 +592,9 @@ async function meterViewSolvedLutIn3d(name){
 function meterLutCubeShow(parsed,name){
  meterLutCubeState={parsed:parsed,name:String(name||'')};
  const wrap=document.getElementById('lutCubeViewWrap');
+ // The canvas stands in for its "nothing chosen" line from now on (data-empty, webui-layout.css).
+ const cubeCanvas=document.getElementById('lutCubeView');
+ if(cubeCanvas) cubeCanvas.removeAttribute('data-empty');
  const label=document.getElementById('lutCubeViewName');
  if(label) label.textContent=meterLutCubeState.name+' ('+parsed.size+'³)';
  document.querySelectorAll('#meterSolvedLutList .meter-solved-lut-name').forEach(btn=>{
@@ -19551,6 +19554,7 @@ document.getElementById('ccssUploadBtn').addEventListener('click',async function
    status.textContent=r.message||'Uploaded';
    status.style.color='var(--green)';
    document.getElementById('ccssFileInput').value='';
+   pgFilePickSync(document.getElementById('ccssFileInput'));
    document.getElementById('ccssName').value='';
     await refreshMeterCcssCatalog();
     // Post-split: selecting a custom CCSS goes through the new
@@ -19917,6 +19921,8 @@ function ccssPreviewClear(message){
  if(meta) meta.textContent=message||'Select a CCSS to inspect its spectral curves or a CCMX to inspect its matrix.';
  if(legend) legend.innerHTML='';
  if(!canvas) return;
+ // Without a profile the chart is a short box that says what to do (data-empty, webui-theme.css), not 320-440 px of nothing.
+ canvas.setAttribute('data-empty','');
  const ctx=setupCanvasHiDPI(canvas);
  if(!ctx) return;
  ctx.fillStyle=pgThemeColor('--chart-bg','#0d0d15');
@@ -20001,6 +20007,7 @@ function ccssPreviewRender(payload){
  const legend=document.getElementById('ccssPreviewLegend');
  const canvas=document.getElementById('ccssPreviewCanvas');
  if(!canvas) return;
+ canvas.removeAttribute('data-empty');
  if(String(payload&&payload.format||'').toLowerCase()==='ccmx'){
   ccssPreviewLastPayload=payload;
   const matrix=Array.isArray(payload.matrix)?payload.matrix:[];

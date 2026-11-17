@@ -7,6 +7,10 @@ body.layout-desktop #meter3dLutWorkspaceCard .meter-lut-tools-close{display:none
 body.layout-desktop #meter3dLutWorkspaceCard #meterSolvedLutSection{min-width:0}
 body.layout-desktop #meter3dLutWorkspaceCard #lutCubeViewWrap{display:block!important;position:absolute;top:0;right:0;width:calc(50% - 9px);min-width:0;padding:14px;box-sizing:border-box;background:var(--surface-card);border:1px solid var(--border);border-radius:var(--r-md)}
 body.layout-desktop #meter3dLutWorkspaceCard #lutCubeView{max-width:none!important}
+/* Before a LUT is chosen: one line in a short box instead of an empty 4:3 canvas and tools that act on nothing (audit 2026-11-16). */
+.lut-cube-empty{display:none;margin:0;padding:28px 16px;border-radius:6px;background:var(--surface-inset);font-size:var(--fs-sm);line-height:1.45;color:var(--text-secondary);text-align:center}
+#lutCubeViewWrap:has(#lutCubeView[data-empty]) .lut-cube-empty{display:block}
+#lutCubeViewWrap:has(#lutCubeView[data-empty]) .lut-cube-tools,#lutCubeView[data-empty]{display:none!important}
 body.layout-desktop #meter3dLutWorkspaceCard #meterSolvedLutList{background:var(--surface-inset)!important}
 .meter-solved-lut-row{display:flex;align-items:center;gap:6px;padding:4px;border-radius:var(--r-sm)}
 .meter-solved-lut-name{flex:1 1 auto;min-width:0;border:0;border-radius:var(--r-xs);padding:7px 8px;background:transparent;color:var(--text);font:inherit;text-align:left;cursor:pointer;overflow:hidden}
@@ -819,9 +823,13 @@ body.layout-tablet .status-bar .status-pattern .status-label{max-width:100%}
 body.layout-tablet #tempDisplay{position:absolute;right:118px;top:6px;height:44px;margin:0}
 body.layout-tablet .header:has(#updateBtn.update-pulse) #tempDisplay{position:static;height:auto;min-height:20px}
 @media(max-width:340px){body.layout-tablet #tempDisplay{position:static;height:auto;min-height:20px}}
-/* The card's drag grip hangs in the card's left padding, so the title starts on the 24 px edge with everything else. */
+/* The card's drag grip: a grabber centred in the card's top padding, so the title starts on the card's edge with everything else and the
+   grip does not sit on the card's line (audit 2026-11-16: in the 14 px left padding it touched it). It hits at 44 x 24 px, reaching into
+   the gap above the card, not into the title row. */
 body.layout-tablet .dashboard>.card>h2{position:relative}
-body.layout-tablet .dashboard>.card>h2>.drag-handle{position:absolute;left:-14px;top:50%;transform:translateY(-50%);margin:0;padding:10px 0}
+body.layout-tablet .dashboard>.card>h2>.drag-handle{position:absolute;left:50%;top:-13px;width:44px;height:13px;margin:0;padding:0;justify-content:center;align-items:center;transform:translateX(-50%)}
+body.layout-tablet .dashboard>.card>h2>.drag-handle::before{content:"";position:absolute;inset:-11px 0 0}
+body.layout-tablet .dashboard>.card>h2>.drag-handle>svg{transform:rotate(90deg)}
 
 /* ---- Help marks ----
    An info mark: a drawn "i" (the "?" in the markup is hidden). 15 px drawn;
@@ -1118,11 +1126,12 @@ body.layout-desktop .status-bar:has(.status-diff){column-gap:12px}
 :root[data-skin="glow"][data-theme] .btn-secondary:hover{background:var(--glow-key-hi)}
 /* A button that cannot be pressed says so (these rules outweigh the page's own .btn:disabled). */
 :root[data-skin="glow"][data-theme] .btn-secondary:disabled,:root[data-skin="glow"][data-theme] .btn-secondary:disabled:hover{background:var(--control-disabled-bg);color:var(--control-disabled-text);box-shadow:inset 0 0 0 1px var(--glow-line)}
-:root[data-skin="glow"][data-theme] .btn-primary{background:linear-gradient(180deg,var(--glow-accent-hi),var(--glow-accent-lo));color:var(--on-accent);font-weight:700;box-shadow:inset 0 1px 0 rgba(255,255,255,.45),inset 0 0 0 1px var(--glow-line2)}
-:root[data-skin="glow"][data-theme] .btn-primary:hover{background:linear-gradient(180deg,var(--glow-accent-hover-hi),var(--glow-accent-hover-lo))}
+/* One flat fill: DESIGN.md has no gradient in the chrome (audit 2026-11-16). */
+:root[data-skin="glow"][data-theme] .btn-primary{background:var(--glow-accent-hi);color:var(--on-accent);font-weight:700;box-shadow:inset 0 0 0 1px var(--glow-line2)}
+:root[data-skin="glow"][data-theme] .btn-primary:hover{background:var(--glow-accent-hover-lo)}
 :root[data-skin="glow"][data-theme] .btn-primary:disabled{background:var(--glow-key);color:var(--control-disabled-text);box-shadow:inset 0 0 0 1px var(--glow-line)}
 /* The one action that changes the signal carries the glow. */
-:root[data-skin="glow"][data-theme] #applyBar .btn-primary{box-shadow:inset 0 1px 0 rgba(255,255,255,.45),inset 0 0 0 1px rgba(255,255,255,.14),0 8px 24px var(--glow-accent-shadow)}
+:root[data-skin="glow"][data-theme] #applyBar .btn-primary{box-shadow:inset 0 0 0 1px rgba(255,255,255,.14),0 8px 24px var(--glow-accent-shadow)}
 /* While a change waits for Apply, that is the one orange action: Run Full Test steps back. */
 :root[data-skin="glow"][data-theme] body:has(#applyBar:not([style*="none"])) #selftestRunBtn{background:var(--glow-key);color:var(--glow-lit);font-weight:600;box-shadow:inset 0 0 0 1px var(--glow-line)}
 :root[data-skin="glow"][data-theme] body:has(#applyBar:not([style*="none"])) #selftestRunBtn:hover{background:var(--glow-key-hi)}
@@ -1195,6 +1204,12 @@ body.layout-desktop .status-bar:has(.status-diff){column-gap:12px}
 :root[data-skin="glow"][data-theme] .signal-overview > .preset-bar:not(.is-empty){display:flex;flex-direction:column}
 :root[data-skin="glow"][data-theme] .preset-bar:not(.is-empty) .preset-row{margin-top:auto}
 :root[data-skin="glow"][data-theme] .preset-bar:not(.is-empty) .preset-row > select{max-width:none}
+/* On the desktop the panel is as tall as the ports or the Calman settings beside it: between the filter and the list it says what the
+   fields hold, the chosen preset's chips or that none is chosen, instead of an empty band (audit 2026-11-16). */
+:root[data-skin="glow"][data-theme] body.layout-desktop .signal-overview > .preset-bar:not(.is-empty) > .preset-chips{order:1;margin:auto 0}
+:root[data-skin="glow"][data-theme] body.layout-desktop .signal-overview > .preset-bar:not(.is-empty) > .preset-row{order:2;margin-top:0}
+:root[data-skin="glow"][data-theme] body.layout-desktop .signal-overview > .preset-bar:not(.is-empty) > .preset-save{order:3}
+:root[data-skin="glow"][data-theme] body.layout-desktop .signal-overview > .preset-bar:not(.is-empty):has(> #presetChips[hidden]):not(:has(> #presetSaveForm:not([hidden])))::after{content:"No preset chosen. Choosing one fills the fields below.";order:1;margin:auto 0;padding:8px 0;font-size:var(--fs-xs);line-height:1.45;color:var(--text-secondary)}
 /* A wide card: the name beside the drawing, the panel as low as the presets. */
 @container glowset (min-width:1312px){
  :root[data-skin="glow"][data-theme] .signal-overview > .signal-port{flex-direction:row;align-items:center;gap:16px}
@@ -1245,14 +1260,15 @@ body.layout-desktop .status-bar:has(.status-diff){column-gap:12px}
 :root[data-skin="glow"][data-theme] body.layout-desktop .dashboard.glow-dash > *{grid-column:1 / -1}
 :root[data-skin="glow"][data-theme] body.layout-desktop .dashboard.glow-dash > .desktop-workspace-title{grid-row:1;align-self:start;margin:6px 0 0}
 /* Self-Test stands beside the HDR card while it is a summary (ring and verdict). With its mode list, without an HDR card, or where the dashboard is too narrow for two cards side by side, it takes a row of its own (.glow-test-wide, set by the Glow script). */
-:root[data-skin="glow"][data-theme] body.layout-desktop .dashboard.glow-dash > #hdrCard{display:flex;flex-direction:column}
+:root[data-skin="glow"][data-theme] body.layout-desktop .dashboard.glow-dash > #hdrCard[data-desktop-active="true"]{display:flex;flex-direction:column}
 /* Every card on a row of its own: one column, so the second one's 320 px are not asked of a dashboard that is narrower. */
 :root[data-skin="glow"][data-theme] body.layout-desktop .dashboard.glow-dash.glow-test-wide{grid-template-columns:minmax(0,1fr)}
 :root[data-skin="glow"][data-theme] body.layout-desktop .dashboard.glow-dash:not(.glow-test-wide) > #hdrCard{grid-column:1}
 :root[data-skin="glow"][data-theme] body.layout-desktop .dashboard.glow-dash:not(.glow-test-wide) > #selftestCard{grid-column:2}
 
-/* ---- The settings stand on the page: no card around them ---- */
-:root[data-skin="glow"][data-theme] body.layout-desktop .dashboard.glow-dash > #displaySettingsCard{grid-row:1;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;background:none;box-shadow:none;border-radius:0;padding:0}
+/* ---- The settings stand on the page: no card around them (the display only on the shown card, so another workspace does not show it while the Glow script catches up) ---- */
+:root[data-skin="glow"][data-theme] body.layout-desktop .dashboard.glow-dash > #displaySettingsCard{grid-row:1;background:none;box-shadow:none;border-radius:0;padding:0}
+:root[data-skin="glow"][data-theme] body.layout-desktop .dashboard.glow-dash > #displaySettingsCard[data-desktop-active="true"]{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
 :root[data-skin="glow"][data-theme] body.layout-desktop .dashboard.glow-dash > #displaySettingsCard > *{grid-column:1 / -1;margin:0;order:4}
 /* Its title is the workspace's ("Output" beside it); Reset Defaults closes that row. */
 :root[data-skin="glow"][data-theme] body.layout-desktop .dashboard.glow-dash > #displaySettingsCard > h2{order:0;min-height:54px;margin:0 0 4px;justify-content:flex-end;align-items:center;font-size:0}
@@ -1357,8 +1373,16 @@ body.layout-desktop .status-bar:has(.status-diff){column-gap:12px}
 /* ---- Signal Self-Test: the ring ---- */
 :root[data-skin="glow"][data-theme] .glow-test{display:flex;align-items:center;gap:20px;margin:0 0 16px}
 /* Beside the HDR card the Self-Test card is as tall as that one: the ring takes the room that is left. */
-:root[data-skin="glow"][data-theme] body.layout-desktop .dashboard.glow-dash:not(.glow-test-wide) > #selftestCard{display:flex;flex-direction:column}
+/* Only on the card the workspace shows: a display here outweighs the page's own display:none of the other workspaces' cards. */
+:root[data-skin="glow"][data-theme] body.layout-desktop .dashboard.glow-dash:not(.glow-test-wide) > #selftestCard[data-desktop-active="true"]{display:flex;flex-direction:column}
 :root[data-skin="glow"][data-theme] body.layout-desktop .dashboard.glow-dash:not(.glow-test-wide) > #selftestCard > .glow-test{flex:1 0 auto}
+/* On a row of its own the ring and its list take a third of the card: the verdict stands beside them, and wraps under them where the card is too narrow for both (audit 2026-11-16: half the card was empty). */
+:root[data-skin="glow"][data-theme] body.layout-desktop .dashboard.glow-dash.glow-test-wide > #selftestCard[data-desktop-active="true"]{display:flex;flex-wrap:wrap;align-items:center;gap:16px 28px}
+/* The flex gap spaces the rows (title, ring and verdict, mode list, report line); their own margins step aside. */
+:root[data-skin="glow"][data-theme] body.layout-desktop .dashboard.glow-dash.glow-test-wide > #selftestCard > *{flex:1 1 100%;min-width:0;margin-top:0;margin-bottom:0}
+:root[data-skin="glow"][data-theme] body.layout-desktop .dashboard.glow-dash.glow-test-wide > #selftestCard > h2{margin-bottom:2px}
+:root[data-skin="glow"][data-theme] body.layout-desktop .dashboard.glow-dash.glow-test-wide > #selftestCard > .glow-test{flex:0 1 auto}
+:root[data-skin="glow"][data-theme] body.layout-desktop .dashboard.glow-dash.glow-test-wide > #selftestCard > .selftest-verdict{flex:1 1 440px}
 .glow-ring{position:relative;flex:0 0 auto;width:132px;height:132px}
 .glow-ring svg{display:block}
 .glow-ring path{fill:none;stroke-width:18}
@@ -1379,9 +1403,10 @@ body.layout-desktop .status-bar:has(.status-diff){column-gap:12px}
 .glow-leg li{display:flex;align-items:center;gap:10px;white-space:nowrap}
 .glow-leg-n{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis}
 .glow-leg b{flex:0 0 auto;min-width:2.2em;text-align:right;font-weight:600;color:var(--glow-lit);font-variant-numeric:tabular-nums}
-.glow-pips{display:flex;gap:3px;flex:0 0 auto}
+.glow-pips{display:flex;align-items:center;gap:3px;flex:0 0 auto}
 .glow-leg i{flex:0 0 auto;width:7px;height:14px;border-radius:2px}
-.glow-leg i.rs-pending{box-shadow:inset 0 0 0 1.5px var(--glow-idle)}
+/* Not run: a thin line, as on the ring (an outlined box read as a missing glyph, audit 2026-11-16). */
+.glow-leg i.rs-pending{height:3px;border-radius:2px;background:var(--glow-idle)}
 .glow-leg i.rs-pass{background:var(--glow-pass)}
 .glow-leg i.rs-fail{background:repeating-linear-gradient(135deg,var(--glow-fail) 0 2px,transparent 2px 4px);box-shadow:inset 0 0 0 1px var(--glow-fail)}
 .glow-leg i.rs-skip{background:repeating-linear-gradient(0deg,var(--text-secondary) 0 2px,transparent 2px 4px)}

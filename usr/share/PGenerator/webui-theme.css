@@ -574,6 +574,18 @@ body.layout-desktop [data-widget="lg"] .grid>.field>input:not([type=checkbox]),b
 .ccss-file-input{display:block;width:100%;margin-bottom:10px;padding:0;border:0;background:transparent;font:inherit;font-size:var(--fs-sm);color:var(--text-secondary)}
 .ccss-file-input::file-selector-button{margin-right:10px;padding:7px 12px;border:0;border-radius:var(--r-sm);background:var(--neutral-fill);color:var(--text);font:inherit;font-weight:600;cursor:pointer}
 .ccss-file-input::file-selector-button:hover{filter:brightness(1.12)}
+/* A file field in the page's own words: the browser draws its button and "no file" in the system's language
+   (audit 2026-11-16: "Datei auswählen" in an English page). The real input lies transparent over the whole row,
+   so a click and a dropped file reach it as before, and it stays in the tab order; the button under it shows
+   its hover and focus. */
+.file-pick{position:relative;display:flex;align-items:center;gap:10px;min-width:0;margin-bottom:10px}
+.file-pick>.file-pick-input{position:absolute;inset:0;z-index:1;width:100%;height:100%;margin:0;padding:0;border:0;opacity:0;cursor:pointer;font-size:0}
+.file-pick>.file-pick-btn{flex:0 0 auto;margin:0;cursor:pointer}
+.file-pick>.file-pick-input:hover+.file-pick-btn{filter:brightness(1.12)}
+.file-pick>.file-pick-input:focus-visible+.file-pick-btn{outline:2px solid var(--focus-ring);outline-offset:2px}
+.file-pick>.file-pick-input:disabled{cursor:default}
+.file-pick>.file-pick-input:disabled+.file-pick-btn{opacity:.5;cursor:default}
+.file-pick-name{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:var(--fs-sm);color:var(--text-secondary)}
 .ccss-input{box-sizing:border-box;min-height:var(--control-h);padding:6px 10px;border:1px solid var(--field-border);border-radius:var(--r-sm);background:var(--surface-field);color:var(--text-primary);font:inherit;font-size:var(--fs-sm);outline:none;transition:border-color .2s ease-out}
 .ccss-input:focus,.ccss-input:focus-visible{border-color:var(--accent)}
 .ccss-input:disabled{cursor:not-allowed}
@@ -1412,6 +1424,10 @@ body.layout-desktop #meterProfileCard #customCcssEditorModal>div{width:min(1180p
 body.layout-desktop #meterProfileCard .ccss-editor-close-btn{display:none}
 body.layout-desktop #meterProfileCard .meter-profile-dialog-title{display:none}
 body.layout-desktop #meterProfileCard #ccssPreviewCanvas{height:440px!important}
+/* No profile chosen: the chart is a short box with its one line, and the line above it does not say it twice (audit 2026-11-16).
+   The line stays for screen readers: the canvas's words are pixels. */
+#ccssPreviewCanvas[data-empty],body.layout-desktop #meterProfileCard #ccssPreviewCanvas[data-empty]{height:120px!important}
+.ccss-viewer-panel:has(#ccssPreviewCanvas[data-empty]) #ccssPreviewMeta{position:absolute;width:1px;height:1px;margin:0;padding:0;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
 body.layout-desktop #meterSeriesTabRow [data-series-tab="3dlut"],
 body.layout-desktop #meterSeriesTabRow [data-series-tab="icc"]{display:none!important}
 body.layout-desktop #meter3dLutWorkspaceCard[data-desktop-active="true"]{border-bottom:0}
@@ -1430,6 +1446,8 @@ body.layout-tablet #meter3dLutWorkspaceBuildBtn{display:none!important}
 body.layout-desktop #meter3dLutWorkspaceCard #meterLutToolsModal{display:block!important;position:static!important;inset:auto!important;background:transparent!important;padding:0!important;z-index:auto!important}
 body.layout-desktop #meter3dLutWorkspaceCard #meterLutToolsModal>.meter-modal-scroll{width:100%!important;max-height:none!important;overflow:visible!important;background:transparent!important;border:0!important;border-radius:0!important;padding:0!important;box-shadow:none!important}
 body.layout-desktop #meter3dLutWorkspaceCard #meterLutToolsModal>.meter-modal-scroll{display:block;position:relative;min-height:570px}
+/* The cube viewer stands beside the tools (absolute): 570 px hold its canvas; before a LUT is chosen it is one line (.lut-cube-empty), and the card ends with the content (audit 2026-11-16). */
+body.layout-desktop #meter3dLutWorkspaceCard #meterLutToolsModal>.meter-modal-scroll:has(#lutCubeView[data-empty]){min-height:140px}
 /* Animated select menu (webui-app.js replaces the native popup). */
 select[data-pg-dd-open]{border-color:var(--accent)!important;outline:none}
 .pg-dd-menu{position:fixed;z-index:100100;margin:0;padding:6px;list-style:none;overflow-y:auto;overscroll-behavior:contain;

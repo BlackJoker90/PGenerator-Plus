@@ -1164,7 +1164,7 @@ __PG_LOGO_DARK__
      <div style="font-size:var(--fs-2xs);color:var(--text2);margin-bottom:6px;display:flex;align-items:center;gap:10px;flex-wrap:wrap">3D LUT Cube &mdash; <span id="lutCubeViewName" style="text-transform:none">Select a solved LUT</span>
       <span class="meter-help-tip" title="The LUT's contents in signal RGB space: hollow box = input lattice node, filled dot = where the LUT sends it. Connector length shows how far the LUT moves that node (an identity LUT shows dots centred in their boxes). Drag = rotate, wheel = zoom, double-click = reset camera." aria-label="LUT cube view help">?</span>
      </div>
-     <div style="font-size:var(--fs-2xs);color:var(--text2);margin-bottom:6px;display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+     <div class="lut-cube-tools" style="font-size:var(--fs-2xs);color:var(--text2);margin-bottom:6px;display:flex;align-items:center;gap:10px;flex-wrap:wrap">
       <label style="font-size:var(--fs-2xs);color:var(--text2);cursor:pointer;user-select:none;display:inline-flex;align-items:center;gap:4px" title="Show the hollow input-node target boxes and their displacement connectors. Off = only the LUT's output positions.">
        <input type="checkbox" id="lutCubeShowTargets" checked onchange="meterLutCubeDraw()" style="vertical-align:middle"> Targets
       </label>
@@ -1175,7 +1175,8 @@ __PG_LOGO_DARK__
        Marker size <input type="number" id="lutCubeDotSize" min="0.2" max="5" step="0.1" value="1" onchange="meterLutCubeDotSizeChange()" style="width:48px;vertical-align:middle">
       </label>
      </div>
-     <canvas id="lutCubeView" width="640" height="480" style="width:100%;max-width:640px;background:var(--surface-inset);border-radius:6px;cursor:grab;display:block"></canvas>
+     <p class="lut-cube-empty">No LUT on view yet. Choose one under Solved LUTs, or import a .cube file.</p>
+     <canvas id="lutCubeView" data-empty width="640" height="480" style="width:100%;max-width:640px;background:var(--surface-inset);border-radius:6px;cursor:grab;display:block"></canvas>
     </div>
     <div id="meterSolvedLutSection">
      <div style="font-size:var(--fs-2xs);color:var(--text2);margin-bottom:6px">Solved LUTs</div>
@@ -1385,8 +1386,12 @@ __PG_LOGO_DARK__
     </div>
     <div id="meterCcssCreateMatrixSection" style="display:none;margin-bottom:12px">
      <div id="meterCcssCreateJsonSection" style="display:none;margin-bottom:10px">
-      <label style="font-size:var(--fs-xs);color:var(--text2);display:block;margin-bottom:6px">XYZ Correction Matrix JSON</label>
-      <input type="file" id="meterCcssCreateJsonInput" class="ccss-file-input" accept=".json,.txt,application/json" onchange="meterCcssCreateImportJson(event)">
+      <label for="meterCcssCreateJsonInput" style="font-size:var(--fs-xs);color:var(--text2);display:block;margin-bottom:6px">XYZ Correction Matrix JSON</label>
+      <div class="file-pick">
+       <input type="file" id="meterCcssCreateJsonInput" class="ccss-file-input file-pick-input" accept=".json,.txt,application/json" onchange="meterCcssCreateImportJson(event)">
+       <label class="btn btn-sm btn-secondary file-pick-btn" for="meterCcssCreateJsonInput">Choose File</label>
+       <span class="file-pick-name" aria-hidden="true">No file chosen</span>
+      </div>
       <div id="meterCcssCreateJsonStatus" style="font-size:var(--fs-2xs);color:var(--text2);margin-top:6px;line-height:1.45">Choose a JSON file exported by the former PGenerator+ XYZ Correction Matrix tool.</div>
      </div>
      <label style="font-size:var(--fs-xs);color:var(--text2);display:block;margin-bottom:6px">3x3 XYZ Correction Matrix</label>
@@ -1433,7 +1438,11 @@ __PG_LOGO_DARK__
      <section class="ccss-editor-panel" aria-labelledby="ccssImportTitle">
       <div class="card-section-head"><h3 class="card-section-title" id="ccssImportTitle"><svg class="card-section-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 15V4M7.5 8.5 12 4l4.5 4.5M4 15v3.5A1.5 1.5 0 0 0 5.5 20h13a1.5 1.5 0 0 0 1.5-1.5V15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>Import</h3></div>
       <label class="ccss-editor-label" for="ccssFileInput">CCSS, CCMX, EDR, TI3, or spectral CSV</label>
-      <input type="file" id="ccssFileInput" class="ccss-file-input" accept=".ccss,.ccmx,.edr,.csv,.ti3">
+      <div class="file-pick">
+       <input type="file" id="ccssFileInput" class="ccss-file-input file-pick-input" accept=".ccss,.ccmx,.edr,.csv,.ti3">
+       <label class="btn btn-sm btn-secondary file-pick-btn" for="ccssFileInput">Choose File</label>
+       <span class="file-pick-name" aria-hidden="true">No file chosen</span>
+      </div>
       <div class="ccss-upload-row">
        <input type="text" id="ccssName" class="ccss-input" placeholder="Profile name" aria-label="Profile name">
        <button id="ccssUploadBtn" class="btn btn-sm btn-secondary" disabled>Upload</button>

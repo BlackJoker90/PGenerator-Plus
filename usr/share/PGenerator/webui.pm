@@ -11888,6 +11888,41 @@ sub webui_redact_sensitive_log_text (@) {
  $text =~ s{(?<![A-Za-z0-9._%+-])([A-Za-z0-9._%+-]+\@[A-Za-z0-9.-]+\.[A-Za-z]{2,})(?![A-Za-z0-9._%+-])}{<email-redacted>}g;
  $text =~ s{/home/[^/\s]+}{/home/<user>}g;
 
+ # Infoframe bytes (the patched vc4's dmesg "AVI IF: 82:02:0d:...", "DRM
+ # IF:", "HVS IF:", "SPD IF:", and the report's "AVI: " / "DRM: " / "HVS (vendor/DV): "
+ # lines) are what the report is read for, and the address rules below cut
+ # them into fake addresses ("AVI: <mac-3>:<mac-4>:00"). Only bytes right
+ # after such a label are set aside and put back unchanged at the end; the
+ # token carries a per-call nonce, so text that happens to look like one
+ # is left alone.
+ my @hex_runs;
+ my $hex_nonce=sprintf("%x%x",$$,int(rand(0xffffffff)));
+ $text =~ s{
+  ((?:\b(?:AVI|DRM|HVS|SPD)\ IF:|^(?:AVI|DRM|HVS\ \(vendor/DV\)):)[\ \t]*)
+  ((?:[A-Fa-f0-9]{2}[:-])*[A-Fa-f0-9]{2})
+  (?![A-Fa-f0-9:-])
+ }{
+  push(@hex_runs,$2);
+  $1."\x00PGHEXRUN${hex_nonce}_".$#hex_runs."\x00";
+ }gemx;
+ # Any other run of 7 bytes or more than 8 carries a MAC more often than
+ # not (a DHCP client ID is 01 and the MAC, a DUID ends in one, a firewall
+ # "MAC=" line holds two): the address rules took only 6 or 8 bytes of it
+ # and left the rest. The whole run goes, equal runs as the same alias.
+ # Runs of 6 (MAC) and 8 bytes (EUI-64) are left to the address rules.
+ my (%hex_alias,$hex_count);
+ $text =~ s{
+  (?<![A-Fa-f0-9])
+  ((?:[A-Fa-f0-9]{2}[:-]){6,}[A-Fa-f0-9]{2})
+  (?![A-Fa-f0-9])
+ }{
+  my $run=$1;
+  my $seps=($run=~tr/:-//);
+  ($seps == 7) ? $run : ($hex_alias{lc($run)} ||= "<hexid-".(++$hex_count).">");
+ }gex;
+ # A DHCP IAID is the last 4 bytes of the MAC (dhcpcd logs "IAID 32:12:34:56").
+ $text =~ s{(\bIAID[:=]?[\ \t]*)(?:[A-Fa-f0-9]{2}[:-]){3}[A-Fa-f0-9]{2}(?![A-Fa-f0-9])}{$1<redacted>}g;
+
  # UUIDs/GUIDs also appear without a useful key (Bluetooth service listings,
  # WiFi connection records, D-Bus output and filesystem paths). Preserve only
  # equality within the report so repeated references remain diagnosable.
@@ -11937,6 +11972,16 @@ sub webui_redact_sensitive_log_text (@) {
   my $addr=lc($1);
   $mac_alias{$addr} ||= "<mac-".(++$mac_count).">";
  }gex;
+ # BlueZ object paths name a Bluetooth address with underscores
+ # (/org/bluez/hci0/dev_DC_A6_32_12_34_56): the same alias as that address.
+ $text =~ s{
+  (?<![A-Za-z0-9])dev_((?:[A-Fa-f0-9]{2}_){5}[A-Fa-f0-9]{2})(?![A-Fa-f0-9])
+ }{
+  my $addr=lc($1);
+  $addr=~tr/_/:/;
+  "dev_".($mac_alias{$addr} ||= "<mac-".(++$mac_count).">");
+ }gex;
+ $text =~ s{\x00PGHEXRUN\Q$hex_nonce\E_(\d+)\x00}{defined($hex_runs[$1]) ? $hex_runs[$1] : "\x00PGHEXRUN${hex_nonce}_$1\x00"}ge;
  return $text;
 }
 

@@ -1781,9 +1781,14 @@ sub pattern_daemon {
     # COLF:RGB|YCBCR444|YCBCR422  QRNG:FULL|LIMITED|DEFAULT
     # 
     if($calman{$connection}) {
-     # Log raw data for debugging (hex + ascii)
-     my $hex_key=join(' ',map { sprintf("%02x",ord($_)) } split(//,$key));
-     &log("Calman RAW: [$hex_key] ascii=[$key]");
+     # Log raw data for debugging (hex + ascii); PUSH pixel data (up to
+     # $pattern_cmd_max_bytes) only by its length.
+     if($key =~/^\x02?PUSH,/) {
+      &log("Calman RAW: PUSH pixel data, ".length($key)." bytes");
+     } else {
+      my $hex_key=join(' ',map { sprintf("%02x",ord($_)) } split(//,$key));
+      &log("Calman RAW: [$hex_key] ascii=[$key]");
+     }
      #
     # No-colon client commands (SN, CAP, ENABLE PATTERNS)
      #
@@ -1806,8 +1811,15 @@ sub pattern_daemon {
       # report the UPGCI commands first, then the rampecho extensions.
       # Calman only sends GET_SETTINGS when CAP lists it, and it ignores a
       # CAP reply that does not start with ACK.
-      my $caps="GET_SETTINGS,STATUS,CONF_FORMAT,CONF_HDR,CONF_LEVEL,CONF_DV,HDR_ENABLE,IMAGE,PUSH,RGB_S,RGB_B,RGB_A,SPECIALTY,UPDATE,YCC_A,YCC_B,YCC_S,HDR,DOLBYVISION,SIZE,10_SIZE,11_APL,CommandRGB,BITDEPTH,COLORSPACE,RANGE";
-      # The G1 source (port 2101) gets its built-in list plus GET_SETTINGS.
+      # Calman's built-in list also names PUSH (BMP upload) and YCC_A,
+      # YCC_B, YCC_S (YCbCr patches). rampecho draws neither (both are
+      # answered with NAK), so CAP leaves them out. Calman 5.17
+      # (calmanv5.dll 5.17.3.6) has format strings only for
+      # RGB_A/RGB_B/RGB_S (0x109b8cb0-0x109b8d04); YCC_* occurs there only
+      # inside that default list.
+      my $caps="GET_SETTINGS,STATUS,CONF_FORMAT,CONF_HDR,CONF_LEVEL,CONF_DV,HDR_ENABLE,IMAGE,RGB_S,RGB_B,RGB_A,SPECIALTY,UPDATE,HDR,DOLBYVISION,SIZE,10_SIZE,11_APL,CommandRGB,BITDEPTH,COLORSPACE,RANGE";
+      # The G1 source (port 2101) gets its built-in list (without PUSH and
+      # YCC_*) plus GET_SETTINGS.
       # Without a GET_SETTINGS reply it forces Range Limited at every
       # connect (Calman 5.17.6 UPGCI::Startup), whatever range its
       # settings show, and choosing Full there again sent nothing: the
@@ -1815,9 +1827,33 @@ sub pattern_daemon {
       # reports (after "Format YCC444_10" it still showed RGB 8-bit), so
       # the reply names Calman's start-up format RGB 8-bit, which the
       # output follows (see calman_g1_startup), and the range on the cable.
-      $caps="GET_SETTINGS,STATUS,CONF_FORMAT,CONF_HDR,CONF_LEVEL,CONF_DV,HDR_ENABLE,IMAGE,PUSH,RGB_S,RGB_B,RGB_A,SPECIALTY,UPDATE,YCC_A,YCC_B,YCC_S" if($rpc_client{$connection});
+      $caps="GET_SETTINGS,STATUS,CONF_FORMAT,CONF_HDR,CONF_LEVEL,CONF_DV,HDR_ENABLE,IMAGE,RGB_S,RGB_B,RGB_A,SPECIALTY,UPDATE" if($rpc_client{$connection});
       &log("Calman: CAP request, returning $caps");
       &send_calman_payload_to_client($connection,$caps,1);
+      last;
+     }
+     # PUSH — BMP upload: "PUSH BMP Size=N", then "PUSH,"+pixels after an
+     # ACK (Calman UPGCI::SetCommand Push branch; it gives up on anything
+     # but ACK). rampecho stores no pushed pictures and does not list PUSH
+     # in CAP: the announcement gets NAK, so no pixels follow and the
+     # previous pattern is not taken for the pushed one (Calman frees the
+     # picture on anything but ACK). Pixel data sent anyway cannot be
+     # framed: an ETX byte in it (port 2100) or a read boundary (port 2101)
+     # cuts it, and a piece reading "RGB_S:..." would draw a patch. It gets
+     # NAK and the connection is closed, which drops the queued pieces.
+     # Not caught: pixels holding the port 85 terminator (02 0D) before
+     # their first ETX end as a port 85 command and never reach this.
+     if($clean_key =~/^PUSH(?:[\s,]|\z)/) {
+      my $pixels=($clean_key =~/^PUSH,/) ? 1 : 0;
+      my $what=$pixels ? "PUSH pixel data (".length($clean_key)." bytes)" : $clean_key;
+      $what=substr($what,0,64) if(length($what) > 64);
+      &log("Calman: $what answered with NAK (pushed pictures are not supported)".($pixels ? ", connection closed" : ""));
+      eval { $connection->send($nak_cmd_string); };
+      if($@) {
+       &close_connection($connection,"send error: $@");
+      } elsif($pixels) {
+       &close_connection($connection,"PUSH pixel data (not supported)");
+      }
       last;
      }
      if($clean_key eq "ENABLE PATTERNS" || $clean_key eq "ENABLEPATTERNS") {
@@ -3218,6 +3254,18 @@ sub pattern_daemon {
       last;
      }
      #
+     # YCC_A / YCC_B / YCC_S — YCbCr patches. rampecho has no drawing path
+     # for them and does not list them in CAP. Acknowledging one left the
+     # previous patch on screen, and the client measured it as this one:
+     # NAK, nothing drawn, no state changed.
+     #
+     if($type =~/^YCC_[ABS]$/) {
+      &log("Calman: $type:$pattern_cmd answered with NAK (YCbCr patches are not drawn; the previous pattern stays on screen)");
+      eval { $connection->send($nak_cmd_string); };
+      &close_connection($connection,"send error: $@") if($@);
+      last;
+     }
+     #
     # RGB Pattern Commands (legacy external wire protocol)
     # RGB_B:R,G,B,BG  RGB_S:R,G,B,SIZE  RGB_A:R,G,B,BG_R,BG_G,BG_B,SIZE
     # The client sends 10-bit values (0-1023). Standard DV expands them to
@@ -3434,7 +3482,12 @@ sub pattern_daemon {
        &calman_render_specialty_pattern($pattern_cmd);
        &calman_remember_pattern("SPECIALTY",$type,$pattern_cmd);
       } else {
-       &log("Calman: IMAGE=$pattern_cmd not available");
+       # No G1 plate of that name, nothing drawn: an ACK left the previous
+       # pattern on screen as this picture.
+       &log("Calman: IMAGE=$pattern_cmd not available, answered with NAK");
+       eval { $connection->send($nak_cmd_string); };
+       &close_connection($connection,"send error: $@") if($@);
+       last;
       }
       &send_key_to_client($connection,"");
       last;

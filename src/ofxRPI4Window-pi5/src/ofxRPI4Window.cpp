@@ -1,5 +1,10 @@
 #include "ofxRPI4Window.h"
 #include "igt_edid.h"
+/* A copy of src/ofxRPI4Window/src/cea_vic.h (t/renderer_pi5_cea_vic.t keeps
+   the two equal): the Pi 5 flavour resolves range Default with the same
+   table, then sets "Broadcast RGB" to the result, so the kernel's own
+   Automatic rule (6.12) is not relied on. */
+#include "cea_vic.h"
 
 #include <dlfcn.h>
 #include <fcntl.h>
@@ -1367,7 +1372,7 @@ bool ofxRPI4Window::InitDRM()
 	}
 #endif	
 	// Start BiasiLinux patch for compatibility with old version
-	mode = connector->modes[0];
+	if (connector->count_modes > 0) mode = connector->modes[0];
 	for (int i=0;i<connector->count_modes;i++) {
 		drmModeModeInfo *current_mode = &connector->modes[i];
 		if (current_mode->type & DRM_MODE_TYPE_USERDEF) {
@@ -1386,7 +1391,30 @@ bool ofxRPI4Window::InitDRM()
 			drmModeFreeEncoder(encoder_tmp);
 		}
 	}
-	if(ofxRPI4Window::mode_idx!= -1) mode = connector->modes[ofxRPI4Window::mode_idx];
+	/* As the Pi 4 flavour: mode_idx indexes the connector's mode list as
+	   the EDID gave it, which can be shorter now; an index past its end
+	   read beyond the array. Fall back to the preferred mode. */
+	if (ofxRPI4Window::mode_idx >= 0 && ofxRPI4Window::mode_idx < connector->count_modes)
+		mode = connector->modes[ofxRPI4Window::mode_idx];
+	else if (ofxRPI4Window::mode_idx != -1) {
+		for (int i = 0; i < connector->count_modes; i++) {
+			if (connector->modes[i].type & DRM_MODE_TYPE_PREFERRED) {
+				mode = connector->modes[i];
+				break;
+			}
+		}
+		ofLogError() << "DRM: mode index " << ofxRPI4Window::mode_idx << " is not among the connector's " << connector->count_modes << " modes; using " << mode.hdisplay << "x" << mode.vdisplay;
+	}
+	/* Default (0) is resolved here as on the Pi 4 (CEA VIC > 1 Limited,
+	   else Full), so the codes drawn and "Broadcast RGB" (then set to
+	   Limited or Full, never Automatic) name the same range, and the
+	   daemon reads it from running/default-rgb-quant-range. */
+	default_rgb_quant_range = cea_default_rgb_quant_range(&mode);
+	WriteRunningFile("default-rgb-quant-range", default_rgb_quant_range == 1 ? "1\n" : "2\n");
+	if (avi_info.rgb_quant_range == 0 && avi_info.output_format == 0) {
+		avi_info.rgb_quant_range = default_rgb_quant_range;
+		ofLog() << "DRM: rgb quant range Default -> " << default_rgb_quant_range << " (VIC " << cea_vic_for_mode(&mode) << ")";
+	}
 
 	//End BiasiLinux patch for compatiblity with old version
 //    ofLog() << "DRM: Current Mode Index " << ofxRPI4Window::mode_idx;
@@ -1643,6 +1671,58 @@ int ofxRPI4Window::is_std_DoVi = 0;
 int ofxRPI4Window::bit_depth = 0;
 unsigned long ofxRPI4Window::window_generation = 0;
 bool ofxRPI4Window::reload_pending = false;
+unsigned long ofxRPI4Window::frame_tag = 0;
+int ofxRPI4Window::wire_bpc = 8;
+int ofxRPI4Window::default_rgb_quant_range = 0;
+
+/* As the Pi 4 flavour: the RQ3 marker in the vc4 srcversion. The Pi 5
+   kernel's module has no RQ3 patch, so this is "not available" there. */
+bool ofxRPI4Window::rgbLimitedPassthroughSupported()
+{
+	static int supported = -1;
+	if (supported < 0) {
+		char version[64] = {0};
+		FILE *f = fopen("/sys/module/vc4/srcversion", "r");
+		if (f) {
+			if (!fgets(version, sizeof(version), f))
+				version[0] = 0;
+			fclose(f);
+		}
+		supported = strstr(version, "RQ3V1") ? 1 : 0;
+		fprintf(stderr, "PGEN: vc4 RGB Limited passthrough %s\n", supported ? "available" : "not available");
+	}
+	return supported == 1;
+}
+
+bool ofxRPI4Window::rgbLimitedPassthrough()
+{
+	return avi_info.output_format == 0 && avi_info.rgb_quant_range == 1 &&
+		!is_std_DoVi && rgbLimitedPassthroughSupported();
+}
+
+/* The range value as the kernel gets it. Without the passthrough (always
+   on the Pi 5) it is the conf's value; the Pi 5 flavour maps it to
+   "Broadcast RGB" where it writes the property. */
+uint64_t ofxRPI4Window::wireRgbQuantRange(int rgb_quant_range, int output_format)
+{
+	if (is_std_DoVi || !rgbLimitedPassthroughSupported())
+		return (uint64_t)rgb_quant_range;
+	if (rgb_quant_range == 1 || (rgb_quant_range == 0 && output_format != 0))
+		return 3;
+	return (uint64_t)rgb_quant_range;
+}
+
+/* Same as the Pi 4 flavour: YCbCr is always Limited on the wire, Full
+ * becomes Limited (ofApp compresses full-range source codes). */
+int ofxRPI4Window::effectiveRgbQuantRange(int rgb_quant_range, int output_format)
+{
+	if (output_format != 0 && rgb_quant_range == 2)
+		return 1;
+	if (rgb_quant_range == 0 && output_format == 0 && default_rgb_quant_range != 0)
+		return default_rgb_quant_range;
+	return rgb_quant_range;
+}
+
 int ofxRPI4Window::mode_idx = 0;
 int ofxRPI4Window::dv_profile = 2;
 int ofxRPI4Window::dv_status = 0;
@@ -3174,8 +3254,17 @@ void ofxRPI4Window::update()
 
    if (current_bit_depth != bit_depth)
 		flip = 1;
-	if (colorspace_status != colorspace_on) 
-		flip = 1;
+	/* As the Pi 4 flavour: image <-> drawn pattern (colorspace_on) needs a
+	   new window only for standard DV, which swaps the image and pattern
+	   packer shaders. Elsewhere the setup only repeated the modeset (an LG
+	   OLED in HDR blanked for about 1.5 s on the Pi 4), after the frame
+	   running/presented had already named. */
+	if (colorspace_status != colorspace_on) {
+		if (is_std_DoVi)
+			flip = 1;
+		else
+			colorspace_status = colorspace_on;
+	}
     coreEvents.notifyUpdate();
 	if (flip) {
 		if (!colorspace_on && !initial_bit_depth) colorspace_on = 0;
@@ -3202,7 +3291,9 @@ void ofxRPI4Window::update()
 					ofLogError() << "DRM: input bit_depth of " << bit_depth << " bits not compatible with output bpc of " << avi_info.max_bpc << " bits, switching output bpc to 10 bits"; 
 					avi_info.max_bpc = 10;
 				}
-				if (!colorspace_on) bit_depth=8;
+				/* As the Pi 4 flavour: an image keeps the 10-bit surface
+				   (ofApp promotes 8-bit patterns on a 10 bpc link). */
+				if (!colorspace_on) ofLog() << "DRM: input bit_depth of " << bit_depth << " but colorspace_on is false; keeping bit_depth=" << bit_depth;
 			break;
 			case 12:
 				if (bit_depth != avi_info.max_bpc) {
@@ -3357,8 +3448,16 @@ glm::vec2 ofxRPI4Window::getWindowPosition(){
     return glm::vec2(currentWindowRect.getPosition());
 }
 
-static void on_pageflip_event(int fd, unsigned int frame, unsigned int sec,	unsigned int usec, void *userdata) 
+/* The last completed flip: DRM vblank sequence and time (CLOCK_MONOTONIC). */
+static unsigned int pg_flip_seq = 0, pg_flip_sec = 0, pg_flip_usec = 0;
+static bool pg_flip_seen = false;
+
+static void on_pageflip_event(int fd, unsigned int frame, unsigned int sec,	unsigned int usec, void *userdata)
 {
+	pg_flip_seq = frame;
+	pg_flip_sec = sec;
+	pg_flip_usec = usec;
+	pg_flip_seen = true;
 	ofLog() << "DRM: page flip event ocurred: " << /*%12.6f\n",*/ std::fixed  << std::setprecision(6) << sec + (usec / 1000000.0);
 }
 
@@ -3543,6 +3642,18 @@ void ofxRPI4Window::swapBuffers()
 		ofLogError() << "DRM: Failed to wait for page flip completion";
 		ofExit(1);
 		return;
+	}
+
+	if (pg_flip_seen && frame_tag != presented_tag) {
+		// first completed flip showing a newly loaded pattern
+		presented_tag = frame_tag;
+		const double hz = (mode.htotal && mode.vtotal) ? mode_vrefresh(&mode) : 0.0;
+		char line[128];
+		snprintf(line, sizeof(line), "%ld %lu %u %llu %ld\n", (long)getpid(), frame_tag, pg_flip_seq,
+		         (unsigned long long)pg_flip_sec * 1000000ULL + pg_flip_usec,
+		         hz > 0.0 ? (long)(1000000.0 / hz + 0.5) : 0L);
+		if (!WriteRunningFile("presented", line))
+			fprintf(stderr, "PGEN: unable to write running/presented: %s\n", strerror(errno));
 	}
 
 	if (reload_pending) {

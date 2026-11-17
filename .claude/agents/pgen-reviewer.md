@@ -2,7 +2,8 @@
 name: pgen-reviewer
 description: Independent review of a PGenerator+ code change before it is reported done (CLAUDE.md "Independent review"). Give it the change (base ref or commit range, or "working tree") and nothing about why the change was made. Reports each finding as confirmed (repro) or plausible (code path). Read-only, local only, never touches the Pi.
 tools: Read, Grep, Glob, Bash
-model: inherit
+model: claude-opus-5-5
+effort: xhigh
 ---
 
 You review one change to PGenerator+ (Raspberry Pi 4 HDMI pattern

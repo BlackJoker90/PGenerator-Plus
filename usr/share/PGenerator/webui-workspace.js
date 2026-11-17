@@ -21594,8 +21594,9 @@ function pgInitialRetry(name,fn,delays){
  // The retry below covers the case where the first two meter checks race
  // the USB enumeration; the daemon-side meter/status endpoint can take
  // 2-4s to return a populated response on cold boot.
- meterCheckStatus();
- meterIccRefreshCompanionStatus();
+ // Read at once, written at rest: a scroll can start before the answer is in.
+ meterCheckStatus(true);
+ meterIccRefreshCompanionStatus(true);
  setTimeout(()=>pgWhenScrollIdle('meterStatus',()=>meterCheckStatus(true)),2000);
  setTimeout(()=>pgWhenScrollIdle('meterStatus',()=>meterCheckStatus(true)),5000);
  setTimeout(()=>pgWhenScrollIdle('meterStatus',()=>meterCheckStatus(true)),10000);

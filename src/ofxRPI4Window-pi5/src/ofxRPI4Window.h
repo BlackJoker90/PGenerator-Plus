@@ -408,6 +408,9 @@ public:
 	   context and every texture, so ofApp makes its picture's texture
 	   again when this has moved on (picture_cache.h). */
 	static unsigned long window_generation;
+	// Bit depth the HDMI link runs at, as main.cpp derives it from the conf
+	// (same as the Pi 4 flavour; ofApp dithers 8-bit patterns only below 10).
+	static int wire_bpc;
 	static int mode_idx;
 	static int dv_profile;	
 	static int dv_status;
@@ -422,9 +425,22 @@ public:
 	static int colorspace_on;
 	int colorspace_status = 0;
 	static int shader_init;
+	/* The range interface ofApp/main.cpp share with the Pi 4 flavour.
+	   RGB Limited passthrough needs the RQ3 vc4 patch (srcversion marker
+	   RQ3V1), which exists for the Pi 4 kernel only: on the Pi 5 it reports
+	   "not available" and the kernel's compression CSC stays in use, as in
+	   the upstream Pi 5 renderer. */
+	static bool rgbLimitedPassthroughSupported();
+	static bool rgbLimitedPassthrough();
+	static uint64_t wireRgbQuantRange(int rgb_quant_range, int output_format);
+	/* Range "rgb quant range" Default (0) ends up as for the mode in use
+	   (1 Limited for a CEA VIC > 1, else 2 Full); 0 until InitDRM picked
+	   the mode. */
+	static int default_rgb_quant_range;
+	static int effectiveRgbQuantRange(int rgb_quant_range, int output_format);
 
 	void EGL_create_surface(EGLint attribs[], EGLConfig config);
-	
+
 	/* shaders */
 	static void rgb2ycbcr_shader();
 	static void dovi_pattern_shader();
@@ -498,6 +514,11 @@ public:
 	   (nothing is changed in that case). */
 	static const char *(*reloadConf)();
 	void ReloadSignalConf();
+	/* Raised by ofApp for each pattern it loads; the first completed flip
+	   showing a new value writes running/presented (pid, this value, DRM
+	   flip sequence, flip time in us, frame period in us) for the daemon. */
+	static unsigned long frame_tag;
+	unsigned long presented_tag = 0;
 	bool exit_started = false;
 	/* A SIGHUP reload was taken and its first completed flip, which
 	   acknowledges it (running/reconfigured), is still to come. Read by

@@ -144,6 +144,9 @@ sub hdmi_packet_probe(@) {
  }
  my $probe="/usr/bin/pgen_hdmi_packet";
  if(!-x $probe) { print "ERR $probe missing\n"; exit 1; }
+ # The caller's environment arrives through sudo -E (SETENV): the read
+ # goes to the real device tree and /dev/mem, never to a test's stand-ins.
+ delete @ENV{qw(PGEN_DEVICE_TREE PGEN_DEV_MEM)};
  system($probe,@slots);
  exit(0);
 }

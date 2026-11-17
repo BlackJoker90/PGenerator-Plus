@@ -21589,19 +21589,22 @@ function pgInitialRetry(name,fn,delays){
  // 2-4s to return a populated response on cold boot.
  meterCheckStatus();
  meterIccRefreshCompanionStatus();
- setTimeout(()=>meterCheckStatus(),2000);
- setTimeout(()=>meterCheckStatus(),5000);
- setTimeout(()=>meterCheckStatus(),10000);
+ setTimeout(()=>pgWhenScrollIdle('meterStatus',()=>meterCheckStatus(true)),2000);
+ setTimeout(()=>pgWhenScrollIdle('meterStatus',()=>meterCheckStatus(true)),5000);
+ setTimeout(()=>pgWhenScrollIdle('meterStatus',()=>meterCheckStatus(true)),10000);
  meterRestoreAutoCalWorkflows();
  meterAutoCalRepairOverlayPointerState();
- setTimeout(meterAutoCalInitialRecoveryPoll,1200);
- setTimeout(meterAutoCalBackendRecoveryWatchdog,5000);
- setTimeout(meterAutoCalBackendRecoveryWatchdog,10000);
+ setTimeout(()=>pgWhenScrollIdle('autoCalInitial',meterAutoCalInitialRecoveryPoll),1200);
+ setTimeout(()=>pgWhenScrollIdle('autoCalRecovery',meterAutoCalBackendRecoveryWatchdog),5000);
+ setTimeout(()=>pgWhenScrollIdle('autoCalRecovery',meterAutoCalBackendRecoveryWatchdog),10000);
  setTimeout(()=>meterPollLg3dAutoCal({initial:true}),1500);
  setInterval(meterAutoCalStatusWatchdog,5000);
- setInterval(meterAutoCalBackendRecoveryWatchdog,15000);
- setInterval(()=>meterCheckStatus(),10000);
- setInterval(()=>meterIccRefreshCompanionStatus(),5000);
+ // Background status, like the polls above, starts and is written only while
+ // the page is at rest (pgWhenScrollIdle, pgScrollIdle): their redraws during
+ // a touch scroll made iOS jump.
+ setInterval(()=>pgWhenScrollIdle('autoCalRecovery',meterAutoCalBackendRecoveryWatchdog),15000);
+ setInterval(()=>pgWhenScrollIdle('meterStatus',()=>meterCheckStatus(true)),10000);
+ setInterval(meterIccRefreshCompanionPoll,5000);
 })();
 
 /* ==== Glow look: what the dashboard adds to the Output workspace ============
@@ -21836,7 +21839,9 @@ function pgInitialRetry(name,fn,delays){
     if (!calRange || !calDv) return true;
     [calRange.querySelector('option[value=""]'), calDv.querySelector('option[value="2"]')].forEach(function (o) {
       if (!o) return;
-      if (on) o.setAttribute('data-pg-badge', 'Recommended'); else o.removeAttribute('data-pg-badge');
+      // Written only when it changes: sync() runs every 500 ms.
+      if (on) { if (o.getAttribute('data-pg-badge') !== 'Recommended') o.setAttribute('data-pg-badge', 'Recommended'); }
+      else if (o.hasAttribute('data-pg-badge')) o.removeAttribute('data-pg-badge');
     });
     var fr = calRange.closest('.field'), fd = calDv.closest('.field');
     if (!fr || !fd || fr.parentNode !== fd.parentNode) return true;
@@ -21866,7 +21871,8 @@ function pgInitialRetry(name,fn,delays){
     if (!on) { undone = placed && dressed; return; }
     undone = false;
     var eotf = $('eotf');
-    pq.hidden = !(eotf && eotf.value === '2');
+    var pqHide = !(eotf && eotf.value === '2');
+    if (pq.hidden !== pqHide) pq.hidden = pqHide;
     var sig = [pq.clientWidth, pq.clientHeight, pq.hidden, ($('max_luma') || {}).value, ($('max_fall') || {}).value, unapplied('max_luma'), unapplied('max_fall')].join('|');
     if (sig !== pqSig) { pqSig = sig; if (!pq.hidden) drawPq(); }
     drawPort();
@@ -21876,14 +21882,19 @@ function pgInitialRetry(name,fn,delays){
   sync();
   // The new card takes its place among the page's panels (it was not there when the page laid them out).
   if (typeof pgSyncDesktopPanels === 'function' && document.body.classList.contains('layout-desktop')) pgSyncDesktopPanels();
-  setInterval(sync, 500);
-  window.addEventListener('resize', sync);
+  // The timer, a resize and the observer wait until the page is at rest, as the page's polls do
+  // (pgWhenScrollIdle): on iOS a pass during a touch scroll or its momentum made the page jump
+  // (the toolbars sliding in and out resize the window mid-scroll). Input and a theme change are
+  // the user's own and run at once.
+  function idleSync() { if (typeof pgWhenScrollIdle === 'function') pgWhenScrollIdle('glowSync', sync); else sync(); }
+  setInterval(idleSync, 500);
+  window.addEventListener('resize', idleSync);
   // The drawer and Desktop Zoom change the dashboard's width without a resize of the window.
   // Once per frame, after the observer's own pass: sync() toggles classes that move the dashboard's height, and
   // doing that inside the callback would raise "ResizeObserver loop completed with undelivered notifications".
   if (typeof ResizeObserver === 'function') {
     var framed = 0;
-    new ResizeObserver(function () { if (!framed) framed = requestAnimationFrame(function () { framed = 0; sync(); }); }).observe(dash);
+    new ResizeObserver(function () { if (!framed) framed = requestAnimationFrame(function () { framed = 0; idleSync(); }); }).observe(dash);
   }
   hdr.addEventListener('input', sync);
   document.addEventListener('pgen:themechange', sync);

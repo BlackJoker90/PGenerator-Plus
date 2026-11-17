@@ -4094,8 +4094,17 @@ async function tvMenuSetListen(on){
  if(!r||r.status!=='ok') toast((r&&r.message)||'The setting was not saved.','err');
  await playlistLoad();
 }
-async function playlistLoad(){
+let playlistLoadSeq=0,playlistLoadApplied=0;
+// background: the poll's read; its answer is written once the page is at rest
+// (pgScrollIdle), unless the answer of a later read is written already.
+async function playlistLoad(background){
+ const seq=++playlistLoadSeq;
  const r=await fetchJSON('/api/playlists',{_quiet:true});
+ if(background===true){
+  await pgScrollIdle();
+  if(seq<playlistLoadApplied) return;
+ }
+ if(seq>playlistLoadApplied) playlistLoadApplied=seq;
  if(r&&r.status==='ok'){
   const before=playlistActive();
   playlistData=r;
@@ -4113,7 +4122,8 @@ function playlistSchedule(){
  const shown=id=>{ const e=document.getElementById(id); return !!e&&e.offsetParent!==null; };
  const visible=!document.hidden&&(shown('playlistCard')||shown('glowListsCard'));
  const active=playlistActive()||(playlistData&&playlistData.tvmenu&&playlistData.tvmenu.view);
- playlistPollTimer=setTimeout(playlistLoad,active?(visible?1500:5000):(visible?15000:60000));
+ // At rest only, as the other polls (pgWhenScrollIdle): a redraw during a touch scroll made iOS jump.
+ playlistPollTimer=setTimeout(()=>pgWhenScrollIdle('playlists',()=>playlistLoad(true)),active?(visible?1500:5000):(visible?15000:60000));
 }
 async function playlistCall(path,body,opts){
  playlistBusy=true; playlistRender();
@@ -6349,6 +6359,18 @@ function pgFlushScrollIdle(){
  const jobs=Array.from(pgScrollIdleJobs.values());
  pgScrollIdleJobs.clear();
  jobs.forEach(fn=>{try{fn();}catch(e){}});
+ pgScrollIdleWaiters.splice(0).forEach(resolve=>resolve());
+}
+// The same wait for a background read whose answer arrives later: it awaits
+// pgScrollIdle() between the request and its writes, since the answer can
+// land mid-scroll. Every waiter is released (none replaces another).
+const pgScrollIdleWaiters=[];
+function pgScrollIdle(){
+ if(!pgScrollBusy()) return Promise.resolve();
+ return new Promise(resolve=>{
+  pgScrollIdleWaiters.push(resolve);
+  if(!pgScrollIdleTimer) pgScrollIdleTimer=setTimeout(pgFlushScrollIdle,150);
+ });
 }
 // Runs fn now, or once scrolling has settled; a later job with the same key
 // replaces the queued one (only the newest poll result is applied).
@@ -6618,7 +6640,8 @@ const PG_WIDGET_ORDER_KEY='pg_widget_order_v6';
 
  // Kill native HTML5 drag on every widget card (markup still has draggable=true).
  function disableNativeDrag(){
-  dash.querySelectorAll('[data-widget]').forEach(w=>w.setAttribute('draggable','false'));
+  // Only where it is not set yet: the observer below runs this on every redraw in the dashboard.
+  dash.querySelectorAll('[data-widget]').forEach(w=>{ if(w.getAttribute('draggable')!=='false') w.setAttribute('draggable','false'); });
  }
  disableNativeDrag();
  dash.addEventListener('dragstart',e=>{
@@ -6771,18 +6794,31 @@ function pgUpdateTargetLabel(t){
  const os={biasi:'BiasiLinux',bookworm:'Bookworm'}[m[2]]||m[2];
  return 'Pi '+m[1]+(os?' \u00b7 '+os:'');
 }
+let checkUpdateSeq=0,checkUpdateApplied=0;
 async function checkUpdate(manual,background){
  _updateChecked=true;
+ // A check nobody clicked (page load, the card coming into view while the
+ // page scrolls) writes only while the page is at rest (pgScrollIdle): a
+ // write during a touch scroll made iOS jump.
+ if(!manual) await pgScrollIdle();
  // The release list is its own request (~1 s on the Pi): fetch it alongside
  // the check instead of after it. The background check on page load leaves
  // it to the card.
- if(!background) loadReleaseList();
+ if(!background) loadReleaseList(!manual);
  const btn=document.getElementById('checkUpdateBtn');
  if(btn) btn.disabled=true;
  setUpdateStatus('Checking GitHub for updates…','',true);
+ const seq=++checkUpdateSeq;
  let r=null;
- try{ r=await fetchJSON('/api/update/check'+(manual?'?fresh=1':''),{_quiet:true,_timeoutMs:30000}); }
+ try{
+  r=await fetchJSON('/api/update/check'+(manual?'?fresh=1':''),{_quiet:true,_timeoutMs:30000});
+  if(!manual) await pgScrollIdle();
+ }
  finally{ if(btn) btn.disabled=false; }
+ // An answer that waited for the page to rest is not written over a later
+ // check's (a click on Check for Updates meanwhile).
+ if(!manual&&seq<checkUpdateApplied) return;
+ if(seq>checkUpdateApplied) checkUpdateApplied=seq;
  const checkedAt=new Date().toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'});
  if(!r||r.status==='error'){
   const msg=r&&r.message?r.message:'Couldn\u2019t reach GitHub. The Pi needs internet access to check for updates; check its network connection, then try again.';
@@ -6846,7 +6882,7 @@ function pgWatchUpdateCard(){
   if(!entries.some(e=>e.isIntersecting)) return;
   io.disconnect();
   if(!_updateChecked) checkUpdate();
-  else if(!window._releaseList) loadReleaseList();
+  else if(!window._releaseList) loadReleaseList(true);
  },{rootMargin:'0px 0px 100% 0px'});
  io.observe(card);
  // Once per page load, so the header shows an update without a visit to
@@ -6931,10 +6967,13 @@ function pgVersionCmp(a,b){
  }
  return 0;
 }
-async function loadReleaseList(){
+// atRest: started by the page, not a click; written only while the page is
+// at rest (pgScrollIdle), as checkUpdate.
+async function loadReleaseList(atRest){
  const row=document.getElementById('releaseRow');
  const sel=document.getElementById('releaseSelect');
  if(!row||!sel) return;
+ if(atRest===true) await pgScrollIdle();
  const loading=!window._releaseList;
  if(loading){
   sel.innerHTML='<option>Loading releases\u2026</option>';
@@ -6942,6 +6981,7 @@ async function loadReleaseList(){
   row.style.display='';
  }
  const r=await fetchJSON('/api/update/releases',{_quiet:true,_timeoutMs:30000});
+ if(atRest===true) await pgScrollIdle();
  if(!(_pgUpd&&_pgUpd.result==='running')) sel.disabled=false;
  if(!r||r.status!=='ok'||!Array.isArray(r.releases)||!r.releases.length){ if(!window._releaseList) row.style.display='none'; return; }
  window._releaseList=r.releases;
@@ -16820,24 +16860,35 @@ function meterUpdateUsbPowerWarning(r){
  }
 }
 
-async function meterCheckStatus(){
+let meterCheckStatusSeq=0,meterCheckStatusApplied=0;
+// background: the poll's read; its answer is written once the page is at
+// rest (pgScrollIdle), unless the answer of a later read is written already
+// or the meter has become busy meanwhile.
+async function meterCheckStatus(background){
  // Busy guard. On a cold start (meter not yet detected in this
  // session) we still probe the meter status so the user can see the
  // connected meter without waiting for a busy flag to clear. Once the
  // meter is known, a stale busy flag from a previous tab or in-flight
  // read won't blank the status card.
- if(meterDetected && (
+ const meterBusyNow=()=>meterDetected && (
   meterContinuousActive||meterContinuousSuspendedForLgWrite||meterLgGreyBusy
   ||meterAutoCalRunning||meterLg3dAutoCalRunning||meterFullAutoCalRunning
   ||meterDvAutoCalProfileRunning||meterDvProfileStandaloneRunning
   ||meterActionPending||window._meterToneMapBusy
- )){
+ );
+ if(meterBusyNow()){
   setConnectionBusyStatus('Busy');
   return;
  }
 
  const meterWasDetected=meterDetected;
+ const seq=++meterCheckStatusSeq;
  const r=await fetchJSON('/api/meter/status',{_quiet:true,_timeoutMs:5000});
+ if(background===true){
+  await pgScrollIdle();
+  if(seq<meterCheckStatusApplied||meterBusyNow()) return;
+ }
+ if(seq>meterCheckStatusApplied) meterCheckStatusApplied=seq;
  // A timed-out request is not a USB disconnect. Keep a previously detected
  // meter and its charts visible until the daemon explicitly reports
  // detected:false; slow auxiliary status work must not blank calibration UI.

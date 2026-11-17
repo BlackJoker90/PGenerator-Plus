@@ -1188,7 +1188,7 @@ async function meterOpenIccProfileBuilder(){
  meterIccProfileTypeChanged();
  if(await meterIccRefreshCompanionStatus()) await meterIccPushCompanionDisplaySettings(false);
  await meterIccRefreshRecoveryAvailability();
- if(!meterIccCompanionTimer) meterIccCompanionTimer=setInterval(meterIccRefreshCompanionStatus,2000);
+ if(!meterIccCompanionTimer) meterIccCompanionTimer=setInterval(meterIccRefreshCompanionPoll,2000);
  await meterIccLoadProfiles();
  uiSyncBodyScrollLock();
 }
@@ -1358,7 +1358,7 @@ function meterCalibrationSyncPatternProviderUi(){
   if(gear){gear.classList.remove('active');gear.setAttribute('aria-expanded','false');}
  }
  if(meterCalibrationUsesCompanion()){
-  if(!meterCalibrationCompanionTimer) meterCalibrationCompanionTimer=setInterval(meterIccRefreshCompanionStatus,2000);
+  if(!meterCalibrationCompanionTimer) meterCalibrationCompanionTimer=setInterval(meterIccRefreshCompanionPoll,2000);
  }else{
   if(meterCalibrationCompanionTimer){clearInterval(meterCalibrationCompanionTimer);meterCalibrationCompanionTimer=null;}
   meterCalibrationShowCompanionStatus(false,'');
@@ -1566,13 +1566,35 @@ function meterIccUpdateTopCompanionStatus(connected,detail,busy){
  if(typeof syncTopStatusStack==='function') syncTopStatusStack();
 }
 
-async function meterIccRefreshCompanionStatus(){
+let meterIccCompanionRefreshSeq=0,meterIccCompanionRefreshApplied=0;
+// The timers' read (dialog open, Companion as pattern provider, the page's
+// 5 s status): started and written only while the page is at rest.
+function meterIccRefreshCompanionPoll(){
+ if(typeof pgWhenScrollIdle!=='function'){ meterIccRefreshCompanionStatus(true); return; }
+ pgWhenScrollIdle('iccCompanion',()=>meterIccRefreshCompanionStatus(true));
+}
+// background: a poll's read; its answer is written once the page is at rest
+// (pgScrollIdle: a write during a touch scroll made iOS jump), unless a later
+// read is written already.
+async function meterIccRefreshCompanionStatus(background){
  // Fire-and-forget: this only ever primes a cache that the outdated-version
  // check below reads synchronously, so it cannot delay this poll.
  meterIccRefreshGithubVersionCache();
  let buildOffloadActive=false;
+ const seq=++meterIccCompanionRefreshSeq;
+ // A slow answer is still written when later reads have only started: with
+ // the 2 s timers and a 3.5 s timeout they overlap.
+ const waitIdle=async()=>{
+  if(background===true&&typeof pgScrollIdle==='function'){
+   await pgScrollIdle();
+   if(seq<meterIccCompanionRefreshApplied) return false;
+  }
+  if(seq>meterIccCompanionRefreshApplied) meterIccCompanionRefreshApplied=seq;
+  return true;
+ };
  try{
   const state=await fetchJSON('/api/icc/companion/status',{_quiet:true,_timeoutMs:3500});
+  if(!await waitIdle()) return meterIccCompanionConnected;
   // Shown in both companion-status locations regardless of connection state --
   // an unpaired Companion is by definition not connected yet, so the approval
   // prompt has to appear anyway.
@@ -1658,6 +1680,7 @@ async function meterIccRefreshCompanionStatus(){
    meterCalibrationShowCompanionStatus(true,buildText,true);
   }else if(!meterIccCompanionConnected){ meterIccShowCompanionStatus(false,'Companion not connected'); meterCalibrationShowCompanionStatus(false,'Companion not connected'); }
  }catch(error){
+  if(!await waitIdle()) return meterIccCompanionConnected;
   meterIccCompanionConnected=meterIccCompanionLastSeenAt>0&&Date.now()-meterIccCompanionLastSeenAt<12000;
   if(!meterIccCompanionConnected){ meterIccShowCompanionStatus(false,'Companion not connected'); meterCalibrationShowCompanionStatus(false,'Companion not connected'); }
  }

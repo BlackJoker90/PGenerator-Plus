@@ -423,6 +423,12 @@ public:
 	int initial_bit_depth = 0;
 	int starting_bpc = 0;
 	static int colorspace_on;
+	/* Standard DV tunnel codes as PGenerator 1.6's, computed exactly
+	   (outside PiTPG sessions; main.cpp); 0: PiTPG's. */
+	static int dv_tunnel_pg16;
+	/* This flavour has no pg16 shaders (only PiTPG's tunnel): main.cpp
+	   leaves dv_tunnel_pg16 at 0 here. */
+	static const int pg16_shaders = 0;
 	int colorspace_status = 0;
 	static int shader_init;
 	/* The range interface ofApp/main.cpp share with the Pi 4 flavour.

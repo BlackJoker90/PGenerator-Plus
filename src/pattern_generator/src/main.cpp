@@ -56,6 +56,7 @@ std::string dv_maxpq="";
 std::string dv_diagonal="42";
 std::string dv_signal_range="1";
 std::string dv_pq_source="";
+std::string dv_packet="";
 /* Include RPI p4 header file */
 #include "ofxRPI4Window.h"
 // End Patch RPI p4
@@ -115,6 +116,7 @@ static bool readPGeneratorConf() {
   if(el[0] == "dv_diagonal")     dv_diagonal=el[1];
   if(el[0] == "dv_signal_range") dv_signal_range=el[1];
   if(el[0] == "dv_pq_source")    dv_pq_source=el[1];
+  if(el[0] == "dv_packet")       dv_packet=el[1];
  }
  return true;
 }
@@ -284,6 +286,16 @@ int main(int argc, char **argv){
   /* Tunnel signal range (PiTPG Patch Scale in TV-led): 2 full, else limited. */
   ofApp::dv_full=(atoi(dv_signal_range.c_str()) == 2) ? 1 : 0;
   ofApp::dv_diagonal=atoi(dv_diagonal.c_str());
+  /* dv_packet (command.pm): "calman" in a Calman session, Calman's own
+     form; "pitpg" for a PiTPG client, PiTPG's; else PGenerator 1.6's. */
+  ofApp::dv_packet_form=(dv_packet == "calman") ? dovi::form_calman : ((dv_packet == "pitpg") ? dovi::form_pitpg : dovi::form_pg16);
+  /* Tunnel codes and metadata pixels as PGenerator 1.6 sends them, its
+     tunnel computed exactly (ofxRPI4Window.cpp pg16_dovi_*_frag), except for
+     a PiTPG client, which keeps PiTPG's arithmetic and parity embedding
+     (maintainer, 2026-11-18). A full tunnel exists only in PiTPG sessions;
+     1.6 has none. A window flavour without the pg16 shaders (Pi 5) draws
+     with its own tunnel shader, which is not read back (TASKS.md). */
+  ofxRPI4Window::dv_tunnel_pg16=(ofxRPI4Window::pg16_shaders && ofApp::dv_packet_form != dovi::form_pitpg && !ofApp::dv_full) ? 1 : 0;
   ofxRPI4Window::reloadConf=reloadSignalConf;
 
   /* Raspberry Pi KMS Run App */

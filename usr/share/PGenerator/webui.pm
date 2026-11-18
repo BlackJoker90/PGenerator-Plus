@@ -29,6 +29,7 @@ use PGCalibrationMath qw(
 use PGEdidDolby qw(dolby_vsvdb_from_edid dolby_vsvdb_json);
 use PGSignalCode qw(
  signal_code_nominal_range signal_code_policy signal_percent_to_code
+ dv_tunnel_grid_code
 );
 use Fcntl qw(O_NONBLOCK O_WRONLY);
 use Time::HiRes ();
@@ -5407,9 +5408,6 @@ $request_dv_map_mode=$1 if($body=~/"dv_map_mode"\s*:\s*"?([0-9])"?/);
 $request_dv_map_mode="" unless($request_dv_map_mode eq "1" || $request_dv_map_mode eq "2");
 my $request_dv_interface="";
 $request_dv_interface=$1 if($body=~/"dv_interface"\s*:\s*"?([012])"?/);
-my $request_dv_transport="";
-$request_dv_transport=$1 if($body=~/"dv_transport"\s*:\s*"([^"\\]{1,32})"/);
-$request_dv_transport=&pg_dv_transport_mode($request_dv_transport);
 if($signal_mode eq "dv") {
  my $effective_dv_map_mode=$request_dv_map_mode || $pgenerator_conf{"dv_map_mode"} || "2";
  $target_gamma=($effective_dv_map_mode eq "2") ? "2.2" : "st2084";
@@ -5498,7 +5496,15 @@ if($signal_mode eq "dv") {
  # once divided by zero below and killed the series start.
  $target_gamma_exp_resolved=2.4 if(!($target_gamma_exp_resolved>0));
 my $dv_map_mode=($signal_mode eq "dv") ? ($request_dv_map_mode || $pgenerator_conf{"dv_map_mode"} || "2") : "";
-my $dv_interface=($signal_mode eq "dv") ? &pg_dv_transport_interface($request_dv_transport) : 0;
+# The transport and the tunnel grid are the cable's (variables.pm
+# pg_dv_cable_conf: the running renderer's start record in Dolby Vision,
+# else the conf it starts with): series patterns are drawn with them
+# (webui_pattern takes none per request), whatever the page's select says.
+# Read once, decided for the run and recorded with it. A run the Patch
+# Companion draws gets the same codes (maintainer, 2026-11-18).
+my $dv_cable=($signal_mode eq "dv") ? &pg_dv_cable_conf() : undef;
+my $dv_interface=($signal_mode eq "dv") ? &pg_dv_cable_interface($dv_cable) : 0;
+my $dv_tunnel_grid=($signal_mode eq "dv" && &pg_dv_tunnel_pg16_grid($dv_cable)) ? 1 : 0;
  my $target_linear_to_signal=sub {
   my ($v)=@_;
   return 0 if(!defined $v || $v<=0);
@@ -5610,6 +5616,7 @@ my $dv_interface=($signal_mode eq "dv") ? &pg_dv_transport_interface($request_dv
    dv_series_code_bits=>12,
    dv_series_full_range=>0,
    dv_interface=>$dv_interface,
+   dv_tunnel_grid=>$dv_tunnel_grid,
   });
  my $chroma_range=signal_code_nominal_range($chroma_signal_code_policy);
  die "Unable to resolve chroma signal-code range\n" if(!$chroma_range);
@@ -5871,10 +5878,15 @@ my $dv_interface=($signal_mode eq "dv") ? &pg_dv_transport_interface($request_dv
 			    }
 			   }
   my %channel_stimulus_for_slot;
+  # Whether the custom greyscale profile's stimuli went into this series
+  # (a CSV of the series' length for the slots or a channel); its steps say
+  # so ("grey_custom") and keep their targets.
+  my $grey_custom_applied=0;
 	   if($grey_custom_allowed && $points!=2) {
    my $csv=$points==11 ? $grey_steps_11 : ($points==30 ? $grey_steps_30 : ($points==100 ? $grey_steps_100 : $grey_steps_21));
     my @vals=grep { $_ ne "" } map { my $v=$_; $v=~s/^\s+|\s+$//g; $v } split(/,/,$csv || "");
     if(@vals == @ire_vals) {
+     $grey_custom_applied=1;
      my $prev=-1;
      for(my $idx=0;$idx<scalar(@ire_vals);$idx++) {
       my $stim=$vals[$idx] + 0;
@@ -5898,6 +5910,7 @@ my $dv_interface=($signal_mode eq "dv") ? &pg_dv_transport_interface($request_dv
     foreach my $channel (keys %channel_csv) {
      my @vals=grep { $_ ne "" } map { my $v=$_; $v=~s/^\s+|\s+$//g; $v } split(/,/,$channel_csv{$channel} || "");
      next unless(@vals == @ire_vals);
+     $grey_custom_applied=1;
      for(my $idx=0;$idx<scalar(@ire_vals);$idx++) {
       my $stim=$vals[$idx] + 0;
       $stim=0 if($stim < 0);
@@ -5923,6 +5936,8 @@ my $dv_interface=($signal_mode eq "dv") ? &pg_dv_transport_interface($request_dv
      dv_series => ($dv_series ? 1 : 0),
      dv_series_code_bits => (defined($dv_series_code_bits) ? $dv_series_code_bits : 8),
      dv_series_full_range => ($dv_series_full_range ? 1 : 0),
+     dv_interface => (($signal_mode eq "dv") ? "$dv_interface" : ""),
+     dv_tunnel_grid => $dv_tunnel_grid,
     );
     $_opts_for_grey{"active_table"}=$lg_hdr20_active_table if($lg_hdr20_codes && ref($lg_hdr20_active_table) eq "HASH");
     my $grey_signal_code_policy=&webui_signal_code_policy(
@@ -6015,6 +6030,12 @@ my $dv_interface=($signal_mode eq "dv") ? &pg_dv_transport_interface($request_dv
     my $extra="";
     $extra.=",\"point_role\":\"$role\"" if($points==2);
 	    $extra.=",\"series_type\":\"greyscale\",\"signal_r_pct\":$r_stim,\"signal_g_pct\":$g_stim,\"signal_b_pct\":$b_stim";
+	    # A custom greyscale profile whose stimuli went into the series keeps
+	    # the targets it has without 1.6's DV tunnel grid (the page: the
+	    # nominal slot, webui-app.js meterGreyTargetSignal, by this mark of the
+	    # charted run); the worker takes a grey's target from its gridded code
+	    # only without this mark (meter_series.sh dv_absolute_targets_worker).
+	    $extra.=",\"grey_custom\":true" if($grey_custom_applied && !$lg_greyscale_21 && !$lg_autocal_26);
 	    $extra.=",\"final_white_refresh\":true" if($points==21 && !$lg_greyscale_21 && !$lg_autocal_26 && abs($v-100)<0.001);
 	    $extra.=",\"analysis_ire\":$analysis_ire,\"target_ire\":$analysis_ire,\"transport_stimulus\":$stim" if($points==21 && $lg_greyscale_21);
 		    $extra.=",\"input_max\":4095" if($dv_series && $dv_series_code_bits == 12);
@@ -6638,6 +6659,9 @@ my $dv_interface=($signal_mode eq "dv") ? &pg_dv_transport_interface($request_dv
     $level_encoded=$target_linear_to_signal->($level_request);
    }
    $level_code=int($min_code + $level_encoded*$span_code + .5);
+   # DV Absolute on 1.6's tunnel: the level is a tunnel code percentage,
+   # which the page takes from the code policy, on the tunnel grid; so here.
+   $level_code=dv_tunnel_grid_code($level_code,$chroma_input_max) if($dv_tunnel_grid && $dv_map_mode eq "1");
   }
   my $level_signal=$span_code>0?($level_code-$min_code)/$span_code:0;
   my $hcfr_pq_reference_nits=94.37844;
@@ -6886,6 +6910,16 @@ my $dv_interface=($signal_mode eq "dv") ? &pg_dv_transport_interface($request_dv
 	 }
 
 
+	 # PGenerator 1.6's Standard Dolby Vision tunnel carries its 8-bit grid:
+	 # every step's code becomes the nearest one the cable carries as it is,
+	 # so the run records what is sent (maintainer, 2026-11-18), and the step
+	 # says so ("dv_tunnel_grid"): a grey's target follows that code, as in
+	 # SDR, and the worker keeps a rebased code on the grid. The page does
+	 # the same (webui-workspace.js meterBuildStepsJS).
+	 if($dv_tunnel_grid) {
+	  @steps=map { &webui_dv_step_on_tunnel_grid($_) } @steps;
+	 }
+
 	 my $series_id="${type}_".int(Time::HiRes::time()*1000)."_".int(rand(1000000));
 	 my $selection_run=($body=~/"selection_run"\s*:\s*true/i)?1:0;
 	 my $total=scalar(@steps);
@@ -6939,7 +6973,7 @@ my $dv_interface=($signal_mode eq "dv") ? &pg_dv_transport_interface($request_dv
 	 # The panel this run is measured on travels with the run: the page cannot
 	 # tell it from the selection once that has changed.
 	 my $series_true_black=&webui_display_type_is_oled_class($display_type_key,$ccss_file) ? "true" : "false";
-	 my $series_meta_json="\"type\":\"$series_type_json\",\"points\":".($points+0).",\"true_black_panel\":$series_true_black,\"selection_run\":".($selection_run?"true":"false").",\"signal_mode\":\"$series_signal_mode_json\",\"target_gamma\":\"$series_target_gamma_json\",\"max_luma\":$series_max_luma_num,\"dv_map_mode\":\"$series_dv_map_mode_json\",\"dv_interface\":\"$series_dv_interface_json\",\"calibration_target_context\":$series_target_context_json";
+	 my $series_meta_json="\"type\":\"$series_type_json\",\"points\":".($points+0).",\"true_black_panel\":$series_true_black,\"selection_run\":".($selection_run?"true":"false").",\"signal_mode\":\"$series_signal_mode_json\",\"target_gamma\":\"$series_target_gamma_json\",\"max_luma\":$series_max_luma_num,\"dv_map_mode\":\"$series_dv_map_mode_json\",\"dv_interface\":\"$series_dv_interface_json\",\"dv_tunnel_grid\":".($dv_tunnel_grid?"true":"false").",\"calibration_target_context\":$series_target_context_json";
 	 my $series_step_meta=",\"selection_run\":".($selection_run?"true":"false").",\"signal_mode\":\"$series_signal_mode_json\",\"target_gamma\":\"$series_target_gamma_json\",\"max_luma\":$series_max_luma_num,\"dv_map_mode\":\"$series_dv_map_mode_json\",\"dv_interface\":\"$series_dv_interface_json\"";
 	 @steps=map {
 	  my $step=$_;
@@ -6995,6 +7029,8 @@ my $dv_interface=($signal_mode eq "dv") ? &pg_dv_transport_interface($request_dv
    extended_sdr_codes => (($type eq "greyscale" && !$lg_autocal_26_codes && (($points==26 && $lg_autocal_26) || ($points==21 && $lg_greyscale_21)) && $signal_mode eq "sdr") ? 1 : 0),
    dv_series => (($signal_mode eq "dv") ? 1 : 0),
    dv_series_code_bits => (($signal_mode eq "dv") ? 12 : 8),
+   dv_interface => (($signal_mode eq "dv") ? "$dv_interface" : ""),
+   dv_tunnel_grid => $dv_tunnel_grid,
   );
   ($insert_patch_code,$insert_patch_input_max)=&webui_grey_code_for_stimulus($patch_insert_patch_level,$signal_mode,$target_gamma,$greyscale_patch_limited,\%series_opts) if($patch_insert_patch_enabled);
   ($insert_time_code,$insert_time_input_max)=&webui_grey_code_for_stimulus($patch_insert_time_level,$signal_mode,$target_gamma,$greyscale_patch_limited,\%series_opts) if($patch_insert_time_enabled);
@@ -10935,6 +10971,10 @@ sub webui_config_json (@) {
   }
  }
  $json_conf{"rgb_quant_range"}=&webui_preferred_rgb_quant_range() if($external_rgb_quant_range_active);
+ # Not a setting: whether a Dolby Vision series goes on PGenerator 1.6's
+ # tunnel grid (variables.pm pg_dv_tunnel_pg16_grid), for the page's own
+ # step and code previews. A post of it is dropped (webui_apply_config).
+ $json_conf{"dv_tunnel_grid"}=&pg_dv_tunnel_pg16_grid() ? "1" : "0";
  # During an HDR Metadata Cycle the conf holds the step's Max Luma and
  # MaxCLL. The page shows, and posts back with its next apply, the values
  # that were set before it.
@@ -11091,7 +11131,7 @@ sub webui_apply_conf_only (@) {
  if(exists $changes->{"calman_dv_container"} && &dv_container_follow("Dolby Vision with Calman") && &dv_container_restart_needed()) {
   my $restart_id=&webui_renderer_restart_begin();
   my $result='{"status":"ok","restart":true'.($restart_id ne "" ? ',"restart_id":"'.$restart_id.'"' : "").'}';
-  return wantarray ? ($result,1,$restart_id,{changed=>{dv_profile=>1},dv_before=>1}) : $result;
+  return wantarray ? ($result,1,$restart_id,{changed=>{map { ($_=>1) } &dv_session_keys()},dv_before=>1}) : $result;
  }
  my $result='{"status":"ok","restart":false}';
  return wantarray ? ($result,0) : $result;
@@ -11116,6 +11156,16 @@ sub webui_apply_config (@) {
  # bytes, as the conf stores them.
  my $decoded=eval { require JSON::PP; JSON::PP->new->decode($body) };
  $decoded={} if(ref($decoded) ne "HASH");
+ # The packet form and the infoframe form are the daemon's (command.pm
+ # dv_session_values, normalize_dv_transport_conf), and dv_tunnel_grid is
+ # not a setting (webui_config_json): posted ones are dropped,
+ # whatever their value (null, an object), before anything else; the Dolby
+ # Vision branch below and the next renderer start derive them. A request
+ # that named nothing else changes nothing.
+ my @daemon_keys=grep { exists $decoded->{$_} } qw(dv_packet dv_vsif_form dv_ll_bt2020 dv_tunnel_grid);
+ if(@daemon_keys) {
+  delete @$decoded{@daemon_keys};
+ }
  my %changes;
  foreach my $k (keys %$decoded) {
   my $v=$decoded->{$k};
@@ -11126,6 +11176,12 @@ sub webui_apply_config (@) {
    return wantarray ? ($result,0) : $result;
   }
   $changes{$k}=$v;
+ }
+ # Nothing left but the daemon's keys (a value the loop drops, null or an
+ # object, and the self-test's marker do not count): nothing to apply.
+ if(@daemon_keys && !grep { $_ ne "selftest" } keys %changes) {
+  my $result='{"status":"ok","restart":false}';
+  return wantarray ? ($result,0) : $result;
  }
  # The self-test (pgen_selftest.pl) marks its own switches "selftest":1. It
  # counts only with exactly that value, from this device, while the
@@ -11444,8 +11500,12 @@ sub webui_apply_config (@) {
   $changes{"primaries"}="2" if(!$pitpg);
   $changes{"rgb_quant_range"}=&pg_dv_transport_quant_range($dv_transport) if(!$pitpg_ll_rgb);
  # The container: BT.2020, or "Dolby Vision with Calman" while a Calman
- # session is open (command.pm dv_session_profile).
- $changes{"dv_profile"}=&dv_session_profile($dv_transport) if(!$pitpg);
+ # session is open (command.pm dv_session_values). The packet form goes
+ # with it: Calman's while its session holds the container, PGenerator
+ # 1.6's otherwise. A PiTPG client keeps both: its own apply gives it
+ # PiTPG's packet (normalize_dv_transport_conf), another save must not
+ # restart its output. Both from one look at the session (dv_session_values).
+ @changes{qw(dv_profile dv_packet)}=&dv_session_values($dv_transport) if(!$pitpg);
  $changes{"dv_color_space"}="0";
   $changes{"dv_interface"}=&pg_dv_transport_interface($dv_transport);
   $changes{"dv_map_mode"}=$dv_map_mode;
@@ -11579,7 +11639,7 @@ sub webui_apply_config (@) {
  # Keys that require pattern generator restart
  my %restart_keys=map{$_=>1} qw(mode_idx eotf is_hdr is_sdr colorimetry primaries
   min_luma max_luma max_cll max_fall color_format max_bpc rgb_quant_range
-    dv_status is_ll_dovi is_std_dovi dv_interface dv_profile dv_metadata dv_color_space dv_map_mode dv_transport dv_ll_rgb
+    dv_status is_ll_dovi is_std_dovi dv_interface dv_profile dv_packet dv_metadata dv_color_space dv_map_mode dv_transport dv_ll_rgb
     dv_signal_range dv_pq_source);
 
   my @conf_writes=();
@@ -11658,7 +11718,7 @@ sub webui_apply_config (@) {
  # POST reads the file after it.
  if(exists $changes{"calman_dv_container"} && &dv_container_follow("Dolby Vision with Calman") && &dv_container_restart_needed()) {
   $need_restart=1;
-  $changed_restart_keys{"dv_profile"}=1;
+  $changed_restart_keys{$_}=1 for(&dv_session_keys());
  }
  # Settings that work: what a later refused apply goes back to, and the end
  # of a refusal a calibration program was left in.
@@ -15076,6 +15136,37 @@ sub webui_pattern_apl_bg_triplet (@) {
  return "$bg_y,$bg_y,$bg_y";
 }
 
+# A series step (JSON text) with its r, g, b on PGenerator 1.6's Standard
+# Dolby Vision tunnel grid (PGSignalCode dv_tunnel_grid_code). Without an
+# input_max the codes say it, as webui_pattern reads them (> 255: 12-bit).
+# The step is marked "dv_tunnel_grid":true: its target follows the code
+# (meter_series.sh), and a code the worker computes anew (the ColorChecker
+# rebase) goes on the grid too.
+sub webui_dv_step_on_tunnel_grid (@) {
+ my $step=shift;
+ # Codes as the page's twin reads them (webui-workspace.js
+ # meterStepsOnDvTunnelGrid): unsigned integer JSON numbers; a decimal or a
+ # string leaves the step as it is.
+ my %c;
+ for my $ch (qw(r g b)) { $c{$ch}=$1 if($step=~/"$ch"\s*:\s*(\d+)\s*[,}]/); }
+ return $step if(grep { !defined($c{$_}) } qw(r g b));
+ my ($max)=$step=~/"input_max"\s*:\s*(\d+)\s*[,}]/;
+ # An input_max that is there but no unsigned integer says nothing usable:
+ # the step stays as it is (no guess from its codes).
+ return $step if(!defined($max) && $step=~/"input_max"\s*:/);
+ $max=(grep { $_ > 255 } values %c) ? 4095 : 255 if(!defined($max));
+ # The grid is a 10- or 12-bit one: an 8-bit code is on it as it is (<< 4),
+ # and its step is not marked, so no reader takes it for a 12-bit code.
+ return $step if($max != 1023 && $max != 4095);
+ for my $ch (qw(r g b)) {
+  my $v=dv_tunnel_grid_code($c{$ch},$max+0);
+  $step=~s/"$ch"(\s*):(\s*)\d+(\s*[,}])/"$ch"$1:$2$v$3/;
+ }
+ if($step=~/"dv_tunnel_grid"\s*:/) { $step=~s/"dv_tunnel_grid"(\s*):(\s*)(?:true|false|null|"[^"]*"|-?[\d.]+)/"dv_tunnel_grid"$1:$2true/; }
+ else { $step=~s/\}\s*$/,"dv_tunnel_grid":true}/; }
+ return $step;
+}
+
 sub webui_pattern_scale_value (@) {
  my $value=int(shift);
  my $input_max=int(shift);
@@ -15200,6 +15291,17 @@ sub webui_signal_code_policy (@) {
  }
  if(defined($resolved{max_bpc}) && $resolved{max_bpc} ne "") {
   $resolved{max_bpc}=(int($resolved{max_bpc})>=10) ? 10 : 8;
+ }
+ # Standard DV puts its codes on 1.6's tunnel grid, Low Latency does not: a
+ # caller that names no interface (insertion flashes, the stabilization
+ # pattern) gets the cable's (variables.pm pg_dv_cable_conf), not "standard"
+ # by default; so does the tunnel grid, from the same settings.
+ if($selected eq "dv_series") {
+  my $need_if=(!defined($resolved{dv_interface}) || $resolved{dv_interface} eq "");
+  my $need_grid=(!defined($resolved{dv_tunnel_grid}) || $resolved{dv_tunnel_grid} eq "");
+  my $cable=($need_if || $need_grid) ? &pg_dv_cable_conf() : undef;
+  $resolved{dv_interface}=&pg_dv_cable_interface($cable) if($need_if);
+  $resolved{dv_tunnel_grid}=&pg_dv_tunnel_pg16_grid($cable) if($need_grid);
  }
  if($selected eq "autocal_26_codes"
   && (!defined($resolved{color_format}) || $resolved{color_format} eq "")) {
@@ -17190,7 +17292,9 @@ sub webui_pattern (@) {
  my $cyan_rgb=($signal_mode eq "dv") ? "256,3760,3760" : &webui_pattern_named_triplet(0,255,255,$pat_bits,$source_range eq "LIMITED");
  my $magenta_rgb=($signal_mode eq "dv") ? "3760,256,3760" : &webui_pattern_named_triplet(255,0,255,$pat_bits,$source_range eq "LIMITED");
  my $yellow_rgb=($signal_mode eq "dv") ? "3760,3760,256" : &webui_pattern_named_triplet(255,255,0,$pat_bits,$source_range eq "LIMITED");
- my $gray50_rgb=($signal_mode eq "dv") ? "2008,2008,2008" : &webui_pattern_named_triplet(128,128,128,$pat_bits,$source_range eq "LIMITED");
+ # 50 % grey is 2008 (256 + 3504 / 2); PGenerator 1.6's tunnel carries the
+ # nearest code of its 8-bit grid, 2016 (pg_dv_tunnel_pg16_grid), sent so.
+ my $gray50_rgb=($signal_mode eq "dv") ? (&pg_dv_tunnel_pg16_grid() ? "2016,2016,2016" : "2008,2008,2008") : &webui_pattern_named_triplet(128,128,128,$pat_bits,$source_range eq "LIMITED");
  # Complex patterns are rendered directly into a temporary image (DRAW=IMAGE),
  # because PGeneratord clears the entire frame for each DRAW=RECTANGLE entry.
  # Prefer PNG for renderer compatibility; fall back to raw PPM only if convert

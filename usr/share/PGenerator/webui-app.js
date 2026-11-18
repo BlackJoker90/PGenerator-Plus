@@ -1010,6 +1010,11 @@ function applyConfigState(nextConfig){
  refreshSavedSettingsSnapshot();
  pgCaptureHeaderSignal();
  pgRenderDvDisplayInfo();
+ // The cable on or off 1.6's tunnel grid (a transport applied, a PiTPG
+ // client): a series without readings gets steps for it. Asked on every
+ // config read, so a change that came while a read held the patch is taken
+ // up on the next one (the function does nothing while the steps fit).
+ try{ if(typeof meterRebuildDvStepsForCable==='function') meterRebuildDvStepsForCable(); }catch(e){}
 }
 
 async function syncRemoteConfig(){
@@ -1037,6 +1042,10 @@ async function syncRemoteConfig(){
    if(modeChanged && typeof loadInfo==='function'){
     loadInfo(true);
    }
+  }else{
+   // The same conf: a rebuild for the cable a read held off (applyConfigState
+   // ran while it held the patch) is taken up now.
+   try{ if(typeof meterRebuildDvStepsForCable==='function') meterRebuildDvStepsForCable(); }catch(e){}
   }
  }
  finally{
@@ -8239,6 +8248,12 @@ function meterReadingGammaAnalysisIre(reading){
   // target line. DV is treated explicitly above; for HDR/HLG, the HDR20
   // makeHdrStep path stamps analysis_ire / target_ire from the slot
   // value, mirroring the LG 22pt manual greyscale pattern.
+  // A Dolby Vision grey on 1.6's tunnel grid: the signal its code sends, the
+  // one its target follows (meterGreyTargetSignal).
+  if(meterChartIsDv()){
+   const gridded=meterDvGridCodeSignalFraction(reading.r_code!=null?reading.r_code:reading.r);
+   if(gridded!=null&&Number.isFinite(gridded)) return clampNum(gridded,0,1)*100;
+  }
   if(analysis!=null && (meterChartIsDv() || reading.analysis_ire!=null || reading.target_ire!=null)) return analysis;
   const code=reading.r_code!=null?reading.r_code:reading.r;
   if(code!=null){
@@ -8643,8 +8658,25 @@ function meterResolveSeriesSnapshotFromCache(key,options){
  // whole PQ pipeline (BT.2390 control, PQ target decode, chart law).
  const signalMode=meterSeriesSnapshotSignalMode(exact,requestedMode);
  if(exact&&meterSeriesSnapshotIsCleared(exact)&&meterSeriesSnapshotSignalMode(exact,requestedMode)===requestedMode) return null;
- let steps=clone((Array.isArray(opts.steps)&&opts.steps.length)?opts.steps:((exact&&Array.isArray(exact.steps)&&exact.steps.length)?exact.steps:meterBuildStepsJS(type,points)));
- steps=meterCanonicalRecoveredSteps(type,points,steps,(exact&&exact.status)||'complete');
+ // A Dolby Vision snapshot keeps the codes it was run with: on 1.6's tunnel
+ // grid or not (meterSeriesRecordedDvTunnelGrid). Steps built now for the
+ // page (opts.steps) follow today's rule and would restamp its readings
+ // with other codes; then its own steps, or steps rebuilt with its grid.
+ const dvRecordedGrid=(signalMode==='dv'&&exact)?meterSeriesRecordedDvTunnelGrid(exact):null;
+ // Only 10/12-bit steps can say which grid they were built on
+ // (meterDvStepsGridState); steps that cannot say do not disagree.
+ const dvDisagrees=list=>{ const state=meterDvStepsGridState(list); return dvRecordedGrid!=null&&state!=null&&state!==dvRecordedGrid; };
+ const keepGridRebuild=meterDvTunnelGridRebuild;
+ if(dvRecordedGrid!=null) meterDvTunnelGridRebuild=dvRecordedGrid?1:0;
+ let steps;
+ try{
+  steps=clone((Array.isArray(opts.steps)&&opts.steps.length)?opts.steps:((exact&&Array.isArray(exact.steps)&&exact.steps.length)?exact.steps:meterBuildStepsJS(type,points)));
+  if(dvDisagrees(steps)){
+   steps=(Array.isArray(exact.steps)&&exact.steps.length&&!dvDisagrees(exact.steps))
+    ?clone(exact.steps):clone(meterBuildStepsJS(type,points));
+  }
+  steps=meterCanonicalRecoveredSteps(type,points,steps,(exact&&exact.status)||'complete');
+ }finally{ meterDvTunnelGridRebuild=keepGridRebuild; }
  const requestedLg26=type==='greyscale'&&(Number(points)===26||meterSeriesStepsHaveLgAutoCal26Markers(steps));
  const exactEligible=exact&&Array.isArray(exact.readings)&&exact.readings.length>0&&meterSeriesSnapshotSignalMode(exact,requestedMode)===requestedMode&&(requestedLg26===(meterSeriesSnapshotHasLgAutoCal26Markers(exact)||Number((exact&&exact.points)||0)===26))?exact:null;
  if(type!=='greyscale'){
@@ -8657,6 +8689,7 @@ function meterResolveSeriesSnapshotFromCache(key,options){
 	   target_gamma:exactEligible.target_gamma||null,
 	   max_luma:exactEligible.max_luma||null,
 	   dv_map_mode:exactEligible.dv_map_mode||null,
+	   dv_tunnel_grid:dvRecordedGrid,
 	   observer_readings:clone(exactEligible.observer_readings||{}),
 	   steps:steps,
 	   readings:clone((exactEligible.readings||[]).filter(rd=>meterReadingHasLuminance(rd))),
@@ -8679,6 +8712,12 @@ function meterResolveSeriesSnapshotFromCache(key,options){
    // must never act as fallback measurements for native point-count presets.
    if(meterSeriesSnapshotIsImported(snap)) return;
    if(meterSeriesSnapshotSignalMode(snap,signalMode)!==signalMode) return;
+   // A DV run recorded on another tunnel grid than these steps were built
+   // on has other codes: its readings would be restamped with these.
+   if(signalMode==='dv'){
+    const want=meterDvStepsGridState(steps);
+    if(want!=null&&meterSeriesRecordedDvTunnelGrid(snap)!==want) return;
+   }
    const snapshotLg26=meta.points===26||meterSeriesSnapshotHasLgAutoCal26Markers(snap);
    if(snapshotLg26!==requestedLg26) return;
    candidates.push({snap:snap,exact:false});
@@ -8696,6 +8735,9 @@ function meterResolveSeriesSnapshotFromCache(key,options){
 	   if(!source) continue;
 	   const reading=clone(source);
 	   meterStampReadingStepMeta(reading,step);
+	   // Taken over from another run: the custom greyscale profile mark is the
+	   // step's, not the other run's.
+	   if(candidate.snap!==exactEligible&&step.grey_custom!==true) delete reading.grey_custom;
    meterNormalizeMeasuredReading(reading);
    mergedReadings.push(reading);
    break;
@@ -8724,6 +8766,17 @@ function meterResolveSeriesSnapshotFromCache(key,options){
 	  target_gamma:contextSnap.target_gamma||null,
 	  max_luma:contextSnap.max_luma||null,
 	  dv_map_mode:contextSnap.dv_map_mode||null,
+	  dv_tunnel_grid:dvRecordedGrid,
+	  // The run's own record of a custom greyscale profile, else what its own
+	  // steps and readings say (before steps built now and readings merged
+	  // from another point count take their place). No run of its own: what
+	  // the steps given and the readings taken over say (a reading keeps its
+	  // profile mark only where the step has one, the merge above), never the
+	  // series active or the profile at the moment it is resolved (stored on
+	  // "Clear" by meterPreserveOtherSeriesCacheOnClear).
+	  grey_custom:exactEligible?meterDvRunGreyCustomState(exactEligible,meterSeriesRecordedDvTunnelGridState(exactEligible))
+	   :(signalMode==='dv'?meterDvRunGreyCustomState({steps:steps,readings:mergedReadings},
+	     meterSeriesRecordedDvTunnelGridState({steps:steps,readings:mergedReadings})):null),
 	  steps:steps,
 	  readings:mergedReadings,
 	  white_reading:white,
@@ -9681,6 +9734,120 @@ function meterPatchInputMax(){
  return bits===12?4095:(bits===10?1023:255);
 }
 
+// The page's one rule for PGenerator 1.6's DV tunnel grid: a charted run's
+// codes, marks and targets follow that run (meterPreviewDvTunnelGrid: its
+// flag), a page without a run follows the cable (GET /api/config
+// dv_tunnel_grid, variables.pm pg_dv_tunnel_pg16_grid; meterRunSeries clears
+// the run before a new one). Rebuilding a recorded run (meterRecoverSeries,
+// meterResolveSeriesSnapshotFromCache) sets meterDvTunnelGridRebuild to the
+// grid it was run with while its steps are built.
+let meterDvTunnelGridRebuild=null;
+function meterDvTunnelGridNow(){
+ if(meterDvTunnelGridRebuild!=null) return meterDvTunnelGridRebuild?1:0;
+ return meterPreviewDvTunnelGrid();
+}
+
+// Whether a recorded run or snapshot was on 1.6's DV tunnel grid: its flag,
+// else its steps where they can say (meterDvStepsGridState), else its marked
+// readings (webui.pm webui_dv_step_on_tunnel_grid). A patch re-read on the
+// cable's grid in a run of the other grid marks one reading, not the run.
+// A run recorded before the grid, or off it, says nothing and was not.
+function meterSeriesRecordedDvTunnelGridState(src){
+ if(!src) return null;
+ if(src.dv_tunnel_grid!=null) return src.dv_tunnel_grid===true;
+ const steps=meterDvStepsGridState(Array.isArray(src.steps)?src.steps:null);
+ if(steps!=null) return steps;
+ const readings=Array.isArray(src.readings)?src.readings:[];
+ const steplessSays=[src.steps,readings].some(list=>Array.isArray(list)&&list.length);
+ return steplessSays?readings.some(rd=>rd&&rd.dv_tunnel_grid===true):null;
+}
+function meterSeriesRecordedDvTunnelGrid(src){
+ return meterSeriesRecordedDvTunnelGridState(src)===true;
+}
+
+// Whether a list of steps was built on 1.6's DV tunnel grid: only its 10-
+// and 12-bit steps can say (an 8-bit step is on the grid as it is and never
+// marked); null when none of them is one.
+function meterDvStepsGridState(list){
+ if(!Array.isArray(list)) return null;
+ // The White/Black Ref the daemon puts in front (3760, 256 in DV) lie on
+ // both grids: they say nothing about it.
+ const markable=list.filter(st=>meterDvTunnelStepMax(st)!=null&&!meterIsWhiteReferenceReading(st));
+ return markable.length?markable.some(st=>st.dv_tunnel_grid===true):null;
+}
+
+// The 10- or 12-bit maximum a DV step or reading was sent at, as the grid
+// reads it (webui-workspace.js meterStepsOnDvTunnelGrid, webui.pm
+// webui_dv_step_on_tunnel_grid): its input_max, else 4095 when a code is
+// above 255 (the DV saturation steps carry no input_max). null: an 8-bit
+// one, or none that can say.
+function meterDvTunnelStepMax(o){
+ if(!o||typeof o!=='object') return null;
+ const max=Number(o.input_max);
+ if(max===1023||max===4095) return max;
+ if(o.input_max!=null&&o.input_max!=='') return null;
+ const codes=['r','g','b'].map(k=>Number(o[k+'_code']!=null?o[k+'_code']:o[k]));
+ return codes.some(c=>Number.isFinite(c)&&c>255)?4095:null;
+}
+
+// Whether a run was sent with a custom greyscale profile's stimuli (webui.pm
+// "grey_custom" on its grey steps): its own record (the snapshot's flag,
+// meterCacheSeriesState), else every grey step marked, else most of its greys
+// read so (steps rebuilt by the page, a restore or a recovery, carry no
+// mark). One re-read, with the profile or without it, does not decide the
+// run. A run on the grid that says nothing of it had none; one that says
+// nothing of either (no run, or one recorded before them): null, the
+// profile decides (meterDvGreyCustomTargetsNow).
+function meterDvRunGreyCustomState(src,runGrid){
+ if(!src) return null;
+ if(src.grey_custom!=null) return src.grey_custom===true;
+ const greys=(list,codeKeys)=>Array.isArray(list)?list.filter(st=>st&&typeof st==='object'
+  &&codeKeys.every(k=>st[k]!=null)
+  &&!st.series_white_reference&&!meterIsWhiteReferenceReading(st)
+  &&(st.series_type==null||String(st.series_type).toLowerCase()==='greyscale')):[];
+ const steps=greys(src.steps,['r','g','b']);
+ if(steps.length&&steps.every(st=>st.grey_custom===true)) return true;
+ const readings=greys(src.readings,['r_code','g_code','b_code']);
+ const marked=readings.filter(rd=>rd.grey_custom===true).length;
+ if(marked>0&&marked*2>Math.max(steps.length,readings.length)) return true;
+ return runGrid===true?false:null;
+}
+
+// Whether a DV grey's target is its custom greyscale profile's nominal slot:
+// a charted run says so (webui.pm "grey_custom" on its steps or readings); a
+// page without a run asks the profile, as the daemon applies it (a series of
+// 11, 21, 30 or 100 points, whose CSV it sends: webui.pm grey_steps_<n>).
+function meterDvGreyCustomTargetsNow(){
+ if(typeof meterActiveSeriesGreyCustom!=='undefined'&&meterActiveSeriesGreyCustom!=null) return !!meterActiveSeriesGreyCustom;
+ if(!(typeof meterGreyscaleCustomTargetActive==='function'&&meterGreyscaleCustomTargetActive())) return false;
+ const points=(typeof meterActiveSeriesPoints!=='undefined')?meterActiveSeriesPoints:0;
+ // 256 points run the 100-point CSV (webui.pm webui_meter_series_start).
+ return [11,21,30,100].includes(Number(points)===256?100:Number(points));
+}
+
+// Whether DV targets follow PGenerator 1.6's tunnel grid: the charted run says
+// so (meterSetActiveSeriesChartContext); else the daemon, for the cable now
+// (GET /api/config dv_tunnel_grid, variables.pm pg_dv_tunnel_pg16_grid). The
+// Patch Companion gets the same codes (maintainer, 2026-11-18).
+function meterPreviewDvTunnelGrid(){
+ if(typeof meterActiveSeriesDvTunnelGrid!=='undefined'&&meterActiveSeriesDvTunnelGrid!=null) return meterActiveSeriesDvTunnelGrid?1:0;
+ return (typeof config!=='undefined'&&config&&String(config.dv_tunnel_grid)==='1')?1:0;
+}
+
+// A Dolby Vision grey on 1.6's tunnel grid is sent as its gridded code, not
+// as its nominal percentage: its target follows that code, as an SDR grey's
+// does (meterGreyTargetSignal). The code's signal fraction, or null (off the
+// grid, no code). Not for a custom greyscale profile, whose target is its
+// nominal slot (meterGreyTargetSignal; meterDvGreyCustomTargetsNow). Nor for
+// a custom series, whose 8/10-bit steps carry their own targets.
+function meterDvGridCodeSignalFraction(code){
+ if(!meterPreviewDvTunnelGrid()||code==null||code===''||!Number.isFinite(Number(code))) return null;
+ if(meterDvGreyCustomTargetsNow()) return null;
+ if(typeof meterActiveSeriesPoints!=='undefined'&&Number(meterActiveSeriesPoints)>=900) return null;
+ if(typeof meterGreySignalFractionFromCode!=='function') return null;
+ return meterGreySignalFractionFromCode(Number(code));
+}
+
 const meterPreviewSignalCodePolicies=new Map();
 function meterPreviewSignalCodePolicy(options){
  const opts=options||{};
@@ -9704,6 +9871,14 @@ function meterPreviewSignalCodePolicy(options){
   input.dv_series_code_bits=12;
   input.dv_series_full_range=0;
   input.dv_interface=context&&context.dv_interface?context.dv_interface:'standard';
+  // The page's one rule (meterDvTunnelGridNow): a charted run's grid, with
+  // its interface above, else the cable's; the steps follow the same
+  // (webui-workspace.js meterStepsOnDvTunnelGrid), and so do targets drawn
+  // from these codes (meterActualSignalPercent).
+  input.dv_tunnel_grid=meterDvTunnelGridNow();
+  // 1.6's tunnel grid is a Standard one: its codes are Standard codes,
+  // whatever interface a conf written without a restart says.
+  if(input.dv_tunnel_grid) input.dv_interface='standard';
  }
  if(opts.lgExtendedSdr) input.extended_sdr_codes=1;
  if(opts.lgLegalSdrDdc) input.legal_sdr_ddc_codes=1;
@@ -9837,6 +10012,8 @@ function meterDvAbsoluteTargetRollOffFraction(peak){
 }
 
 function meterDvTargetSignalFraction(ire,code){
+ const gridded=meterDvGridCodeSignalFraction(code);
+ if(gridded!=null) return clampNum(gridded,0,1);
  const pct=Number(ire);
  if(Number.isFinite(pct)) return clampNum(pct/100,0,1);
  if(code!=null&&code!==''&&typeof meterGreySignalFractionFromCode==='function'){
@@ -9861,7 +10038,8 @@ function meterDvAbsoluteChartTargetLuminance(ire, peak, code){
 
 function meterDvRelativeChartTargetLuminance(ire, peak, code){
  const targetPeak=(peak>0)?peak:100;
- const frac=clampNum((ire||0)/100,0,1);
+ const gridded=meterDvGridCodeSignalFraction(code);
+ const frac=clampNum(gridded!=null?gridded:(ire||0)/100,0,1);
  return Math.min(targetPeak,gammaEotf(frac,2.2)*targetPeak);
 }
 
@@ -14016,7 +14194,10 @@ function meterGreyCodeLooksHeadroom(code){
 function meterGreyTargetSignal(ire,code){
  const headroomIre=Number(ire)>100;
  const nominal=Math.max(0,Math.min((meterGreyAllowsHeadroomTargets()||headroomIre)?1.1:1,(ire||0)/100));
- if(meterChartIsDv()) return nominal;
+ if(meterChartIsDv()){
+  const gridded=meterDvGridCodeSignalFraction(code);
+  return gridded!=null?gridded:nominal;
+ }
  // Custom greyscale: the target must follow the nominal IRE only. Ignore the
  // passed code so a custom 10-bit code (which can look headroom >255, or trip
  // the HDR/PQ code-decode branch) does not re-bend the target signal.
@@ -14372,7 +14553,12 @@ function meterGreyTargetLuminanceForChartPoint(signal,Lw,Lb,point){
 		// which must NOT move the target. The caller (curve builder / per-reading
 		// target) already reduced the position to the nominal slot and passed it
 		// as `signal`; use that and ignore the row so the target line is smooth.
-		if((typeof meterGreyscaleCustomTargetActive==='function')&&meterGreyscaleCustomTargetActive()){
+		// On 1.6's DV tunnel grid a charted run says whether it ran with the
+		// profile (meterDvGreyCustomTargetsNow), not the profile now.
+		const customTargets=(meterChartIsDv()&&meterPreviewDvTunnelGrid())
+		 ?meterDvGreyCustomTargetsNow()
+		 :((typeof meterGreyscaleCustomTargetActive==='function')&&meterGreyscaleCustomTargetActive());
+		if(customTargets){
 		 const frac=Number(signal);
 		 return meterGreyTargetLuminance(Number.isFinite(frac)?frac*100:0,Lw,Lb||0,null);
 		}
@@ -14978,7 +15164,14 @@ function meterCalibrationTargetContextFromSource(source,metaStep,metaReading){
  const dvMapEl=document.getElementById('dv_map_mode');
  const dvMap=src.dv_map_mode!=null?src.dv_map_mode:(step.dv_map_mode!=null?step.dv_map_mode:(reading.dv_map_mode!=null?reading.dv_map_mode:((dvMapEl&&dvMapEl.value)||'')));
  const dvInterfaceEl=document.getElementById('dv_interface');
- const dvInterface=src.dv_interface!=null?src.dv_interface:(step.dv_interface!=null?step.dv_interface:(reading.dv_interface!=null?reading.dv_interface:((dvInterfaceEl&&dvInterfaceEl.value)||'')));
+ // A live series: the cable's interface (webui.pm webui_meter_series_start,
+ // variables.pm pg_dv_cable_conf), not a select not yet applied. A cable on
+ // 1.6's tunnel grid (GET /api/config dv_tunnel_grid) is a Standard one,
+ // whatever transport a conf written without a restart says; else the
+ // conf's transport.
+ const liveDvInterface=(typeof config!=='undefined'&&config&&String(config.dv_tunnel_grid)==='1')?'0'
+  :((typeof config!=='undefined'&&config&&config.dv_transport)?dvTransportDefaults(config.dv_transport).dv_interface:((dvInterfaceEl&&dvInterfaceEl.value)||''));
+ const dvInterface=src.dv_interface!=null?src.dv_interface:(step.dv_interface!=null?step.dv_interface:(reading.dv_interface!=null?reading.dv_interface:liveDvInterface));
  const rangeEl=document.getElementById('rgb_quant_range');
  const transportLimited=String((rangeEl&&rangeEl.value)||'2')==='1';
  const patternLimited=(typeof meterPatchUsesVideoRange==='function')?meterPatchUsesVideoRange():transportLimited;
@@ -15022,6 +15215,8 @@ function meterSetActiveSeriesChartContext(source){
   meterActiveSeriesMaxLuma=null;
   meterActiveSeriesDvMapMode=null;
   meterActiveSeriesDvInterface=null;
+  meterActiveSeriesDvTunnelGrid=null;
+  meterActiveSeriesGreyCustom=null;
   console.warn('chart target context rejected; charting without a context',src&&src.name);
   return null;
  }
@@ -15031,6 +15226,14 @@ function meterSetActiveSeriesChartContext(source){
  meterActiveSeriesMaxLuma=context.signal_peak_nits>0?context.signal_peak_nits:null;
  meterActiveSeriesDvMapMode=context.dv_map_mode==='absolute'?'1':(context.dv_map_mode==='relative'?'2':null);
  meterActiveSeriesDvInterface=context.dv_interface==='low_latency'?'1':(context.dv_interface==='standard'?'0':null);
+ // On 1.6's tunnel grid: the run says so (meterSeriesRecordedDvTunnelGridState:
+ // its flag, else its steps where they can say, else its readings; a patch
+ // re-read on another grid does not move the run). A run recorded before the
+ // grid, or off it, is not on it; without a run, the cable decides.
+ const runGrid=meterSeriesRecordedDvTunnelGridState(src);
+ meterActiveSeriesDvTunnelGrid=context.signal_mode!=='dv'?false:runGrid;
+ // Run with a custom greyscale profile's stimuli (meterDvRunGreyCustomState).
+ meterActiveSeriesGreyCustom=meterDvRunGreyCustomState(src,runGrid);
  return context;
 }
 
@@ -17083,8 +17286,14 @@ function meterRecoverSeries(s){
 	  if(basis>=101) return 100;
 	  return basis>0&&basis<=11?11:21;
 	 };
- // Recover steps: prefer server-provided steps, else rebuild client-side
+ // Recover steps: prefer server-provided steps, else rebuild client-side.
+ // Whatever is rebuilt here (the steps, the series definition they are
+ // matched against) gets the codes the run was run with: 1.6's DV tunnel
+ // grid only for a run that says so (its flag, or its gridded steps); a run
+ // recorded before the grid, or off it, keeps the exact codes.
  let steps=null;
+ meterDvTunnelGridRebuild=meterSeriesRecordedDvTunnelGrid(s)?1:0;
+ try{
  if(s.steps&&Array.isArray(s.steps)&&s.steps.length>0){
   steps=s.steps;
   if(type!=='greyscale'&&type!=='colors'&&type!=='saturations'){
@@ -17115,6 +17324,7 @@ function meterRecoverSeries(s){
 	  steps=meterRecoveryDisplaySteps(type,points,steps);
 	  steps=meterApplyColorSeriesTargetWhiteReference(steps,type,points);
 	 }
+ }finally{ meterDvTunnelGridRebuild=null; }
  meterSeriesSteps=steps;
  if(!s.series_id&&Array.isArray(s.executed_steps)&&s.executed_steps.length){
   meterExecutedSeriesSteps=Object.freeze(s.executed_steps.map(step=>Object.freeze({...step})));
@@ -17278,6 +17488,22 @@ function meterRecoverSeries(s){
 function meterStampReadingStepMeta(reading,step){
  if(!reading||!step) return reading;
  const alternateStimulus=meterReadingUsesAlternateStimulus(reading,step);
+ // A DV reading keeps the 10/12-bit codes it was sent with when the step
+ // comes from another tunnel grid (1.6's, or none): a run recorded before
+ // or off the grid restored on a cable on it, a patch re-read on the cable's
+ // grid in such a run (webui-workspace.js meterStepOnCableDvTunnelGrid).
+ // Codes the step shares with the reading are no other grid's: then the
+ // step's mark is the reading's too.
+ const sameCodes=['r','g','b'].every(k=>step[k]==null||Number(reading[k+'_code'])===Number(step[k]));
+ // Steps the page builds and the meter's readings carry no signal_mode: the
+ // reading's target context, else the charted run's mode.
+ const ctxMode=reading.calibration_target_context&&reading.calibration_target_context.signal_mode;
+ const stampMode=String(reading.signal_mode||step.signal_mode||ctxMode
+  ||((typeof meterActiveChartSignalMode==='function')?meterActiveChartSignalMode():'')||'').toLowerCase();
+ const keepSentCodes=stampMode==='dv'
+  &&reading.r_code!=null&&!sameCodes
+  &&meterDvTunnelStepMax(reading)!=null&&meterDvTunnelStepMax(step)!=null
+  &&(reading.dv_tunnel_grid===true)!==(step.dv_tunnel_grid===true);
  if(step.ire!=null) {
   reading.ire=step.ire;
   reading.nominal_ire=step.ire;
@@ -17290,7 +17516,7 @@ function meterStampReadingStepMeta(reading,step){
   if(step.g!=null) reading.nominal_g_code=step.g;
   if(step.b!=null) reading.nominal_b_code=step.b;
   if(reading.stimulus!=null) reading.patch_stimulus=reading.stimulus;
- } else {
+ } else if(!keepSentCodes) {
   if(step.r!=null) reading.r_code=step.r;
   if(step.g!=null) reading.g_code=step.g;
   if(step.b!=null) reading.b_code=step.b;
@@ -17298,7 +17524,7 @@ function meterStampReadingStepMeta(reading,step){
  if(step.series_type!=null) reading.series_type=step.series_type;
  if(step.series_white_reference!=null) reading.series_white_reference=step.series_white_reference;
  if(!alternateStimulus&&step.stimulus!=null) reading.stimulus=step.stimulus;
- if(!alternateStimulus&&step.input_max!=null) reading.input_max=step.input_max;
+ if(!alternateStimulus&&!keepSentCodes&&step.input_max!=null) reading.input_max=step.input_max;
 	 if(!alternateStimulus&&step.signal_r_pct!=null) reading.signal_r_pct=step.signal_r_pct;
 	 if(!alternateStimulus&&step.signal_g_pct!=null) reading.signal_g_pct=step.signal_g_pct;
 	 if(!alternateStimulus&&step.signal_b_pct!=null) reading.signal_b_pct=step.signal_b_pct;
@@ -17323,6 +17549,11 @@ function meterStampReadingStepMeta(reading,step){
  if(step.target_Z!=null) reading.target_Z=step.target_Z;
  if(step.dv_absolute_white_y!=null) reading.dv_absolute_white_y=step.dv_absolute_white_y;
  if(step.dv_absolute_target_y!=null) reading.dv_absolute_target_y=step.dv_absolute_target_y;
+ // The reading takes the step's codes, or has them: the step's mark too,
+ // also its absence (a 10/12-bit DV step without one is off the grid).
+ if(!keepSentCodes&&step.dv_tunnel_grid!=null) reading.dv_tunnel_grid=step.dv_tunnel_grid;
+ else if(!keepSentCodes&&(!alternateStimulus||sameCodes)&&stampMode==='dv'&&meterDvTunnelStepMax(step)!=null) delete reading.dv_tunnel_grid;
+ if(step.grey_custom!=null) reading.grey_custom=step.grey_custom;
  if(step.dv_absolute_rolloff_pct!=null) reading.dv_absolute_rolloff_pct=step.dv_absolute_rolloff_pct;
  if(step.dv_absolute_tunnel_gamma!=null) reading.dv_absolute_tunnel_gamma=step.dv_absolute_tunnel_gamma;
  if(step.dv_absolute_st2084_precomp!=null) reading.dv_absolute_st2084_precomp=step.dv_absolute_st2084_precomp;
@@ -17545,11 +17776,13 @@ function meterEnsureReadingsIndex(){
  return meterReadingsIndex;
 }
 
-function meterUpsertSeriesReading(reading,step){
+// sentStep: the step as the caller sent it, when it put it on the cable's
+// grid itself (a continuous read); step finds the series step.
+function meterUpsertSeriesReading(reading,step,sentStep){
  if(!reading) return;
  meterNormalizeMeasuredReading(reading);
  const canon=meterCanonicalSeriesStep(step||reading);
- if(canon) meterStampReadingStepMeta(reading,canon);
+ if(canon) meterStampReadingStepMeta(reading,meterDvSentStampStep(reading,canon,sentStep||step));
  if(!Array.isArray(meterReadings)) meterReplaceReadings([]);
  const index=meterEnsureReadingsIndex();
  const keys=meterReadingIndexKeys(reading);
@@ -17567,6 +17800,38 @@ function meterUpsertSeriesReading(reading,step){
   keys.forEach(key=>{ if(!index.has(key)) index.set(key,idx); });
   meterReadingsIndexLength=meterReadings.length;
  }
+}
+
+// A DV read records the step that was sent, not the series step of its
+// name: the page puts what it sends on the cable's grid
+// (webui-workspace.js meterStepOnCableDvTunnelGrid, meterApplyReadStepPayload)
+// and the daemon's codes say whether they come from the custom greyscale
+// profile (meterStepWithDaemonCodes). The meter's reading carries the codes
+// sent (meter_session.sh r_code..b_code) but neither input_max nor a mark:
+// where they are the sent step's and not the series step's, the sent step's
+// codes, input_max and mark stamp it.
+function meterDvSentStampStep(reading,canon,given){
+ // The series step itself may be the one asked for: what was sent is still
+ // its cable form.
+ if(!canon||!given) return canon;
+ const mode=String(reading.signal_mode||given.signal_mode||canon.signal_mode||((typeof meterActiveChartSignalMode==='function')?meterActiveChartSignalMode():'')).toLowerCase();
+ if(mode!=='dv') return canon;
+ const codes=['r','g','b'];
+ const readsCodes=st=>codes.every(k=>st&&st[k]!=null&&reading[k+'_code']!=null&&Number(reading[k+'_code'])===Number(st[k]));
+ // The step asked for, as the caller sent it (a continuous read puts it on
+ // the cable's grid when it sends it); else its cable form now.
+ const sent=readsCodes(given)?given
+  :((typeof meterStepOnCableDvTunnelGrid==='function')?(meterStepOnCableDvTunnelGrid(given)||given):given);
+ const out={...canon};
+ if(sent.grey_custom===true) out.grey_custom=true;
+ const sentCodes=readsCodes(sent);
+ if(sentCodes&&codes.some(k=>Number(sent[k])!==Number(canon[k]))){
+  codes.forEach(k=>{ out[k]=sent[k]; });
+  const max=meterDvTunnelStepMax(sent);
+  if(max!=null) out.input_max=max;
+  if(sent.dv_tunnel_grid===true) out.dv_tunnel_grid=true; else delete out.dv_tunnel_grid;
+ }
+ return out;
 }
 
 function meterReadingHasLuminance(rd){
@@ -17659,6 +17924,12 @@ function meterCacheSeriesState(status,options){
 	  max_luma:meterActiveSeriesMaxLuma||null,
 	  dv_map_mode:meterActiveSeriesDvMapMode||null,
 	  dv_interface:meterActiveSeriesDvInterface||null,
+	  dv_tunnel_grid:meterActiveSeriesDvTunnelGrid==null?null:meterActiveSeriesDvTunnelGrid===true,
+	  // The custom greyscale profile the run's DV targets use: the run's, else
+	  // (no run: hand reads) the profile's as the page applies it now
+	  // (meterDvGreyCustomTargetsNow); recorded with its readings.
+	  grey_custom:meterActiveSeriesGreyCustom!=null?meterActiveSeriesGreyCustom===true
+	   :((activeSignalMode==='dv'&&readings.length)?meterDvGreyCustomTargetsNow():null),
 	  calibration_target_context:meterActiveCalibrationTargetContext?{...meterActiveCalibrationTargetContext}:null,
 	  selection_run:meterServerSeriesIsSelection({steps:meterExecutedSeriesSteps}),
 	  executed_steps:meterServerSeriesIsSelection({steps:meterExecutedSeriesSteps})
@@ -17716,6 +17987,8 @@ function meterRestoreSeriesFromCache(key){
 	  max_luma:cached.max_luma,
 	  dv_map_mode:cached.dv_map_mode,
 	  dv_interface:cached.dv_interface,
+	  dv_tunnel_grid:cached.dv_tunnel_grid,
+	  grey_custom:cached.grey_custom,
 	  calibration_target_context:cached.calibration_target_context?JSON.parse(JSON.stringify(cached.calibration_target_context)):null,
 	  selection_run:!!cached.selection_run,
 	  executed_steps:Array.isArray(cached.executed_steps)?JSON.parse(JSON.stringify(cached.executed_steps)):null,
@@ -18508,6 +18781,9 @@ async function meterStartSingleRead(readPayload,shouldCancel){
 
 function meterApplyReadStepPayload(readPayload,step){
  if(!readPayload||!step) return readPayload;
+ // The codes the meter session draws (meter_session.sh post_patch) are what
+ // goes on the cable: on 1.6's grid when the cable carries it.
+ if(typeof meterStepOnCableDvTunnelGrid==='function') step=meterStepOnCableDvTunnelGrid(step)||step;
  const ire=Number(step.ire);
  if(Number.isFinite(ire)){
   readPayload.ire=ire;
@@ -19926,10 +20202,15 @@ async function meterContinuousLoop(){
   const rr=getMeterRefreshRate();
   const delay=meterDelayMs();
 	  const requestedStep=meterClonePatchStep(meterCurrentPatchStep);
+	  // The step as it goes on the cable now (1.6's grid when the cable
+	  // carries it): the payload's codes and the reading's stamp, whatever
+	  // the conf says when the sample comes back.
+	  const sentStep=(requestedStep&&typeof meterStepOnCableDvTunnelGrid==='function')
+	   ?(meterStepOnCableDvTunnelGrid(requestedStep)||requestedStep):requestedStep;
   const patternSignalRange=meterMeasurementPatchSignalRange();
 	  const readPayload=meterMeasurementSignalContext({display_type:dtype,refresh_rate:rr||undefined,delay_ms:delay,ccss_override:(typeof getCcssOverride==='function')?getCcssOverride():undefined,target_gamut:(document.getElementById('meterTargetGamut')||{}).value||'auto',target_gamma:meterAutoCalTargetGammaValue(),pattern_provider:meterCalibrationReadPatternProvider()});
 	  if(requestedStep){
-	   meterApplyReadStepPayload(readPayload,requestedStep);
+	   meterApplyReadStepPayload(readPayload,sentStep);
 	   readPayload.patch_size=getMeterPatchSize();
 	   if(patternSignalRange!=null) readPayload.signal_range=patternSignalRange;
 		  }
@@ -19988,7 +20269,7 @@ async function meterContinuousLoop(){
    } else {
    const stampStep=requestedStep;
    if(meterSeriesSteps&&stampStep){
-    meterUpsertSeriesReading(rd,stampStep);
+    meterUpsertSeriesReading(rd,stampStep,sentStep);
     const white=meterFindSeriesWhiteReading(meterReadings);
     if(white) meterWhiteReading=white;
     const completedIresC=new Set();
@@ -20311,6 +20592,8 @@ let meterActiveSeriesTargetGamma=null; // target transfer function tied to activ
 let meterActiveSeriesMaxLuma=null; // HDR/DV peak tied to active series snapshot
 let meterActiveSeriesDvMapMode=null; // DV absolute/relative mode tied to active series snapshot
 let meterActiveSeriesDvInterface=null; // DV standard/low-latency interface tied to active series snapshot
+let meterActiveSeriesDvTunnelGrid=null; // DV codes on 1.6's tunnel grid (true/false), null: ask the conf
+let meterActiveSeriesGreyCustom=null; // run with a custom greyscale profile's stimuli (true/false), null: ask the profile
 let meterActiveCalibrationTargetContext=null; // immutable context v1 tied to active series snapshot
 let meterCurrentPatchStep=null; // currently displayed patch step object
 let meterPatternDisplayToken=0; // invalidates queued patch-display requests
@@ -20353,7 +20636,8 @@ function meterFreshSeriesContextKey(){
  return JSON.stringify([
   meterActiveSeriesType,meterActiveSeriesPoints,meterSeriesChartRevision,
   meterActiveSeriesSignalMode,meterActiveSeriesTargetGamma,meterActiveSeriesMaxLuma,
-  meterActiveSeriesDvMapMode,meterActiveSeriesDvInterface,
+  meterActiveSeriesDvMapMode,meterActiveSeriesDvInterface,meterActiveSeriesDvTunnelGrid,
+  (typeof config!=='undefined'&&config)?String(config.dv_tunnel_grid||''):'',
   value('meterPatchBitDepth'),value('meterPatchUsesVideoRange'),
   custom?{id:custom.id,kind:custom.kind,category:custom.category,mode:custom.mode,range:custom.range,params:custom.params,patches:custom.patches}:null
  ]);
@@ -20378,7 +20662,15 @@ function meterRecoveryDisplaySteps(type,points,workerSteps){
   if(Array.isArray(rebuilt)&&rebuilt.length+2>=run.length) candidates.push(rebuilt);
  }catch(e){}
  const runKeys=run.map(step=>meterStepNameKey(step)).filter(Boolean);
+ // A DV run keeps the codes it was recorded with: steps built for the page
+ // now (meterSelectSeries installs them before a restore) on another tunnel
+ // grid would restamp its readings.
+ const runGrid=meterDvStepsGridState(run);
  for(const candidate of candidates){
+  if(runGrid!=null){
+   const candidateGrid=meterDvStepsGridState(candidate);
+   if(candidateGrid!=null&&candidateGrid!==runGrid) continue;
+  }
   const candidateKeys=new Set(candidate.map(step=>meterStepNameKey(step)).filter(Boolean));
   const matched=runKeys.reduce((count,key)=>count+(candidateKeys.has(key)?1:0),0);
   // Selection may prepend measured-reference White/Black steps that are not
@@ -20669,6 +20961,10 @@ function meterDeselectCurrentPatch(options){
 }
 function meterSelectPatchFromInteraction(step,reading,opts){
 	 if(!step) return;
+	 // A cable change that arrived while a read held the patch has not been
+	 // taken up yet (the next poll would): fit a series without a run to the
+	 // cable now, so this click sends the code the cable carries.
+	 try{ if(typeof meterRebuildDvStepsForCable==='function') meterRebuildDvStepsForCable(); }catch(e){}
 	 const isColorSeries=meterActiveSeriesType==='colors'||meterActiveSeriesType==='saturations';
 	 const resolvedStep=meterCanonicalSeriesStep(step)||step;
 	 if(!(opts&&opts.preserveMulti)){

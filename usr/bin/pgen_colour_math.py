@@ -57,6 +57,19 @@ ICTCP_RGB_TO_LMS = (
 )
 
 
+def dv_tunnel_grid_code(code, input_max):
+    """The code nearest to code (of input_max: 1023 or 4095) that
+    PGenerator 1.6's 8-bit Standard Dolby Vision tunnel grid sends as it is
+    (PGSignalCode.pm dv_tunnel_grid_code, the twin): a multiple of
+    2 ** (bits - 8), the top code for step 256. Other maxima keep the code."""
+    bits = {1023: 10, 4095: 12}.get(input_max)
+    if not bits:
+        return code
+    grid = 1 << (bits - 8)
+    n = int(max(0, code) / float(grid) + 0.5)
+    return input_max if n >= 256 else n * grid
+
+
 def clamp(value, lower, upper):
     return max(lower, min(upper, value))
 

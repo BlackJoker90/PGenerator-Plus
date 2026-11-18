@@ -372,8 +372,8 @@ sub conf_after_helper_writes(@) {
 # pitpgd 2.0.3 picks it (edid_sink_caps, dv_vsif_build): standard DV as the
 # HDMI 1.4b VSIF with PB4/PB5 0 for a v0 block (length byte 0x19) or a v1
 # block of 15 bytes (0x0e), "1"; the Dolby VSIF 81 01 1B | 46 D0 00 | 02 for
-# any other block, "2". Low latency with PB5 0x10 (pitpgd: "BT.2020
-# container") when a v2 block sets interface bit 0 (Low-Latency-HDMI).
+# any other block, "2". Low latency as PGenerator 1.6 sends it, PB5 0
+# (dv_ll_bt2020 stays empty: pitpgd's PB5 0x10 is not taken over).
 # Without a block both are empty and the kernel sends its own form.
 # drm_override.so hands them to the patched vc4.ko (dovi_vsif_marker).
 # The rule lives in PGEdidDolby::dolby_vsif_form, which the self-test
@@ -422,21 +422,32 @@ sub calman_session_open (@) {
  return (defined($main::calibration_sessions) && $main::calibration_sessions=~/^Calman\|(?:UPGCI|G1 RPC)\|/m) ? 1 : 0;
 }
 
-# dv_profile of a Dolby Vision session without a PiTPG client (main.cpp:
-# 1 is the BT.2020 container, anything else P3-D65). $transport: the DV
+# (dv_profile, dv_packet) of a Dolby Vision session without a PiTPG
+# client. dv_profile: main.cpp takes 1 as the BT.2020 container, anything
+# else P3-D65. dv_packet: "calman" sends the display-management packet in
+# the form Calman's own Murideo and VideoForge Pro drivers hand their
+# generator (calmanv5.dll), "" PGenerator 1.6's (dovi_metadata.h); a PiTPG
+# client gets "pitpg" (normalize_dv_transport_conf). $transport: the DV
 # transport the caller is about to write, else the conf's. Only Standard
-# Dolby Vision has a container of its own (ofApp.cpp reads dv_profile under
-# is_std_DoVi only); Low Latency keeps 1, so a Calman session writes and
-# restarts nothing there. "Dolby Vision with Calman" counts from the first
-# picture Calman draws, or its own switch to Dolby Vision
-# ($calman_dv_container_taken, daemon.pm), until its last session ends: a
-# Calman that is connected and shows nothing leaves the WebUI's BT.2020,
-# whoever asks (a renderer start, the WebUI's Dolby Vision form).
-sub dv_session_profile (@) {
+# Dolby Vision has a container and a packet of its own (ofApp.cpp reads
+# them under is_std_DoVi only); Low Latency keeps 1 and "", so a Calman
+# session writes and restarts nothing there. "Dolby Vision with Calman"
+# counts from the first picture Calman draws, or its own switch to Dolby
+# Vision ($calman_dv_container_taken, daemon.pm), until its last session
+# ends: a Calman that is connected and shows nothing leaves the WebUI's
+# BT.2020 and 1.6's packet, whoever asks (a renderer start, the WebUI's
+# Dolby Vision form). Both from one look at the Calman session: the session
+# can end on another thread between two looks, and the container and the
+# packet form must come from the same one.
+sub dv_session_values (@) {
  my $transport=&pg_dv_transport_mode(shift);
- return "1" if($transport ne "standard");
- return ($main::calman_dv_container_taken && &calman_session_open()) ? &calman_dv_container() : "1";
+ return ("1","") if($transport ne "standard");
+ return ($main::calman_dv_container_taken && &calman_session_open()) ? (&calman_dv_container(),"calman") : ("1","");
 }
+
+# The Calman-session keys of a Standard Dolby Vision conf, as
+# dv_container_follow brings them: container and packet form.
+sub dv_session_keys (@) { return qw(dv_profile dv_packet); }
 
 # 1 while the conf is Standard (TV-led) Dolby Vision.
 sub dv_standard_active (@) {
@@ -452,12 +463,15 @@ sub dv_container_restart_needed (@) {
  return 0 if(!&pattern_generator_is_running());
  my $run=&renderer_running_conf();
  return 1 if(!$run);
- my $sent=defined($run->{"dv_profile"}) ? "$run->{dv_profile}" : "";
- my $conf=defined($pgenerator_conf{"dv_profile"}) ? "$pgenerator_conf{dv_profile}" : "";
- return ($sent eq $conf) ? 0 : 1;
+ for my $key (&dv_session_keys()) {
+  my $sent=defined($run->{$key}) ? "$run->{$key}" : "";
+  my $conf=defined($pgenerator_conf{$key}) ? "$pgenerator_conf{$key}" : "";
+  return 1 if($sent ne $conf);
+ }
+ return 0;
 }
 
-# Brings a Standard Dolby Vision conf's container to dv_session_profile:
+# Brings a Standard Dolby Vision conf's container to dv_session_values:
 # when Calman draws its first picture, when its last session ends, when the
 # WebUI option changes. Only the conf; the caller restarts the renderer when
 # dv_container_restart_needed says so. Low Latency Dolby Vision is left
@@ -468,9 +482,12 @@ sub dv_container_follow (@) {
  my $before_gate=shift;
  return 0 if($main::pitpg_clients || 0);
  return 0 if(!&dv_standard_active());
- my $want=&dv_session_profile("standard");
- return 0 if((defined($pgenerator_conf{"dv_profile"}) ? "$pgenerator_conf{dv_profile}" : "") eq $want);
- return 0 if(!&normalize_conf_write("DV container","dv_profile",$want));
+ my %want;
+ @want{qw(dv_profile dv_packet)}=&dv_session_values("standard");
+ my @writes=map { ((defined($pgenerator_conf{$_}) ? "$pgenerator_conf{$_}" : "") eq $want{$_}) ? () : ($_,$want{$_}) } &dv_session_keys();
+ return 0 if(!@writes);
+ return 0 if(!&normalize_conf_write("DV container",@writes));
+ my $want=$want{"dv_profile"};
  # A refusal later in the session goes back to the applied snapshot: it
  # keeps the container the renderer was restarted with. Not written: the
  # session's end still finds the renderer (close_connection compares it
@@ -478,8 +495,11 @@ sub dv_container_follow (@) {
  # writes the container among the settings its gate has yet to judge; a
  # pass writes the whole snapshot, a refusal puts dv_profile back with
  # the rest, as the renderer still sends it.
- &signal_applied_snapshot_set("dv_profile",$want) if(!$before_gate);
- &log("Signal: Dolby Vision container ".($want eq "2" ? "P3-D65" : "BT.2020")." ($who)");
+ if(!$before_gate) {
+  &signal_applied_snapshot_set(map { ($_,$want{$_}) } &dv_session_keys());
+ }
+ &log("Signal: Dolby Vision container ".($want eq "2" ? "P3-D65" : "BT.2020").
+      ($want{"dv_packet"} eq "calman" ? ", Calman's metadata packet" : "")." ($who)");
  return 1;
 }
 
@@ -517,7 +537,7 @@ sub normalize_dv_transport_conf(@) {
  # The standard DV container: while a PiTPG client is connected it is the
  # client's (dv_profile, or without one the primaries: main.cpp, as pitpgd
  # apply_now). While a Calman session is open it is "Dolby Vision with
- # Calman" (dv_session_profile). Any other DV session keeps the BT.2020
+ # Calman" (dv_session_values). Any other DV session keeps the BT.2020
  # container (dv_profile 1, 8.1). Primaries stay 1 (the renderer's BT.2020
  # PQ surface, as before), so a primaries value left by an earlier HDR10
  # session does not pick the container.
@@ -525,11 +545,16 @@ sub normalize_dv_transport_conf(@) {
  # low latency in RGB, the PQ from the mastering luminance (1.6's 62/3696
  # apply again).
  if(!($main::pitpg_clients || 0)) {
-  $wanted{"dv_profile"}=&dv_session_profile($dv_transport);
+  @wanted{qw(dv_profile dv_packet)}=&dv_session_values($dv_transport);
   $wanted{"primaries"}="1";
   $wanted{"dv_signal_range"}="";
   $wanted{"dv_ll_rgb"}="";
   $wanted{"dv_pq_source"}="";
+ } else {
+  # A PiTPG client gets PiTPG's packet, also beside a Calman session. Only
+  # Standard DV carries the packet: in Low Latency the key stays empty, so
+  # the client's apply and its close restart nothing for it.
+  $wanted{"dv_packet"}=($dv_transport eq "standard") ? "pitpg" : "";
  }
  my @writes=();
  for my $key (sort keys %wanted) {
@@ -1459,7 +1484,7 @@ sub hdmi_sink_connected (@) {
 our @signal_conf_keys=qw(mode_idx signal_mode is_sdr is_hdr eotf colorimetry
  primaries color_format max_bpc rgb_quant_range dv_status is_ll_dovi
  is_std_dovi dv_interface dv_transport dv_metadata dv_map_mode dv_color_space
- dv_profile dv_signal_range dv_ll_rgb dv_pq_source);
+ dv_profile dv_signal_range dv_ll_rgb dv_pq_source dv_packet);
 # HDR metadata the renderer reads while it runs: snapshotted and put back
 # with the signal keys, so a refused apply leaves the output as it was.
 # Optional in a snapshot: one written before they were added still
@@ -1702,14 +1727,22 @@ sub signal_applied_snapshot_write (@) {
 # back to the snapshot and would turn the key back under a renderer that
 # keeps sending it. The other entries stay as they are, absent ones absent.
 # No snapshot: nothing to do, the gate's next pass writes one from the conf.
+# One or more key/value pairs, written in one go: keys that belong together
+# (the Dolby Vision container and packet form) never land half.
 sub signal_applied_snapshot_set (@) {
- my ($key,$value)=@_;
+ my @pairs=@_;
  lock($signal_applied_guard);
  my $f=&_signal_state_read($signal_applied_file);
  return 1 if(!$f);
- my $entry="conf_$key";
- return 1 if(defined($f->{$entry}) && $f->{$entry} eq "$value");
- $f->{$entry}="$value";
+ my $changed=0;
+ while(@pairs) {
+  my ($key,$value)=splice(@pairs,0,2);
+  my $entry="conf_$key";
+  next if(defined($f->{$entry}) && $f->{$entry} eq "$value");
+  $f->{$entry}="$value";
+  $changed=1;
+ }
+ return 1 if(!$changed);
  return 1 if(&_signal_state_write($signal_applied_file,%$f));
  &log("Signal: could not write $signal_applied_file: $!") if(defined &log);
  return 0;

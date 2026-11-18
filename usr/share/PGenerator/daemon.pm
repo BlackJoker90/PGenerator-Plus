@@ -151,7 +151,7 @@ sub calman_levels_limited (@) {
 
 # "Dolby Vision with Calman": Calman is about to draw a picture. From here
 # until its last session ends, Standard Dolby Vision signals the session's
-# container (command.pm dv_session_profile), for the WebUI's patterns too.
+# container (command.pm dv_session_values), for the WebUI's patterns too.
 # Standard Dolby Vision that is already on (the WebUI's) takes it now: the
 # conf, and a renderer restart when the running one was started with
 # another container. Taken here and not in Calman's apply, so nothing of it
@@ -2406,7 +2406,7 @@ sub pattern_daemon {
       # dv_maxpq): main.cpp.
       if(&signal_mode_from_conf($conf) eq "dv") {
        for my $k (qw(dv_interface dv_profile dv_color_space dv_minpq dv_maxpq dv_diagonal dv_signal_range
-                     dv_pq_source)) {
+                     dv_pq_source dv_packet)) {
         $k{$k}=defined($conf->{$k}) ? "$conf->{$k}" : "";
        }
        my $v=sub { my $x=$conf->{$_[0]}; return defined($x) ? "$x" : ""; };

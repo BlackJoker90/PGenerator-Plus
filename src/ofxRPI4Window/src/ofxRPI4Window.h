@@ -423,6 +423,12 @@ public:
 	int initial_bit_depth = 0;
 	int starting_bpc = 0;
 	static int colorspace_on;
+	/* Standard DV tunnel codes as PGenerator 1.6's, computed exactly
+	   (outside PiTPG sessions; main.cpp); 0: PiTPG's. */
+	static int dv_tunnel_pg16;
+	/* This window loads the exact pg16 shaders (pg16_dovi_*_frag): main.cpp
+	   sets dv_tunnel_pg16 only then. */
+	static const int pg16_shaders = 1;
 	int colorspace_status = 0;
 	static int shader_init;
 	/* RGB Limited without the vc4 compression CSC: the patched vc4.ko (its

@@ -106,8 +106,10 @@ sub pitpg_closed (@) {
    %pitpg_session_before=();
    &pitpg_client_values_store();
   }
-  # The client's settings end with it: a new session reads the conf.
+  # The client's settings end with it: a new session reads the conf, and
+  # looks at the renderer's form again (pitpg_dv_session_form).
   %pitpg_settings=();
+  $pitpg_form_checked=0;
   # Settings still not put back must not become the output through what follows.
   if(!$put_back) {
    &log("PiTPG: refused settings still not put back; the output stays as it is");
@@ -116,7 +118,7 @@ sub pitpg_closed (@) {
   # Dolby Vision goes back to the form other sessions get (no client
   # counted now: normalize_dv_transport_conf clears the PiTPG-only keys and
   # pins the container), at once.
-  my @keys=qw(dv_profile primaries dv_signal_range dv_ll_rgb dv_pq_source color_format max_bpc rgb_quant_range);
+  my @keys=qw(dv_profile dv_packet primaries dv_signal_range dv_ll_rgb dv_pq_source color_format max_bpc rgb_quant_range);
   my %before=map { ($_ => $pgenerator_conf{$_} // "") } @keys;
   &normalize_dv_transport_conf();
   &pitpg_signal_cache_drop();
@@ -222,9 +224,10 @@ sub pitpg_hdmi_info (@) {
  my (undef,$raw)=&pitpg_edid();
  my ($dvmax)=&pitpg_display_luminance($raw);
  if(&pitpg_dv_ll()) {
-  # pitpgd hdmi_info: "(BT.2020 container)" only with VSIF PB5 bit 4. The
-  # kernel's packer sends PB5 0; the patched vc4.ko sets the bit when the
-  # VSVDB declares Low-Latency-HDMI (dv_ll_bt2020, dv_vsif_conf_for_vsvdb).
+  # pitpgd hdmi_info: "(BT.2020 container)" only with VSIF PB5 bit 4. We
+  # send PB5 0 as PGenerator 1.6 does: dv_vsif_conf_for_vsvdb leaves
+  # dv_ll_bt2020 empty, and an older conf's 1 goes at the next Dolby Vision
+  # renderer start (normalize_signal_mode_conf).
   my $bt2020=(($pgenerator_conf{"dv_ll_bt2020"} // "") eq "1" && &webui_vc4_dv_vsif_forms()) ? 1 : 0;
   $t.=", Dolby Vision Low-Latency (".($bt2020 ? "BT.2020 container" : "display's own colour container").")";
  } elsif(&pitpg_dv_tv_led()) {
@@ -877,6 +880,10 @@ sub pitpg_apply_output (@) {
   &pattern_generator_restart_unless_current($who);
   # The renderer started or was found on the conf, with what waited in it.
   %pitpg_live_waiting=();
+  # With PiTPG's packet form in the conf, it runs in that form: the session's
+  # form is checked (pitpg_dv_session_form), also after a renderer started
+  # without a start record.
+  $pitpg_form_checked=1 if(($pgenerator_conf{"dv_packet"} // "") eq "pitpg");
   return "";
  }
  return "Refused: ".&signal_patches_refused();
@@ -1266,11 +1273,57 @@ sub pitpg_source_range (@) {
  return &legacy_external_dv_active() ? "" : "LIMITED";
 }
 
+# Standard Dolby Vision in a PiTPG session draws with PiTPG's tunnel and
+# packet (dv_packet pitpg; main.cpp dv_tunnel_pg16 is 0 only then). A
+# renderer started before the session sends the form every other session
+# gets (PGenerator 1.6's tunnel and packet), and a client may draw without an
+# apply first (hello, then a patch): the conf takes the session's form
+# (normalize_dv_transport_conf, which counts the client) and the renderer
+# is restarted on it before the first draw. A conf that already says pitpg
+# is not enough: a classic SET_PGENERATOR_CONF writes it without a restart,
+# so the running renderer's start record decides (pitpg_renderer_form_other).
+# Once the output has the form it is not looked at again until the session
+# ends ($pitpg_form_checked, cleared by pitpg_closed), as long as the conf
+# still says pitpg: no record read per patch, and a renderer without a start
+# record is restarted once, not before every patch. Its close puts the form
+# back (pitpg_closed). "" when the output has the session's form, else why
+# not.
+our $pitpg_form_why="";
+our $pitpg_form_checked=0;
+sub pitpg_dv_session_form (@) {
+ return "" if(!&pitpg_dv_tv_led() || &pg_dv_transport_mode() ne "standard");
+ my $conf_pitpg=(($pgenerator_conf{"dv_packet"} // "") eq "pitpg") ? 1 : 0;
+ return "" if($pitpg_form_checked && $conf_pitpg);
+ if($conf_pitpg) {
+  if(!&pitpg_renderer_form_other()) { $pitpg_form_checked=1; return ""; }
+ } else {
+  &normalize_dv_transport_conf();
+  return "the Dolby Vision packet form of the session could not be written." if(($pgenerator_conf{"dv_packet"} // "") ne "pitpg");
+ }
+ &log("PiTPG: Standard Dolby Vision takes PiTPG's tunnel and packet for the session");
+ my $why=&pitpg_apply_output("PiTPG session form");
+ return "the Dolby Vision form of the session could not be applied. $why" if($why ne "");
+ $pitpg_form_checked=1;
+ return "";
+}
+
+# 1 when a running renderer was not started with PiTPG's packet form
+# (main.cpp dv_packet_form; the tunnel follows it), or nothing says what it
+# was started with (no start record). A renderer that is not running reads
+# the conf at its start.
+sub pitpg_renderer_form_other (@) {
+ return 0 if(!&pattern_generator_is_running());
+ my $run=&renderer_running_conf();
+ return 1 if(!$run);
+ return ((defined($run->{"dv_packet"}) ? "$run->{dv_packet}" : "") ne "pitpg") ? 1 : 0;
+}
+
 # Why pitpg_show drew nothing: a video root could not end, the pattern file
 # could not be written (create_tmp_file sets $pattern_write_failed on every
 # write), or no flip came.
 sub pitpg_not_shown (@) {
  my $what=shift;
+ return "$what could not be shown: $pitpg_form_why" if($pitpg_form_why ne "");
  return "$what could not be shown: the video could not be ended." if($pattern_load_video_not_ended);
  return "$what could not be shown: the pattern could not be written." if($pattern_write_failed);
  return "$what could not be shown: the renderer reported no new frame.";
@@ -1282,6 +1335,8 @@ sub pitpg_not_shown (@) {
 sub pitpg_show (@) {
  my ($fb,$frames)=@_;
  $pattern_load_video_not_ended=0;
+ $pitpg_form_why=&pitpg_dv_session_form();
+ return undef if($pitpg_form_why ne "");
  my $ps=&pitpg_pattern_string($fb,$frames);
  my @before=&pitpg_presented();
  my $written=&pitpg_monotonic_us();

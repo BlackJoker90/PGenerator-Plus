@@ -16,8 +16,49 @@ top priority, above any feature, in SDR, HDR10, HLG and Dolby Vision alike:
   - ST 2084 and ST 2086 for HDR10, ARIB STD-B67 for HLG;
   - CTA-861 for the AVI and DRM infoframes;
   - ETSI GS CCM 001 for the Dolby Vision metadata.
-- Where a standard is silent, PGenerator 1.6 is the reference (see
-  "Research, don't guess").
+- PGenerator 1.6 is the gold standard (reference implementation) for what
+  goes on the cable, wherever a standard leaves room (see "Research, don't
+  guess"). PiTPG (pitpgd) is not a reference: nothing is taken over from it
+  unchecked. Compare anything PiTPG-derived against 1.6 (binary, templates,
+  a readback), the standard and, where Calman drives a hardware generator,
+  Calman's own packet; where they differ, 1.6 wins unless a standard or a
+  readback proves otherwise, and name the difference. Where 1.6 departs
+  from a standard, the maintainer decides (Dolby Vision metadata id: 0 as
+  1.6, not stepping as ETSI 6.3.1). Decided exceptions to 1.6 (maintainer,
+  2026-11-17): in a Calman session the DV packet is Calman's own (with
+  `signal_color_space` 0), and the Standard DV infoframe follows the
+  display's Dolby block (Amlogic's rule; 1.6 sends HDMI 1.4b with HDMI_VIC
+  1 in every timing when a client sets 1.6's dv_interface to 1, its kernel
+  value for that layout; our conf's dv_interface 1 is Low Latency), with
+  PiTPG's two departures from that rule kept (maintainer, 2026-11-09 and
+  2026-11-17): a 12-byte version 1 block always gets the Dolby form, and
+  4K24/25/30 and 4096x2160p24 no HDMI_VIC. The metadata id is 0 in all
+  three packet forms, PiTPG's included (2026-11-18). The Standard DV packet
+  had taken over PiTPG's L4 block and start sequence, which neither 1.6 nor
+  Calman send; outside Calman and PiTPG sessions it now sends 1.6's
+  packet, checked against 1.6's templates by `t/renderer_dovi_metadata.t`
+  (ChadB, 2026-11-17). Outside PiTPG sessions the tunnel codes and the
+  metadata pixels are 1.6's: its matrix, 8-bit grid and packing, but
+  rounded exactly (integer arithmetic on the GPU, not 1.6's float32,
+  which a CPU model of its shader puts one Cb/Cr code off for ~0.03 % of
+  the colours; 1.6 on the GPU is not read back), without 1.6's
+  picture-path faults (fp16 texels 240..254, odd pixels paired with the
+  next pair), with exactly 3072 metadata pixels (1.6's stray white one
+  left out); PiTPG sessions keep PiTPG's arithmetic and parity embedding,
+  also for a first draw without an apply. The Pi 5 renderer flavour has
+  no 1.6 tunnel (`pg16_shaders` 0; its own tunnel is not read back). The
+  WebUI's DV series codes, and every patch it sends, lie on 1.6's 8-bit
+  grid whenever the cable
+  carries that tunnel (`pg_dv_tunnel_pg16_grid`: Standard in the running
+  renderer's start record when it runs in Dolby Vision, else the conf;
+  no PiTPG packet, no full
+  tunnel, a Pi 4; the Patch Companion gets the same codes),
+  so a run records the code sent and a grey's target
+  follows it (maintainer, 2026-11-18); a colour's target stays its
+  reference colour, as at 8 bits in SDR, and a custom greyscale profile
+  keeps its targets (`t/renderer_pg16_tunnel.t`, `t/pitpg_backend.t`,
+  `t/webui_dv_tunnel_grid.t`, `t/meter_series_dv_tunnel_grid.t`,
+  `t/webui_dv_grid_chart_targets.t`, `t/meter_saturation_series_steps.t`).
 
 ## Research, don't guess
 

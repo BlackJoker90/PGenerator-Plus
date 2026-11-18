@@ -20963,7 +20963,9 @@ function meterSelectPatchFromInteraction(step,reading,opts){
 	 if(!step) return;
 	 // A cable change that arrived while a read held the patch has not been
 	 // taken up yet (the next poll would): fit a series without a run to the
-	 // cable now, so this click sends the code the cable carries.
+	 // cable now, so a series the page builds (custom, HCFR, saturations,
+	 // matrix) sends the code the cable carries; a daemon-built series gets
+	 // its codes from the daemon, which reads the cable itself.
 	 try{ if(typeof meterRebuildDvStepsForCable==='function') meterRebuildDvStepsForCable(); }catch(e){}
 	 const isColorSeries=meterActiveSeriesType==='colors'||meterActiveSeriesType==='saturations';
 	 const resolvedStep=meterCanonicalSeriesStep(step)||step;

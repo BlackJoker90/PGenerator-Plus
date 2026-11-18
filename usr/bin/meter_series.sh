@@ -186,7 +186,7 @@ meta = {"type": stype, "points": points}
 # these top-level fields made a live series depend on whichever reading or
 # reconstructed step happened to be available during that poll, then caused a
 # second target/Delta-E calculation when the completed snapshot was restored.
-for key in ("signal_mode", "target_gamma", "max_luma", "dv_map_mode", "dv_interface", "true_black_panel"):
+for key in ("signal_mode", "target_gamma", "max_luma", "dv_map_mode", "dv_interface", "dv_tunnel_grid", "true_black_panel"):
     if key in state and state[key] is not None:
         meta[key] = state[key]
 sys.stdout.write(",".join(json.dumps(key) + ":" + json.dumps(value, separators=(",", ":"))
@@ -825,7 +825,7 @@ import json, math, os, sys, tempfile
 for candidate in (os.environ.get("PGEN_BIN_DIR", ""), "/usr/bin"):
     if candidate and candidate not in sys.path:
         sys.path.insert(0, candidate)
-from pgen_colour_math import pq_encode_nits
+from pgen_colour_math import pq_encode_nits, dv_tunnel_grid_code
 
 def finite(value):
     return value == value and value not in (float("inf"), float("-inf"))
@@ -877,10 +877,20 @@ for step in steps:
     linear = [number(step.get("colorchecker_linear_%s" % channel)) for channel in ("r", "g", "b")]
     if code_min is None or code_span is None or code_span <= 0 or any(value is None for value in linear):
         continue
+    # A step on PGenerator 1.6's Standard DV tunnel grid (webui.pm
+    # webui_dv_step_on_tunnel_grid) keeps its rebased code there too: the
+    # run records the code the cable carries.
+    on_grid = signal_mode == "dv" and step.get("dv_tunnel_grid") is True
+    input_max = number(step.get("input_max"))
+    if input_max is None:
+        # As webui_pattern reads the codes: above 255 they are 12-bit.
+        input_max = 4095 if code_min + code_span > 255 else 255
     for key, value in zip(("r", "g", "b"), linear):
         value = max(0.0, min(1.0, value))
         code = int(code_min + pq_encode_normalized(value * white_y) * code_span + 0.5)
         code = max(int(math.ceil(code_min)), min(int(math.floor(code_min + code_span)), code))
+        if on_grid:
+            code = dv_tunnel_grid_code(code, int(input_max))
         if step.get(key) != code:
             step[key] = code
             changed = True
@@ -1036,6 +1046,26 @@ def percent_from_step(step, channel):
             return value
     return 0.0
 
+def percent_from_grid_code(step):
+    # A grey on PGenerator 1.6's Standard DV tunnel grid (webui.pm
+    # webui_dv_step_on_tunnel_grid) is sent as its gridded code, not as its
+    # nominal percentage: its target follows that code, as in SDR. The grid
+    # applies to limited codes only (PGSignalCode.pm). The step's own
+    # input_max (10 or 12 bit; an 8-bit step is never marked), read before
+    # the 12-bit rewrite below. A custom greyscale profile ("grey_custom")
+    # keeps its stimulus target.
+    if step.get("dv_tunnel_grid") is not True or step.get("grey_custom") is True:
+        return None
+    try:
+        code = float(step.get("g"))
+        input_max = int(step.get("input_max", 4095))
+    except Exception:
+        return None
+    limits = {4095: (256.0, 3504.0), 1023: (64.0, 876.0)}.get(input_max)
+    if limits is None or not finite(code):
+        return None
+    return max(0.0, min(100.0, (code - limits[0]) / limits[1] * 100.0))
+
 def target_for_absolute_percent(percent):
     stim = max(0.0, min(1.0, float(percent) / 100.0))
     if stim <= 0:
@@ -1051,8 +1081,9 @@ for step in steps:
     # legal-range codes built by the client (256..3760); converting the PQ
     # target through a measured-white 2.2 carrier makes the TV decode PQ
     # twice and produces a severely crushed verification ramp.
+    grid_percent = percent_from_grid_code(step)
     step["input_max"] = 4095
-    target_y = target_for_absolute_percent(percent_from_step(step, "g"))
+    target_y = target_for_absolute_percent(percent_from_step(step, "g") if grid_percent is None else grid_percent)
     step["dv_absolute_white_y"] = white_y
     step["dv_absolute_target_y"] = target_y
     step["dv_absolute_rolloff_pct"] = pq_encode_normalized(white_y) * 100

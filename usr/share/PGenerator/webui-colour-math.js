@@ -150,7 +150,7 @@ function signalCodePolicy(input){
  let legalMin=limited?(bits===12?256:(bits===10?64:16)):0;
  let nominalWhite=limited?(bits===12?3760:(bits===10?940:235)):inputMax;
  let allowsHeadroom=false,maximumStimulus=100;
- let percentDomain='container_signal_percent',tunnelMode='none',activeTable=null;
+ let percentDomain='container_signal_percent',tunnelMode='none',dvTunnelGrid=0,activeTable=null;
  // Absent or empty means RGB (Perl parity); a provided value must be an
  // integer 0..2 (Number, not parseInt, so '1.7' is rejected, not truncated).
  const colorFormat=(input.color_format==null||input.color_format==='')?0:Number(input.color_format);
@@ -190,6 +190,10 @@ function signalCodePolicy(input){
   if(dvInterface==='1'||dvInterface==='ll') dvInterface='low_latency';
   if(!['standard','low_latency'].includes(dvInterface)) return null;
   tunnelMode='dolby_vision_'+dvInterface;
+  // Only on the cable of PGenerator 1.6's tunnel (the daemon's
+  // pg_dv_tunnel_pg16_grid, GET /api/config dv_tunnel_grid), and only for
+  // its limited codes (PGSignalCode.pm, the twin).
+  dvTunnelGrid=(input.dv_tunnel_grid&&String(input.dv_tunnel_grid)!=='0'&&dvInterface==='standard'&&limited)?1:0;
   percentDomain='dolby_vision_tunnel_signal_percent';
  }else if(strategy==='extended_sdr_codes'){
   if(mode!=='sdr') return null;
@@ -210,13 +214,23 @@ function signalCodePolicy(input){
   nominal_white_code:nominalWhite,physical_max_code:inputMax,
   allows_above_nominal_white:allowsHeadroom,
   maximum_stimulus_percent:maximumStimulus,
-  rounding_mode:'positive_half_up',tunnel_mode:tunnelMode,
+  rounding_mode:'positive_half_up',tunnel_mode:tunnelMode,dv_tunnel_grid:dvTunnelGrid,
   percent_domain:percentDomain,strategy,color_format:colorFormat,
   hdr20_use_limited:input.hdr20_use_limited?1:0,
   hdr20_full:input.hdr20_full?1:0,
   signal_peak_nits:input.signal_peak_nits==null?0:Number(input.signal_peak_nits),
   active_table:activeTable
  });
+}
+
+// Standard Dolby Vision: the nearest code PGenerator 1.6's 8-bit tunnel
+// grid sends as it is (PGSignalCode.pm dv_tunnel_grid_code, the twin).
+function dvTunnelGridCode(code,inputMax){
+ const bits={1023:10,4095:12}[Number(inputMax)];
+ if(!bits) return code;
+ const grid=1<<(bits-8);
+ const n=Math.round(Math.max(0,Number(code))/grid);
+ return n>=256?Number(inputMax):n*grid;
 }
 
 function signalPercentToCode(policy,stimulus){
@@ -270,6 +284,7 @@ function signalPercentToCode(policy,stimulus){
   const minimum=limited?(bits===12?256:(bits===10?64:16)):0;
   const span=limited?(bits===12?3504:(bits===10?876:219)):inputMax;
   code=clamp(Math.round(minimum+value*span),minimum,minimum+span);
+  if(policy.dv_tunnel_grid) code=dvTunnelGridCode(code,inputMax);
  }else if(strategy==='pq_luminance_percent'){
   code=clamp(Math.round(pqEncodeNormalized(clamp(stimulus,0,100)/100*policy.signal_peak_nits)*inputMax),0,inputMax);
  }else{

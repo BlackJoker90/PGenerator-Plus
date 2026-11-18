@@ -21,7 +21,6 @@
 #include "ofApp.h"
 #include <algorithm>
 #include <unistd.h>
-#include <sys/stat.h>
 
 /* Start Patch RPI P4 */
 #include "rgb2ycbcr.h"
@@ -837,6 +836,10 @@ void ofApp::setColor(int red, int green, int blue) {
   dv_source_red=ofClamp(red,0,dv_source_max);
   dv_source_green=ofClamp(green,0,dv_source_max);
   dv_source_blue=ofClamp(blue,0,dv_source_max);
+  if(ofxRPI4Window::dv_tunnel_pg16) {
+   doviSetPg16Color(dv_source_red,dv_source_green,dv_source_blue);
+   return;
+  }
   // Geometry still uses the 8-bit framebuffer. The standard-DV shader
   // consumes the unquantized source integers above and emits packed bytes.
   ofSetColor(255,255,255,255);
@@ -870,6 +873,38 @@ static int limitedCodeFromFull(int value, int full, int target_max) {
  * depth (scaleSourceToBitDepth), then brought to its range
  * (normalizeSourceValue).
  */
+/*
+ * The tunnel colour outside PiTPG sessions (ofxRPI4Window::dv_tunnel_pg16).
+ * 1.6's ofApp::setColor@0x703ec leaves code / 255. (ofSet10bitColor:
+ * / 1023) in globalColor, and its shader takes int(c * 256.0) << 4: a
+ * limited-range code on 1.6's 8-bit grid (255 gives 4096). Here the step is
+ * taken exactly (dovi::pg16Step; deeper codes land on that grid as a 10-bit
+ * colour would in 1.6, full-range source codes as their limited value),
+ * and the colour handed over is the middle of it,
+ * (step + 0.5) / 256, so the shader's int(c * 256.0) finds the step whatever
+ * float32 does to the quotient.
+ */
+void ofApp::doviSetPg16Color(int red, int green, int blue) {
+ int full=doviSourceFull(dv_source_range);
+ int v[3]={red,green,blue};
+ int step[3];
+ for(int i=0; i < 3; i++)
+  step[i]=dovi::pg16Step(v[i],dv_source_max,full);
+ ofGLProgrammableRenderer *renderer=exactColorRenderer();
+#ifdef OF_PGENERATOR_EXACT_COLOR
+ if(renderer) {
+  renderer->setExactColor((float)((step[0] + 0.5) / 256.0),(float)((step[1] + 0.5) / 256.0),(float)((step[2] + 0.5) / 256.0),1.f);
+  return;
+ }
+#endif
+ (void)renderer;
+ /* Without the exact colour (of-exact-color.patch, which both builds apply)
+    globalColor is code / 255. of an 8-bit code, as in 1.6: steps 0..254
+    and 256 come out exactly, 255 becomes 256 (1.6's 8-bit colour cannot
+    give 255 either). */
+ ofSetColor(std::min(step[0],255),std::min(step[1],255),std::min(step[2],255));
+}
+
 int ofApp::sourceToOutputCode(int value) {
  int source_max=cur_op().source_max;
  int target_max=(ofxRPI4Window::bit_depth == 10) ? 1023 : 255;
@@ -1126,7 +1161,15 @@ void ofApp::shader_begin(int is_image) {
   if (ofxRPI4Window::is_std_DoVi) {
 	/* The window loads dovi_image_shader for IMAGE draws (colorspace_on 0),
 	   else dovi_pattern_shader. */
-	if (!ofxRPI4Window::colorspace_on) {
+	if (ofxRPI4Window::dv_tunnel_pg16) {
+		/* 1.6's tunnel, exact (dovi::pg16Codes): its shader_begin@0x71274
+		   picks the matrix by dv_profile (1 BT.2020, 2 BT.709), here as
+		   integers per 10000; the colour is globalColor (doviSetPg16Color)
+		   or the image texture. */
+		dovi::Pg16Matrix m = dovi::pg16Matrix(ofxRPI4Window::dv_profile == 1 ? 1 : 2);
+		ofxRPI4Window::shader.setUniform3i("pg16_k", m.kr, m.kg, m.kb);
+		ofxRPI4Window::shader.setUniform2i("pg16_d", m.db, m.dr);
+	} else if (!ofxRPI4Window::colorspace_on) {
 		/* dovi_image_shader: 8-bit texels in float32 (one code off PiTPG
 		   near the rounding edge, see t/renderer_dovi_metadata.t). */
 		ofxRPI4Window::shader.setUniform2f("resolution", ofGetWindowWidth(), ofGetWindowHeight());
@@ -1239,6 +1282,7 @@ int ofApp::dv_minpq=62;
 int ofApp::dv_maxpq=3696;
 int ofApp::dv_diagonal=42;
 int ofApp::dv_full=0;
+int ofApp::dv_packet_form=dovi::form_pg16;
 
 /* How standard-DV source codes are normalised (pitpgd keeps this apart from
    the signal range: dv_ycc12's patch flag is set for patch scale Legal only,
@@ -1256,10 +1300,12 @@ int ofApp::doviSourceFull(int source_range) {
  #                   DoVi Metadata Packet                 #
  ##########################################################
 */
-/* The display-management packet as PiTPG 2.0.3 sends it, with ETSI's L1
-   average and a metadata id that steps on each change (dovi_metadata.h):
-   container from dv_profile (main.cpp), signal range, source min/max PQ and
-   diagonal, and the run mode in an L255 block when it is 1 or 2. */
+/* The display-management packet in the form dv_packet_form names
+   (dovi_metadata.h): PGenerator 1.6's, Calman's (the packet Calman hands a
+   Murideo or VideoForge Pro) or, for a PiTPG client, PiTPG 2.0.3's with
+   ETSI's L1 average; metadata id 0 in all three. Container from dv_profile
+   (main.cpp), signal range, source min/max PQ and diagonal, the run mode in
+   the L255 block. */
 void ofApp::dovi_packet_set(int run_mode) {
 	dovi::Params p;
 	p.container_2020 = (ofxRPI4Window::dv_profile == 1) ? 1 : 0;
@@ -1267,23 +1313,14 @@ void ofApp::dovi_packet_set(int run_mode) {
 	p.min_pq = dv_minpq;
 	p.max_pq = dv_maxpq;
 	p.diagonal = dv_diagonal;
+	p.form = dv_packet_form;
 	unsigned char packet[dovi::packet_bytes];
 	dovi::buildPacket(p, run_mode, packet);
-	if (!dv_metadata_id.have) {
-		// Gone after a daemon restart; if this fails, the save below logs it.
-		mkdir(dovi::metadata_id_dir, 0770);
-		dv_metadata_id.load(dovi::metadata_id_file);
-	}
-	int id = dv_metadata_id.next(packet);
-	if (!dv_metadata_id.save(dovi::metadata_id_file))
-		ofLogError() << "DoVi: cannot save the metadata id to " << dovi::metadata_id_file << ": " << strerror(errno)
-		             << " (the next renderer start steps on from the last saved id, or starts at 0)";
-	dovi::buildPacket(p, run_mode, packet, id);
 	dovi::packetWords(packet, dv_packet_words);
-	ofLog() << "DoVi: metadata " << (p.container_2020 ? "BT.2020" : "P3-D65") << " "
+	ofLog() << "DoVi: metadata " << (p.form == dovi::form_calman ? "Calman's form, " : (p.form == dovi::form_pitpg ? "PiTPG's form, " : "1.6's form, ")) << (p.container_2020 ? "BT.2020" : "P3-D65") << " "
 	        << (p.full ? "full" : "limited") << " range, PQ " << dovi::normalized(p).min_pq << "/"
 	        << dovi::normalized(p).max_pq << ", diagonal " << dovi::normalized(p).diagonal
-	        << ", run mode " << dovi::runModeFor(run_mode) << ", payload " << (int)packet[4] << " bytes, metadata id " << id;
+	        << ", run mode " << dovi::runModeFor(run_mode) << ", payload " << (int)packet[4] << " bytes, metadata id 0";
 }
 
 /*
@@ -1306,6 +1343,34 @@ void ofApp::dovi_metadata_create() {
 		short_img.getTexture().setTextureMinMagFilter(GL_NEAREST, GL_NEAREST);
 		drawDoviMetadataPixels(short_img, ofGetWindowWidth());
 		fbo_dovi.end();
+		return;
+	}
+
+	/* Start sequence of PiTPG's form (pitpgd dv_show@0x40d2c0): after every
+	   mode set with a run mode, the packet goes out without it (no L255
+	   block) for four frames plus 1 ms (67 ms when the refresh rate is
+	   unknown), then with it. Calman's and 1.6's forms have no such
+	   sequence: Calman hands its generator the packet with the run mode at
+	   once (calmanv5.dll), 1.6 rewrites its packet, run mode included,
+	   only when its conf values change. */
+	int run_mode = dovi::runModeFor(dv_map_mode);
+	int first_run_mode = 0;
+	dovi::startSequence(run_mode, dv_packet_form, &first_run_mode, &dv_start_pending);
+	dovi_packet_set(first_run_mode);
+	dv_start_t0 = 0;
+	double hz = 0.0;
+	ofxRPI4Window *win = dynamic_cast<ofxRPI4Window*>(ofGetWindowPtr());
+	if (win && win->mode.htotal && win->mode.vtotal)
+		hz = win->mode.clock * 1000.0 / ((double)win->mode.htotal * win->mode.vtotal);
+	dv_start_wait_ms = (hz > 1.0) ? (int)(4000.0 / hz) + 1 : 67;
+
+	/* Outside PiTPG sessions the metadata goes out as PGenerator 1.6 sends
+	   it: its own pixels over the first 3072 pixels of the frame
+	   (dovi_metadata_create@0x72a8c, 1.6's form of the codes; exactly 3072,
+	   not 1.6's 3073, whose last one stayed white). Both ways are ETSI GS
+	   CCM 001 6.4.1/6.4.3 (maintainer, 2026-11-18: 1.6's pixels). */
+	if (ofxRPI4Window::dv_tunnel_pg16) {
+		dovi_fixed_pixels_draw();
 		return;
 	}
 
@@ -1363,19 +1428,25 @@ void ofApp::dovi_metadata_create() {
 	if (!dovi_embed.setup(settings))
 		ofLogError() << "DoVi: metadata embedding shader failed to build";
 
-	/* Start sequence (pitpgd dv_show@0x40d2c0): after every mode set with a
-	   run mode, the packet goes out without it (no L255 block) for four
-	   frames plus 1 ms (67 ms when the refresh rate is unknown), then with
-	   it. */
-	int run_mode = dovi::runModeFor(dv_map_mode);
-	dovi_packet_set(0);
-	dv_start_pending = run_mode;
-	dv_start_t0 = 0;
-	double hz = 0.0;
-	ofxRPI4Window *win = dynamic_cast<ofxRPI4Window*>(ofGetWindowPtr());
-	if (win && win->mode.htotal && win->mode.vtotal)
-		hz = win->mode.clock * 1000.0 / ((double)win->mode.htotal * win->mode.vtotal);
-	dv_start_wait_ms = (hz > 1.0) ? (int)(4000.0 / hz) + 1 : 67;
+}
+
+void ofApp::dovi_fixed_pixels_draw() {
+	unsigned char bits[1024];
+	for (int k = 0; k < 1024; k++)
+		bits[k] = (dv_packet_words[k >> 5] >> (31 - (k & 31))) & 1;
+	const int meta_lines = doviWindowMetadataLines();
+	ofPixels pix;
+	ofImage img;
+	pix.allocate(ofGetWindowWidth(), meta_lines, OF_IMAGE_COLOR_ALPHA);
+	pix.setColor(255);
+	doviFillTunnel8(pix.getData(), ofGetWindowWidth(), meta_lines, bits);
+	img.setFromPixels(pix);
+	ofSetColor(255,255,255,255);
+	fbo_dovi.begin();
+	ofClear(0,0,0,0);
+	img.getTexture().setTextureMinMagFilter(GL_NEAREST, GL_NEAREST);
+	drawDoviMetadataPixels(img, ofGetWindowWidth());
+	fbo_dovi.end();
 }
 
 /*
@@ -1397,7 +1468,17 @@ void ofApp::dovi_metadata_mux() {
 		} else if (now - dv_start_t0 >= (uint64_t)dv_start_wait_ms) {
 			dovi_packet_set(dv_start_pending);
 			dv_start_pending = 0;
+			if (ofxRPI4Window::dv_tunnel_pg16)
+				dovi_fixed_pixels_draw();
 		}
+	}
+	if (ofxRPI4Window::dv_tunnel_pg16) {
+		/* 1.6's dovi_metadata_mux@0x73f0c: the frame, then its metadata
+		   pixels over the top lines. */
+		ofSetColor(255,255,255,255);
+		fbo8.draw(0,0,ofGetWindowWidth(),ofGetWindowHeight());
+		fbo_dovi.draw(0,0,ofGetWindowWidth(),doviWindowMetadataLines());
+		return;
 	}
 	ofSetColor(255,255,255,255); 
 	dovi_embed.begin();

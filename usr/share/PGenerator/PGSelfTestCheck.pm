@@ -417,7 +417,8 @@ sub drm_differences {
 #   standard, form 2 (v1-12 / v2 VSVDB): Dolby VSIF 46 D0 00, PB4 0x02;
 #   standard, form 1 (v0 / v1-15):       HDMI 1.4b VSIF 03 0C 00, PB4/PB5 0;
 #   low latency:                         Dolby VSIF, PB4 0x03, PB5 0x10 with
-#                                        dv_ll_bt2020 1 (VSVDB v2 LL-HDMI), else 0.
+#                                        dv_ll_bt2020 1, else 0 (the daemon
+#                                        leaves it empty, PB5 0 as 1.6).
 # Otherwise the kernel's own frames go out: standard as HDMI 1.4b with
 # PB4 0x20 / PB5 0x01 (forced HDMI_VIC 1), low latency PB4 0x03, PB5 0.
 # Returns {oui, length, pb4, pb5, form}.

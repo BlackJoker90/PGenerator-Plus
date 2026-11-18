@@ -1607,6 +1607,7 @@ int ofxRPI4Window::hdr_primaries=2;
 avi_infoframe ofxRPI4Window::avi_info;
 drm_hdr_output_metadata ofxRPI4Window::hdr_metadata;
 int ofxRPI4Window::colorspace_on = 0;
+int ofxRPI4Window::dv_tunnel_pg16 = 0;
 int ofxRPI4Window::shader_init = 0;
 
 bool ofxRPI4Window::rgbLimitedPassthroughSupported()
@@ -2182,6 +2183,102 @@ void ofxRPI4Window::rgb2ycbcr_shader()
 }
 #endif
 
+/* The standard Dolby Vision tunnel outside PiTPG sessions (dv_tunnel_pg16):
+ * PGenerator 1.6's (PGeneratord sha256 5882ec1b..., its shaders at file
+ * offsets 0x1d1b88 pattern and 0x1d1020 image), computed exactly
+ * (maintainer, 2026-11-18): a CPU model of 1.6's float32 shader rounds
+ * 0.02-0.03 % of the colours one Cb or Cr code the wrong way (1.6 itself on
+ * the GPU is not read back). The same steps as
+ * dovi::pg16Codes (dovi_metadata.h, which states the arithmetic), in 32-bit
+ * ints between the PG16_EXACT markers (pg16_exact_glsl, in both shaders),
+ * which t/renderer_pg16_tunnel.t compiles against it. Kept from 1.6: int(c * 256) << 4 per channel (the
+ * 8-bit grid, 255 -> 256), no clamp, the pair's mean for Cb (even x) and Cr
+ * (odd x), and its packing R = C >> 4, G = Y >> 4, B = Y & 15 | (C & 15) << 4
+ * into an 8-bit unorm (Y 4096 reads 4080). The image shader decodes each
+ * texel by round(t * 255): the GPU hands 8-bit texels over as 16-bit floats,
+ * and 1.6's int(t * 256) turned 240..254 into 241..255 (read back on the Pi,
+ * 2026-11-18). It pairs x with x + 1 for even x and x - 1 with x for odd x:
+ * 1.6's image shader paired each pixel with the one to its right, so an odd
+ * pixel carried the Y and Cr of the next pair (read back, 2026-11-18).
+ * ofApp::shader_begin sets pg16_k (Kr, Kg, Kb) and pg16_d (Db, Dr) per
+ * 10000. */
+static const char *pg16_exact_glsl = R"PG16(
+		// PG16_EXACT begin
+		int pg16_luma(ivec3 q)
+		{
+			return (pg16_k.x * q.x + pg16_k.y * q.y + pg16_k.z * q.z + 5000) / 10000;
+		}
+		int pg16_chroma(int k, int d)
+		{
+			int e = 2 * d;
+			int ko = k + 16 * e;
+			int u = ko / e;
+			int v = ko - u * e;
+			return 2048 + 224 * (u - 16) + (224 * v + d) / e;
+		}
+		int pg16_cb(ivec3 a, ivec3 b)
+		{
+			int h = pg16_d.x / 2;
+			return pg16_chroma(-pg16_k.x * a.x - pg16_k.y * a.y + h * a.z - pg16_k.x * b.x - pg16_k.y * b.y + h * b.z, 219 * pg16_d.x);
+		}
+		int pg16_cr(ivec3 a, ivec3 b)
+		{
+			int h = pg16_d.y / 2;
+			return pg16_chroma(h * a.x - pg16_k.y * a.y - pg16_k.z * a.z + h * b.x - pg16_k.y * b.y - pg16_k.z * b.z, 219 * pg16_d.y);
+		}
+		// PG16_EXACT end
+		vec4 pg16_pack(int Y, int C)
+		{
+			return vec4(float(C >> 4) / 255.0, float(Y >> 4) / 255.0, float((Y & 15) | ((C & 15) << 4)) / 255.0, 1.0);
+		}
+)PG16";
+
+static const std::string pg16_dovi_pattern_frag = std::string(R"PG16(
+		#version 310 es
+		precision highp float;
+		precision highp int;
+		uniform vec4 globalColor;
+		uniform ivec3 pg16_k;
+		uniform ivec2 pg16_d;
+		out vec4 outputColor;
+)PG16") + pg16_exact_glsl + R"PG16(
+		void main()
+		{
+			/* ofApp::doviSetPg16Color centres globalColor on 1.6's step */
+			ivec3 q = clamp(ivec3(globalColor.rgb * 256.0), 0, 256) << 4;
+			int Y = pg16_luma(q);
+			outputColor = mod(gl_FragCoord.x, 2.0) < 1.0 ? pg16_pack(Y, pg16_cb(q, q)) : pg16_pack(Y, pg16_cr(q, q));
+		}
+)PG16";
+
+static const std::string pg16_dovi_image_frag = std::string(R"PG16(
+		#version 310 es
+		precision highp float;
+		precision highp int;
+		uniform sampler2D tex0;
+		uniform ivec3 pg16_k;
+		uniform ivec2 pg16_d;
+		in vec2 texCoordVarying;
+		out vec4 outputColor;
+)PG16") + pg16_exact_glsl + R"PG16(
+		ivec3 pg16_texel(vec2 tc)
+		{
+			ivec3 v = clamp(ivec3(round(texture(tex0, tc).rgb * 255.0)), 0, 255);
+			return ivec3(v.x == 255 ? 256 : v.x, v.y == 255 ? 256 : v.y, v.z == 255 ? 256 : v.z) << 4;
+		}
+		void main()
+		{
+			/* One cable pixel to the right in texture space, also for an
+			   image drawn narrower or wider than the window. */
+			vec2 onePixel = vec2(dFdx(texCoordVarying).x, 0.0);
+			bool even = mod(gl_FragCoord.x, 2.0) < 1.0;
+			vec2 tcA = even ? texCoordVarying : texCoordVarying - onePixel;
+			ivec3 a = pg16_texel(tcA);
+			ivec3 b = pg16_texel(tcA + onePixel);
+			outputColor = even ? pg16_pack(pg16_luma(a), pg16_cb(a, b)) : pg16_pack(pg16_luma(b), pg16_cr(a, b));
+		}
+)PG16";
+
 void ofxRPI4Window::dovi_pattern_shader()
 {  //  ofShader shader;    
 
@@ -2206,7 +2303,8 @@ void ofxRPI4Window::dovi_pattern_shader()
 		uniform ivec3 tunnel_ycc;
 		out vec4 outputColor;
 
-		/* The tunnel's 12-bit Y, Cb, Cr come from the CPU (dovi::tunnelCodes,
+		/* PiTPG sessions (dv_tunnel_pg16 0; else 1.6's tunnel above): the
+		 * tunnel's 12-bit Y, Cb, Cr come from the CPU (dovi::tunnelCodes,
 		 * PiTPG's double arithmetic, ofApp::shader_begin): a float32 shader
 		 * missed PiTPG by one code near the rounding edge. Even x carries
 		 * Cb, odd x Cr; packed R = C[11:4], G = Y[11:4], B = C[3:0] Y[3:0]. */
@@ -2219,6 +2317,8 @@ void ofxRPI4Window::dovi_pattern_shader()
 	)";
 		
 	
+	if (dv_tunnel_pg16)
+		settings.shaderSources[GL_FRAGMENT_SHADER] = pg16_dovi_pattern_frag;
 	shader.setup(settings);	
 //	dovi_shader.setup(settings);
 }
@@ -2253,7 +2353,8 @@ void ofxRPI4Window::dovi_image_shader()
 		in vec2 texCoordVarying; 
 		out vec4 outputColor;
 
-		/* As dovi_pattern_shader, for an 8-bit image: each pixel pair (even
+		/* PiTPG sessions (else 1.6's tunnel above). As dovi_pattern_shader,
+		 * for an 8-bit image: each pixel pair (even
 		 * x, x + 1) takes Y from its own pixel and Cb (even) / Cr (odd) from
 		 * the mean of both, before rounding (pitpgd tunnel_pair@0x404990). */
 		/* Source normalisation (dv_src_full) and signal range (dv_full)
@@ -2300,6 +2401,8 @@ void ofxRPI4Window::dovi_image_shader()
 	)";
 		 
 	
+	if (dv_tunnel_pg16)
+		settings.shaderSources[GL_FRAGMENT_SHADER] = pg16_dovi_image_frag;
 	shader.setup(settings);	
 //	dovi_shader.setup(settings);
 }

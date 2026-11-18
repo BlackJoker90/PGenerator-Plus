@@ -1736,6 +1736,7 @@ int ofxRPI4Window::hdr_primaries=2;
 avi_infoframe ofxRPI4Window::avi_info;
 drm_hdr_output_metadata ofxRPI4Window::hdr_metadata;
 int ofxRPI4Window::colorspace_on = 0;
+int ofxRPI4Window::dv_tunnel_pg16 = 0; // stays 0: no pg16 shaders here (pg16_shaders)
 int ofxRPI4Window::shader_init = 0;
 ofShader ofxRPI4Window::shader;
 volatile sig_atomic_t ofxRPI4Window::exit_requested = 0;

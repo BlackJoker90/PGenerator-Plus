@@ -156,19 +156,31 @@ class ofApp : public ofBaseApp{
   static int dv_maxpq;
   static int dv_diagonal;
   static int dv_full;
+  /* The packet's form (dovi_metadata.h, conf dv_packet, main.cpp):
+     dovi::form_calman in a Calman session, form_pitpg for a PiTPG client,
+     else PGenerator 1.6's form (form_pg16). */
+  static int dv_packet_form;
   static int doviSourceFull(int source_range);
   void dovi_rpu_inject();
   void dovi_metadata_mux();
   void dovi_metadata_create();
   /* Standard Dolby Vision metadata (dovi_metadata.h): the packet as 32
-     MSB-first words for the embedding shader, which sets each tunnel
+     MSB-first words, for 1.6's metadata pixels (dovi_fixed_pixels_draw) or,
+     in a PiTPG session, the embedding shader, which sets each tunnel
      pixel's parity to one packet bit (pitpgd dv_embed). */
   void dovi_packet_set(int run_mode);
+  /* PGenerator 1.6's metadata pixels (ofxRPI4Window::dv_tunnel_pg16): the
+     packet bits as pixels of the packed bytes 128, 16, 16/0 (Y 256,
+     C 2049/2048; dovi_tunnel.h) in fbo_dovi,
+     drawn over the frame by dovi_metadata_mux. */
+  void dovi_fixed_pixels_draw();
+  /* The draw colour of 1.6's tunnel (globalColor, ofxRPI4Window
+     pg16_dovi_pattern_frag). */
+  void doviSetPg16Color(int red, int green, int blue);
   ofShader dovi_embed;
   int dv_packet_words[32] = {0};
-  // The packet's metadata id (dovi::MetadataId): steps when it changes.
-  dovi::MetadataId dv_metadata_id;
-  /* Start sequence after a mode set (pitpgd dv_show@0x40d2c0): the packet
+  /* Start sequence of PiTPG's form after a mode set (pitpgd
+     dv_show@0x40d2c0; dovi::startSequence): the packet
      goes out without the run-mode block first and gets it after
      dv_start_wait_ms from the first frame; dv_start_pending holds the run
      mode still to send. */

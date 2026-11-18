@@ -4,21 +4,20 @@
 #include <cstdint>
 #include <cstring>
 #include <cstdio>
-#include <cerrno>
 
-// Standard (TV-led) Dolby Vision display-management packet, built the way
-// PiTPG 2.0.3 builds it (pitpgd dv_md_build@0x4043e0, dv_packet@0x4045f0,
+// Standard (TV-led) Dolby Vision display-management packet in three forms
+// (Params::form, below). PiTPG's form is built the way PiTPG 2.0.3 builds it
+// (pitpgd dv_md_build@0x4043e0, dv_packet@0x4045f0,
 // pq12@0x40d530; REA/Ghidra ev_7183b908, ev_2b3bb6bd). Field layout: ETSI GS
 // CCM 001 V1.1.1, 6.2. Built on the Mac under ASan/UBSan by
 // t/renderer_dovi_metadata.t.
-// Two departures from pitpgd, both to ETSI GS CCM 001 V1.1.1: the L1 average
+// One departure from pitpgd, to ETSI GS CCM 001 V1.1.1: the L1 average
 // is the value a sink infers without L1, (source_min_PQ + source_max_PQ) / 2
 // (6.2.2; pitpgd sends min + (max - min) / 3, a scene statistic no pattern
-// has), and header byte 1 carries a metadata id that steps (mod 16) each time
-// the packet changes (6.3.1-6.3.2; pitpgd leaves it 0). The id goes into
-// both nibbles (affected = current: the metadata are the current picture's),
-// as the independent encoder CroqueMr/libreelec-x86-DV dvbridge_metadata.h
-// writes packet[1]=(id<<4)|id.
+// has). Header byte 1, the metadata ids, is 0 in every form, as PGenerator
+// 1.6, Calman's generator packet and pitpgd send it; ETSI GS CCM 001 6.3.1
+// asks for an id that steps when the metadata change (maintainer's choice of
+// 1.6 over 6.3.1, 2026-11-17; for PiTPG's form too, 2026-11-18).
 //
 // The packet is 128 bytes: header bytes 0..2 (byte 1 the metadata ids), the
 // payload length as u16 BE in 3..4, the payload, zeros, and the
@@ -36,6 +35,42 @@
 //   82..90  L4: 00 00 00 04 04 0F FF 0F FF
 //   91..101 L255 (run mode 1 or 2 only): 00 00 00 06 FF run 00 00 00 00 00
 // Length 91 (0x5B) without the L255 block, 102 (0x66) with it.
+//
+// Three forms (Params::form). PiTPG's (form_pitpg, a PiTPG client) is the
+// layout above. Calman's (form_calman, a Calman session) and PGenerator
+// 1.6's (form_pg16, every other session) leave out the L4 block:
+//   70      number of extension blocks: 1, or 2 with the L255 block
+//   71..81  L1 as above
+//   82..92  L255: 00 00 00 06 FF run 00 00 00 00 00
+// Length 82 (0x52) without the L255 block, 93 (0x5D) with it. Calman's form
+// sends L255 only with a run mode (Perceptual without it), 1.6's always
+// (run 0 in Perceptual). In all three forms the metadata id stays 0 also
+// when the metadata change (a mode switch), as 1.6, Calman and pitpgd send
+// it, where ETSI GS CCM 001 6.3.1 asks for a step: a departure from the
+// standard, kept on purpose. Byte numbers below are packet bytes (payload
+// offset + 5).
+//
+// Calman's form: the packet Calman itself
+// hands a Murideo 6G/7G or VideoForge Pro generator. calmanv5.dll (5.17,
+// sha256 19cc7538...) holds one per mode in .data (0x10a6ec18 Perceptual,
+// 0x10a6ec98 Absolute, 0x10a6ed18 Relative) and copies it whole into the
+// generator (functions 0x10689030 and 0x1068c0e0): no L4 block, metadata id
+// 0. One byte is not taken over: Calman's Relative packet carries
+// signal_color_space 1, a reserved value (ETSI GS CCM 001 V1.1.1 table 6:
+// 0 YCbCr, 2 ICtCp, 1 and 3 reserved); this form sends 0 (YCbCr) in every
+// mode, as PGenerator 1.6 does (dv_color_space, shipped 0). 1.6's template is
+// Calman's Relative packet, but 1.6 rewrites byte 66 from conf
+// dv_color_space (shipped 0) and always sends the L255 block (byte 92 from
+// dv_map_mode): Absolute and Relative of this form are 1.6's packets.
+//
+// 1.6's form: what PGenerator 1.6 sends for the same container, run mode
+// and mastering values, dv_color_space as shipped (PGeneratord
+// sha256 5882ec1b..., ofApp::dovi_metadata_update 0x70dc8: the template of
+// the container, 0x1c218c P3-D65 or 0x1c220c BT.2020, with byte 66 from
+// dv_color_space 0, 69..74 and the L1 81..86 from the conf, byte 92 the run
+// mode, and its CRC). 1.6 rewrites it only when those conf values change
+// (dovi_metadata_update's one call is in dovi_metadata_create, 0x72b3c): no
+// start sequence.
 
 namespace dovi {
 
@@ -48,6 +83,9 @@ static const int16_t rgb_to_lms_p3[9]        = { 5845, 9702, 837, 2568, 12256, 1
 static const int16_t rgb_to_lms_2020[9]      = { 7222, 8771, 390, 2654, 12430, 1300, 0, 422, 15962 };
 
 const int packet_bytes = 128;
+const int form_pitpg = 0;
+const int form_calman = 1;
+const int form_pg16 = 2;
 const int payload_max = 0x66;
 
 struct Params {
@@ -56,6 +94,7 @@ struct Params {
 	int min_pq;         // source display min, 12-bit PQ
 	int max_pq;         // source display max, 12-bit PQ
 	int diagonal;       // source display diagonal, inches
+	int form;           // form_pitpg, form_calman or form_pg16 (see above)
 };
 
 // pitpgd pq12: nits -> 12-bit PQ code (ST 2084), 0 for nits <= 0.
@@ -72,6 +111,16 @@ inline int pq12(double nits) {
 // pitpgd apply_now.
 inline int runModeFor(int map_mode) {
 	return (map_mode == 1 || map_mode == 2) ? map_mode : 0;
+}
+
+// The start sequence after a mode set (pitpgd dv_show@0x40d2c0): the run
+// mode the first packet carries, and the one it switches to four frames
+// later (0: no switch). PiTPG's form starts without the run mode; Calman's
+// and 1.6's carry it at once (Calman hands it its generator so, 1.6 rewrites
+// its packet, run mode included, only when its conf values change).
+inline void startSequence(int run_mode, int form, int *first, int *pending) {
+	*first = (form == form_pitpg) ? 0 : run_mode;
+	*pending = (form == form_pitpg) ? run_mode : 0;
 }
 
 // pitpgd apply_now: max PQ not below min PQ, diagonal at most 1023. The PQ
@@ -93,7 +142,8 @@ inline void put16(unsigned char *d, int v) {
 	d[1] = (unsigned char)(v & 0xff);
 }
 
-// The payload; returns its length (0x5B or 0x66).
+// The payload; returns its length (PiTPG's form 0x5B or 0x66; Calman's 0x52
+// or 0x5D; 1.6's 0x5D).
 inline int buildPayload(const Params &in, int run_mode, unsigned char *p) {
 	Params m = normalized(in);
 	run_mode = runModeFor(run_mode);
@@ -114,12 +164,21 @@ inline int buildPayload(const Params &in, int run_mode, unsigned char *p) {
 	put16(p + 64, m.min_pq);
 	put16(p + 66, m.max_pq);
 	put16(p + 68, m.diagonal);
-	p[70] = run_mode ? 3 : 2;
 	p[74] = 0x06;
 	p[75] = 0x01;
 	put16(p + 76, m.min_pq);
 	put16(p + 78, m.max_pq);
 	put16(p + 80, (m.min_pq + m.max_pq) / 2);
+	if (m.form == form_calman || m.form == form_pg16) {
+		const bool l255 = run_mode || m.form == form_pg16;
+		p[70] = l255 ? 2 : 1;
+		if (!l255) return 0x52;
+		p[85] = 0x06;
+		p[86] = 0xff;
+		p[87] = (unsigned char)run_mode;
+		return 0x5d;
+	}
+	p[70] = run_mode ? 3 : 2;
 	p[85] = 0x04;
 	p[86] = 0x04;
 	p[87] = 0x0f;
@@ -133,67 +192,6 @@ inline int buildPayload(const Params &in, int run_mode, unsigned char *p) {
 	return 0x66;
 }
 
-// The metadata id of a packet (ETSI GS CCM 001 6.3.1): it steps, mod 16,
-// when the packet differs from the one before (bytes 3..123: everything but
-// the header and the CRC); the first packet keeps the start value.
-// The renderer restarts on most DV setting changes (PQ, range, container),
-// so the last id and packet live in a file (load/save) and a new process
-// steps on from them; without a file (first start after a boot or a daemon
-// restart, or no save ever worked) it starts at 0.
-struct MetadataId {
-	int id = 0;
-	bool have = false;
-	unsigned char prev[packet_bytes];
-	// pkt built with metadata id 0; returns the id to send it with.
-	int next(const unsigned char *pkt) {
-		if (have && memcmp(prev + 3, pkt + 3, 121) != 0) id = (id + 1) & 15;
-		memcpy(prev, pkt, packet_bytes);
-		have = true;
-		return id;
-	}
-	// The id byte and the packet; anything else (missing, short, an id
-	// above 15) is ignored. Returns whether it was taken.
-	bool load(const char *path) {
-		unsigned char b[1 + packet_bytes + 1];
-		FILE *f = fopen(path, "rb");
-		if (!f) return false;
-		size_t n = fread(b, 1, sizeof(b), f);
-		fclose(f);
-		if (n != 1 + (size_t)packet_bytes || b[0] > 15) return false;
-		id = b[0];
-		memcpy(prev, b + 1, packet_bytes);
-		have = true;
-		return true;
-	}
-	// Written whole to path.tmp, then renamed over path. On failure errno
-	// is the failed step's.
-	bool save(const char *path) const {
-		if (!have) return false;
-		char tmp[512];
-		if (snprintf(tmp, sizeof(tmp), "%s.tmp", path) >= (int)sizeof(tmp)) return false;
-		FILE *f = fopen(tmp, "wb");
-		if (!f) return false;
-		unsigned char b = (unsigned char)id;
-		bool ok = fwrite(&b, 1, 1, f) == 1 && fwrite(prev, 1, packet_bytes, f) == (size_t)packet_bytes;
-		ok = (fclose(f) == 0) && ok;
-		if (!ok || rename(tmp, path) != 0) {
-			int e = errno;
-			remove(tmp);
-			errno = e;
-			return false;
-		}
-		return true;
-	}
-};
-
-// Where the renderer keeps it: a subdirectory of running/, the renderer's
-// tmpfs (owner pgenerator, mode 0770). clean_files empties running/ itself on
-// every renderer stop and most starts but keeps its subdirectories; the init
-// script unmounts it on a daemon stop, so a daemon restart or a boot normally
-// starts at 0.
-static const char *const metadata_id_dir = "/var/lib/PGenerator/running/dovi";
-static const char *const metadata_id_file = "/var/lib/PGenerator/running/dovi/metadata_id";
-
 // CRC-32/MPEG-2: poly 0x04C11DB7, init 0xFFFFFFFF, MSB first, no final XOR.
 inline uint32_t crc32mpeg(const unsigned char *d, size_t n) {
 	uint32_t c = 0xffffffffu;
@@ -204,12 +202,11 @@ inline uint32_t crc32mpeg(const unsigned char *d, size_t n) {
 	return c;
 }
 
-// The whole 128-byte packet (pitpgd dv_packet), metadata id in byte 1.
-inline void buildPacket(const Params &in, int run_mode, unsigned char *out, int metadata_id = 0) {
+// The whole 128-byte packet (pitpgd dv_packet), metadata ids (byte 1) 0.
+inline void buildPacket(const Params &in, int run_mode, unsigned char *out) {
 	unsigned char payload[payload_max];
 	int len = buildPayload(in, run_mode, payload);
 	memset(out, 0, packet_bytes);
-	out[1] = (unsigned char)(((metadata_id & 15) << 4) | (metadata_id & 15));
 	out[4] = (unsigned char)len;
 	memcpy(out + 5, payload, len);
 	uint32_t crc = crc32mpeg(out, 124);
@@ -258,6 +255,15 @@ inline int packetBit(const unsigned char *packet, int i) {
 // dv_full, dv_show@0x40d2c0: patch scale Full). Limited signal: Y = 3504Y'
 // + 256, C = 3584(B'-Y') / d + 2048, codes 16..4079; full: Y = 4095Y',
 // C = 4095(..) / d + 2048, codes 0..4095; rounding (long)(x + 0.5).
+// Against PGenerator 1.6 (PGeneratord sha256 5882ec1b..., its tunnel shader
+// text with the uniforms ofApp::shader_begin sets: BT.2020 luma weights for
+// dv_profile 1, BT.709 for 2, in float32), recomputed on the CPU for every
+// 8-bit colour: inside 16..235 Y is the same and Cb or Cr one code apart for
+// 2942 (BT.2020) and 2421 (BT.709) of the 220^3 colours (0.02-0.03 %; 2880
+// and 2346 with fused multiply-adds), where the exact value lies within
+// float32 error of .5. Outside 16..235 the clamp below is pitpgd's; 1.6's
+// shader has none. So this arithmetic serves PiTPG sessions only: elsewhere
+// the renderer computes 1.6's tunnel exactly (pg16Codes below).
 inline long code12(double x, int full) {
 	long hi = full ? 4095 : 4079, lo = full ? 0 : 16;
 	long v = (long)(x + 0.5);
@@ -280,6 +286,64 @@ inline void tunnelCodes(int container_2020, int bits, int src_full, int full, in
 	ycc[0] = (int)code12(ys * y + yo, full);
 	ycc[1] = (int)code12(((B - y) * cs) / d + 2048.0, full);
 	ycc[2] = (int)code12(((R - y) * cs) / e + 2048.0, full);
+}
+
+// The Standard DV tunnel outside PiTPG sessions: PGenerator 1.6's
+// (PGeneratord sha256 5882ec1b..., tunnel shaders at file offsets 0x1d1b88
+// and 0x1d1020, uniforms from ofApp::shader_begin@0x71274), computed exactly
+// (maintainer, 2026-11-18: bit-exact also where 1.6's float32 rounds the
+// wrong way). 1.6 takes each channel as int(c * 256) << 4 of the colour c
+// (code / max), so 8-bit codes keep their value, 255 gives 256 and 10- or
+// 12-bit codes land on the 8-bit grid; then for a pixel pair (a, b)
+//   Y = R(Kr R + Kg G + Kb B) per pixel,
+//   Cb = R(2048 + 224/219 ((B - Y) / Db of a + of b) / 2),
+//   Cr = R(2048 + 224/219 ((R - Y) / Dr of a + of b) / 2),
+// with dv_profile 1 BT.2020's Kr 0.2627, Kb 0.0593, Db 1.8814, Dr 1.4746
+// and 2 BT.709's 0.2126, 0.0722, 1.8556, 1.5748, no clamp. 1.6 evaluates
+// this in float32; here every coefficient is a ratio of integers (per
+// 10000), so the codes come from integer arithmetic: R(x) is
+// floor(x + 0.5), and no exact .5 occurs (Y: 16 (Kr r + ..) is never 5000
+// mod 10000; C: 224 k = 219 D (2j + 1) fails, the left side holds more
+// factors of 2 than D). The shaders
+// (ofxRPI4Window.cpp pg16_dovi_*_frag) run the same steps in 32-bit ints:
+// t/renderer_pg16_tunnel.t compiles them against these.
+struct Pg16Matrix { int kr, kg, kb, db, dr; };
+inline Pg16Matrix pg16Matrix(int profile) {
+	if (profile == 1) return { 2627, 6780, 593, 18814, 14746 };
+	return { 2126, 7152, 722, 18556, 15748 };
+}
+
+// 1.6's step int(c * 256) of the colour doviSetPg16Color sets: code / max,
+// or (16 + 219 code / max) / 255 for a full-range source. 0..256.
+inline int pg16Step(int v, int maxc, int src_full) {
+	if (maxc < 1) maxc = 1;
+	v = v < 0 ? 0 : (v > maxc ? maxc : v);
+	long long num = src_full ? 256LL * (16LL * maxc + 219LL * v) : 256LL * v;
+	long long den = src_full ? 255LL * maxc : (long long)maxc;
+	return (int)(num / den);
+}
+
+// 2048 + R(224 k / (2 d)) for the pair sum k of (B - Y) Db or (R - Y) Dr in
+// 1/10000 units and d = 219 Db (or Dr) in the same: floor((224 k + d) /
+// (2 d)) in steps that stay within 32 bits for |k| < 16 * 2d.
+inline int pg16Chroma(int k, int d) {
+	int e = 2 * d;
+	int ko = k + 16 * e;
+	int u = ko / e;
+	int v = ko - u * e;
+	return 2048 + 224 * (u - 16) + (224 * v + d) / e;
+}
+
+// Steps (0..256) of the even pixel a and the odd pixel b to Y of a, Y of b,
+// Cb and Cr of the pair.
+inline void pg16Codes(int profile, const int *a, const int *b, int *out) {
+	Pg16Matrix m = pg16Matrix(profile);
+	int ra = a[0] << 4, ga = a[1] << 4, ba = a[2] << 4;
+	int rb = b[0] << 4, gb = b[1] << 4, bb = b[2] << 4;
+	out[0] = (m.kr * ra + m.kg * ga + m.kb * ba + 5000) / 10000;
+	out[1] = (m.kr * rb + m.kg * gb + m.kb * bb + 5000) / 10000;
+	out[2] = pg16Chroma(-m.kr * ra - m.kg * ga + (m.db / 2) * ba - m.kr * rb - m.kg * gb + (m.db / 2) * bb, 219 * m.db);
+	out[3] = pg16Chroma((m.dr / 2) * ra - m.kg * ga - m.kb * ba + (m.dr / 2) * rb - m.kg * gb - m.kb * bb, 219 * m.dr);
 }
 
 } // namespace dovi

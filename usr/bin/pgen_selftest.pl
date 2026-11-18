@@ -467,15 +467,37 @@ sub write_pattern {
  return 1;
 }
 
+# A Raspberry Pi 5 (BCM2712), as PGSignalCheck signal_board_limits and
+# variables.pm pg_dv_tunnel_pg16_grid tell it.
+sub board_is_pi5 {
+ my $model="";
+ if(open(my $fh,"<","/proc/device-tree/model")) { local $/; $model=<$fh> // ""; close($fh); }
+ return ($model=~/Raspberry Pi 5|Compute Module 5|BCM2712/i) ? 1 : 0;
+}
+
 # Expected framebuffer channels for a grey or colour window. $max 4095:
 # 12-bit source codes, sent as the 10-bit code BT.2100 Table 9 gives.
 sub expected_fb {
  my ($sc,$link_format,$bits,$r,$g,$b,$max)=@_;
- # Standard DV packer (dovi_pattern_shader): source code -> 12 bit, a grey
- # is Y=code, Cb=Cr=2048; each pixel carries R=C>>4, G=Y>>4,
- # B=(Y&15)|((C&15)<<4), so a grey reads 128, Y>>4, Y&15.
+ # Standard DV outside a PiTPG session (a self-test is none) sends
+ # PGenerator 1.6's tunnel (ofxRPI4Window.cpp pg16_dovi_pattern_frag):
+ # 12-bit Y=int(code/max*256)<<4, so a 10-bit window (drawn as code<<2 of
+ # 4095) lands on the 8-bit grid, 502 -> 2000; a grey is Cb=Cr=2048. Each
+ # pixel carries R=C>>4, G=Y>>4, B=(Y&15)|((C&15)<<4) in an 8-bit unorm, so
+ # a grey reads 128, Y>>4, Y&15, and Y 4096 (code max) reads G=255 B=0.
+ # The Pi 5 renderer flavour has no 1.6 tunnel (pg16_shaders 0): it keeps
+ # the expectation it had before, the code taken to 12 bits as it is. Its
+ # own tunnel shader is not read back on a Pi 5 (it reads a source_rgb
+ # uniform the pattern code never sets; TASKS.md).
  if($sc->{tunnel}) {
-  my $y=($bits == 8) ? ($g << 4) : ($g << 2);
+  my $y;
+  if(board_is_pi5()) {
+   $y=($bits == 8) ? ($g << 4) : ($g << 2);
+  } else {
+   my ($s,$m)=($bits == 8) ? ($g,255) : ($g << 2,4095);
+   $y=int($s*256/$m) << 4;
+   $y=4080 if($y > 4080);
+  }
   return [2048 >> 4,$y >> 4,$y & 15];
  }
  my @c=($r,$g,$b);

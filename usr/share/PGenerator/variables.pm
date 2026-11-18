@@ -87,6 +87,44 @@ sub pg_dv_transport_interface(@) {
  return (&pg_dv_transport_mode(@_) eq "lldv") ? "1" : "0";
 }
 
+# The Dolby Vision settings on the cable now: the start record of the
+# renderer that runs (command.pm renderer_running_conf) when it was started
+# in Dolby Vision; a conf written without a restart, e.g. a PiTPG session
+# form the gate refused to apply, is not on the cable yet. Otherwise (no
+# renderer, no record, a renderer started outside Dolby Vision that the next
+# start puts into it) the conf it starts with.
+sub pg_dv_cable_conf(@) {
+ my $run=defined(&renderer_running_conf) ? &renderer_running_conf() : undef;
+ return $run if(ref($run) eq "HASH" && exists($run->{"dv_transport"})
+                && (int($run->{"is_std_dovi"} || 0) || int($run->{"is_ll_dovi"} || 0)));
+ return \%pgenerator_conf;
+}
+
+# The Dolby Vision interface on the cable (pg_dv_cable_conf): "1" Low
+# Latency, "0" Standard. $c: a pg_dv_cable_conf result already read.
+sub pg_dv_cable_interface(@) {
+ my $c=shift || &pg_dv_cable_conf();
+ return (lc($c->{"dv_transport"} // "") eq "lldv") ? "1" : "0";
+}
+
+# Whether the renderer sends PGenerator 1.6's Standard Dolby Vision tunnel,
+# whose 8-bit grid carries a 10- or 12-bit code as int(code / max * 256)
+# (main.cpp dv_tunnel_pg16), by the settings on the cable (pg_dv_cable_conf;
+# $c: one already read): the transport is Standard, the packet is not a
+# PiTPG session's, the tunnel is not PiTPG's full-range one (dv_signal_range
+# 2), and the board is not a Pi 5 (its renderer flavour has no pg16
+# shaders, pg16_shaders 0).
+sub pg_dv_tunnel_pg16_grid(@) {
+ my $c=shift || &pg_dv_cable_conf();
+ return 0 if(lc($c->{"dv_transport"} // "") eq "lldv");
+ return 0 if(($c->{"dv_packet"} // "") eq "pitpg");
+ return 0 if(($c->{"dv_signal_range"} // "") eq "2");
+ my $model="";
+ if(open(my $fh,"<",$proc_device_model)) { local $/; $model=<$fh> // ""; close($fh); }
+ return 0 if($model=~/Raspberry Pi 5|Compute Module 5|BCM2712/i);
+ return 1;
+}
+
 sub pg_dv_transport_color_format(@) {
  return (&pg_dv_transport_mode(@_) eq "lldv") ? "2" : "0";
 }
@@ -340,7 +378,7 @@ $calman_bg="";
 $calman_settings_dirty=0;
 # "Dolby Vision with Calman": 1 from the first picture Calman draws (or its
 # own switch to Dolby Vision) until its last session ends (command.pm
-# dv_session_profile; shared with the WebUI workers).
+# dv_session_values; shared with the WebUI workers).
 $calman_dv_container_taken=0;
 $calman_win_size=10;
 $calman_explicit_max_bpc=0;

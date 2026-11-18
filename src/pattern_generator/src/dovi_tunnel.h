@@ -24,10 +24,12 @@ template <class Image> void drawDoviMetadataPixels(Image &image, int width) {
 		image.drawSubsection(0, line, left < width ? left : width, 1, 0, line);
 }
 
-// Writes the tunnel codes into an 8-bit, 4-channel (Y, Cb, Cr, A) buffer of
-// width x lines pixels: pixel p carries bit p % 1024 of bits[] as Y 128,
-// Cb 16, Cr 16 (1) or 0 (0), the codes of PGenerator 1.6. Alpha and the
-// pixels after 3071 are left alone. Returns the number of pixels written.
+// Writes the tunnel bytes into an 8-bit, 4-channel (R, G, B, A) buffer of
+// width x lines pixels: pixel p carries bit p % 1024 of bits[] as the
+// packed bytes 128, 16, 16 (1) or 128, 16, 0 (0), the bytes of PGenerator
+// 1.6 (tunnel packing R = C >> 4, G = Y >> 4, B = Y & 15 | (C & 15) << 4:
+// Y 256, C 2049 or 2048). Alpha and the pixels after 3071 are left alone.
+// Returns the number of pixels written.
 inline int doviFillTunnel8(unsigned char *data, int width, int lines, const unsigned char *bits) {
 	if (!data || !bits || width <= 0 || lines <= 0) return 0;
 	const long long room = (long long)width * lines;

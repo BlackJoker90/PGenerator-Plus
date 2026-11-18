@@ -13,7 +13,7 @@ use PGMath qw(pq_encode_normalized);
 
 our @EXPORT_OK=qw(
  code_to_signal_fraction signal_code_nominal_range signal_code_policy
- signal_percent_to_code
+ signal_percent_to_code dv_tunnel_grid_code
 );
 
 my %HDR20_8_LIMITED=(
@@ -147,6 +147,7 @@ sub signal_code_policy {
  my $maximum_stimulus=100;
  my $percent_domain="container_signal_percent";
  my $tunnel_mode="none";
+ my $dv_tunnel_grid=0;
  my $active_table;
 
  if($strategy eq "two_point_ycbcr_headroom") {
@@ -188,6 +189,10 @@ sub signal_code_policy {
   $interface="low_latency" if($interface eq "1" || $interface eq "ll");
   return undef if($interface ne "standard" && $interface ne "low_latency");
   $tunnel_mode="dolby_vision_".$interface;
+  # The caller says whether the cable carries PGenerator 1.6's tunnel
+  # (variables.pm pg_dv_tunnel_pg16_grid): only then, and only for its
+  # limited codes, does the 8-bit grid apply.
+  $dv_tunnel_grid=($input->{dv_tunnel_grid} && $interface eq "standard" && $limited) ? 1 : 0;
   $percent_domain="dolby_vision_tunnel_signal_percent";
  } elsif($strategy eq "extended_sdr_codes") {
   return undef if($mode ne "sdr");
@@ -219,6 +224,7 @@ sub signal_code_policy {
   maximum_stimulus_percent=>$maximum_stimulus,
   rounding_mode=>"positive_half_up",
   tunnel_mode=>$tunnel_mode,
+  dv_tunnel_grid=>$dv_tunnel_grid,
   percent_domain=>$percent_domain,
   strategy=>$strategy,
   color_format=>$color_format,
@@ -247,6 +253,20 @@ sub signal_code_nominal_range {
   max=>int($maximum),
   input_max=>int($input_max),
  };
+}
+
+# Standard Dolby Vision: the code nearest to $code (of $input_max: 255,
+# 1023 or 4095) that PGenerator 1.6's 8-bit tunnel grid sends as it is.
+# The renderer takes int(code / max * 256) (dovi::pg16Step): a multiple of
+# 2^(bits - 8) keeps its value, the top code gives step 256. 8-bit codes
+# and other maxima stay as they are.
+sub dv_tunnel_grid_code {
+ my ($code,$input_max)=@_;
+ my %bits=(1023=>10,4095=>12);
+ return $code if(!defined($input_max) || !$bits{$input_max});
+ my $grid=1 << ($bits{$input_max}-8);
+ my $n=_positive_half_up(($code < 0 ? 0 : $code)/$grid);
+ return $n >= 256 ? $input_max : $n*$grid;
 }
 
 sub _clamp {
@@ -327,6 +347,12 @@ sub signal_percent_to_code {
   my $minimum=$limited ? ($bits==12 ? 256 : ($bits==10 ? 64 : 16)) : 0;
   my $span=$limited ? ($bits==12 ? 3504 : ($bits==10 ? 876 : 219)) : $input_max;
   $code=_clamp(_positive_half_up($minimum+$value*$span),$minimum,$minimum+$span);
+  # PGenerator 1.6's Standard Dolby Vision tunnel takes a 10- or 12-bit
+  # code as int(code / max * 256) of its 8-bit grid (dovi::pg16Step): only
+  # a multiple of 2^(bits - 8) reaches the cable as sent, the top code as
+  # step 256. The nearest such code is sent, and so recorded (maintainer,
+  # 2026-11-18). The JS twin does the same.
+  $code=dv_tunnel_grid_code($code,$input_max) if($policy->{dv_tunnel_grid});
  } elsif($strategy eq "pq_luminance_percent") {
   my $value=_clamp($stimulus,0,100);
   $code=_positive_half_up(pq_encode_normalized(

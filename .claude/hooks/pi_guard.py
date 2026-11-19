@@ -87,7 +87,16 @@ POWER = {"reboot", "shutdown", "poweroff", "halt"}
 ASK_PROMPTS = {"default", "acceptEdits", "plan", "auto"}
 ASK_FORMS = ("`git push fork main`", "`.claude/skills/pi/scripts/pgen-pi reboot`",
              "`gh release create ...`", "`gh api graphql ...`", "`git subtree push ...`",
-             "`tools/release-ota.sh ...`")
+             "`tools/release-ota.sh [--accept-audit] <version>`")
+# A release goes through the ask rule as one plain command from any checkout:
+# release-ota.sh hands over to the main checkout's copy when run from a
+# worktree, and --accept-audit stands for PGEN_AUDIT_ACCEPT=1 (2026-11-19:
+# a session in a worktree could not release, `cd main &&` and the leading
+# assignment are not plain commands).
+RELEASE_FORM = ("For a release run `tools/release-ota.sh <version>` alone, without `cd` or a variable in front: "
+                "from a worktree it hands over to the main checkout's tools/release-ota.sh (tools/ is local-only: "
+                "if the worktree has no copy or one without the hand-over, copy the main checkout's "
+                "tools/release-ota.sh into it first), and `--accept-audit` takes the place of PGEN_AUDIT_ACCEPT=1.")
 KEYWORDS = {"if", "then", "else", "elif", "fi", "do", "done", "while", "until", "!", "case", "esac",
             "export", "local", "readonly", "declare", "typeset"}
 ASSIGN = re.compile(r"^([A-Za-z_][A-Za-z0-9_]*)=(.*)$", re.S)
@@ -1404,6 +1413,8 @@ def main():
             "unasked. Ask the user, then run it as its own plain command that an ask rule in "
             ".claude/settings.json covers (%s): that rule shows the dialog in every mode."
             % (mode if isinstance(mode, str) else "(not given)", ", ".join(ASK_FORMS)))
+        if "release script:" in reason:
+            reason += " " + RELEASE_FORM
     if kind:
         print(json.dumps({"hookSpecificOutput": {"hookEventName": "PreToolUse",
                                                  "permissionDecision": kind,

@@ -4391,7 +4391,9 @@ function selftestRender(st){
  document.getElementById('selftestRunBtn').hidden=running;
  document.getElementById('selftestQuickBtn').hidden=running;
  document.getElementById('selftestStopBtn').hidden=!running;
- document.getElementById('selftestRunBtn').textContent=state==='idle'?'Run Full Test':'Run Again';
+ // The button always starts the full test: "Run Again" only when the last
+ // run was the full one, after a Quick Check it keeps its name (AVS #67).
+ document.getElementById('selftestRunBtn').textContent=(state!=='idle'&&set==='full')?'Run Again':'Run Full Test';
  // The modes are listed once there is something to say about them: while
  // the test runs and with its results. Before that the (i) names them.
  const list=document.getElementById('selftestModes');

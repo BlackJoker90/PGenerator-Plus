@@ -37,9 +37,9 @@ sub auto_select_4k_mode (@) {
  }
  close(CMD_MODETEST);
  if($target_idx ne "") {
-  &sudo("SET_PGENERATOR_CONF","mode_idx","$target_idx");
-  $pgenerator_conf{"mode_idx"}="$target_idx";
-  &log("Auto-selected 4K 30Hz mode_idx=$target_idx");
+  if(&pg_conf_write_checked("mode_idx","$target_idx")) {
+   &log("Auto-selected 4K 30Hz mode_idx=$target_idx");
+  }
  }
 }
 
@@ -209,6 +209,8 @@ sub apply_source_rgb_quant_range (@) {
    $quant_range=$o;
   }
  }
+ my $next_external_active=$external_rgb_quant_range_active;
+ my $next_webui_preferred=$webui_rgb_quant_range_preferred;
  if($source eq "webui") {
   my $ycbcr=(($pgenerator_conf{"color_format"} || "0") ne "0");
   if(&renderer_dv_conf_active()) {
@@ -226,16 +228,23 @@ sub apply_source_rgb_quant_range (@) {
     return 0;
    }
    $quant_range=&webui_preferred_rgb_quant_range() if($ycbcr || $quant_range !~/^[12]$/);
-   $webui_rgb_quant_range_preferred=$quant_range;
+   $next_webui_preferred=$quant_range;
   }
-  $external_rgb_quant_range_active=0;
+  $next_external_active=0;
  } else {
   $quant_range=2 if($quant_range !~/^[12]$/);
-  &remember_webui_rgb_quant_range();
-  $external_rgb_quant_range_active=1;
+  $next_external_active=1;
  }
- return 0 if(($pgenerator_conf{"rgb_quant_range"}||"") eq "$quant_range" && $rgb_quant_range_source eq $source);
+ if(($pgenerator_conf{"rgb_quant_range"}||"") eq "$quant_range" && $rgb_quant_range_source eq $source) {
+  &remember_webui_rgb_quant_range() if($source ne "webui");
+  $webui_rgb_quant_range_preferred=$next_webui_preferred if($source eq "webui");
+  $external_rgb_quant_range_active=$next_external_active;
+  return 0;
+ }
  if(($pgenerator_conf{"rgb_quant_range"}||"") eq "$quant_range") {
+  &remember_webui_rgb_quant_range() if($source ne "webui");
+  $webui_rgb_quant_range_preferred=$next_webui_preferred if($source eq "webui");
+  $external_rgb_quant_range_active=$next_external_active;
   $owner_changed=($rgb_quant_range_source ne $source);
   $rgb_quant_range_source=$source;
   &log("Signal range owner: source=$source rgb_quant_range=$quant_range (no restart)");
@@ -257,8 +266,16 @@ sub apply_source_rgb_quant_range (@) {
   return 1;
  }
  my $dv_before=&renderer_dv_conf_active();
- &sudo("SET_PGENERATOR_CONF","rgb_quant_range","$quant_range");
- $pgenerator_conf{"rgb_quant_range"}="$quant_range";
+ my $prev_range=$pgenerator_conf{"rgb_quant_range"};
+ return 0 if(!&pg_conf_write_checked("rgb_quant_range","$quant_range"));
+ if($source ne "webui") {
+  if($webui_rgb_quant_range_preferred !~/^[12]$/ && ($prev_range || "")=~/^[12]$/) {
+   $webui_rgb_quant_range_preferred=$prev_range;
+  }
+ } else {
+  $webui_rgb_quant_range_preferred=$next_webui_preferred;
+ }
+ $external_rgb_quant_range_active=$next_external_active;
  $rgb_quant_range_source=$source;
  &log("Signal range owner: source=$source rgb_quant_range=$quant_range");
  return 1 if(&renderer_reconfigure_in_place({rgb_quant_range=>1},$dv_before));
@@ -285,10 +302,26 @@ sub calman_default_rgb_quant_range (@) {
  return &release_source_rgb_quant_range("calman");
 }
 
+# Write one conf key through the root helper and update %pgenerator_conf only
+# when the helper confirms it or the file reads back as written. Returns 1 on
+# success, 0 on refusal/failure (memory keeps its previous value).
+sub pg_conf_write_checked(@) {
+ my ($key,$value)=@_;
+ my $val=defined($value) ? "$value" : "";
+ if((&sudo("SET_PGENERATOR_CONF",$key,$val) // "")!~/^\Q$ok_response\E/) {
+  my $file=&renderer_conf_read();
+  if(!(ref($file) eq "HASH" && ($file->{$key} // "") eq $val)) {
+   &log("Signal: $key could not be written; the conf keeps its value") if(defined &log);
+   return 0;
+  }
+ }
+ $pgenerator_conf{$key}=$val;
+ return 1;
+}
+
 sub set_pgenerator_conf_runtime(@) {
  my ($key,$value)=@_;
- &sudo("SET_PGENERATOR_CONF",$key,$value);
- $pgenerator_conf{$key}="$value";
+ return &pg_conf_write_checked($key,$value);
 }
 
 # Several keys in one root-helper call (each sudo spawn costs ~0.35s) and
@@ -2873,16 +2906,14 @@ sub pgenerator_cmd (@) {
    my $map_mode=&dv_map_mode_for_metadata($conf_value);
    # dv_map_mode "0" (Perceptual) is a value, not empty.
    if($map_mode ne "" && ((defined $pgenerator_conf{"dv_map_mode"} ? $pgenerator_conf{"dv_map_mode"} : "") ne $map_mode)) {
-    &sudo("SET_PGENERATOR_CONF","dv_map_mode",$map_mode);
-    $pgenerator_conf{"dv_map_mode"}=$map_mode;
+    &pg_conf_write_checked("dv_map_mode",$map_mode);
    }
   } elsif($conf_key eq "dv_map_mode" && $conf_value ne "") {
    # An empty value deletes the map mode and leaves dv_metadata as it is
    # (dv_metadata_for_map_mode("") would switch DV metadata on).
    my $metadata=&dv_metadata_for_map_mode($conf_value);
    if(($pgenerator_conf{"dv_metadata"} || "") ne $metadata) {
-    &sudo("SET_PGENERATOR_CONF","dv_metadata",$metadata);
-    $pgenerator_conf{"dv_metadata"}=$metadata;
+    &pg_conf_write_checked("dv_metadata",$metadata);
    }
   }
   if(($conf_key eq "dv_status" && $conf_value eq "1") ||
@@ -3139,13 +3170,22 @@ sub wpa_cli () {
  my @el=split(":",$cmd,2);
  return &sudo("$el[0]","$interface") if($el[0] eq "WIFI_SCAN" || $el[0] eq "GET_WIFI_STATUS");
  if($el[0] eq "GETNETCONFIGURED") {
-  return "" if(!-f $wifi_conf);
-  open(CONF,"$wifi_conf");
-  while(<CONF>) {
-   next if($_=~/^#/);
-   return $1 if($_=~/ssid=\"(.*)\"/);
+  if(-f $wifi_conf && open(my $conf_fh,"<",$wifi_conf)) {
+   while(<$conf_fh>) {
+    next if($_=~/^\s*#/);
+    if($_=~/ssid="([^"\r\n]*)"/) {
+     my $ssid=$1;
+     close($conf_fh);
+     return $ssid;
+    }
+   }
+   close($conf_fh);
+   return "";
   }
-  close(CONF);
+  my $ssid=&sudo("WIFI_GET_CONFIGURED");
+  $ssid="" if(!defined $ssid);
+  $ssid=~s/[\r\n]+$//;
+  return $ssid;
  }
  if($el[0] eq "WIFI_AP_APPLYCONF") {
   @info=split(":",$el[1],2);

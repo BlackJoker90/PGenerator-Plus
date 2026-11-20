@@ -449,9 +449,9 @@ sub calman_apply_init_mode (@) {
   my $default_idx=&calman_find_mode_idx(1920,1080,"p",24);
   if($default_idx >= 0) {
    $init_mode_idx=$default_idx;
-   &sudo("SET_PGENERATOR_CONF","calman_mode_idx","$init_mode_idx");
-   $pgenerator_conf{"calman_mode_idx"}="$init_mode_idx";
-   &log("Calman: default init mode remembered as 1080p24 mode_idx=$init_mode_idx");
+   if(&pg_conf_write_checked("calman_mode_idx","$init_mode_idx")) {
+    &log("Calman: default init mode remembered as 1080p24 mode_idx=$init_mode_idx");
+   }
   }
  }
  return if($init_mode_idx eq "" || $init_mode_idx !~/^\d+$/);
@@ -463,8 +463,7 @@ sub calman_apply_init_mode (@) {
   if($edid_idx >= 0 && $edid_idx != $init_mode_idx) {
    &log("Calman: remembered mode_idx=$init_mode_idx is the userdef boot mode, using mode_idx=$edid_idx");
    $init_mode_idx=$edid_idx;
-   &sudo("SET_PGENERATOR_CONF","calman_mode_idx","$init_mode_idx");
-   $pgenerator_conf{"calman_mode_idx"}="$init_mode_idx";
+   &pg_conf_write_checked("calman_mode_idx","$init_mode_idx");
   }
  }
  if(($pgenerator_conf{"mode_idx"} || "") ne $init_mode_idx) {
@@ -487,8 +486,9 @@ sub calman_set_gci_active (@) {
   # first disconnects, and INIT:2.0 sent again on a connection counts once.
   $calman_gci_active_count=scalar(grep { $calman_gci{$_} } keys %calman_gci);
   $calman_gci_active_count=1 if($calman_gci_active_count < 1);
-  &sudo("SET_PGENERATOR_CONF","calman_gci","1") if(($pgenerator_conf{"calman_gci"} || "") ne "1");
-  $pgenerator_conf{"calman_gci"}="1";
+  if(($pgenerator_conf{"calman_gci"} || "") ne "1") {
+   &pg_conf_write_checked("calman_gci","1");
+  }
   &log("Calman GCI: control plane active — drm_override will not override connector properties");
   return;
  }
@@ -496,8 +496,9 @@ sub calman_set_gci_active (@) {
  # Caller (close_connection / TERM / SHUTDOWN / QUIT) is responsible
  # for having decremented $calman_gci_active_count and deleting the
  # per-connection entry from %calman_gci before calling this with 0.
- &sudo("SET_PGENERATOR_CONF","calman_gci","0") if(($pgenerator_conf{"calman_gci"} || "") ne "0");
- $pgenerator_conf{"calman_gci"}="0";
+ if(($pgenerator_conf{"calman_gci"} || "") ne "0") {
+  &pg_conf_write_checked("calman_gci","0");
+ }
  &log("Calman GCI: control plane cleared — drm_override may resume overriding connector properties");
 }
 #
@@ -2096,10 +2097,9 @@ sub pattern_daemon {
 	       my $cur="$pgenerator_conf{$k}";
 	       $cur="" if(!defined $cur);
 	       next if($cur eq "$v");
-	       $calman_coherence_left_dv=1 if($k eq "dv_status" && "$v" eq "0" && $cur eq "1");
 	       &forget_pre_dv_format_depth("Calman") if($k eq "dv_status" && "$v" eq "1");
-	       &sudo("SET_PGENERATOR_CONF",$k,$v);
-	       $pgenerator_conf{$k}="$v";
+	       next if(!&pg_conf_write_checked($k,$v));
+	       $calman_coherence_left_dv=1 if($k eq "dv_status" && "$v" eq "0" && $cur eq "1");
 	       $changed=1;
 	       &log("Calman GCI: coherence update $k=$v (WebUI-owned, but mode transition implied it)");
 	      }
@@ -2133,8 +2133,7 @@ sub pattern_daemon {
 	      my $webui_range=&webui_preferred_rgb_quant_range();
 	      return if(($pgenerator_conf{"rgb_quant_range"} || "") eq "$webui_range");
 	      &log("Calman: leaving Dolby Vision, range $webui_range (the WebUI's; Calman has named none)");
-	      &sudo("SET_PGENERATOR_CONF","rgb_quant_range","$webui_range");
-	      $pgenerator_conf{"rgb_quant_range"}="$webui_range";
+	      return if(!&pg_conf_write_checked("rgb_quant_range","$webui_range"));
 	      $calman_settings_dirty=1;
 	     };
 	     my $calman_save_setting = sub {
@@ -2218,8 +2217,7 @@ sub pattern_daemon {
 	       return;
 	      }
 	      &forget_pre_dv_format_depth("Calman") if($conf_key eq "dv_status" && $new_val eq "1");
-	      &sudo("SET_PGENERATOR_CONF",$conf_key,$conf_val);
-	      $pgenerator_conf{$conf_key}="$conf_val";
+	      return if(!&pg_conf_write_checked($conf_key,$conf_val));
 	      &sync_pattern_bits_default();
 	      $calman_settings_dirty=1;
 	      &log("Calman: saved $conf_key=$conf_val (dirty flag set)");
@@ -3351,9 +3349,9 @@ sub pattern_daemon {
         &send_key_to_client($connection,"");
         last;
        }
-       &sudo("SET_PGENERATOR_CONF","calman_mode_idx","$best_idx");
-       $pgenerator_conf{"calman_mode_idx"}="$best_idx";
-       &log("Calman: remembered CONF_FORMAT mode_idx=$best_idx");
+       if(&pg_conf_write_checked("calman_mode_idx","$best_idx")) {
+        &log("Calman: remembered CONF_FORMAT mode_idx=$best_idx");
+       }
        # Update cached resolution
        &get_hdmi_info();
        } else {

@@ -87,6 +87,7 @@ $0=basename($0)." $action";
 &set_scaling_governor()   if($action eq "SET_SCALING_GOVERNOR");
 &set_discoverable()       if($action eq "SET_DISCOVERABLE");
 &wifi_status()            if($action eq "GET_WIFI_STATUS");
+&wifi_get_configured()    if($action eq "WIFI_GET_CONFIGURED");
 &wifi_scan()              if($action eq "WIFI_SCAN");
 &wifi_set_country()       if($action eq "WIFI_SET_COUNTRY");
 &wifi_apply_conf()        if($action eq "WIFI_APPLYCONF");
@@ -467,6 +468,20 @@ sub wifi_scan (@) {
 ###############################################
 #        Wifi Set Country function            #
 ###############################################
+sub wifi_get_configured (@) {
+ return if(!-f $wifi_conf);
+ open(my $fh,"<",$wifi_conf) or return;
+ while(my $line=<$fh>) {
+  next if($line=~/^\s*#/);
+  if($line=~/ssid="([^"\r\n]*)"/) {
+   print $1;
+   close($fh);
+   return;
+  }
+ }
+ close($fh);
+}
+
 sub wifi_set_country (@) {
  $interface=$ARGV[1];
  my $country=$ARGV[2];

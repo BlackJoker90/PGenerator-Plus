@@ -60,11 +60,11 @@
 	   #lgCalHistoryModal{display:none;position:fixed;inset:0;z-index:10000;background:rgba(0,0,0,.7);align-items:center;justify-content:center;padding:18px;box-sizing:border-box}
 	   #lgCalHistoryPanel{width:min(720px,calc(100vw - 36px));max-height:min(780px,calc(100vh - 36px));overflow:auto;background:var(--card);border:1px solid var(--border);border-radius:8px;padding:16px;box-sizing:border-box}
 	   #lgDisplayControlModal{display:none;position:fixed;inset:0;z-index:10000;background:rgba(0,0,0,.7);align-items:center;justify-content:center;padding:18px;box-sizing:border-box}
-	   #lgDisplayControlPanel{width:min(920px,calc(100vw - 36px));max-height:min(760px,calc(100vh - 36px));overflow:auto;background:var(--card);border:1px solid var(--border);border-radius:8px;box-shadow:0 20px 60px rgba(0,0,0,.45);padding:16px;box-sizing:border-box;scrollbar-color:#525264 #232330;scrollbar-width:auto;scrollbar-gutter:stable}
+	   #lgDisplayControlPanel{width:min(920px,calc(100vw - 36px));max-height:min(760px,calc(100vh - 36px));overflow:auto;background:var(--card);border:1px solid var(--border);border-radius:8px;box-shadow:0 20px 60px var(--shadow,rgba(0,0,0,.45));padding:16px;box-sizing:border-box;scrollbar-color:var(--scroll-thumb) var(--scroll-track);scrollbar-width:auto;scrollbar-gutter:stable}
 	   #lgDisplayControlPanel::-webkit-scrollbar{width:14px;height:14px}
-	   #lgDisplayControlPanel::-webkit-scrollbar-track{background:linear-gradient(90deg,#20202d 0%,#272736 100%);border-radius:999px;border:1px solid #3a3a4a}
-	   #lgDisplayControlPanel::-webkit-scrollbar-thumb{background:linear-gradient(90deg,#58586c 0%,#38384a 100%);border-radius:999px;border:1px solid #6c6c82;box-shadow:inset 1px 0 0 rgba(255,255,255,.12)}
-	   #lgDisplayControlPanel::-webkit-scrollbar-thumb:hover{background:linear-gradient(90deg,#67677c 0%,#434356 100%)}
+	   #lgDisplayControlPanel::-webkit-scrollbar-track{background:var(--scroll-track);border-radius:999px;border:1px solid var(--border)}
+	   #lgDisplayControlPanel::-webkit-scrollbar-thumb{background:var(--scroll-thumb);border-radius:999px;border:1px solid var(--scroll-thumb-border)}
+	   #lgDisplayControlPanel::-webkit-scrollbar-thumb:hover{background:var(--scroll-thumb-hover)}
 	   #lgApplyAllInputsModal{display:none;position:fixed;inset:0;z-index:10010;background:rgba(0,0,0,.7);align-items:center;justify-content:center;padding:18px;box-sizing:border-box}
 	   #lgApplyAllInputsPanel{width:min(520px,calc(100vw - 36px));max-height:calc(100vh - 36px);overflow:auto;background:var(--card);border:1px solid var(--orange);border-radius:8px;box-shadow:0 20px 60px rgba(0,0,0,.45);padding:16px 18px;box-sizing:border-box}
 	   #lgApplyAllInputsPanel h2{margin:0 0 8px;font-size:1rem;color:var(--orange);display:flex;align-items:center;gap:8px}
@@ -72,7 +72,7 @@
 	   #lgApplyAllInputsPanel ul{margin:0 0 12px 18px;padding:0;font-size:.78rem;line-height:1.5;color:var(--text2)}
 	   #lgApplyAllInputsMode{font-weight:600;color:var(--text)}
 	   #lgDisplayControlGrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:10px}
-	   .lg-display-control-item{border:1px solid var(--border);border-radius:6px;padding:9px;background:#10131d;min-height:74px}
+	   .lg-display-control-item{border:1px solid var(--border);border-radius:6px;padding:9px;background:var(--surface-inset);min-height:74px}
 	   .lg-display-control-top{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:7px}
 	   .lg-display-control-label{font-size:.78rem;color:var(--text);font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 	   .lg-display-control-value{font-size:.72rem;color:var(--text2);min-width:34px;text-align:right}
@@ -80,10 +80,10 @@
 	   .lg-display-control-row input[type="range"]{flex:1;min-width:0}
 	   .lg-display-control-row input[type="number"]{width:68px}
 	   .lg-display-control-row select,.lg-display-control-row input[type="text"]{width:100%}
-	   #lgDisplayControlPanel .lg-display-control-row select,#lgDisplayControlPanel .lg-display-control-row input[type="number"],#lgDisplayControlPanel .lg-display-control-row input[type="text"]{min-height:32px;background:var(--surface-inset);border:1px solid var(--border);border-radius:6px;color:var(--text);outline:none;box-sizing:border-box;color-scheme:dark}
+	   #lgDisplayControlPanel .lg-display-control-row select,#lgDisplayControlPanel .lg-display-control-row input[type="number"],#lgDisplayControlPanel .lg-display-control-row input[type="text"]{min-height:32px;background:var(--surface-field);border:1px solid var(--border);border-radius:6px;color:var(--text);outline:none;box-sizing:border-box}
 	   #lgDisplayControlPanel .lg-display-control-row input[type="number"],#lgDisplayControlPanel .lg-display-control-row input[type="text"]{padding:6px 8px}
-	   #lgDisplayControlPanel .lg-display-control-row select{padding:6px 30px 6px 8px;-webkit-appearance:none;appearance:none;cursor:pointer;background-color:var(--surface-inset);background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' fill='%23888'%3E%3Cpath d='M5 7L0 2h10z'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 10px center}
-	   #lgDisplayControlPanel .lg-display-control-row select option{background:var(--surface-inset);color:var(--text)}
+	   #lgDisplayControlPanel .lg-display-control-row select{padding:6px 30px 6px 8px;-webkit-appearance:none;appearance:none;cursor:pointer;background-color:var(--surface-field);background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' fill='%23888'%3E%3Cpath d='M5 7L0 2h10z'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 10px center}
+	   #lgDisplayControlPanel .lg-display-control-row select option{background:var(--surface-field);color:var(--text)}
 	   #lgDisplayControlPanel .lg-display-control-row select:focus,#lgDisplayControlPanel .lg-display-control-row input[type="number"]:focus,#lgDisplayControlPanel .lg-display-control-row input[type="text"]:focus{border-color:var(--accent)}
 	   #lgDisplayControlPanel .lg-display-control-row select:disabled,#lgDisplayControlPanel .lg-display-control-row input:disabled{opacity:.65;cursor:not-allowed}
 	   .lg-current-input-value{display:flex;align-items:center;padding:6px 10px;box-sizing:border-box;background:var(--surface-inset);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:.82rem;line-height:normal}
@@ -91,7 +91,7 @@
 	  <h2 id="lgCardTitle" style="gap:8px"><span class="drag-handle"><svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true" fill="currentColor"><circle cx="9" cy="6" r="1.6"/><circle cx="15" cy="6" r="1.6"/><circle cx="9" cy="12" r="1.6"/><circle cx="15" cy="12" r="1.6"/><circle cx="9" cy="18" r="1.6"/><circle cx="15" cy="18" r="1.6"/></svg></span><span class="lg-card-title-label">TV Control</span><span class="lg-card-title-actions"><button class="btn btn-sm btn-secondary" id="lgCalHistoryOpenBtn" type="button" onclick="lgOpenCalHistoryModal()">History</button><button class="btn btn-sm btn-secondary" id="lgDisplayControlOpenBtn" type="button" onclick="lgOpenDisplayControl()">Display Control</button></span></h2>
   <div class="card-section-head"><h3 class="card-section-title"><svg class="card-section-icon" viewBox="182.978 -280.26 33.406 33.41" aria-hidden="true"><path transform="scale(1,-1)" fill="currentColor" fill-rule="evenodd" d="M 199.679,246.85 c 9.226,0 16.705,7.491 16.705,16.703 0,9.229 -7.479,16.707 -16.705,16.707 -9.225,0 -16.701,-7.478 -16.701,-16.707 0,-9.212 7.476,-16.703 16.701,-16.703 z M 199.006,270.894 l 0,-14.661 4.652,0 0,1.317 -3.307,0 0,13.344 -1.345,0 z M 194.342,266.886 c 1.103,0 2.011,0.896 2.011,2.002 0,1.112 -0.908,2.01 -2.011,2.01 -1.103,0 -2.005,-0.898 -2.005,-2.01 0,-1.106 0.902,-2.002 2.005,-2.002 z M 200.351,277.526 c -0.183,0.005 -0.5,0.005 -0.672,0.005 -7.711,0 -13.984,-6.26 -13.984,-13.975 0,-3.731 1.458,-7.246 4.091,-9.883 2.646,-2.643 6.149,-4.112 9.893,-4.112 3.736,0 7.244,1.469 9.888,4.112 2.633,2.637 4.083,6.152 4.083,9.883 l 0,0.639 -9.979,0 0,-1.298 8.655,0 c 0,-0.026 -0.006,-0.169 -0.006,-0.198 -0.426,-6.601 -5.948,-11.811 -12.641,-11.811 -3.38,0 -6.576,1.312 -8.965,3.699 -2.392,2.392 -3.717,5.583 -3.717,8.97 0,3.384 1.325,6.569 3.717,8.96 2.389,2.397 5.585,3.717 8.965,3.717 0.15,0 0.506,-0.008 0.672,-0.011 l 0,1.303 z"/></svg>LG Display</h3><span class="conn-badge" id="lgStatusBadge" data-state="off" role="status">Checking…</span></div>
   <button class="btn btn-sm btn-secondary lg-display-control-open-desktop" type="button" onclick="lgOpenDisplayControl()">Display Control</button>
-  <div id="lgCommandStatus" style="display:none;align-items:center;gap:8px;font-size:.78rem;color:var(--text);background:#101522;border:1px solid var(--border);border-radius:6px;padding:7px 9px;margin-bottom:8px">
+  <div id="lgCommandStatus" style="display:none;align-items:center;gap:8px;font-size:.78rem;color:var(--text);background:var(--surface-inset);border:1px solid var(--border);border-radius:6px;padding:7px 9px;margin-bottom:8px">
    <span class="spinner"></span>
    <span id="lgCommandStatusText">Communicating with LG TV…</span>
    <span id="lgCommandElapsed" style="margin-left:auto;color:var(--text2);font-size:.72rem"></span>
@@ -161,7 +161,7 @@
  <div id="lgDisplayControlModal" class="pg-modal-in" onclick="if(event.target===this) lgCloseDisplayControl()">
   <div id="lgDisplayControlPanel">
   <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:10px">
-   <h2 style="margin:0">Display Control <span id="lgDisplayControlBadge" style="font-size:.7rem;padding:2px 8px;border-radius:4px;background:var(--text2);color:#000;margin-left:8px">Idle</span></h2>
+   <h2 style="margin:0">Display Control <span id="lgDisplayControlBadge" style="font-size:.7rem;padding:2px 8px;border-radius:4px;background:var(--text2);color:var(--surface-card);margin-left:8px">Idle</span></h2>
    <button class="btn btn-sm btn-secondary" onclick="lgCloseDisplayControl()">Close</button>
   </div>
   <div id="lgDisplayControlStatus" style="font-size:.8rem;color:var(--text2);line-height:1.45;margin-bottom:8px">Connect display</div>

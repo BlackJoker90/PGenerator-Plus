@@ -464,17 +464,19 @@ github_get() {
   # $(...) subshell this runs in): when the answer was last confirmed and,
   # for a rate limit, when GitHub takes requests again.
   reset=""
-  if { [ "$code" = 403 ] || [ "$code" = 429 ]; } && tr -d '\r' <"$hdr" | grep -qi '^x-ratelimit-remaining: *0$'; then
+  if { [ "$code" = 403 ] || [ "$code" = 429 ]; } && { tr -d '\r' <"$hdr" | grep -qi '^x-ratelimit-remaining: *0$' || grep -qi 'rate limit exceeded' "$body"; }; then
    reset=$(tr -d '\r' <"$hdr" | sed -n 's/^[Xx]-[Rr]ate[Ll]imit-[Rr]eset: *//p' | tail -1)
+   case "$reset" in ''|*[!0-9]*) reset=$(( now + 60 )) ;; esac
   fi
   printf '%s %s %s\n' "$(stat -c %Y "$base.json" 2>/dev/null || echo 0)" "${reset:-0}" "${code:-000}" >"$GITHUB_CACHE_DIR/stale.$$" 2>/dev/null || true
   cat "$base.json"
   rm -f "$hdr" "$body"
   return 0
  fi
- if { [ "$code" = 403 ] || [ "$code" = 429 ]; } && tr -d '\r' <"$hdr" | grep -qi '^x-ratelimit-remaining: *0$'; then
+ if { [ "$code" = 403 ] || [ "$code" = 429 ]; } && { tr -d '\r' <"$hdr" | grep -qi '^x-ratelimit-remaining: *0$' || grep -qi 'rate limit exceeded' "$body"; }; then
   reset=$(tr -d '\r' <"$hdr" | sed -n 's/^[Xx]-[Rr]ate[Ll]imit-[Rr]eset: *//p' | tail -1)
-  mins=$(( ( ${reset:-$now} - now + 59 ) / 60 ))
+  case "$reset" in ''|*[!0-9]*) reset="$now" ;; esac
+  mins=$(( ( reset - now + 59 ) / 60 ))
   [ "$mins" -ge 1 ] || mins=1
   printf '{"message":%s}' "$(json_escape "GitHub allows 60 requests per hour from your network without a login, and they are used up. Try again in $mins min.")"
  else
@@ -542,11 +544,29 @@ pick_update_release() {
 }
 
 # One release by version, for installing an older (or the same) release.
+# Preserves GitHub error JSON (such as HTTP 403 rate-limit messages) instead of
+# collapsing them to empty output so the caller reports the real reason.
 get_release_by_version() {
- local version="$1" json
- json=$(github_get "https://api.github.com/repos/${UPDATE_REPO}/releases/tags/v${version}") || json=""
- [ -n "$json" ] || json=$(github_get "https://api.github.com/repos/${UPDATE_REPO}/releases/tags/${version}") || json=""
- printf '%s' "$json"
+ local version="$1" json msg
+ if json=$(github_get "https://api.github.com/repos/${UPDATE_REPO}/releases/tags/v${version}"); then
+  printf '%s' "$json"
+  return 0
+ fi
+ msg=$(github_error_message "$json" 2>/dev/null || true)
+ if [ -n "$json" ] && [ "$msg" != "Not Found" ] && [ "$msg" != "Cannot reach GitHub" ]; then
+  printf '%s' "$json"
+  return 0
+ fi
+ if json=$(github_get "https://api.github.com/repos/${UPDATE_REPO}/releases/tags/${version}"); then
+  printf '%s' "$json"
+  return 0
+ fi
+ msg=$(github_error_message "$json" 2>/dev/null || true)
+ if [ -n "$json" ] && [ "$msg" != "Not Found" ] && [ "$msg" != "Cannot reach GitHub" ]; then
+  printf '%s' "$json"
+  return 0
+ fi
+ return 0
 }
 
 # The families an OTA update from CURRENT may reach besides its own (bridges).

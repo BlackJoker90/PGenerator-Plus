@@ -7436,7 +7436,7 @@ sub webui_meter_lg_autocal_ensure_10b (@) {
  # PGenerator.conf via SET_PGENERATOR_CONF and updates the in-memory
  # $pgenerator_conf hash so the same-process call sites below see the
  # new value without a separate reload.
- &set_pgenerator_conf_runtime("max_bpc","10");
+ return 0 if(!&set_pgenerator_conf_runtime("max_bpc","10"));
  # Restart the renderer so it picks up the new link bit-depth. Same pair
  # /api/restart uses; pattern_generator_start() blocks until the
  # renderer is up and holds DRM master.

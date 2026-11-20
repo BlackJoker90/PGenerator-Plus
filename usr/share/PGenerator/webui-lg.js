@@ -685,7 +685,7 @@ function lgDismissDetectedPrompt(){
 		   const selected=String(item.getAttribute('data-lg-tv-ip')||'')===String(ip||'');
 		   item.classList.toggle('selected',selected);
 		   item.setAttribute('aria-selected',selected?'true':'false');
-		   item.style.background=selected?'#10131d':'transparent';
+		   item.style.background=selected?'var(--selected-bg)':'transparent';
 		   item.style.boxShadow=selected?'inset 3px 0 0 var(--green)':'none';
 		  });
 		 }
@@ -713,7 +713,7 @@ function lgDismissDetectedPrompt(){
 			  list.style.height='90px';
 			  list.style.maxHeight='90px';
 			  list.style.overflowY=(count>3)?'auto':'hidden';
-			  list.style.scrollbarColor='var(--border) #0d0d15';
+			  list.style.scrollbarColor='var(--scroll-thumb) var(--scroll-track)';
 			  list.style.scrollbarWidth='thin';
 		 };
 		 const devices=(r&&Array.isArray(r.devices))?r.devices:[];
@@ -735,7 +735,7 @@ function lgDismissDetectedPrompt(){
 		  const ip=String(d.ip||'');
 		  const label=String(d.label||((d.name||d.model_name||'LG WebOS TV')+' ('+ip+')'))+(d.saved?' — saved pairing':'');
 		  html+='<option value="'+lgEscapeHtml(ip)+'" '+(idx===0?'selected':'')+'>'+lgEscapeHtml(label)+'</option>';
-		  cardHtml+='<button type="button" data-lg-tv-ip="'+lgEscapeHtml(ip)+'" role="option" aria-selected="'+(idx===0?'true':'false')+'" class="lg-device-item '+(idx===0?'selected':'')+'" onclick="lgCardDeviceClicked(\''+lgEscapeHtml(ip)+'\')" style="display:flex;align-items:center;width:100%;height:30px;min-height:30px;padding:0 10px;text-align:left;background:'+(idx===0?'#10131d':'transparent')+';box-shadow:'+(idx===0?'inset 3px 0 0 var(--green)':'none')+';border:0;border-bottom:1px solid var(--border);color:var(--text);font-size:var(--fs-sm);line-height:1.15;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer">'+lgEscapeHtml(label)+'</button>';
+		  cardHtml+='<button type="button" data-lg-tv-ip="'+lgEscapeHtml(ip)+'" role="option" aria-selected="'+(idx===0?'true':'false')+'" class="lg-device-item '+(idx===0?'selected':'')+'" onclick="lgCardDeviceClicked(\''+lgEscapeHtml(ip)+'\')" style="display:flex;align-items:center;width:100%;height:30px;min-height:30px;padding:0 10px;text-align:left;background:'+(idx===0?'var(--selected-bg)':'transparent')+';box-shadow:'+(idx===0?'inset 3px 0 0 var(--green)':'none')+';border:0;border-bottom:1px solid var(--border);color:var(--text);font-size:var(--fs-sm);line-height:1.15;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer">'+lgEscapeHtml(label)+'</button>';
 			 });
 			 if(promptSelect) promptSelect.innerHTML=html;
 			 if(cardSelect) cardSelect.innerHTML=cardHtml;
@@ -818,7 +818,7 @@ function lgDismissDetectedPrompt(){
 	   if(cardStatus) cardStatus.textContent='Network scan timed out; showing saved TVs.';
 	  }else{
 		  if(promptSelect) promptSelect.innerHTML='<option value="">Scan failed</option>';
-		  if(cardSelect) cardSelect.innerHTML='<div style="height:30px;display:flex;align-items:center;padding:0 10px;color:#f7b0b0">Scan failed</div>';
+		  if(cardSelect) cardSelect.innerHTML='<div style="height:30px;display:flex;align-items:center;padding:0 10px;color:var(--red)">Scan failed</div>';
 	  if(promptStatus) promptStatus.textContent='Scan failed. Enter the TV IP manually.';
 	  if(cardStatus) cardStatus.textContent='Scan failed. Enter the TV IP manually.';
 	  }

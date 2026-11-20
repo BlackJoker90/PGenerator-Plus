@@ -136,6 +136,7 @@ static YCbCr RGB2YCbCr(RGB rgb, int bits, int colorimetry, int rgb_quant_range) 
 	int scalar2;
 	YCbCrRangeScalars(bits, rgb_quant_range, scalar1, scalar2);
 	int offset = 128 << (bits - 8);
+	int max_code = (1 << bits) - 1;
 	int R, G, B;
 	float d = k.d, e = k.e;
 	
@@ -156,6 +157,13 @@ static YCbCr RGB2YCbCr(RGB rgb, int bits, int colorimetry, int rgb_quant_range) 
 	int Y = std::round((k.Kr * R + k.Kg* G + k.Kb * B));
 	int Cb = std::round(((-k.Kr/d) * R - (k.Kg/d) * G + ((d/2)/d) * B)*scalar1/scalar2 + offset); // Chrominance Blue
 	int Cr = std::round((((e/2)/e) * R - (k.Kg/e) * G - (k.Kb/e) * B)*scalar1/scalar2 + offset); // Chrominance Red
+
+	// Clamp to the framebuffer's code range [0, 2^bits - 1] so out-of-range
+	// chroma (e.g. full-range RGB on a limited YCbCr link) matches the GPU
+	// fragment shader instead of wrapping modulo 256 in 8-bit ofBackground().
+	if (Y < 0) Y = 0; else if (Y > max_code) Y = max_code;
+	if (Cb < 0) Cb = 0; else if (Cb > max_code) Cb = max_code;
+	if (Cr < 0) Cr = 0; else if (Cr > max_code) Cr = max_code;
 
 	return YCbCr(Y, Cb, Cr); 
 }

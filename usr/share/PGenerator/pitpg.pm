@@ -582,8 +582,17 @@ sub pitpg_client_values_recover (@) {
  close($fh);
  push(@pairs,&pitpg_session_back(\%session));
  if(@pairs) {
+  my %prev;
+  for(my $i=0; $i+1 <= $#pairs; $i+=2) {
+   my $k=$pairs[$i];
+   $prev{$k}=exists($pgenerator_conf{$k}) ? $pgenerator_conf{$k} : undef unless exists($prev{$k});
+  }
   my $ok=&set_pgenerator_conf_runtime_multi(@pairs) // "";
   if($ok!~/^\Q$ok_response\E/) {
+   for my $k (keys %prev) {
+    if(defined $prev{$k}) { $pgenerator_conf{$k}=$prev{$k}; }
+    else { delete $pgenerator_conf{$k}; }
+   }
    &log("PiTPG: client settings from the last session could not be put back: $ok");
    return 0;
   }

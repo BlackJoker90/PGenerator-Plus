@@ -1287,21 +1287,75 @@ if [[ "$PATCH_INSERT_TIME_ENABLED" == "1" ]]; then
 
 read_timeout_seconds() {
  local ire="${1:-0}"
- # Large ICC sets can enter a slower adaptive integration after hundreds of
- # readings even when their synthetic IRE field is high.  Ten seconds then
- # expires just before a valid result and needlessly starts a second trigger.
- # Keep the longer bound scoped to profile-sized colour series.
+ local r="${2:-}" g="${3:-}" b="${4:-}" input_max="${5:-}"
+ local large_color=0
  if [[ "$SERIES_ID" == colors_* ]] && (( ${TOTAL:-0} >= 100 )); then
-  echo 20
- elif float_le "$ire" 1; then
-  echo 90
- elif float_le "$ire" 5; then
-  echo 70
- elif float_le "$ire" 20; then
-  echo 20
- else
-  echo 10
+  large_color=1
  fi
+ local sig_mode="${SIGNAL_MODE:-sdr}"
+ local sig_range="${PATTERN_SIGNAL_RANGE:-}"
+ local color_fmt="${COLOR_FORMAT:-0}"
+ # Near-black patches need much longer meter integration (especially on
+ # Mini-LED with local dimming or OLED). Large ICC colour sets pass a
+ # synthetic step index in IRE (0..TOTAL-1), so compute the timeout from both
+ # IRE and the actual RGB stimulus codes and take the longer bound. For
+ # profile-sized colour series, 20 s is a minimum floor for bright patches,
+ # never a cap that shortens dark-patch timeouts (#39).
+ awk -v ire="$ire" -v r="$r" -v g="$g" -v b="$b" -v imax="$input_max" \
+     -v large_color="$large_color" -v sig_mode="$sig_mode" -v sig_range="$sig_range" \
+     -v color_fmt="$color_fmt" '
+  function is_num(s) {
+   return (s ~ /^[+-]?([0-9]+\.?[0-9]*|\.[0-9]+)([eE][+-]?[0-9]+)?$/)
+  }
+  function clamp01(v) {
+   if (v < 0) return 0
+   if (v > 1) return 1
+   return v
+  }
+  BEGIN {
+   sig_mode = tolower(sig_mode)
+   sig_range = tolower(sig_range)
+   ire_t = 10
+   if (is_num(ire)) {
+    iv = ire + 0
+    if (iv <= 1) ire_t = 90
+    else if (iv <= 5) ire_t = 70
+    else if (iv <= 20) ire_t = 20
+   }
+
+   code_t = 10
+   if (is_num(r) && is_num(g) && is_num(b) && is_num(imax) && (imax + 0) > 0) {
+    m = imax + 0
+    lo = 0.0
+    hi = m
+    if (sig_range == "1" || sig_range == "limited" || sig_mode == "dv" || (color_fmt != "" && color_fmt != "0")) {
+     lo = 16.0 * (m + 1.0) / 256.0
+     hi = 235.0 * (m + 1.0) / 256.0
+    }
+    span = hi - lo
+    if (span <= 0) span = m
+    rn = clamp01(((r + 0) - lo) / span)
+    gn = clamp01(((g + 0) - lo) / span)
+    bn = clamp01(((b + 0) - lo) / span)
+    luma_pct = 100.0 * (0.2126 * rn + 0.7152 * gn + 0.0722 * bn)
+    if (sig_mode == "hdr10" || sig_mode == "dv") {
+     if (luma_pct <= 10) code_t = 90
+     else if (luma_pct <= 20) code_t = 70
+     else if (luma_pct <= 30) code_t = 35
+    } else {
+     if (luma_pct <= 1) code_t = 90
+     else if (luma_pct <= 5) code_t = 70
+     else if (luma_pct <= 15) code_t = 45
+     else if (luma_pct <= 20) code_t = 20
+    }
+   }
+
+   timeout = (code_t > ire_t) ? code_t : ire_t
+   if ((large_color + 0) == 1 && timeout < 20) {
+    timeout = 20
+   }
+   print timeout
+  }'
 }
 
 find_port() {
@@ -2281,7 +2335,7 @@ EOJSON
 
  # Near-black reads can take much longer than mid/high greys. Match the
  # manual-read tolerance here so the low end does not time out prematurely.
- READ_TIMEOUT=$(read_timeout_seconds "$IRE")
+ READ_TIMEOUT=$(read_timeout_seconds "$IRE" "$R" "$G" "$B" "$INPUT_MAX")
 
  # Trigger reading: send space
  PREV_COUNT=$(count_results)
@@ -2390,7 +2444,7 @@ EOJSON
    SCAN_OFFSET=$(output_size)
    printf " " >&3
    READ_START=$SECONDS
-   RETRY_TIMEOUT=$(read_timeout_seconds "$IRE")
+   RETRY_TIMEOUT=$(read_timeout_seconds "$IRE" "$R" "$G" "$B" "$INPUT_MAX")
    GOT_RETRY=false
    RETRIED_COMM=0
    while (( SECONDS - READ_START < RETRY_TIMEOUT )); do
@@ -2469,7 +2523,7 @@ EOJSON
    SCAN_OFFSET=$(output_size)
    printf " " >&3
    READ_START=$SECONDS
-   RETRY_TIMEOUT=$(read_timeout_seconds "$IRE")
+   RETRY_TIMEOUT=$(read_timeout_seconds "$IRE" "$R" "$G" "$B" "$INPUT_MAX")
    GOT_RETRY=false
    RETRIED_COMM=0
    while (( SECONDS - READ_START < RETRY_TIMEOUT )); do
@@ -2558,7 +2612,7 @@ EOJSON
    write_state_json << EOJSON
 {"status":"running","series_id":"$SERIES_ID","current_step":$STEP_NUM,"total_steps":$TOTAL,"current_name":"$NAME (sample $average_index/$AVERAGE_SAMPLE_COUNT)","readings":[$READINGS],"white_reading":$WHITE_READING}
 EOJSON
-   capture_series_average_sample "$(read_timeout_seconds "$IRE")"
+   capture_series_average_sample "$(read_timeout_seconds "$IRE" "$R" "$G" "$B" "$INPUT_MAX")"
    SAMPLE_RC=$?
    # A zero that survived its re-reads ends the set. It never enters the mean:
    # 4, 0, 4 would pass as 2.67 with no flag. The reads so far stand; the next
@@ -2695,7 +2749,7 @@ EOJSON
   SCAN_OFFSET=$(output_size)
   printf " " >&3
 
-  READ_TIMEOUT=$(read_timeout_seconds "$FIRST_IRE")
+  READ_TIMEOUT=$(read_timeout_seconds "$FIRST_IRE" "$FIRST_R" "$FIRST_G" "$FIRST_B" "$FIRST_INPUT_MAX")
   READ_START=$SECONDS
   GOT_RESULT=false
   RETRIED_COMM=0

@@ -247,6 +247,21 @@ a turn while a snapshot is open.
 - Releases are OTA packages (`tools/release-ota.sh`); a flashable image
   only for boot/base-system changes or when the maintainer asks. The
   release script refuses untracked runtime files: `git add` new files first.
+- Release notes (`build/release-<ver>/notes.md` and GitHub releases): write
+  in English with a user-first layout and collapsible `<details>` blocks for
+  technical and test details:
+  - Start with the target/upgrade notice (e.g. Pi 4 OTA, 2.13.52 bridge note)
+    and a brief summary or 2–4 bullet **Highlights** for larger releases.
+  - Group user-visible changes under clear sections (**What's New**,
+    **Improvements**, **Bug Fixes**, or clear feature areas; omit empty
+    sections). Keep each bullet to one topic: a **bold short title** plus
+    1–2 readable sentences describing user impact (`(#issue)` where
+    applicable). Avoid catch-all paragraphs and avoid internal file,
+    function, or helper names in the main body unless users interact with
+    them directly.
+  - Place internal implementation/hardening details and the **How this was
+    tested** verification summary in collapsible
+    `<details><summary>…</summary>…</details>` blocks at the bottom.
 
 - README follows the product without being asked: when something
   fundamental is added or changed (a new setting, workspace, card, endpoint,

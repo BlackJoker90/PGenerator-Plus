@@ -11,8 +11,10 @@ files changed in this session, before a turn ends.
    core.fsmonitor, filters), no symlinked files. Perl is left to 2.
 2. Tests: a code file under usr/, src/, etc/ or the project's hook and pi
    scripts was changed in this turn after the last test run (a `prove` or a
-   tools/repro_old_new.sh command in a Bash call of this session; text in
-   quotes or a heredoc does not count); changed Perl files are named with
+   tools/repro_old_new.sh command in a Bash or Monitor call of this
+   session, also behind wrappers such as timeout or /usr/bin/time and in
+   `bash -c '...'`; other text in quotes or a heredoc does not count);
+   changed Perl files are named with
    the perl -c they still need. The transcript can lag at stop time, so it
    is read again once before the hint is given.
 
@@ -63,11 +65,31 @@ ASSIGNMENT = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*=")
 
 HEREDOC = re.compile(r"<<-?\s*(['\"]?)([A-Za-z_][A-Za-z0-9_]*)\1")
 QUOTED = re.compile(r"'[^']*'|\"(?:[^\"\\]|\\.)*\"")
+# Wrappers that run the rest of their words, with the options that take a
+# value: pi_guard's WRAP without flock (its first argument is the lock
+# file), plus BSD xargs' -J/-R/-S; matched by program name, so
+# /usr/bin/time counts as time. timeout/gtimeout take a duration first.
+WRAPPERS = {"sudo": {"-u", "-g", "-C", "-h", "-p", "-r", "-t", "-U", "-D", "-T", "--user", "--group"},
+            "doas": {"-u", "-C"},
+            "env": {"-u", "-C", "-S", "--unset", "--chdir", "--split-string"},
+            "nice": {"-n", "--adjustment"},
+            "ionice": {"-c", "-n", "-p"},
+            "nohup": set(), "setsid": set(), "exec": {"-a"}, "command": set(), "time": {"-f", "-o"},
+            "stdbuf": {"-i", "-o", "-e"}, "busybox": set(),
+            "timeout": {"-s", "-k", "--signal", "--kill-after"}, "gtimeout": {"-s", "-k", "--signal", "--kill-after"},
+            "caffeinate": {"-t", "-w"},
+            "xargs": {"-I", "-n", "-P", "-L", "-d", "-E", "-s", "-a", "-l", "-J", "-R", "-S", "--max-args",
+                      "--max-procs", "--delimiter", "--arg-file", "--replace", "--max-lines", "--eof"},
+            "watch": {"-n", "--interval"}}
+# Shell words before a command: `do prove ...`, `if bash -c '...'`, `! prove`.
+RESERVED = {"if", "then", "elif", "else", "do", "while", "until", "!", "{"}
+# `sh -c '...'`: the quoted script after the shell's options is a command.
+SHELLS = {"sh", "bash", "dash", "zsh", "ksh"}
+SHELL_VALUE_OPTIONS = {"-o", "+o", "-O", "+O", "--rcfile", "--init-file"}
 
 
-def strip_text(command):
-    """The command without heredoc bodies and quoted strings: `prove` in a
-    commit message, an echo or a script fed to python is no test run."""
+def strip_heredocs(command):
+    """The command without heredoc bodies: a script fed to python is text."""
     lines, out, end = command.split("\n"), [], None
     for line in lines:
         if end is not None:
@@ -78,25 +100,87 @@ def strip_text(command):
         if m:
             end = m.group(2)
         out.append(line)
+    return "\n".join(out)
+
+
+def strip_text(command):
+    """The command without heredoc bodies and quoted strings: `prove` in a
+    commit message, an echo or a script fed to python is no test run."""
     # A quoted single word stays a word ('prove' -r t runs prove); quoted
     # text with spaces (a message, an echo) is text.
     return QUOTED.sub(lambda q: q.group(0)[1:-1] if re.match(r"^['\"][\w./-]+['\"]$", q.group(0)) else "''",
-                      "\n".join(out))
+                      strip_heredocs(command))
 
 
-def runs_tests(command):
+def command_words(seg):
+    """The words of one segment from its command word on: assignments, shell
+    keywords and wrappers (with their options) dropped; [] for `command -v`
+    (a lookup)."""
+    words = seg.split()
+    while words and (ASSIGNMENT.match(words[0]) or words[0] in RESERVED
+                     or os.path.basename(words[0]) in WRAPPERS):
+        w = os.path.basename(words.pop(0))
+        if w not in WRAPPERS:
+            continue                              # an assignment or a keyword
+        if w == "command" and any(x in ("-v", "-V") for x in words[:2]):
+            return []                             # command -v prove: a lookup, runs nothing
+        # options before the command: env -u NAME, time -p, timeout -s KILL
+        while words and words[0].startswith("-") and words[0] != "-":
+            o = words.pop(0)
+            if o == "--":
+                break
+            if o in WRAPPERS[w] and words:
+                words.pop(0)
+        if w in ("timeout", "gtimeout") and words:
+            words.pop(0)                          # the duration
+    return words
+
+
+def ends_in_shell_c(plain):
+    """True if the last segment of `plain` (quotes already replaced) is a
+    shell as its command word followed by options only, the last a cluster
+    with c: `bash -c `, `env X=1 sh -lc `, `bash -o pipefail -c `. A shell
+    that is the argument of another command (`echo bash -c`) runs nothing."""
+    if not plain[-1:].isspace():
+        return False                              # the quote must start a word of its own
+    words = command_words(SEGMENT_SPLIT.split(plain)[-1])
+    if not words or os.path.basename(words[0]) not in SHELLS:
+        return False
+    i = 1
+    while i < len(words):
+        w, last = words[i], i == len(words) - 1
+        if w in SHELL_VALUE_OPTIONS or re.match(r"^[-+][A-Za-z]*[oO]$", w):
+            i += 2                                # -o pipefail, -euo pipefail: a value follows
+            continue
+        if re.match(r"^-[A-Za-z]+$", w) and "c" in w and last:
+            return True
+        if not re.match(r"^(?:[-+][A-Za-z]+|--[\w-]+)$", w):
+            return False                          # a script file or another argument
+        i += 1
+    return False
+
+
+def shell_c_scripts(text):
+    """The script of each `sh -c '...'` (bash, zsh, ...) whose shell is its
+    segment's command word: `bash -c "prove -r t"` runs prove; a message
+    that quotes such a command, or `echo bash -c '...'`, does not."""
+    out, plain, last = [], "", 0
+    for q in QUOTED.finditer(text):
+        plain += text[last:q.start()]
+        if ends_in_shell_c(plain):
+            s = q.group(0)[1:-1]
+            out.append(re.sub(r"\\(.)", r"\1", s) if q.group(0)[0] == '"' else s)
+        plain += "''"
+        last = q.end()
+    return out
+
+
+def runs_tests(command, depth=0):
     """True if a segment of a shell command starts `prove` or the repro script."""
+    if depth < 5 and any(runs_tests(s, depth + 1) for s in shell_c_scripts(strip_heredocs(command or ""))):
+        return True
     for seg in SEGMENT_SPLIT.split(strip_text(command or "")):
-        words = seg.split()
-        while words and (ASSIGNMENT.match(words[0]) or words[0] in ("env", "time", "nice", "exec", "command", "nohup")):
-            w = words.pop(0)
-            # env -u NAME / env -i / env --: options before the command
-            while w == "env" and words and words[0].startswith("-"):
-                o = words.pop(0)
-                if o in ("-u", "--unset", "-C", "--chdir", "-S", "--split-string") and words:
-                    words.pop(0)
-            if w == "nice" and words and words[0] == "-n" and len(words) > 1:
-                words[:2] = []
+        words = command_words(seg)
         if not words:
             continue
         first = os.path.basename(words[0])
@@ -437,7 +521,8 @@ def transcript_times(path, prompt_id):
             if not isinstance(content, list):
                 continue
             for c in content:
-                if (isinstance(c, dict) and c.get("type") == "tool_use" and c.get("name") == "Bash"
+                # Monitor runs its command in a shell as Bash does
+                if (isinstance(c, dict) and c.get("type") == "tool_use" and c.get("name") in ("Bash", "Monitor")
                         and runs_tests(str((c.get("input") or {}).get("command", "")))):
                     if last_run is None or ts > last_run:
                         last_run = ts
@@ -498,9 +583,10 @@ def main():
         repro = os.path.join(main_checkout(root), "tools", "repro_old_new.sh")
         reasons.append(
             "code changed in this turn after the last test run: %s. "
-            "Run `prove -j8 -Q -r t` on a fresh copy (in a worktree: the tree plus the main checkout's t/ and tools/, "
-            "see .claude/agents/pgen-reviewer.md), and for a fix `bash %s t/<test>.t` "
-            "(fails on the old code, passes on the new).%s "
+            "Run `prove -j16 -Q --state=slow,save --statefile=t/.prove-state -r t` on a fresh copy (in a worktree: "
+            "the tree plus the main checkout's t/ and tools/, see .claude/agents/pgen-reviewer.md); in the Bash "
+            "sandbox, rerun unsandboxed every red file and every file that printed `sandbox:`. For a fix "
+            "`bash %s t/<test>.t` (fails on the old code, passes on the new).%s "
             "If tests just ran or do not apply, say so in the reply and stop again."
             % (listed(stale), repro,
                (" Perl, not parsed by this hook: `perl -I usr/share/PGenerator -c` for scripts, "

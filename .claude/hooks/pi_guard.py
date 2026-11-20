@@ -1,8 +1,17 @@
 #!/usr/bin/env python3
-"""PreToolUse guard for Bash: the rules of CLAUDE.md ("Working on the Pi",
-"Rules that bite", "Git and releases") enforced before a command runs,
-instead of remembered. Reads the hook JSON on stdin; prints a deny or ask
-decision, or nothing (the normal permission flow goes on).
+"""PreToolUse guard for Bash and Monitor: the rules of CLAUDE.md ("Working
+on the Pi", "Rules that bite", "Git and releases") enforced before a command
+runs, instead of remembered. Reads the hook JSON on stdin; prints a deny or
+ask decision, or nothing (the normal permission flow goes on).
+
+Monitor runs its `command` in a shell as Bash does, so the same command is
+judged the same way (2026-11-19: a Monitor call reached the Pi by raw ssh,
+pushed to origin and posted `{}` unchecked). Its `ws` form opens a
+WebSocket and runs nothing; the Pi's daemon serves none. The ask rules in
+.claude/settings.json are Bash(...) rules, and that they would prompt for a
+Monitor call is not established, so the guard counts them for Bash only:
+an ask on Monitor becomes a deny in a mode without the hook's dialog, with
+the hint to run the command through Bash.
 
 The command is read the way a shell reads it: quotes, $'..', $(..),
 backticks, <(..), backslash-newline, comments only at the start of a word,
@@ -1392,9 +1401,14 @@ def ask_rule_covers(cmd, project):
     return any(rule_rx(r).match(c) for r in ask_rules(project) if r and not r.startswith("*"))
 
 
+# Tools whose tool_input.command runs in a shell (see the docstring).
+SHELL_TOOLS = ("Bash", "Monitor")
+
+
 def main():
     data = json.load(sys.stdin)
-    if not isinstance(data, dict) or data.get("tool_name") != "Bash":
+    tool = data.get("tool_name") if isinstance(data, dict) else None
+    if tool not in SHELL_TOOLS:
         return
     ti = data.get("tool_input")
     cmd = ti.get("command") if isinstance(ti, dict) else None
@@ -1407,12 +1421,14 @@ def main():
     except RecursionError:
         kind, reason = "deny", "nested too deeply to check: write it plainly."
     mode = data.get("permission_mode")
-    if kind == "ask" and mode not in ASK_PROMPTS and not ask_rule_covers(cmd, project):
+    covered = tool == "Bash" and ask_rule_covers(cmd, project)
+    if kind == "ask" and mode not in ASK_PROMPTS and not covered:
         kind, reason = "deny", reason + (
             " The permission mode %s does not show this hook's ask as a dialog, so the command would run "
-            "unasked. Ask the user, then run it as its own plain command that an ask rule in "
+            "unasked. Ask the user, then run it %sas its own plain command that an ask rule in "
             ".claude/settings.json covers (%s): that rule shows the dialog in every mode."
-            % (mode if isinstance(mode, str) else "(not given)", ", ".join(ASK_FORMS)))
+            % (mode if isinstance(mode, str) else "(not given)",
+               "with the Bash tool (not Monitor) " if tool != "Bash" else "", ", ".join(ASK_FORMS)))
         if "release script:" in reason:
             reason += " " + RELEASE_FORM
     if kind:

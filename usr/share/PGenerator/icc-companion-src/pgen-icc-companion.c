@@ -1474,18 +1474,41 @@ static bool connect_with_timeout(socket_handle_t sock, const struct sockaddr *ad
     return true;
 }
 
+/* The network thread and an install thread both connect through the same
+ * CompanionConfig: its address cache is only read and written under this
+ * lock, the connects themselves run outside it. */
+static SDL_SpinLock companion_address_lock;
+
 static socket_handle_t open_server_socket(CompanionConfig *config)
 {
     struct addrinfo hints, *addresses = NULL, *address;
     socket_handle_t sock = INVALID_SOCKET_HANDLE;
     char port[16];
+    struct sockaddr_storage cached_address;
+    int cached_length = 0, cached_family = 0, cached_socktype = 0, cached_protocol = 0;
+    bool cached = false;
 
+    SDL_LockSpinlock(&companion_address_lock);
     if (config->address_resolved) {
-        sock = socket(config->resolved_family, config->resolved_socktype, config->resolved_protocol);
+        cached = true;
+        cached_address = config->resolved_address;
+        cached_length = config->resolved_address_length;
+        cached_family = config->resolved_family;
+        cached_socktype = config->resolved_socktype;
+        cached_protocol = config->resolved_protocol;
+    }
+    SDL_UnlockSpinlock(&companion_address_lock);
+    if (cached) {
+        sock = socket(cached_family, cached_socktype, cached_protocol);
         if (sock == INVALID_SOCKET_HANDLE) return INVALID_SOCKET_HANDLE;
-        if (connect_with_timeout(sock, (const struct sockaddr *)&config->resolved_address,
-                                 config->resolved_address_length, 2500)) return sock;
+        if (connect_with_timeout(sock, (const struct sockaddr *)&cached_address,
+                                 cached_length, 2500)) return sock;
         close_socket(sock);
+        /* Resolve again next time: the unit may have a new address (DHCP),
+         * and the cached one would otherwise fail until a restart. */
+        SDL_LockSpinlock(&companion_address_lock);
+        config->address_resolved = false;
+        SDL_UnlockSpinlock(&companion_address_lock);
         return INVALID_SOCKET_HANDLE;
     }
 
@@ -1499,12 +1522,14 @@ static socket_handle_t open_server_socket(CompanionConfig *config)
         sock = socket(address->ai_family, address->ai_socktype, address->ai_protocol);
         if (sock == INVALID_SOCKET_HANDLE) continue;
         if (connect_with_timeout(sock, address->ai_addr, (int)address->ai_addrlen, 2500)) {
+            SDL_LockSpinlock(&companion_address_lock);
             memcpy(&config->resolved_address, address->ai_addr, (size_t)address->ai_addrlen);
             config->resolved_address_length = (int)address->ai_addrlen;
             config->resolved_family = address->ai_family;
             config->resolved_socktype = address->ai_socktype;
             config->resolved_protocol = address->ai_protocol;
             config->address_resolved = true;
+            SDL_UnlockSpinlock(&companion_address_lock);
             break;
         }
         close_socket(sock);
@@ -1609,7 +1634,8 @@ static int http_binary(CompanionConfig *config, const char *method, const char *
     if (!raw) { close_socket(sock); return 0; }
     for (;;) {
         int count;
-        if (used + 16384 > capacity) {
+        /* >= keeps one byte free for the terminator sscanf needs below. */
+        if (used + 16384 >= capacity) {
             unsigned char *grown;
             if (capacity >= (size_t)96 * 1024 * 1024) break;
             capacity *= 2;
@@ -1622,6 +1648,7 @@ static int http_binary(CompanionConfig *config, const char *method, const char *
         used += (size_t)count;
     }
     close_socket(sock);
+    raw[used] = 0;
     if (used < 12 || sscanf((const char *)raw, "HTTP/%*s %d", &status) != 1) { SDL_free(raw); return 0; }
     {
         size_t index;
@@ -1629,6 +1656,17 @@ static int http_binary(CompanionConfig *config, const char *method, const char *
         for (index = 0; index + 3 < used; index++) {
             if (raw[index] == '\r' && raw[index + 1] == '\n' && raw[index + 2] == '\r' && raw[index + 3] == '\n') {
                 start = index + 4; break;
+            }
+        }
+        /* A reply cut short (recv error or timeout, a peer that closed early,
+         * the size cap, a failed realloc) must not pass as a complete one:
+         * the body has to be as long as the server's Content-Length says. */
+        for (index = 0; index + 15 < start; index++) {
+            if ((index == 0 || raw[index - 1] == '\n') &&
+                !SDL_strncasecmp((const char *)raw + index, "Content-Length:", 15)) {
+                if (strtoull((const char *)raw + index + 15, NULL, 10) !=
+                    (unsigned long long)(used - start)) { SDL_free(raw); return 0; }
+                break;
             }
         }
         if (start >= used) { SDL_free(raw); return status; }
@@ -2296,8 +2334,11 @@ static bool json_string(const char *json, const char *key, char *value, size_t s
     SDL_snprintf(needle, sizeof(needle), "\"%s\"", key);
     found = strstr(json, needle);
     if (!found || !(found = strchr(found + strlen(needle), ':'))) return false;
-    start = strchr(found, '"');
-    if (!start) return false;
+    /* The value itself must be a string: for null or a number the next '"'
+     * opens the following key, whose name is not this key's value. */
+    start = found + 1;
+    while (*start == ' ' || *start == '\t' || *start == '\r' || *start == '\n') start++;
+    if (*start != '"') return false;
     end = strchr(++start, '"');
     if (!end) return false;
     SDL_snprintf(value, size, "%.*s", (int)(end - start), start);
@@ -3922,6 +3963,25 @@ static bool companion_quote_append(char *destination, size_t capacity, size_t *u
     return true;
 }
 
+/* The ']' closing the JSON array whose '[' is at open: the first one outside
+ * a string. A flag value can contain ']' itself (-D "OLED [living room]"),
+ * which strchr took for the end of the array. */
+static const char *json_array_end(const char *open)
+{
+    bool in_string = false;
+    for (const char *cursor = open + 1; *cursor; cursor++) {
+        if (in_string) {
+            if (*cursor == '\\' && cursor[1]) cursor++;
+            else if (*cursor == '"') in_string = false;
+        } else if (*cursor == '"') {
+            in_string = true;
+        } else if (*cursor == ']') {
+            return cursor;
+        }
+    }
+    return NULL;
+}
+
 static void companion_run_targen(const char *poll_response)
 {
     char ti1_path[1200], base_path[1200], input_path[1200], tool[1024];
@@ -3942,7 +4002,7 @@ static void companion_run_targen(const char *poll_response)
     {
         const char *start = strstr(poll_response, "\"flags\":[");
         if (start) {
-            const char *end = strchr(start, ']');
+            const char *end = json_array_end(start + 8);
             size_t length = end ? (size_t)(end - start - 9) : 0;
             if (length && length < sizeof(flags)) {
                 memcpy(flags, start + 9, length);
@@ -4112,7 +4172,7 @@ static void companion_run_build(const char *poll_response)
     {
         const char *start = strstr(poll_response, "\"flags\":[");
         if (start) {
-            const char *end = strchr(start, ']');
+            const char *end = json_array_end(start + 8);
             size_t length = end ? (size_t)(end - start - 9) : 0;
             if (length && length < sizeof(flags)) {
                 memcpy(flags, start + 9, length);
@@ -4455,7 +4515,6 @@ static void companion_run_install(const char *poll_response)
                     SDL_Log("Profile Loader exited with status %d without "
                             "reporting a result",
                             WIFEXITED(child_status) ? WEXITSTATUS(child_status) : -1);
-                SDL_free(profile);
                 companion_report_install(job, false,
                     "Profile Loader exited without reporting a result - it may "
                     "be missing a library or incompatible with this system");

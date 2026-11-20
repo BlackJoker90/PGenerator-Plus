@@ -397,6 +397,7 @@ our $pitpg_mode_error="";
 # apply and when the last PiTPG client closes. While they are in effect the
 # client's own max_bpc / rgb_quant_range are kept here and put back then.
 our $pitpg_bit_depth=0;
+our %pitpg_depth_refused=();
 our $pitpg_patch_range=-1;
 our %pitpg_client_value=();
 # The same values on disk while they are in effect: the conf holds the
@@ -779,6 +780,8 @@ sub pitpg_refused_restored (@) {
 # A write the helper does not confirm leaves the client values (memory and
 # file) in place for the next try or the daemon start, and returns undef.
 sub pitpg_clear_patch_state (@) {
+ # The next session checks its depth again, also when the put-back fails.
+ %pitpg_depth_refused=();
  my @pairs;
  foreach my $k (sort keys %pitpg_client_value) {
   push(@pairs,$k,$pitpg_client_value{$k}) if(($pgenerator_conf{$k} // "") ne $pitpg_client_value{$k});
@@ -1179,8 +1182,15 @@ sub pitpg_set_patch_range (@) {
   my $why=&pitpg_ll_rgb_limited_refused(&pitpg_dv_ll(),($pgenerator_conf{"dv_ll_rgb"} // "") eq "1",$label);
   return ("range",$why) if($why ne "");
   if(($pgenerator_conf{"rgb_quant_range"} // "") ne $label) {
+   my $have=$pgenerator_conf{"rgb_quant_range"} // "";
+   my $kept=exists($pitpg_client_value{rgb_quant_range});
    &pitpg_client_value_keep("rgb_quant_range",$client);
-   &set_pgenerator_conf_runtime("rgb_quant_range",$label);
+   # Checked as the TV-led range above: the renderer reads it from the file.
+   if(!&pitpg_conf_write("rgb_quant_range",$label)) {
+    &pitpg_client_value_drop("rgb_quant_range") if(!$kept && ($pgenerator_conf{"rgb_quant_range"} // "") eq $have);
+    &log("PiTPG: RGB range label could not be written");
+    return ("settings_not_applied","The patch scale could not be applied: the RGB range could not be written.");
+   }
    my $why=&pitpg_apply_output("PiTPG patch scale");
    return ("settings_not_applied","The patch scale could not be applied. $why") if($why ne "");
    &log("PiTPG: RGB range label now follows ColourSpace: ".($label eq "2" ? "Full" : ($label eq "1" ? "Limited" : "Default")));
@@ -1191,6 +1201,12 @@ sub pitpg_set_patch_range (@) {
 }
 
 # The client's patch depth: the link follows it outside Dolby Vision.
+# A depth the output cannot carry is refused for this patch alone, checked on
+# a copy of the conf before anything is written: no write, no restore (which
+# would also put back keys written without the gate, as HDR metadata in SDR),
+# no notice. Patches at the depth the output has are drawn, as the reply asks.
+# A depth that passes goes through the gate as before. The write is checked:
+# the renderer reads the depth from the conf file.
 sub pitpg_set_bit_depth (@) {
  my $bits=shift;
  $pitpg_bit_depth=$bits;
@@ -1198,9 +1214,25 @@ sub pitpg_set_bit_depth (@) {
  return ("") if(&pitpg_link_bits() == $bits);
  # 4:2:2 has at least 10 bits: an 8-bit patch goes out as v << 2.
  return ("") if($bits == 8 && int($pgenerator_conf{"color_format"} || 0) == 2);
- my $client=exists($pitpg_client_value{max_bpc}) ? $pitpg_client_value{max_bpc} : ($pgenerator_conf{"max_bpc"} // "");
+ my $refused=&pitpg_depth_refused($bits);
+ if($refused ne "") {
+  $pitpg_bit_depth=0;
+  &log("PiTPG: $bits-bit patch refused, the output stays as it is: $refused");
+  return ("bit_depth","10-bit patch, but the output cannot be 10-bit here. $refused Set ColourSpace to 8-bit.") if($bits == 10);
+  return ("settings_not_applied","The 8-bit output could not be applied. $refused");
+ }
+ my $have=$pgenerator_conf{"max_bpc"} // "";
+ my $client=exists($pitpg_client_value{max_bpc}) ? $pitpg_client_value{max_bpc} : $have;
+ my $kept=exists($pitpg_client_value{max_bpc});
  &pitpg_client_value_keep("max_bpc",$client);
- &set_pgenerator_conf_runtime("max_bpc",$bits);
+ if(!&pitpg_conf_write("max_bpc",$bits)) {
+  # Memory reads as the file (pitpg_conf_write); a keep made here goes when
+  # the file still holds the depth before it.
+  &pitpg_client_value_drop("max_bpc") if(!$kept && ($pgenerator_conf{"max_bpc"} // "") eq $have);
+  $pitpg_bit_depth=0;
+  &log("PiTPG: bit depth $bits could not be written");
+  return ("settings_not_applied","The $bits-bit output could not be applied: the bit depth could not be written.");
+ }
  my $why=&pitpg_apply_output("PiTPG bit depth");
  if($why ne "") {
   $pitpg_bit_depth=0;
@@ -1209,6 +1241,44 @@ sub pitpg_set_bit_depth (@) {
  }
  &log("PiTPG: client bit depth: $bits");
  return ("");
+}
+
+# Why the gate refuses the conf with max_bpc at $bits while it takes the conf
+# as it is: the depth alone is the reason. "" otherwise: the depth passes, the
+# check cannot tell (a check that fails lets the apply through, as the gate),
+# or the conf is refused at its own depth too, for another reason (review):
+# that goes through the gate, which records the refusal and blocks patches.
+# Without KMS no gate runs. A refusal is kept for what the check read (each
+# check reads the EDID and runs modetest): the conf, the connected port and its
+# EDID. Any of them changing, or the session ending (pitpg_closed), checks
+# again (review: a cable moved to the other port).
+# The connected port and a digest of its EDID, as the signal check reads them.
+sub pitpg_display_sig (@) {
+ my ($port,$edid)=&signal_connected_port();
+ my $bytes="";
+ if(($edid // "") ne "" && open(my $fh,"<",$edid)) {
+  binmode($fh);
+  local $/;
+  $bytes=<$fh> // "";
+  close($fh);
+ }
+ require Digest::MD5;
+ return ($port // "")."\x1f".Digest::MD5::md5_hex($bytes);
+}
+
+sub pitpg_depth_refused (@) {
+ my $bits=shift;
+ return "" if(!$is_kms);
+ my $sig=join("\x1f",$bits,&pitpg_display_sig(),map { $pgenerator_conf{$_} // "" } @signal_conf_keys);
+ return $pitpg_depth_refused{why} if(($pitpg_depth_refused{sig} // "") eq $sig);
+ my %want=(%pgenerator_conf,max_bpc=>"$bits");
+ my ($r)=eval { &signal_check_conf(\%want) };
+ return "" if(!$r || $r->{ok});
+ my ($now)=eval { &signal_check_conf(\%pgenerator_conf) };
+ return "" if(!$now || !$now->{ok});
+ my $why=(defined($r->{reason}) && $r->{reason} ne "") ? $r->{reason} : "The requested signal settings were refused.";
+ %pitpg_depth_refused=(sig=>$sig,why=>$why);
+ return $why;
 }
 
 sub pitpg_screen (@) {

@@ -5490,7 +5490,7 @@ sub lg_ddc_hdr20_low_continuity_guard_settings (@) {
 		  my $max_ratio=1.15;
 		  foreach my $spec (@specs) {
 		   my ($setting,$channel)=@{$spec};
-		   my $values=&lg_ddc_normalize_rgb_array($settings->{$setting});
+		   my $values=&lg_ddc_normalize_rgb_array($guarded{$setting});
 		   next if(ref($values) ne "ARRAY" || $slot >= @{$values});
 		   my $base=($lut_index >= 0 && $lut_index < 1024 && ref($baseline) eq "ARRAY" && @{$baseline} == 3072) ? ($baseline->[($channel*1024)+$lut_index]+0) : 0;
 		   next if($base <= 0);
@@ -6024,7 +6024,8 @@ sub lg_ddc_1d_white_balance_set (@) {
 		 &lg_ddc_clear_state($ip,$picture_mode) if($reset_ddc_baseline);
 			 my $baseline=&lg_ddc_baseline_lut($session,$ip,$picture_mode,$timeout,$reset_ddc_baseline,$ddc_layout);
 			 my ($effective_settings,$top_continuity)=&lg_ddc_sdr26_top_continuity_guard_settings($baseline,$settings);
-			 my ($effective_settings,$low_continuity)=&lg_ddc_hdr20_low_continuity_guard_settings($baseline,$effective_settings) if($ddc_layout eq "hdr20");
+			 my $low_continuity=undef;
+			 ($effective_settings,$low_continuity)=&lg_ddc_hdr20_low_continuity_guard_settings($baseline,$effective_settings) if($ddc_layout eq "hdr20");
 			 my $normalized_state=&lg_ddc_state_from_settings($effective_settings,$picture_mode);
 			 if($ddc_layout eq "sdr26") {
 			  &diag_log_append("ddc1d:normalized-sdr-low-shadow",{

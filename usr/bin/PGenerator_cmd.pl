@@ -244,8 +244,7 @@ sub ensure_wifi_conf(@) {
  mkpath($dir) if(!-d $dir);
  if(!-f $wifi_conf) {
   my $content="ctrl_interface=DIR=$dir_wpa GROUP=pgenerator\nupdate_config=1\ncountry=US\n";
-  &write_file("$wifi_conf.tmp",$wifi_conf,$content);
-  chmod 0600, $wifi_conf if(-f $wifi_conf);
+  &write_wifi_conf($content);
   return;
  }
  my $content=&read_from_file($wifi_conf);
@@ -258,8 +257,18 @@ sub ensure_wifi_conf(@) {
   $content.="\n" if($content!~/\n$/);
   $content.="update_config=1\n";
  }
- &write_file("$wifi_conf.tmp",$wifi_conf,$content);
+ &write_wifi_conf($content);
+}
+
+# wpa_supplicant.conf holds the network's PSK: owner only, also the temp
+# file it is written through (umask 077 while it is created).
+sub write_wifi_conf(@) {
+ my $content=shift;
+ my $old_umask=umask(077);
+ my $ok=&write_file("$wifi_conf.tmp",$wifi_conf,$content);
+ umask($old_umask);
  chmod 0600, $wifi_conf if(-f $wifi_conf);
+ return $ok;
 }
 
 # Read the persisted WiFi-radio intent from /etc/PGenerator/PGenerator.conf.
@@ -478,7 +487,7 @@ sub wifi_set_country (@) {
   } else {
    $content=~s/(ctrl_interface=.*\n)/$1country=$country\n/;
   }
-  &write_file("$wifi_conf.tmp",$wifi_conf,$content);
+  &write_wifi_conf($content);
  }
  &pgen_system_quiet($wpa_cli,"-i",$interface,"disconnect");
  sleep(1);
@@ -656,7 +665,8 @@ sub wifi_ap_status (@) {
 }
 
 sub wifi_ap_enable_impl (@) {
- my $base_interface=$ARGV[1] || $_[0] || "wlan0";
+ # The caller names the interface: under WIFI_AP_APPLYCONF $ARGV[1] is the SSID.
+ my $base_interface=$_[0] || "wlan0";
  my $ssid=&hostapd_conf_value("ssid","PGenerator");
  my $password=&hostapd_conf_value("wpa_passphrase","PGenerator");
  return "ERR:hostapd not installed" if(!&pgen_cmd_exists($hostapd_bin) && !&pgen_service_exists("hostapd.service"));
@@ -719,14 +729,14 @@ sub wifi_apply_conf (@) {
   return print "ERR:wpa_passphrase not found" if(!&pgen_cmd_exists($wpa_passphrase));
   $pid = open2($CMD_READ, $CMD_WRITE, $wpa_passphrase, $ssid);
   print $CMD_WRITE "$password\n";
-  close(CMD_WRITE);
+  close($CMD_WRITE);
   while(<$CMD_READ>) {
    chomp($_);
    next if(!/psk/ || /#/);
    /psk=(.*)/;
    $psk_pass=$1;
   }
-  close(CMD_READ);
+  close($CMD_READ);
   waitpid($pid,0);
   return print "ERR:Unable to generate WiFi PSK" if($psk_pass eq "");
  }
@@ -1013,11 +1023,14 @@ sub set_discoverable(@) {
 ###############################################
 sub set_dtoverlay(@) {
  my ($dtoverlay,$enabled)=split(":",$ARGV[1]);
+ # No name would match, and drop, every overlay line.
+ return if(!defined($dtoverlay) || $dtoverlay eq "");
  my $content="";
  $content="dtoverlay=$dtoverlay\n" if($enabled);
  my @row=split("\n",&read_from_file($bootloader_file));
  for(@row) {
-  next if(/dtoverlay=$dtoverlay/);
+  # The name is text, not a pattern.
+  next if(/dtoverlay=\Q$dtoverlay\E/);
   $content.="$_\n";
  }
  &write_file("$bootloader_file.tmp",$bootloader_file,$content);
@@ -1040,7 +1053,7 @@ sub set_boot_config(@) {
   my $find=0;
   for(@boot_config) { 
    my ($field,$value)=split("=",$_,2);
-   if($row=~/^$field=/) {
+   if($row=~/^\Q$field\E=/) {
     $find=1;
     last;
    }
@@ -1243,8 +1256,11 @@ sub open_iptables_for_ls(@) {
  my $ip_ls=$ARGV[1];
  my $port_ls=$ARGV[2];
  my ($found,$ip_is_not_local) = (0,0);
- # validation
+ # validation: both go into shell commands run as root, and come from a
+ # LightSpace discovery packet (discovery.pm).
  return "" if($ip_ls eq "" || $port_ls eq "");
+ return "" if($ip_ls!~/\A\d{1,3}(?:\.\d{1,3}){3}\z/ || grep { $_>255 } split(/\./,$ip_ls));
+ return "" if($port_ls!~/\A\d{1,5}\z/ || $port_ls<1 || $port_ls>65535);
  open(IP,"$ip route get $ip_ls|");
  while(<IP>) {
   if(/ via /) {

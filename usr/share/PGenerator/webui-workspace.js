@@ -3763,7 +3763,7 @@ function meterRenderGreyTvControls(reading){
   return;
  }
  if(state.status==='error'&&!state.picture&&!seriesReadOnly){
-  host.innerHTML='<div style="height:100%;display:flex;align-items:center;justify-content:center;text-align:center;font-size:var(--fs-2xs);color:#f7b0b0;padding:8px">'+(state.message||'Unable to read LG white-balance values.')+'</div>';
+  host.innerHTML='<div style="height:100%;display:flex;align-items:center;justify-content:center;text-align:center;font-size:var(--fs-2xs);color:#f7b0b0;padding:8px">'+pgHtmlEsc(state.message||'Unable to read LG white-balance values.')+'</div>';
   if(meta) meta.textContent=state.needsRepair?'LG pairing required':'LG read failed';
   return;
  }
@@ -8996,7 +8996,8 @@ async function meterPollAutoCal(options){
 	 meterAutoCalPollInFlight=true;
 	 try{
 	  const r=await fetchJSON('/api/meter/lg-autocal/status',{_quiet:true,_timeoutMs:timeoutMs});
-	  if(!r) return;
+	  // fetchJSON returns null on a failed read: count it in the catch below.
+	  if(!r) throw new Error('LG Auto Cal status unavailable');
 	  // A Full AutoCal workflow is browser-orchestrated. Only the tab holding
 	  // the saved-state lease may advance stage boundaries. This check also
 	  // demotes a former in-memory owner when another tab adopted its expired
@@ -10847,7 +10848,14 @@ async function meterPollLg3dAutoCal(options){
  meterLg3dAutoCalPollInFlight=true;
  try{
 	  const r=await fetchJSON('/api/meter/lg-3d-autocal/status',{_quiet:true,_timeoutMs:5000});
-	  if(!r) return;
+	  // fetchJSON returns null on a failed read: count it in the catch below,
+	  // for a run this tab still holds. Not on meterActionPending alone: a Stop
+	  // holds it while it waits, and the catch would re-arm the poll it cleared.
+	  if(!r){
+	   if(meterLg3dAutoCalRunning||meterLg3dAutoCalPolling||(meterFullAutoCalRunning&&meterFullAutoCalPhase==='3d-lut'))
+	    throw new Error('3D LUT AutoCal status unavailable');
+	   return;
+	  }
   if(meterFullAutoCalReportPhaseActive()){
    if(meterLg3dAutoCalPolling){clearInterval(meterLg3dAutoCalPolling);meterLg3dAutoCalPolling=null;}
    meterLg3dAutoCalRunning=false;
@@ -14585,7 +14593,7 @@ function meterBindStickyYAxisInput(axis,canvasId){
   if(!help) return;
   const dx=e.clientX-rect.left-help.cx;
   const dy=e.clientY-rect.top-help.cy;
-  if(Math.sqrt(dx*dx+dy*dy)<=help.radius+4) meterShowChartYZoomHelpTooltip(e);
+  if(Math.sqrt(dx*dx+dy*dy)<=help.radius+4) meterShowChartYZoomHelpTooltip(e,canvasId);
   else {
    const tip=document.getElementById('chartTooltip');
    if(tip) tip.style.display='none';
@@ -15431,8 +15439,8 @@ function drawColorReadingsTable(readings){
    const deCol=!hasDe?pgThemeColor('--text-muted','#888'):de<1?pgThemeColor('--status-success','#4caf50'):de<3?pgThemeColor('--status-warning','#ff9800'):pgThemeColor('--status-error','#f44');
   const dxCol=dx==null?pgThemeColor('--text-muted','#888'):(Math.abs(dx)<0.005?pgThemeColor('--status-success','#4caf50'):Math.abs(dx)<0.01?pgThemeColor('--status-warning','#ff9800'):pgThemeColor('--status-error','#f44'));
   const dyCol=dy==null?pgThemeColor('--text-muted','#888'):(Math.abs(dy)<0.005?pgThemeColor('--status-success','#4caf50'):Math.abs(dy)<0.01?pgThemeColor('--status-warning','#ff9800'):pgThemeColor('--status-error','#f44'));
-  html+='<tr data-name=\"'+(rd.name||'').replace(/"/g,'&quot;')+'\" style=\"border-bottom:1px solid var(--divider);cursor:pointer\" onclick=\"colorTableRowClick(this)\">';
-  html+='<td style="padding:5px 8px;text-align:left"><span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:'+pc+';vertical-align:middle;margin-right:5px"></span>'+(rd.name||'')+'</td>';
+  html+='<tr data-name=\"'+pgHtmlEsc(rd.name||'')+'\" style=\"border-bottom:1px solid var(--divider);cursor:pointer\" onclick=\"colorTableRowClick(this)\">';
+  html+='<td style="padding:5px 8px;text-align:left"><span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:'+pc+';vertical-align:middle;margin-right:5px"></span>'+pgHtmlEsc(rd.name||'')+'</td>';
   html+='<td style="padding:5px 6px;text-align:right;color:var(--text-muted)">'+(tgt?tgt.x.toFixed(4):'--')+'</td>';
   html+='<td style="padding:5px 6px;text-align:right">'+(measured?measured.x.toFixed(4):'--')+'</td>';
   html+='<td style="padding:5px 6px;text-align:right;color:var(--text-muted)">'+(tgt?tgt.y.toFixed(4):'--')+'</td>';
@@ -15679,7 +15687,7 @@ function showColorReadingDetail(rd,opts){
 
  let h='<div style="margin-bottom:10px;text-align:center">';
  h+='<span style="display:inline-block;width:18px;height:18px;border-radius:3px;background:'+targetColor+';vertical-align:middle;margin-right:6px"></span>';
- h+='<span style="color:var(--text-primary);font-weight:700;font-size:14px">'+(view.name||'')+'</span></div>';
+ h+='<span style="color:var(--text-primary);font-weight:700;font-size:14px">'+pgHtmlEsc(view.name||'')+'</span></div>';
  h+='<div style="display:flex;gap:8px;margin-bottom:10px;justify-content:center">';
  h+='<div style="text-align:center"><div style="width:52px;height:32px;border-radius:4px;border:1px solid var(--border);background:'+targetColor+'"></div><div style="font-size:11px;color:var(--text-muted);margin-top:2px">Target</div></div>';
  h+='<div style="text-align:center"><div style="width:52px;height:32px;border-radius:4px;border:1px solid var(--border);background:'+measuredColor+';'+(hasMeasuredXYZ?'':'opacity:.35')+'"></div><div style="font-size:11px;color:var(--text-muted);margin-top:2px">Measured'+(isUnread?' (none)':'')+'</div></div></div>';
@@ -15831,7 +15839,7 @@ function colorChartHandleHover(e,canvasId){
   :meterColorLuminanceInfo(rd);
  const dx=(hasChroma&&tgt)?(rd.x-tgt.x):null;
  const dy=(hasChroma&&tgt)?(rd.y-tgt.y):null;
- let html='<b>'+(rd.name||'')+'</b><br>';
+ let html='<b>'+pgHtmlEsc(rd.name||'')+'</b><br>';
  html+='Target: '+(tgt?'('+tgt.x.toFixed(4)+', '+tgt.y.toFixed(4)+')':'--')+'<br>';
  html+='Measured: '+(hasChroma?'('+rd.x.toFixed(4)+', '+rd.y.toFixed(4)+')':'--')+'<br>';
  html+='\u0394x: '+(dx==null?'--':(dx>=0?'+':'')+dx.toFixed(4))+' &nbsp;\u0394y: '+(dy==null?'--':(dy>=0?'+':'')+dy.toFixed(4))+'<br>';
@@ -17425,7 +17433,7 @@ function cie3dOnPointerMove(e){
   :meterColorLuminanceInfo(rd);
  const dxv=(hasChroma&&tgt)?(rd.x-tgt.x):null;
  const dyv=(hasChroma&&tgt)?(rd.y-tgt.y):null;
- let html='<b>'+(rd.name||'')+'</b><br>';
+ let html='<b>'+pgHtmlEsc(rd.name||'')+'</b><br>';
  html+='Target: '+(tgt?'('+tgt.x.toFixed(4)+', '+tgt.y.toFixed(4)+')':'--')+'<br>';
  html+='Measured: '+(hasChroma?'('+rd.x.toFixed(4)+', '+rd.y.toFixed(4)+')':'--')+'<br>';
  html+='\u0394x: '+(dxv==null?'--':(dxv>=0?'+':'')+dxv.toFixed(4))+' &nbsp;\u0394y: '+(dyv==null?'--':(dyv>=0?'+':'')+dyv.toFixed(4))+'<br>';
@@ -17823,7 +17831,9 @@ function drawCIETargetInset(ctx,readings,geom){
  if(meterCieViewOpts.locus&&!meterCieIsOpponentMode()) try{
   const grad=getCIEGradient(Math.max(1,Math.round(g.w)),Math.max(1,Math.round(g.h)));
   if(grad){
-   const CX_MIN=0,CX_MAX=1.0,CY_MIN=0,CY_MAX=0.9;
+   // The world the gradient was drawn over (as the main chart reads it).
+   const gradWorld=(typeof meterCie2dGradientWorld==='function')?meterCie2dGradientWorld():meterCie2dWorld();
+   const CX_MIN=gradWorld.xMin,CX_MAX=gradWorld.xMax,CY_MIN=gradWorld.yMin,CY_MAX=gradWorld.yMax;
    const sx=(xMn-CX_MIN)/(CX_MAX-CX_MIN)*grad.width;
    const sw=(xMx-xMn)/(CX_MAX-CX_MIN)*grad.width;
    const sy=(CY_MAX-yMx)/(CY_MAX-CY_MIN)*grad.height;
@@ -18474,7 +18484,7 @@ function meterBuildGreyscaleReportTable(){
    if(Number.isFinite(_de)) de=_de.toFixed(2);
   }
   rows+='<tr>'
-    +'<td>'+(rd.name||((rd.ire!=null)?(Math.round(rd.ire*100)/100)+'%':'--'))+'</td>'
+    +'<td>'+pgHtmlEsc(rd.name||((rd.ire!=null)?(Math.round(rd.ire*100)/100)+'%':'--'))+'</td>'
    +'<td>'+meterNearBlackLuminanceText(rd.Y!=null?rd.Y:(rd.luminance||0),2)+'</td>'
    +'<td>'+(rd.x!=null?rd.x.toFixed(4):'--')+'</td>'
    +'<td>'+(rd.y!=null?rd.y.toFixed(4):'--')+'</td>'
@@ -18491,7 +18501,7 @@ function meterBuildGreyscaleReportTable(){
 
 function meterBuildEmptySeriesReportSection(title){
  let html='<section class="report-section">';
- html+='<div class="report-section-title">'+title+'</div>';
+ html+='<div class="report-section-title">'+pgHtmlEsc(title)+'</div>';
  html+='<div class="report-section-meta">0 readings captured</div>';
  html+='<div class="report-empty">No measurement data has been captured for this series yet.</div>';
  html+='</section>';
@@ -18511,7 +18521,7 @@ function meterBuildCurrentSeriesReportSection(title){
  const valid=(meterReadings||[]).filter(rd=>meterReadingHasLuminance(rd));
  const count=(meterActiveSeriesType==='greyscale'||!meterActiveSeriesType)?meterGreyscaleReportReadings(valid).visible.length:valid.length;
  let html='<section class="report-section">';
- html+='<div class="report-section-title">'+title+'</div>';
+ html+='<div class="report-section-title">'+pgHtmlEsc(title)+'</div>';
  html+='<div class="report-section-meta">'+count+' readings captured</div>';
  html+=meterBuildReportSummaryCards();
  if(meterActiveSeriesType==='greyscale'||!meterActiveSeriesType){
@@ -19674,7 +19684,12 @@ document.getElementById('ccssUploadBtn').addEventListener('click',async function
  this.disabled=true;
  try{
   const buf=await file.arrayBuffer();
-  const b64=btoa(String.fromCharCode(...new Uint8Array(buf)));
+  // In chunks: one spread call over the whole file exceeds the engine's
+  // argument limit from roughly 100 KB (RangeError), as meterBase64Utf8 does.
+  const bytes=new Uint8Array(buf);
+  let binary='';
+  for(let i=0;i<bytes.length;i+=8192) binary+=String.fromCharCode(...bytes.subarray(i,i+8192));
+  const b64=btoa(binary);
   const currentDisplayType=((document.getElementById('meterDisplayType')||{}).dataset.lastStableValue
    || (document.getElementById('meterDisplayType')||{}).value || 'lcd');
   const r=await fetchJSON('/api/ccss/upload',{method:'POST',headers:{'Content-Type':'application/json'},
@@ -19741,8 +19756,8 @@ async function loadCustomCcssList(){
    ? ccssPreviewActiveValue===('custom\t'+f)
    : customCcssFile===f;
   return '<div style="display:flex;align-items:center;gap:6px;margin-bottom:3px">'
-  +'<button class="btn btn-sm '+(active?'btn-success':'btn-secondary')+'" data-ccss-filename="'+ccssPreviewEscapeHtml(f)+'" style="flex:1;font-size:var(--fs-sm);padding:2px 6px;text-align:left" onclick="selectCustomCcss(\''+f+'\')"><span data-ccss-selected-mark>'+(active?'\u2713 ':'')+'</span>['+format+'] '+label+'</button>'
-  +'<button class="btn btn-sm btn-danger-quiet btn-icon-sq" onclick="deleteCustomCcss(\''+f+'\')">\u2715</button></div>';
+  +'<button class="btn btn-sm '+(active?'btn-success':'btn-secondary')+'" data-ccss-filename="'+ccssPreviewEscapeHtml(f)+'" style="flex:1;font-size:var(--fs-sm);padding:2px 6px;text-align:left" onclick="selectCustomCcss('+ccssPreviewEscapeHtml(JSON.stringify(f))+')"><span data-ccss-selected-mark>'+(active?'\u2713 ':'')+'</span>['+format+'] '+ccssPreviewEscapeHtml(label)+'</button>'
+  +'<button class="btn btn-sm btn-danger-quiet btn-icon-sq" onclick="deleteCustomCcss('+ccssPreviewEscapeHtml(JSON.stringify(f))+')">\u2715</button></div>';
  }).join('');
 }
 

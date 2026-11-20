@@ -483,7 +483,9 @@ sub calman_apply_init_mode (@) {
 sub calman_set_gci_active (@) {
  my $active=shift;
  if($active) {
-  $calman_gci_active_count++ if(!$calman_gci_active_count);
+  # One count per GCI connection: a second client keeps the flag when the
+  # first disconnects, and INIT:2.0 sent again on a connection counts once.
+  $calman_gci_active_count=scalar(grep { $calman_gci{$_} } keys %calman_gci);
   $calman_gci_active_count=1 if($calman_gci_active_count < 1);
   &sudo("SET_PGENERATOR_CONF","calman_gci","1") if(($pgenerator_conf{"calman_gci"} || "") ne "1");
   $pgenerator_conf{"calman_gci"}="1";
@@ -3337,7 +3339,18 @@ sub pattern_daemon {
        my $best_idx=&calman_find_mode_idx($req_w,$req_h,$req_ip,$req_rate);
       if($best_idx >= 0) {
        &log("Calman: CONF_FORMAT matched mode_idx=$best_idx for ${req_h}${req_ip}${req_rate}");
-       &pgenerator_cmd("SET_MODE:$best_idx");
+       my $mode_reply=&pgenerator_cmd("SET_MODE:$best_idx");
+       # Refused (signal_gate_conf): the gate put the conf back to the
+       # output that is on, a format saved with this command included. As
+       # for a refused apply: the mode is not remembered, nothing is applied
+       # or drawn again (an apply here passed the gate on the conf put back
+       # and ended the refusal), and the reply carries the NAK.
+       if(($mode_reply // "")=~/^\Q$error_response\E:Refused/) {
+        &log("Calman: CONF_FORMAT mode_idx=$best_idx refused, output unchanged");
+        $calman_settings_dirty=0;
+        &send_key_to_client($connection,"");
+        last;
+       }
        &sudo("SET_PGENERATOR_CONF","calman_mode_idx","$best_idx");
        $pgenerator_conf{"calman_mode_idx"}="$best_idx";
        &log("Calman: remembered CONF_FORMAT mode_idx=$best_idx");

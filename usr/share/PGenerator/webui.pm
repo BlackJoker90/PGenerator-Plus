@@ -2359,10 +2359,10 @@ sub webui_handle_request (@) {
      open(my $fh, "<:raw", $ico_path);
      my $ico_data; { local $/; $ico_data=<$fh>; } close($fh);
      my $len=length($ico_data);
-     print $client "HTTP/1.1 200 OK\r\nContent-Type: image/x-icon\r\nContent-Length: $len\r\nCache-Control: public, max-age=604800\r\n\r\n";
+     print $client "HTTP/1.1 200 OK\r\nContent-Type: image/x-icon\r\nContent-Length: $len\r\nCache-Control: public, max-age=604800\r\n$cors\r\n";
      print $client $ico_data;
     } else {
-     print $client "HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\n\r\n";
+     print $client "HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\n$cors\r\n";
     }
    }
    elsif($path=~m{^/assets/(pg-[a-z]+\.[0-9a-f]{12}\.(css|js))\z}) {
@@ -2371,9 +2371,9 @@ sub webui_handle_request (@) {
     if(defined($asset_data)) {
      my $content_type=($ext eq "css")?"text/css":"application/javascript";
      # The name carries the content hash, so a cached copy can never be stale.
-     &webui_send_text($client,$req,"$content_type; charset=utf-8",$asset_data,"Cache-Control: public, max-age=31536000, immutable\r\n",1);
+     &webui_send_text($client,$req,"$content_type; charset=utf-8",$asset_data,"Cache-Control: public, max-age=31536000, immutable\r\n$cors",1);
     } else {
-     print $client "HTTP/1.1 404 Not Found\r\nCache-Control: no-store\r\nContent-Length: 0\r\n\r\n";
+     print $client "HTTP/1.1 404 Not Found\r\nCache-Control: no-store\r\nContent-Length: 0\r\n$cors\r\n";
     }
    }
    elsif($path=~m{^/assets/fonts/([^/]+)\z}) {
@@ -2384,10 +2384,10 @@ sub webui_handle_request (@) {
     my ($font_type,$font_data)=&webui_font_asset($1);
     if(defined($font_data)) {
      # No validator: a changed face ships under a new file name.
-     print $client "HTTP/1.1 200 OK\r\nContent-Type: $font_type\r\nContent-Length: ".length($font_data)."\r\nCache-Control: public, max-age=604800\r\n\r\n";
+     print $client "HTTP/1.1 200 OK\r\nContent-Type: $font_type\r\nContent-Length: ".length($font_data)."\r\nCache-Control: public, max-age=604800\r\n$cors\r\n";
      print $client $font_data;
     } else {
-     print $client "HTTP/1.1 404 Not Found\r\nCache-Control: no-store\r\nContent-Length: 0\r\n\r\n";
+     print $client "HTTP/1.1 404 Not Found\r\nCache-Control: no-store\r\nContent-Length: 0\r\n$cors\r\n";
     }
    }
    elsif($path eq "/assets/hcfr_chc.js") {
@@ -2395,9 +2395,9 @@ sub webui_handle_request (@) {
     if(-f $asset_path) {
      open(my $fh, "<:raw", $asset_path);
      my $asset_data; { local $/; $asset_data=<$fh>; } close($fh);
-     &webui_send_text($client,$req,"application/javascript; charset=utf-8",$asset_data,"Cache-Control: no-cache\r\n",1);
+     &webui_send_text($client,$req,"application/javascript; charset=utf-8",$asset_data,"Cache-Control: no-cache\r\n$cors",1);
     } else {
-     print $client "HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\n\r\n";
+     print $client "HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\n$cors\r\n";
     }
    }
    elsif($path eq "/assets/icc_profile.js" || $path eq "/assets/icc_profile.css") {
@@ -2405,9 +2405,9 @@ sub webui_handle_request (@) {
     my $asset_data=&webui_icc_asset($asset_name);
     if($asset_data ne "") {
      my $content_type=($asset_name=~/\.css\z/)?"text/css":"application/javascript";
-     &webui_send_text($client,$req,"$content_type; charset=utf-8",$asset_data,"Cache-Control: no-cache\r\n",1);
+     &webui_send_text($client,$req,"$content_type; charset=utf-8",$asset_data,"Cache-Control: no-cache\r\n$cors",1);
     } else {
-     print $client "HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\n\r\n";
+     print $client "HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\n$cors\r\n";
     }
    }
    elsif($path eq "/pgen-logo-light.png") {
@@ -2416,10 +2416,10 @@ sub webui_handle_request (@) {
      open(my $fh, "<:raw", $logo_path);
      my $logo_data; { local $/; $logo_data=<$fh>; } close($fh);
      my $len=length($logo_data);
-     print $client "HTTP/1.1 200 OK\r\nContent-Type: image/png\r\nContent-Length: $len\r\nCache-Control: public, max-age=604800\r\n\r\n";
+     print $client "HTTP/1.1 200 OK\r\nContent-Type: image/png\r\nContent-Length: $len\r\nCache-Control: public, max-age=604800\r\n$cors\r\n";
      print $client $logo_data;
     } else {
-     print $client "HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\n\r\n";
+     print $client "HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\n$cors\r\n";
     }
    }
    elsif($path eq "/api/config") {
@@ -3407,7 +3407,7 @@ sub webui_handle_request (@) {
     }
    else {
     my $msg="404 Not Found";
-    print $client "HTTP/1.1 404 Not Found\r\nContent-Length: ".length($msg)."\r\n\r\n$msg";
+    print $client "HTTP/1.1 404 Not Found\r\nContent-Length: ".length($msg)."\r\n$cors\r\n$msg";
    }
   }
 }
@@ -5203,7 +5203,8 @@ sub webui_meter_series_start (@) {
  $pattern_signal_range=$1 if($body=~/"pattern_signal_range"\s*:\s*"?(\d+)"?/);
  my $transport_signal_range="";
  $transport_signal_range=$1 if($body=~/"transport_signal_range"\s*:\s*"?(\d+)"?/);
- my $series_color_format=0;
+ # "" until the request names it: the conf fallbacks below test for "".
+ my $series_color_format="";
  $series_color_format=$1 if($body=~/"color_format"\s*:\s*"?(\d+)"?/);
 my $patch_insert=0;
 $patch_insert=1 if($body=~/"patch_insert"\s*:\s*true/i);
@@ -5351,7 +5352,8 @@ $target_gamut="" unless($target_gamut eq "bt709" || $target_gamut eq "bt2020" ||
   my $_lb_bpc=(defined $pgenerator_conf{"max_bpc"} && $pgenerator_conf{"max_bpc"} ne "") ? int($pgenerator_conf{"max_bpc"}) : 10;
   $_lb_bpc=10 if($_lb_bpc != 8 && $_lb_bpc != 12);
   my $_lb_input_max=($_lb_bpc == 8) ? 255 : (($_lb_bpc == 12) ? 4095 : 1023);
-  my $_lb_cf=$series_color_format ne "" ? int($series_color_format) : (int($pgenerator_conf{"color_format"} || 1));
+  # Same fallback as the worker's key (meter_series.sh arg 31, set below).
+  my $_lb_cf=$series_color_format ne "" ? int($series_color_format) : (int($pgenerator_conf{"color_format"} || 0));
   # Default the cache-key range to FULL (2) when the request omits
   # transport_signal_range. The legacy default of 1 (limited) silently
   # bifurcated the cache between limited and full reads, so a full read
@@ -5537,6 +5539,10 @@ my $dv_tunnel_grid=($signal_mode eq "dv" && &pg_dv_tunnel_pg16_grid($dv_cable)) 
   }
   return $v**$target_gamma_exp_resolved;
  };
+ # Declared here, set below with the series ranges: the closure must see this
+ # lexical, not the package variable of the same name (always empty), or the
+ # Limited YCbCr divisor of 109 is never taken.
+ my $greyscale_patch_limited;
  my $lg_autocal_26_target_yn_for_stimulus=sub {
   my ($stimulus)=@_;
   return 0 if(!defined $stimulus);
@@ -5576,15 +5582,15 @@ my $dv_tunnel_grid=($signal_mode eq "dv" && &pg_dv_tunnel_pg16_grid($dv_cable)) 
   }
  }
 
- my $series_colorimetry=2;
+ my $series_colorimetry="";
  $series_colorimetry=$1 if($body=~/"colorimetry"\s*:\s*"?(\d+)"?/);
  $series_colorimetry=int($pgenerator_conf{"colorimetry"} || 2) if($series_colorimetry eq "");
- my $series_primaries=0;
+ my $series_primaries="";
  $series_primaries=$1 if($body=~/"primaries"\s*:\s*"?(\d+)"?/);
  $series_primaries=int($pgenerator_conf{"primaries"} || 0) if($series_primaries eq "");
  $series_color_format=int($pgenerator_conf{"color_format"} || 0) if($series_color_format eq "");
  my $patch_limited=&webui_range_is_limited($signal_range,$series_color_format);
- my $greyscale_patch_limited=$patch_limited;
+ $greyscale_patch_limited=$patch_limited;
  if($type eq "greyscale" && $signal_mode eq "sdr" && $pattern_signal_range=~/^[12]$/) {
   $greyscale_patch_limited=&webui_range_is_limited($pattern_signal_range,$series_color_format);
  }
@@ -7222,8 +7228,8 @@ sub webui_meter_lg_autocal_mark_cancelled (@) {
  # process-died promotion to "complete" (final_1d flags set while the
  # worker was killed). Leaving complete here is what resurrects the
  # "Auto Cal complete" popup on the next page refresh.
- if($json=~/"status"\s*:\s*"[^"]*"/) {
-  $json=~s/"status"\s*:\s*"[^"]*"/"status":"cancelled"/;
+ if($json=~/"status"\s*:\s*"(?:\\.|[^"\\])*"/) {
+  $json=~s/"status"\s*:\s*"(?:\\.|[^"\\])*"/"status":"cancelled"/;
  } else {
   $json=~s/\}$/,"status":"cancelled"}/;
  }
@@ -7237,18 +7243,18 @@ sub webui_meter_lg_autocal_mark_cancelled (@) {
  } else {
   $json=~s/\}$/,"calibration_mode":false}/;
  }
- if($json=~/"phase"\s*:\s*"[^"]*"/) {
-  $json=~s/"phase"\s*:\s*"[^"]*"/"phase":"cancelled"/;
+ if($json=~/"phase"\s*:\s*"(?:\\.|[^"\\])*"/) {
+  $json=~s/"phase"\s*:\s*"(?:\\.|[^"\\])*"/"phase":"cancelled"/;
  } else {
   $json=~s/\}$/,"phase":"cancelled"}/;
  }
- if($json=~/"current_name"\s*:\s*"[^"]*"/) {
-  $json=~s/"current_name"\s*:\s*"[^"]*"/"current_name":"Auto Cal cancelled"/;
+ if($json=~/"current_name"\s*:\s*"(?:\\.|[^"\\])*"/) {
+  $json=~s/"current_name"\s*:\s*"(?:\\.|[^"\\])*"/"current_name":"Auto Cal cancelled"/;
  } else {
   $json=~s/\}$/,"current_name":"Auto Cal cancelled"}/;
  }
- if($json=~/"message"\s*:\s*"[^"]*"/) {
-  $json=~s/"message"\s*:\s*"[^"]*"/"message":"Auto Cal stopped"/;
+ if($json=~/"message"\s*:\s*"(?:\\.|[^"\\])*"/) {
+  $json=~s/"message"\s*:\s*"(?:\\.|[^"\\])*"/"message":"Auto Cal stopped"/;
  } else {
   $json=~s/\}$/,"message":"Auto Cal stopped"}/;
  }
@@ -7725,18 +7731,18 @@ sub webui_meter_lg_autocal_status (@) {
 	     # refresh opens the success popup for a cancelled cal.
 	     if(-f $_meter_lg_autocal_stop_file) {
 	      $json=~s/"status"\s*:\s*"running"/"status":"cancelled"/;
-	      if($json=~/"current_name"\s*:\s*"[^"]*"/) {
-	       $json=~s/"current_name"\s*:\s*"[^"]*"/"current_name":"Auto Cal cancelled"/;
+	      if($json=~/"current_name"\s*:\s*"(?:\\.|[^"\\])*"/) {
+	       $json=~s/"current_name"\s*:\s*"(?:\\.|[^"\\])*"/"current_name":"Auto Cal cancelled"/;
 	      } else {
 	       $json=~s/\}$/,"current_name":"Auto Cal cancelled"}/;
 	      }
-	      if($json=~/"message"\s*:\s*"[^"]*"/) {
-	       $json=~s/"message"\s*:\s*"[^"]*"/"message":"Auto Cal stopped"/;
+	      if($json=~/"message"\s*:\s*"(?:\\.|[^"\\])*"/) {
+	       $json=~s/"message"\s*:\s*"(?:\\.|[^"\\])*"/"message":"Auto Cal stopped"/;
 	      } else {
 	       $json=~s/\}$/,"message":"Auto Cal stopped"}/;
 	      }
-	      if($json=~/"phase"\s*:\s*"[^"]*"/) {
-	       $json=~s/"phase"\s*:\s*"[^"]*"/"phase":"cancelled"/;
+	      if($json=~/"phase"\s*:\s*"(?:\\.|[^"\\])*"/) {
+	       $json=~s/"phase"\s*:\s*"(?:\\.|[^"\\])*"/"phase":"cancelled"/;
 	      } else {
 	       $json=~s/\}$/,"phase":"cancelled"}/;
 	      }
@@ -7755,13 +7761,13 @@ sub webui_meter_lg_autocal_status (@) {
 	     ) {
 	      my $now=$_now;
 	      $json=~s/"status"\s*:\s*"running"/"status":"complete"/;
-	      if($json=~/"current_name"\s*:\s*"[^"]*"/) {
-	       $json=~s/"current_name"\s*:\s*"[^"]*"/"current_name":"Auto Cal complete"/;
+	      if($json=~/"current_name"\s*:\s*"(?:\\.|[^"\\])*"/) {
+	       $json=~s/"current_name"\s*:\s*"(?:\\.|[^"\\])*"/"current_name":"Auto Cal complete"/;
 	      } else {
 	       $json=~s/\}$/,"current_name":"Auto Cal complete"}/;
 	      }
-	      if($json=~/"message"\s*:\s*"[^"]*"/) {
-	       $json=~s/"message"\s*:\s*"[^"]*"/"message":"Auto Cal complete"/;
+	      if($json=~/"message"\s*:\s*"(?:\\.|[^"\\])*"/) {
+	       $json=~s/"message"\s*:\s*"(?:\\.|[^"\\])*"/"message":"Auto Cal complete"/;
 	      } else {
 	       $json=~s/\}$/,"message":"Auto Cal complete"}/;
 	      }
@@ -7774,8 +7780,8 @@ sub webui_meter_lg_autocal_status (@) {
 	      }
 	     } else {
 	      $json=~s/"status"\s*:\s*"running"/"status":"error"/;
-	      if($json=~/"current_name"\s*:\s*"[^"]*"/) {
-	       $json=~s/"current_name"\s*:\s*"[^"]*"/"current_name":"Auto Cal process died"/;
+	      if($json=~/"current_name"\s*:\s*"(?:\\.|[^"\\])*"/) {
+	       $json=~s/"current_name"\s*:\s*"(?:\\.|[^"\\])*"/"current_name":"Auto Cal process died"/;
 	      }
 	      # Preserve any real error message the worker already wrote (the
 	      # eval `or do {}` block writes $state->{message}=$err before
@@ -7787,13 +7793,13 @@ sub webui_meter_lg_autocal_status (@) {
 	      # making "auto cal died" indistinguishable from "auto cal
 	      # completed with an unreported exception".
 	      my $_existing_msg="";
-	      $_existing_msg=$1 if($json=~/"message"\s*:\s*"([^"]*)"/);
+	      $_existing_msg=$1 if($json=~/"message"\s*:\s*"((?:\\.|[^"\\])*)"/);
 	      if($_existing_msg eq ""
 	       || $_existing_msg eq "Starting"
 	       || $_existing_msg eq "Starting LG Auto Cal..."
 	       || $_existing_msg eq "Auto Cal complete"
 	       || $_existing_msg eq "LG Auto Cal stopped unexpectedly") {
-	       $json=~s/"message"\s*:\s*"[^"]*"/"message":"LG Auto Cal stopped unexpectedly"/;
+	       $json=~s/"message"\s*:\s*"(?:\\.|[^"\\])*"/"message":"LG Auto Cal stopped unexpectedly"/;
 	      }
 	     }
 	     if(open(my $wf,">",$_meter_lg_autocal_file)) { print $wf $json; close($wf); chmod(0666,$_meter_lg_autocal_file); }
@@ -7848,18 +7854,18 @@ sub webui_meter_lg_3d_autocal_mark_cancelled (@) {
  return if($json eq "");
  # Force cancelled over running/complete (same race as greyscale: process-
  # died or a finished 3D stage left status=complete with full_workflow).
- if($json=~/"status"\s*:\s*"[^"]*"/) {
-  $json=~s/"status"\s*:\s*"[^"]*"/"status":"cancelled"/;
+ if($json=~/"status"\s*:\s*"(?:\\.|[^"\\])*"/) {
+  $json=~s/"status"\s*:\s*"(?:\\.|[^"\\])*"/"status":"cancelled"/;
  } else {
   $json=~s/\}$/,"status":"cancelled"}/;
  }
- if($json=~/"current_name"\s*:\s*"[^"]*"/) {
-  $json=~s/"current_name"\s*:\s*"[^"]*"/"current_name":"3D LUT AutoCal cancelled"/;
+ if($json=~/"current_name"\s*:\s*"(?:\\.|[^"\\])*"/) {
+  $json=~s/"current_name"\s*:\s*"(?:\\.|[^"\\])*"/"current_name":"3D LUT AutoCal cancelled"/;
  } else {
   $json=~s/\}$/,"current_name":"3D LUT AutoCal cancelled"}/;
  }
- if($json=~/"message"\s*:\s*"[^"]*"/) {
-  $json=~s/"message"\s*:\s*"[^"]*"/"message":"3D LUT AutoCal stopped"/;
+ if($json=~/"message"\s*:\s*"(?:\\.|[^"\\])*"/) {
+  $json=~s/"message"\s*:\s*"(?:\\.|[^"\\])*"/"message":"3D LUT AutoCal stopped"/;
  } else {
   $json=~s/\}$/,"message":"3D LUT AutoCal stopped"}/;
  }
@@ -8322,24 +8328,24 @@ sub webui_meter_lg_3d_autocal_status (@) {
       if($_uv && $_tm_ok && $_terminal_commit) {
        my $now=$_now;
        $json=~s/"status"\s*:\s*"running"/"status":"complete"/;
-       $json=~s/"current_name"\s*:\s*"[^"]*"/"current_name":"LG 3D LUT Auto Cal complete"/ if($json=~/"current_name"\s*:\s*"[^"]*"/);
+       $json=~s/"current_name"\s*:\s*"(?:\\.|[^"\\])*"/"current_name":"LG 3D LUT Auto Cal complete"/ if($json=~/"current_name"\s*:\s*"(?:\\.|[^"\\])*"/);
        my $_msg="3D LUT exported, uploaded, and verified";
-       if($json=~/"message"\s*:\s*"[^"]*"/) { $json=~s/"message"\s*:\s*"[^"]*"/"message":"$_msg"/; } else { $json=~s/\}$/,"message":"$_msg"}/; }
-       if($json=~/"phase"\s*:\s*"[^"]*"/) { $json=~s/"phase"\s*:\s*"[^"]*"/"phase":"complete"/; } else { $json=~s/\}$/,"phase":"complete"}/; }
+       if($json=~/"message"\s*:\s*"(?:\\.|[^"\\])*"/) { $json=~s/"message"\s*:\s*"(?:\\.|[^"\\])*"/"message":"$_msg"/; } else { $json=~s/\}$/,"message":"$_msg"}/; }
+       if($json=~/"phase"\s*:\s*"(?:\\.|[^"\\])*"/) { $json=~s/"phase"\s*:\s*"(?:\\.|[^"\\])*"/"phase":"complete"/; } else { $json=~s/\}$/,"phase":"complete"}/; }
        $json=~s/\}$/,"completed_at":$now}/ if($json!~/"completed_at"\s*:/);
       } else {
        $json=~s/"status"\s*:\s*"running"/"status":"error"/;
-       if($json=~/"current_name"\s*:\s*"[^"]*"/) {
-        $json=~s/"current_name"\s*:\s*"[^"]*"/"current_name":"3D LUT AutoCal process died"/;
+       if($json=~/"current_name"\s*:\s*"(?:\\.|[^"\\])*"/) {
+        $json=~s/"current_name"\s*:\s*"(?:\\.|[^"\\])*"/"current_name":"3D LUT AutoCal process died"/;
        }
        # Preserve a real worker error message; only fall back to the generic
        # string when empty/placeholder/the generic itself.
-       my $_em=""; $_em=$1 if($json=~/"message"\s*:\s*"([^"]*)"/);
+       my $_em=""; $_em=$1 if($json=~/"message"\s*:\s*"((?:\\.|[^"\\])*)"/);
        if($_tm_status eq "skipped" || $json=~/"tone_map_upload_error_code"\s*:\s*"lg-tone-map-peak-missing"/) {
         my $_peak_msg="HDR tone-map finalisation failed because the measured peak luminance was missing. The calibration session may still be held; restart the TV before another calibration.";
-        if($json=~/"message"\s*:\s*"[^"]*"/) { $json=~s/"message"\s*:\s*"[^"]*"/"message":"$_peak_msg"/; } else { $json=~s/\}$/,"message":"$_peak_msg"}/; }
+        if($json=~/"message"\s*:\s*"(?:\\.|[^"\\])*"/) { $json=~s/"message"\s*:\s*"(?:\\.|[^"\\])*"/"message":"$_peak_msg"/; } else { $json=~s/\}$/,"message":"$_peak_msg"}/; }
        } elsif($_em eq "" || $_em eq "Starting" || $_em=~/^Starting LG 3D/ || $_em eq "LG 3D LUT AutoCal stopped unexpectedly") {
-        $json=~s/"message"\s*:\s*"[^"]*"/"message":"LG 3D LUT AutoCal stopped unexpectedly"/;
+        $json=~s/"message"\s*:\s*"(?:\\.|[^"\\])*"/"message":"LG 3D LUT AutoCal stopped unexpectedly"/;
        }
       }
       if(open(my $wf,">",$_meter_lg_3d_autocal_file)) { print $wf $json; close($wf); chmod(0666,$_meter_lg_3d_autocal_file); }
@@ -9641,7 +9647,7 @@ sub webui_ccss_list (@) {
   while(my $f=readdir($dh)) {
    next unless($f=~/\.(?:ccss|ccmx)$/i);
    next if($seen{lc $f}++);
-   push @files, "\"$f\"";
+   push @files, "\"".&_webui_json_escape($f)."\"";
   }
   closedir($dh);
  }
@@ -10500,7 +10506,8 @@ sub webui_ccss_validate (@) {
    $text=~s/^\s+|\s+$//g;
    return $exact{$text} if(exists $exact{$text});
 
-   my $suffix=" IPS" if($text=~/\bIPS\b/);
+   my $suffix="";
+   $suffix=" IPS" if($text=~/\bIPS\b/);
    $suffix=" VPA" if($text!~/\bIPS\b/ && $text=~/\bVPA\b/);
    $suffix=" TFT" if($text!~/\bIPS\b/ && $text!~/\bVPA\b/ && $text=~/\bTFT\b/);
 
@@ -11852,14 +11859,16 @@ sub webui_info_json (@) {
    if($wline=~/^wpa_state\s*=\s*(.*)/) { $wifi_state=$1; }
   }
  }
- $wifi_ssid=~s/"/\\"/g;
+ # Full JSON escape: escaping only quotes let a backslash in the SSID text
+ # escape the closing quote and broke the whole answer.
+ $wifi_ssid=&_webui_json_escape($wifi_ssid);
  my $wifi_band="";
  if($wifi_freq=~/^\d+$/) {
   $wifi_band=($wifi_freq>=5000)?"5 GHz":"2.4 GHz";
  }
 
- my $cal_ip=$calibration_client_ip; $cal_ip=~s/"/\\"/g;
- my $cal_sw=$calibration_client_software; $cal_sw=~s/"/\\"/g;
+ my $cal_ip=&_webui_json_escape($calibration_client_ip);
+ my $cal_sw=&_webui_json_escape($calibration_client_software);
  my $cal_conn=($cal_ip ne "")?"true":"false";
  # The WebUI locks its signal fields while this is true (webui_signal_owner).
  my $cal_owns=(&webui_signal_owner() ne "")?"true":"false";
@@ -11937,7 +11946,7 @@ sub webui_redact_sensitive_log_text (@) {
  my $identity_key=qr/(?:ssid|bssid|hostname|host_name|auto_host|user(?:name)?|email|s[\/_-]?n|serial(?:[_-]?(?:number|no))?|(?:device|meter|display|instrument|board|cpu|soc|system|product|chassis|baseboard|edid|adapter|controller)[_-]?serial(?:[_-]?(?:number|no))?|id[_-]?serial(?:[_-]?short)?|uuid|guid|udid|unique[_-]?id|partuuid|(?:boot|machine|product|system|hardware|device|client|installation|instance|network|connection|adapter|interface|wifi|wi[_-]?fi|bluetooth|bt|filesystem|fs|partition|part[_-]?(?:entry|table)|dm)[_-]?(?:uuid|guid|id)|id[_-]?(?:fs|part[_-]?(?:entry|table))[_-]?uuid(?:[_-]?enc)?|(?:device|adapter|controller|interface|wifi|wi[_-]?fi|bluetooth|bt)[_-]?mac(?:[_-]?address)?|mac(?:[_-]?address)?|hwaddr|bdaddr|wwn|wwid|id[_-]?(?:wwn|wwid)|stored_name|cec_osd_name|cec_tv_name|friendly_name|device_name|tv_name)/i;
  $text =~ s{("$identity_key"\s*:\s*)"(?:\\.|[^"\\])*"}{$1"<redacted>"}gi;
  $text =~ s{("$identity_key"\s*:\s*)(?:-?\d+(?:\.\d+)?|true|false|null)}{$1"<redacted>"}gi;
- $text =~ s{("$identity_key"\s*:\s*)\[(?:\\.|[^\]])*\]}{$1["<redacted>"]}gi;
+ $text =~ s{("$identity_key"\s*:\s*)\[(?:\\.|[^\]])*\]}{${1}["<redacted>"]}gi;
  $text =~ s{^(\s*$identity_key\s*[:=]\s*).*$}{$1<redacted>}gim;
  $text =~ s{^(\s*$identity_key\s+)(?:"(?:\\.|[^"\\])*"|'[^']*'|\S+).*$}{$1<redacted>}gim;
  $text =~ s{^(\s*(?:(?:display product|device|meter|instrument)\s+)?serial(?:\s*(?:number|no\.?|#))?\s*[:=]\s*).*$}{$1<redacted>}gim;
@@ -14554,7 +14563,8 @@ sub webui_bootscreen_theme (@) {
  if($old ne $content) {
   (my $dir=$file)=~s{/[^/]+$}{};
   mkdir($dir) if(!-d $dir);
-  my $tmp="$file.tmp.$$";
+  # WebUI workers are threads of one process: $$ alone is shared by them.
+  my $tmp="$file.tmp.$$.".(eval { threads->tid() } // 0);
   my $ok=open(my $out,">",$tmp);
   $ok=$ok && print $out $content;
   $ok=close($out) && $ok if($out);
@@ -14827,6 +14837,9 @@ sub webui_cec (@) {
       $la="" if(!defined($la));
       $osd="" if(!defined($osd));
       $osd =~ s/\s+$//;
+      # Both go into JSON text below.
+      $osd=&_webui_json_escape($osd);
+      $phys=&_webui_json_escape($phys);
       my $self_la=($la ne "") ? $la : 15;
       my $self_phys=($phys ne "") ? $phys : "0.0.0.0";
       $enriched =~ s/^\{/sprintf('{"self":{"phys":"%s","addr":%s,"log":%s,"osd":"%s"},', $self_phys, $self_la, $self_la, ($osd||"PGenerator"))/e;
@@ -14879,6 +14892,8 @@ sub webui_cec (@) {
 	    $la="" if(!defined($la));
 	    $osd="" if(!defined($osd));
 	    $osd =~ s/\s+$//;
+	    $osd=&_webui_json_escape($osd);
+	    $phys=&_webui_json_escape($phys);
 	    # Build a minimal pgcec-style JSON for the cache. The frontend's
 	    # cecScan() iterates over data.devices; we include just ourselves
 	    # plus a placeholder TV entry (the kernel doesn't enumerate other

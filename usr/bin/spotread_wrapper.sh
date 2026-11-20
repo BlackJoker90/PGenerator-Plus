@@ -333,34 +333,45 @@ SELECTED_METER_TYPE="${SELECTED_METER_TYPE:-unknown}"
 take_readings() {
  ensure_runtime_exec
  local display_type="$1" count="$2" timeout_per="$3" ccss_file="$4" requested_port="$5"
- local port_num
- port_num=$(find_port "$requested_port")
- local selected_usb_id
- selected_usb_id=$(meter_usb_id_for_port "$port_num" "$(spotread_help_output)")
- if [[ "$selected_usb_id" == "085c:0a00" ]]; then
-  ccss_file=""
-  refresh_rate=""
- fi
+ local port_num sr_cmd
+ # Pick the port and build the spotread command for it. Run again after the
+ # init retry re-probes the port, so the command names the port it found.
+ # find_port runs in a command substitution: the SELECTED_METER_TYPE it sets
+ # stays in that subshell, so the type is resolved here.
+ select_port_and_build_cmd() {
+  local help_out selected_usb_id
+  port_num=$(find_port "$requested_port")
+  help_out=$(spotread_help_output)
+  SELECTED_METER_TYPE=$(meter_type_for_port "$port_num" "$help_out")
+  selected_usb_id=$(meter_usb_id_for_port "$port_num" "$help_out")
+  # SpyderX takes device-specific CCMX matrices, no CCSS and no refresh
+  # override (as in meter_session.sh and meter_series.sh).
+  if [[ "$selected_usb_id" == "085c:0a00" ]]; then
+   [[ "${ccss_file,,}" =~ \.ccmx$ ]] || ccss_file=""
+   refresh_rate=""
+  fi
 
- local outfile="$TMPDIR/spotread_out_$$"
- rm -f "$outfile"
- touch "$outfile"
-
- # Build spotread command
+  # Build spotread command
   # -N for spectrophotometers: disables Argyll's proactive re-calibration so
   # the i1 Pro 2 reuses its stored wavelength cal instead of re-calibrating on
   # every Read Once. Mandatory re-cal (stale/missing cal) still triggers, so
   # -N is safe; colorimeters (SELECTED_METER_TYPE != spectro) never get it.
   local n_flag=""
   [[ "$SELECTED_METER_TYPE" == "spectro" ]] && n_flag="-N"
-  local sr_cmd="$SPOTREAD_BIN $n_flag -e -y $display_type -c $port_num -x"
+  sr_cmd="$SPOTREAD_BIN $n_flag -e -y $display_type -c $port_num -x"
   if [[ -n "$ccss_file" && -f "$ccss_file" ]]; then
    sr_cmd="$SPOTREAD_BIN $n_flag -e -y $display_type -X '$ccss_file' -c $port_num -x"
   fi
- # Override refresh rate if specified
- if [[ -n "$refresh_rate" ]]; then
-  sr_cmd="$sr_cmd -Y R:$refresh_rate"
- fi
+  # Override refresh rate if specified
+  if [[ -n "$refresh_rate" ]]; then
+   sr_cmd="$sr_cmd -Y R:$refresh_rate"
+  fi
+ }
+ select_port_and_build_cmd
+
+ local outfile="$TMPDIR/spotread_out_$$"
+ rm -f "$outfile"
+ touch "$outfile"
 
  # Disable AIO mode for i1D3 meters if requested
  if $disable_aio; then
@@ -407,7 +418,7 @@ take_readings() {
   pkill -9 -f 'script.*spotread' 2>/dev/null
   rm -f /tmp/spotread_port_cache 2>/dev/null
   sleep 2
-  port_num=$(find_port)
+  select_port_and_build_cmd
   touch "$outfile"
   mkfifo "$cmdpipe"
   cat "$cmdpipe" | script -qfc "$sr_cmd" /dev/null > "$outfile" 2>&1 &
@@ -555,17 +566,17 @@ while [[ $# -gt 0 ]]; do
  case "$1" in
   --detect) detect_only=true; shift ;;
   --kill) kill_only=true; shift ;;
-  -d) display_type="$2"; shift 2 ;;
-  -n) count="$2"; shift 2 ;;
-  --timeout) timeout_per="$2"; shift 2 ;;
-  -X) ccss_file="$2"; shift 2 ;;
-  --port) meter_port="$2"; shift 2 ;;
-  --refresh-rate) refresh_rate="$2"; shift 2 ;;
+  -d) display_type="${2-$display_type}"; shift 2 || shift ;;
+  -n) count="${2-$count}"; shift 2 || shift ;;
+  --timeout) timeout_per="${2-$timeout_per}"; shift 2 || shift ;;
+  -X) ccss_file="${2-$ccss_file}"; shift 2 || shift ;;
+  --port) meter_port="${2-$meter_port}"; shift 2 || shift ;;
+  --refresh-rate) refresh_rate="${2-$refresh_rate}"; shift 2 || shift ;;
   --disable-aio) disable_aio=true; shift ;;
-  --patch-r) patch_r="$2"; shift 2 ;;
-  --patch-g) patch_g="$2"; shift 2 ;;
-  --patch-b) patch_b="$2"; shift 2 ;;
-  --patch-size) patch_size="$2"; shift 2 ;;
+  --patch-r) patch_r="${2-$patch_r}"; shift 2 || shift ;;
+  --patch-g) patch_g="${2-$patch_g}"; shift 2 || shift ;;
+  --patch-b) patch_b="${2-$patch_b}"; shift 2 || shift ;;
+  --patch-size) patch_size="${2-$patch_size}"; shift 2 || shift ;;
   *) shift ;;
  esac
 done

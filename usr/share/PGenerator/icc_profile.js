@@ -1277,8 +1277,12 @@ function meterIccApplyDownloadRecommendation(){
  // visitor, name the file they want. Runs on every status poll because the
  // answer changes the moment a Companion connects or goes away.
  const labels={'windows-x64':'the Windows installer','windows-portable-x64':'the Windows portable zip','linux-x64':'the KDE/Linux zip'};
- const hint=document.getElementById('meterIccReleaseHint');
- if(hint) hint.textContent=labels[preferred]?('Look for '+labels[preferred]+'.'):'';
+ // One download row in the Calibration card, one in the ICC panel: each has
+ // its own id, getElementById would only ever reach the first.
+ ['meterIccReleaseHint','meterIccProfileReleaseHint'].forEach(id=>{
+  const hint=document.getElementById(id);
+  if(hint) hint.textContent=labels[preferred]?('Look for '+labels[preferred]+'.'):'';
+ });
 }
 
 // GitHub redirects "latest/download/<asset>" to whichever release is newest,
@@ -3716,16 +3720,18 @@ window.addEventListener('focus',meterIccResumeVisiblePolling);
 
 async function meterIccBuild(readings){
  const status=document.getElementById('meterIccStatus');
- meterIccBuildPending=true;
- meterActionPending=true;
- meterIccSyncUi();
  const splitReadings=meterIccSplitProfileAndMhc2Readings(readings);
  const profileReadings=splitReadings.profile;
+ // The sentinel check throws to the caller. It runs before the busy flags are
+ // raised: the finally below, which clears them, only covers the try.
  if(splitReadings.mhc2.length&&meterIccRunConfig&&!Array.isArray(meterIccRunConfig.mhc2_readings)){
   if(splitReadings.mhc2.some(row=>String(row.name||'').indexOf('ICC MHC2 Active Sentinel ')===0))
    meterIccVerifyActiveSentinelDrift(splitReadings.mhc2);
   meterIccRunConfig.mhc2_readings=splitReadings.mhc2;
  }
+ meterIccBuildPending=true;
+ meterActionPending=true;
+ meterIccSyncUi();
  const total=profileReadings.length;
  meterIccSetProgress('Building ICC profile',total,total);
  meterIccRememberLastRunConfig(meterIccRunConfig,profileReadings.length);

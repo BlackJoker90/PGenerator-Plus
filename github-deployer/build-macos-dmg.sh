@@ -23,7 +23,10 @@ trap cleanup EXIT HUP INT TERM
 unzip -q "$zip_path" -d "$build_dir/root"
 
 if command -v hdiutil >/dev/null 2>&1; then
-  hdiutil create -volname "$volume" -srcfolder "$build_dir/root/PGenerator-GitHub-Deployer" \
+  # The folder itself goes into the image, as on the Linux path below and as
+  # README-MACOS.md says (drag the PGenerator-GitHub-Deployer folder out):
+  # -srcfolder puts the contents of the folder it names at the volume root.
+  hdiutil create -volname "$volume" -srcfolder "$build_dir/root" \
     -format UDZO -ov "$output"
   exit 0
 fi

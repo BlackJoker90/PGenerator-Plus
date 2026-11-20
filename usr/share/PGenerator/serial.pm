@@ -10,7 +10,8 @@ sub serial (@) {
    open(SERIAL,">$device");
    print SERIAL $end_cmd_string;
    close(SERIAL);
-   sleep(0.5);
+   # Half a second before socat runs again: CORE::sleep(0.5) is sleep(0).
+   select(undef,undef,undef,0.5);
   }
  }
 }

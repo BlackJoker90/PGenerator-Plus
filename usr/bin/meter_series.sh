@@ -725,9 +725,17 @@ write_state_on_exit() {
   local safe_sid="${SERIES_ID:-}"
   safe_sid=$(printf '%s' "$safe_sid" | tr -cd 'A-Za-z0-9_.-')
   local total="${TOTAL:-0}"
-  printf '{"status":"error","series_id":"%s","current_step":%s,"total_steps":%s,"current_name":"%s","readings":[],"white_reading":null,"error":"series_helper_exited_unexpectedly"}\n' \
-   "$safe_sid" "$last_step" "$total" "$safe_name" > "$STATE_FILE" 2>/dev/null || true
-  chmod 666 "$STATE_FILE" 2>/dev/null || true
+  # Replace, never truncate, as write_state_json does: the file belongs to
+  # pgenerator, and fs.protected_regular stops root opening it for writing.
+  local tmp="${STATE_FILE}.$$.$RANDOM.tmp"
+  if printf '{"status":"error","series_id":"%s","current_step":%s,"total_steps":%s,"current_name":"%s","readings":[],"white_reading":null,"error":"series_helper_exited_unexpectedly"}\n' \
+   "$safe_sid" "$last_step" "$total" "$safe_name" 2>/dev/null > "$tmp"; then
+   chmod 666 "$tmp" 2>/dev/null || true
+   chown pgenerator:pgenerator "$tmp" 2>/dev/null || true
+   mv -f "$tmp" "$STATE_FILE" 2>/dev/null || rm -f "$tmp" 2>/dev/null || true
+  else
+   rm -f "$tmp" 2>/dev/null || true
+  fi
  fi
  rm -f "$READY_FILE" "$STOP_FILE" 2>/dev/null || true
 }
@@ -2052,7 +2060,7 @@ echo "[$(date '+%H:%M:%S.%3N')] meter_series.sh started: SERIES_ID=$SERIES_ID" >
 # DV Relative color and saturation series still use a helper-side white
 # pre-read for target Y. DV Absolute should use the in-series 100% White step
 # instead so the white patch is measured once and remains part of the charts.
-if series_uses_initial_white_reference; then
+if series_uses_initial_white_reference && (( TOTAL > 0 )); then
  echo "[$(date '+%H:%M:%S')] WHITE PRE-READ GATE ENTERED for SERIES_ID=$SERIES_ID" >> /tmp/meter_series_debug.log
  if [[ -f "$STEPS_FILE" ]]; then
   FIRST_R="${PREPARED_STEP_R[0]:-}"

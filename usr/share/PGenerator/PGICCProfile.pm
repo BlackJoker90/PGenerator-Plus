@@ -189,6 +189,14 @@ sub webui_icc_profile_finetune (@) {
  my ($body)=@_;
  return '{"status":"error","message":"Fine-tune request is empty"}' if(!defined($body) || $body eq "");
  return '{"status":"error","message":"Fine-tune request is too large"}' if(length($body)>16*1024*1024);
+ # The client's JSON reaches the tool verbatim behind the resolved
+ # "parent_path" and "name" below. Python's json.load keeps the last of
+ # duplicate keys, so a client's own top-level key (also one spelled with
+ # \u escapes) would replace the validated value: refuse such a request.
+ my $request=eval { require JSON::PP; JSON::PP::decode_json($body) };
+ return '{"status":"error","message":"Fine-tune request is not a JSON object"}' if(ref($request) ne "HASH");
+ return '{"status":"error","message":"Fine-tune request may not set parent_path or name"}'
+  if(exists($request->{"parent_path"}) || exists($request->{"name"}));
  my $tool="/usr/bin/icc_finetune.py";
  return '{"status":"error","message":"The fine-tune tool is unavailable"}' unless(-f $tool);
  my $file="";
@@ -415,6 +423,9 @@ sub webui_icc_profile_delete (@) {
  if(unlink($path)) {
   unlink($path.".validation.json");
   unlink($path.".measurements.json");
+  # icc_finetune.py's record of a FineTuned profile: left behind, a later
+  # profile of the same name would be listed as fine-tuned and hand it on.
+  unlink($path.".finetune.json");
   (my $ti3=$path)=~s/\.icc$/.ti3/i;
   unlink($ti3);
   return '{"status":"ok"}';
@@ -426,8 +437,10 @@ sub webui_icc_companion_write_atomic (@) {
  my ($path,$content,$mode)=@_;
  my $tmp=$path.".".$$ .".".int(Time::HiRes::time()*1000000).".".int(rand(1000000)).".tmp";
  return 0 unless(open(my $fh,">",$tmp));
- print $fh $content;
- close($fh);
+ # A short write (full or read-only card) must not replace the old file.
+ my $ok=print $fh $content;
+ $ok=close($fh) && $ok;
+ if(!$ok) { unlink($tmp); return 0; }
  chmod($mode||0600,$tmp);
  return 1 if(rename($tmp,$path));
  unlink($tmp);

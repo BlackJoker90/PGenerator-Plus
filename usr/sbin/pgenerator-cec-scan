@@ -82,18 +82,26 @@ def get_log_addrs(fd):
             'ver': buf[6], 'num': buf[7], 'osd': cec_array_to_bytes(buf[16:31]).split(b'\x00')[0].decode(errors='replace')}
 
 def claim(fd, osd='PGenerator'):
-    """Claim LA 4 (Playback Device 1)."""
+    """Claim a Playback logical address (4, 8 or 11), as pgen_cec_remote.py
+    does: the claimed address is read back with CEC_ADAP_G_LOG_ADDRS, not
+    from the request buffer."""
     buf = array.array('B', [0]*CEC_LOG_ADDRS_SZ)
     buf[0] = 0xFF; buf[1] = 0xFF; buf[2] = 0xFF; buf[3] = 0xFF
     buf[6] = 5  # CEC 1.4
     buf[7] = 1  # 1 LA
+    buf[8] = 0xFF; buf[9] = 0xFF; buf[10] = 0xFF; buf[11] = 0xFF  # vendor_id: CEC_VENDOR_ID_NONE
     for i, c in enumerate(osd[:14]):
         buf[16+i] = ord(c)
-    buf[31] = 4  # Playback
-    buf[35] = 4
-    buf[39] = 0x08
+    buf[31] = 4     # primary device type: playback
+    buf[35] = 3     # log_addr_type: playback
+    buf[39] = 0x10  # all device types: playback
     if not ioctl(fd, CEC_ADAP_S_LOG, buf): return None
-    return buf[0]
+    for _ in range(20):
+        time.sleep(0.1)
+        la_info = get_log_addrs(fd)
+        if la_info and la_info['mask'] and la_info['num'] and la_info['addrs'][0] != 0xFF:
+            return la_info['addrs'][0]
+    return None
 
 def transmit(fd, src, dst, opcode, params=None, timeout_ms=400):
     """Send a CEC message and wait for reply. Returns (tx_status, rx_status, payload bytes).

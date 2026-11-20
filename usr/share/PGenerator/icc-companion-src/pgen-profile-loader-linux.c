@@ -267,8 +267,18 @@ static bool json_next_string(const char **cursor, const char *key, char *value, 
     SDL_snprintf(needle, sizeof(needle), "\"%s\"", key);
     found = strstr(*cursor, needle);
     if (!found) return false;
-    start = strchr(found + strlen(needle), '"');
-    if (!start) return false;
+    /* A value that is not a string (null) is an empty one. Searching on for
+     * the next '"' took the following key's name for a profile path. */
+    start = found + strlen(needle);
+    while (*start == ' ' || *start == '\t' || *start == '\r' || *start == '\n') start++;
+    if (*start != ':') return false;
+    start++;
+    while (*start == ' ' || *start == '\t' || *start == '\r' || *start == '\n') start++;
+    if (*start != '"') {
+        if (value_size) value[0] = '\0';
+        *cursor = start;
+        return true;
+    }
     end = ++start;
     while (*end && *end != '"') {
         if (*end == '\\' && end[1]) end++;
@@ -2237,19 +2247,42 @@ SDL_AppResult SDL_AppInit(void **appstate, int argc, char *argv[])
         set_status(STATUS_PENDING, "STARTING", "Looking for displays and profiles.");
         snapshot_sdl_displays();
         refresh_everything();
+        bool display_found = !requested_display[0];
         if (requested_display[0]) {
             for (int index = 0; index < app.display_count; index++) {
                 if (!strcmp(app.displays[index].name, requested_display) ||
                     !strcmp(app.displays[index].model, requested_display) ||
                     !strcmp(display_title(&app.displays[index]), requested_display)) {
                     app.display_index = index;
+                    display_found = true;
                     break;
                 }
+            }
+            /* With a single output there is no other screen the profile could
+             * land on: keep applying it there even when the names differ
+             * (colord sessions name entries after colormgr, not SDL). */
+            if (!display_found && app.display_count == 1) {
+                app.display_index = 0;
+                display_found = true;
             }
         }
         if (!app.selected_profile[0] && app.profile_count > 0)
             SDL_strlcpy(app.selected_profile, app.profiles[0].path, sizeof(app.selected_profile));
         verify_profile();
+        if (apply_now && !display_found) {
+            /* Never fall back to whichever display happens to be selected: the
+             * profile would land on another screen. */
+            char detail[320];
+            SDL_snprintf(detail, sizeof(detail),
+                         "No display named \"%s\" was found, so the profile was not applied.",
+                         requested_display);
+            set_status(STATUS_BAD, "DISPLAY NOT FOUND", detail);
+            apply_now = false;
+            if (app.silent_apply) {
+                app.silent_started = true;
+                SDL_HideWindow(app.window);
+            }
+        }
         if (apply_now && app.selected_profile[0]) {
             app.silent_started = true;
             if (app.silent_apply) SDL_HideWindow(app.window);

@@ -305,12 +305,21 @@ apply_cleanup() {
 # The published "<tarball>.sha256" ("<hash>  <name>"). Releases from before
 # it was published have none: that is logged and the update goes on.
 verify_tarball_checksum() {
- local tarball="$1" url="$2" sum_file expected actual
+ local tarball="$1" url="$2" sum_file expected actual code
  sum_file="$tarball.sha256"
- if ! curl -f $CURL_OPTS -H "$GITHUB_UA" -o "$sum_file" "$url.sha256" 2>/dev/null || [ ! -s "$sum_file" ]; then
+ # Only a release without a published .sha256 (404) goes on without it. Any
+ # other failure (no connection, timeout, 5xx, an empty file) stops the
+ # update: it must not skip the check it cannot make.
+ code=$(curl $CURL_OPTS -H "$GITHUB_UA" -o "$sum_file" -w '%{http_code}' "$url.sha256" 2>/dev/null) || true
+ if [ "$code" = "404" ]; then
   rm -f "$sum_file"
   log_msg "No published SHA-256 for this release; relying on the archive check"
   return 0
+ fi
+ if [ "$code" != "200" ] || [ ! -s "$sum_file" ]; then
+  rm -f "$sum_file"
+  log_msg "ERROR: Cannot fetch the release's SHA-256 (HTTP ${code:-none})"
+  return 1
  fi
  expected=$(awk 'NR==1{print $1}' "$sum_file" | tr 'A-F' 'a-f')
  rm -f "$sum_file"
@@ -749,6 +758,10 @@ merge_conf_defaults() {
   [ -n "$key" ] || continue
   case "$key" in *[!A-Za-z0-9_]* ) continue ;; esac
   if ! grep -q "^${key}=" "$conf"; then
+   # A conf whose last line has no newline would take the key onto it.
+   if [ "$added" -eq 0 ] && [ -s "$conf" ] && [ -n "$(tail -c 1 "$conf")" ]; then
+    printf '\n' >> "$conf"
+   fi
    printf '%s\n' "$line" >> "$conf"
    added=$((added + 1))
    log_msg "conf: added new default key ${key}"
@@ -848,7 +861,7 @@ case "$cmd" in
    exit 1
   fi
 
-  latest=$(release_field tag_name 2>/dev/null | sed 's/^v//')
+  latest=$(release_field tag_name 2>/dev/null | sed 's/^v//' || true)
   message=$(release_field message 2>/dev/null || true)
   published=$(release_field published_at 2>/dev/null || true)
   changelog=$(release_field body 2>/dev/null || true)
@@ -990,7 +1003,7 @@ case "$cmd" in
    exit 1
   fi
 
-  latest=$(release_field tag_name 2>/dev/null | sed 's/^v//')
+  latest=$(release_field tag_name 2>/dev/null | sed 's/^v//' || true)
   asset_url=$(release_field asset_url 2>/dev/null || true)
   message=$(release_field message 2>/dev/null || true)
 
@@ -1078,7 +1091,7 @@ case "$cmd" in
 
   set_update_state verifying "Verifying the download"
   if ! verify_tarball_checksum "$tarball" "$asset_url"; then
-   echo "ERROR: Update archive checksum mismatch"
+   echo "ERROR: Update archive checksum mismatch or not verifiable"
    rm -f "$tarball"
    exit 1
   fi

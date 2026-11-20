@@ -1011,7 +1011,8 @@ sub lut (@) {
  my $rgb = shift;
  ($r,$g,$b)=split(",",$rgb);
  $file=$lut_file;
- return if($file eq "" || !-f $file);
+ # Without a LUT file the codes go out as asked (an empty return wrote RGB=).
+ return $rgb if($file eq "" || !-f $file);
  open(LUT,$file);
  while(<LUT>) {
   next if($_=~/^#/);

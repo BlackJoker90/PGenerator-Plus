@@ -78,9 +78,24 @@ fi
 #############################################
 sfdisk -d "$DISK" > $FILE
 echo "Changing $START_LAST to $END_LAST for $ROOT_PARTITION"
-perl -p -i -e "s/^$ROOT_PARTITION_PATTERN : (.*) size=(.*) $START_LAST,/^$ROOT_PARTITION_PATTERN : \1 size=       $END_LAST,/" $FILE
+perl -p -i -e "s/^$ROOT_PARTITION_PATTERN : (.*) size=(.*) $START_LAST,/$ROOT_PARTITION_PATTERN : \1 size=       $END_LAST,/" $FILE
+# Only grow the kernel's partition and the filesystem once the new size is
+# in the partition table on the card: otherwise the filesystem would end
+# beyond its partition at the next boot.
+if ! grep -q "^$ROOT_PARTITION : .* size= *$END_LAST," "$FILE"; then
+ echo -e "\nNo partition table entry for $ROOT_PARTITION to resize, not executing\n"
+ exit 1
+fi
 cat "$FILE"|sfdisk --force --no-reread "$DISK" 1>/dev/null
-resizepart "$DISK" "$N_PART" "$END_LAST"
+# Read the table back rather than trusting sfdisk's exit status, and grow
+# the kernel's partition to the size the card now records (sfdisk may have
+# aligned it).
+NEW_SIZE=$(sfdisk -d "$DISK" 2>/dev/null | grep "^$ROOT_PARTITION :" | sed -n 's/.*size= *\([0-9][0-9]*\),.*/\1/p' | head -1)
+if [ -z "$NEW_SIZE" ] || [ "$NEW_SIZE" -le "$START_LAST" ] || [ "$NEW_SIZE" -gt "$END_LAST" ]; then
+ echo -e "\nThe partition table does not hold the new size, not resizing\n"
+ exit 1
+fi
+resizepart "$DISK" "$N_PART" "$NEW_SIZE"
 resize2fs "$ROOT_PARTITION"
 
 #############################################

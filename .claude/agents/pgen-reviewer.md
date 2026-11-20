@@ -123,9 +123,14 @@ Zero findings is a valid result. Do not invent findings to look thorough.
   the Pi. Say what would confirm it.
 
 Also run what CLAUDE.md "Verify after a change" lists for the changed
-files, as far as it works locally (`prove -j8 -Q -r t` in the copied tree, the
-Perl `-c` checks, the WebUI JS parse, the Python 3.5 parse plus an
-f-string scan), and report results with output for failures.
+files, as far as it works locally (`prove -j16 -Q --state=slow,save
+--statefile=t/.prove-state -r t` in the copied tree, the Perl `-c` checks,
+the WebUI JS parse, the Python 3.5 parse plus an f-string scan), and report
+results with output for failures. A file that printed `sandbox:` or
+`skipped:` did not run that part: name it as not run. `t/repo_links.t` and
+`t/python35_syntax.t` (the Python 3.5 check of the tracked tree) skip their
+tracked-files part in a copy without `.git`: `git init` the copy, `git add -f`
+the files `git ls-files` lists in the checkout under review, and run those two.
 
 ## Output
 

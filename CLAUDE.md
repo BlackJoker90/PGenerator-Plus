@@ -92,19 +92,37 @@ the main checkout's copy.
 
 Run what applies and say what was and was not checked:
 
-- `prove -j8 -Q -r t` (code-value tests: bits, Calman scaling, G1 plates,
-  playlists). Parallel, as the release gate runs it: serial it took 784 s
-  on 2026-11-11 (-j8: 107 s) and outlasts a 600 s Bash call; `-v` only on
-  a failing file.
-  In the Bash sandbox `t/pi_exp.t`, `t/refused_settings.t` and
-  `t/meter_ccss_y_selector.t` fail on sandbox limits (ptys, sockets, temp
-  files); rerun just those unsandboxed before calling a red real.
-  `t/webui_hdr_plates.t` skips its socket tests there instead of failing
-  (the HDR Metadata Cycle worker's POST): a green in the sandbox does not
-  cover `webui_hdr_cycle_post`, run it unsandboxed after a change to it.
-  `t/webui_tablet_nav_scroll.t` (Playwright WebKit, iPhone profile) skips
-  in the sandbox too: run it unsandboxed after a change to the phone/tablet
-  layout or the bottom bar.
+- `prove -j16 -Q --state=slow,save --statefile=t/.prove-state -r t`
+  (code-value tests: bits, Calman scaling, G1 plates, playlists): the full
+  suite as the release gate runs it, slowest files first from the timings
+  every such run saves in `t/.prove-state`. 2026-11-19: 124 s (-j8 in name
+  order 194-206 s; serial it outlasts a 600 s Bash call). Never put
+  `--state=slow` next to a single test: it runs every test the state
+  names. `-v` only on a failing file.
+  The Bash sandbox lacks what some tests need (ptys, `/usr/bin/time -l`,
+  headless Chrome and WebKit, listening sockets, the process list). There
+  they skip that part and print `# t/<file>: sandbox: <what>; rerun
+  unsandboxed` on stderr (`t/lib/PGTestSandbox.pm`). Outside the sandbox a
+  missing pty or `time -l` stays a failure, but a browser, socket or
+  process list that is missing or does not start skips there too, as does
+  a test without a tool it needs (a C/C++ compiler or its sanitizers,
+  python3, node, git, expect, the libdrm headers), and prints
+  `# t/<file>: skipped: <what>`. The release gate refuses a run with a
+  `sandbox:` line, and one with a `skipped:` line unless
+  `PGEN_ALLOW_SKIPPED=1` (all of them) or `PGEN_ALLOW_SKIPPED_REASONS`
+  (a Perl regex on the reason) accepts it. After a sandboxed run, rerun
+  unsandboxed every file that printed `sandbox:` and every red file
+  before calling a red
+  real or a green complete; a change is covered only once its tests ran
+  (no `sandbox:` or `skipped:` line from them: browser tests for the
+  WebUI, the compiled renderer tests for the renderer).
+  `t/repo_links.t` and `t/python35_syntax.t` (the Python 3.5 check of
+  the tracked tree) need `.git` (`git ls-files`): a copy without it skips
+  that part and says so on stderr. The main checkout runs them for main;
+  for a worktree's change, `git init` the copy and `git add -f` the
+  worktree's `git ls-files` (main's tree is other code). If prove dies in
+  `YAMLish/Reader.pm` before the first test, `t/.prove-state` is damaged:
+  delete it (the release gate moves it aside itself).
 - Perl: `perl -I usr/share/PGenerator -c <file>` for scripts in `usr/bin`,
   `usr/sbin`; modules are checked by `tools/runtime/pgen_release_checks.sh`
   (`pgen_release_check_runtime_syntax`)
@@ -175,7 +193,8 @@ reviewed / confirmed on the Pi. The release refuses to run without `t/` or
 
 Everything goes through `.claude/skills/pi/scripts/pgen-pi` (the `pi`
 skill). The hooks in `.claude/settings.json` enforce the rules below:
-`pi_guard.py` refuses raw ssh, a written-out password, dummy bodies,
+`pi_guard.py` (on Bash and Monitor commands) refuses raw ssh, a
+written-out password, dummy bodies,
 system writes outside `pgen-pi deploy` and unchecked probes; `pi_stop.py` stops the end of
 a turn while a snapshot is open.
 
@@ -214,7 +233,8 @@ a turn while a snapshot is open.
   redirect: never create a repository of the old name again.
 - Every `gh` write names the repo (`-R BlackJoker90/rampecho`; `gh
   repo edit`, `sync`, `delete` and the like take it as argument).
-  `pi_guard.py` refuses what it can read as going elsewhere, in Bash only;
+  `pi_guard.py` refuses what it can read as going elsewhere, in Bash and
+  Monitor commands only;
   it is a net for slips, not a proof.
 - T3's PR button does not run gh: it posts to the GitHub API and takes the
   target from `GH_REPO`, then the `remote.*.gh-resolved` mark, then the
@@ -255,7 +275,8 @@ compresses with xz, copies the `.img.xz` and `_sha256.txt` to
   script needs a `.git` directory) to `/Users/fabio/pgen-image-<ver>`,
   `git checkout v<ver>`, `git remote set-url --push origin PUSH-DISABLED`,
   then copy in the local-only `tools/`, `build/runtime-cache/` and `t/`.
-- `t/` is not versioned: run `prove -j8 -Q -r t` in the clone first. A
+- `t/` is not versioned: run the full suite (`prove -j16 -Q
+  --state=slow,save --statefile=t/.prove-state -r t`) in the clone first. A
   red file there is acceptable only if it tests code after the tag (birth
   time `stat -f %SB` after the release's `publishedAt`, and a later commit
   it belongs to); remove those from the clone's `t/` and name them. Any
@@ -265,7 +286,19 @@ compresses with xz, copies the `.img.xz` and `_sha256.txt` to
   Wait for `^ERROR` or `] Done: ` in the log (a `pgrep -f run-in-vm`
   watcher matches its own command line and never ends). `t/` runs there
   as root on Linux: a test that needs macOS or a non-root user skips
-  there, it does not fail.
+  there, it does not fail. The VM has no headless Chrome or Playwright,
+  no clang and no expect: run-in-vm.sh (and run-in-vm-pi5.sh) accept
+  exactly those skip reasons (`VM_SKIP_REASONS`, passed as
+  `PGEN_ALLOW_SKIPPED_REASONS`), so the build goes on and the log lists
+  those files under "Warning: tests skipped parts this machine cannot
+  run"; the Mac's release gate runs them. Any other skip stops the
+  build (an inherited `PGEN_ALLOW_SKIPPED=1` or
+  `PGEN_RELEASE_PREFLIGHT_DONE=1` is dropped there;
+  `PGEN_SKIP_RELEASE_CHECKS=1` still skips every check, with a warning).
+  `t/pg_v4l2_runtime.t` and `t/pg_drm_player_runtime.t` run only
+  there (Linux, `libdrm-dev` installed in the VM since 2026-11-19; the
+  scripts refuse to start without it; the target builds use their
+  chroots, not these headers).
   The log must end in "Output image OK" and "Done", and must not say
   "node not found" (nodejs is installed in the VM since 2026-11-16; the
   release checks parse the WebUI JS with it).

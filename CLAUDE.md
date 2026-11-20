@@ -292,9 +292,9 @@ compresses with xz, copies the `.img.xz` and `_sha256.txt` to
   `PGEN_ALLOW_SKIPPED_REASONS`), so the build goes on and the log lists
   those files under "Warning: tests skipped parts this machine cannot
   run"; the Mac's release gate runs them. Any other skip stops the
-  build (an inherited `PGEN_ALLOW_SKIPPED=1` or
-  `PGEN_RELEASE_PREFLIGHT_DONE=1` is dropped there;
-  `PGEN_SKIP_RELEASE_CHECKS=1` still skips every check, with a warning).
+  build (an inherited `PGEN_ALLOW_SKIPPED=1`,
+  `PGEN_RELEASE_PREFLIGHT_DONE=1` or `PGEN_SKIP_RELEASE_CHECKS=1` is
+  dropped there: an image built by these scripts always runs the checks).
   `t/pg_v4l2_runtime.t` and `t/pg_drm_player_runtime.t` run only
   there (Linux, `libdrm-dev` installed in the VM since 2026-11-19; the
   scripts refuse to start without it; the target builds use their

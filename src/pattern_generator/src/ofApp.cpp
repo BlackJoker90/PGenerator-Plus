@@ -233,8 +233,17 @@ void ofApp::update(){
    }
    /* Start Patch RPI P4 */
    if(key == "BITS") {
-    if(!parseIntValue(key, value, bits))
+    int v;
+    if(!parseIntValue(key, value, v))
      continue;
+    /* The renderer draws 8 or 10 bits. Any other depth (a client's BITS
+       passed through pattern.pm) made shifts like 128 << (bits - 8)
+       undefined; the pattern keeps the depth it had. */
+    if(v != 8 && v != 10) {
+     fprintf(stderr, "PGEN: pattern line BITS=%s ignored: 8 or 10\n", value.c_str());
+     continue;
+    }
+    bits=v;
     ofxRPI4Window::bit_depth = effectivePatternBits(bits);
     if (!usesDolbyVisionTransport())
      ofxRPI4Window::avi_info.max_bpc = ofxRPI4Window::bit_depth;
@@ -469,8 +478,7 @@ void ofApp::draw(){
    const char * c = image_name.c_str();
    ifstream p(c);
    if(!p.good()) {
-    img.grabScreen(0,0,ofGetWindowWidth(),ofGetWindowHeight());
-	ofApp::YCbCr2RGB();
+    grabFrameForSave();
 //	dovi_rpu_inject();
 //ofApp::dovi_dump();
 //	ofApp::dovi_metadata_inject(ofxRPI4Window::bit_depth);
@@ -1234,6 +1242,15 @@ void ofApp::shader_end(int is_image) {
 }
 
  
+/* The screen as an RGB picture for a saved frame (save_images). img is
+   also where image() keeps an 8-bit picture: once the screen is in it, the
+   picture's next draw has to read its file again. */
+void ofApp::grabFrameForSave(){
+	img.grabScreen(0,0,ofGetWindowWidth(),ofGetWindowHeight());
+	picture.eightBitImageReplaced();
+	YCbCr2RGB();
+}
+
 void ofApp::YCbCr2RGB(){
 	if (ofxRPI4Window::avi_info.output_format != 0) {
 		int Y = 0, Cb = 0, Cr = 0;
@@ -1262,13 +1279,15 @@ void ofApp::YCbCr2RGB(){
 				}
 
 				YCbCr data = YCbCr(Y,Cb,Cr);
-				RGB rgb = YCbCrToRGB(data,bits,encodeColorimetry(), ofxRPI4Window::avi_info.rgb_quant_range);
-				//Set red 
-				pixels[ index ] = rgb.R;
-				//Set green 
-				pixels[ index + 1 ] = rgb.G;
-				//Set blue 
-				pixels[ index + 2 ] = rgb.B;
+				/* grabScreen reads 8-bit pixels whatever BITS the pattern
+				   has (glReadPixels GL_UNSIGNED_BYTE, also from the 10-bit
+				   framebuffer): 8-bit codes, 8-bit offsets. */
+				RGB rgb = YCbCrToRGB(data,8,encodeColorimetry(), ofxRPI4Window::avi_info.rgb_quant_range);
+				/* Codes outside the RGB cube (e.g. Limited red: R 255+)
+				   are clipped, not wrapped round by the unsigned char. */
+				pixels[ index ] = rgb.R < 0 ? 0 : (rgb.R > 255 ? 255 : rgb.R);
+				pixels[ index + 1 ] = rgb.G < 0 ? 0 : (rgb.G > 255 ? 255 : rgb.G);
+				pixels[ index + 2 ] = rgb.B < 0 ? 0 : (rgb.B > 255 ? 255 : rgb.B);
 			}
 		}
 		//Calling img.update() to apply changes

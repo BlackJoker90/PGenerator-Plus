@@ -7,9 +7,15 @@
  * Monitors DRM_IOCTL_MODE_GETPROPERTY to discover property IDs for
  * "max bpc", "output format", "Colorimetry", "rgb quant range", and
  * "DOVI_OUTPUT_METADATA", then modifies
- * DRM_IOCTL_MODE_ATOMIC, DRM_IOCTL_MODE_SETPROPERTY, and
- * DRM_IOCTL_MODE_OBJ_SETPROPERTY calls to override values from
- * PGenerator.conf.
+ * DRM_IOCTL_MODE_ATOMIC and DRM_IOCTL_MODE_SETPROPERTY calls to override
+ * values from PGenerator.conf.
+ *
+ * DRM_IOCTL_MODE_OBJ_SETPROPERTY is not intercepted. Its handler here had a
+ * 16-byte struct without obj_type, so its request number (0xC01064BA) was
+ * never the one libdrm sends (0xC01864BA) and it never ran; the renderer,
+ * the only process this library is preloaded into, does not call
+ * drmModeObjectSetProperty. Removed (audit F-7) instead of corrected: a
+ * corrected struct would switch on an override that was never tested.
  *
  * NOTE ON THE REFERENCE GCI:
  * daemon.pm gates the reference GCI control plane's writes to
@@ -115,14 +121,6 @@ struct drm_mode_connector_set_property {
     uint32_t connector_id;
 };
 #define DRM_IOCTL_MODE_SETPROPERTY MY_IOWR(DRM_IOCTL_BASE, 0xAB, sizeof(struct drm_mode_connector_set_property))
-
-/* DRM_IOCTL_MODE_OBJ_SETPROPERTY = DRM_IOWR(0xBA, ...) - generic object */
-struct drm_mode_obj_set_property {
-    uint64_t value;
-    uint32_t prop_id;
-    uint32_t obj_id;
-};
-#define DRM_IOCTL_MODE_OBJ_SETPROPERTY MY_IOWR(DRM_IOCTL_BASE, 0xBA, sizeof(struct drm_mode_obj_set_property))
 
 /* DRM_IOCTL_MODE_CREATEPROPBLOB = DRM_IOWR(0xBD, ...) */
 struct drm_mode_create_blob {
@@ -1312,6 +1310,15 @@ int ioctl(int fd, unsigned long request, ...) {
         uint64_t *values = (uint64_t *)(uintptr_t)atomic->prop_values_ptr;
         int is_test = (atomic->flags & DRM_MODE_ATOMIC_TEST_ONLY) != 0;
         int dovi_changed = 0;
+        /* The suppression state before this commit. A commit the kernel
+         * fails took none of its properties (atomic: all or nothing), so
+         * its values must not count as sent: libdrm's drmIoctl sends the
+         * same struct again on EINTR/EAGAIN, and the renderer's next
+         * commit carries the same values after a refusal; with the new
+         * values counted, both lost them to should_suppress. */
+        uint64_t prev_max_bpc = last_max_bpc, prev_output_fmt = last_output_fmt;
+        uint64_t prev_colorimetry = last_colorimetry, prev_rgb_qr = last_rgb_qr;
+        uint64_t prev_dovi = last_dovi;
 
         uint32_t total = 0, i;
         for (i = 0; i < atomic->count_objs; i++)
@@ -1451,12 +1458,33 @@ int ioctl(int fd, unsigned long request, ...) {
         }
 
         long atomic_ret = raw_ioctl(fd, request, arg);
+        /* syscall() returns -1 and leaves the error in errno; the caller
+         * (drmIoctl's retry loop) reads errno after this returns, so the
+         * logging below must not change it. */
+        int atomic_errno = errno;
+        int carries_fallback_dovi =
+            atomic->props_ptr == (uint64_t)(uintptr_t)inj_props;
+        int log_failure = atomic_ret != 0 && (dovi_injected || carries_fallback_dovi);
+
+        if (atomic_ret != 0 && !is_test) {
+            last_max_bpc = prev_max_bpc;
+            last_output_fmt = prev_output_fmt;
+            last_colorimetry = prev_colorimetry;
+            last_rgb_qr = prev_rgb_qr;
+            last_dovi = prev_dovi;
+            /* A failed commit with our fallback DOVI blob: on EINTR/EAGAIN
+             * the same struct, blob included, comes back; any other error
+             * is not retried, so the next commit gets the blob again. */
+            if (carries_fallback_dovi
+                && atomic_errno != EINTR && atomic_errno != EAGAIN)
+                dovi_injected = 0;
+        }
 
         /* Log return for DOVI-related commits */
-        if (dovi_injected && atomic_ret != 0) {
+        if (log_failure) {
             char num[24];
-            itoa_simple((uint32_t)(-(int)atomic_ret), num);
-            write_log("DRM_OVERRIDE: atomic commit returned -");
+            itoa_simple((uint32_t)atomic_errno, num);
+            write_log("DRM_OVERRIDE: atomic commit failed, errno ");
             write_log(num);
             write_log(" (flags=0x");
             {
@@ -1477,6 +1505,7 @@ int ioctl(int fd, unsigned long request, ...) {
             write_log(")\n");
         }
 
+        errno = atomic_errno;
         return atomic_ret;
     }
 
@@ -1493,31 +1522,6 @@ int ioctl(int fd, unsigned long request, ...) {
             override_colorimetry(&sp->value, "setprop_conn");
         if (rgb_qr_prop_id && sp->prop_id == rgb_qr_prop_id)
             override_rgb_qr(&sp->value, "setprop_conn");
-    }
-
-    /* Intercept DRM_IOCTL_MODE_OBJ_SETPROPERTY (generic object, 0xBA) */
-    if (request == DRM_IOCTL_MODE_OBJ_SETPROPERTY) {
-        reload_config_if_changed();
-        struct drm_mode_obj_set_property *sp =
-            (struct drm_mode_obj_set_property *)arg;
-        if (max_bpc_prop_id && sp->prop_id == max_bpc_prop_id)
-            override_max_bpc(&sp->value, "setprop_obj");
-        if (output_fmt_prop_id && sp->prop_id == output_fmt_prop_id)
-            override_output_fmt(&sp->value, "setprop_obj");
-        if (colorimetry_prop_id && sp->prop_id == colorimetry_prop_id)
-            override_colorimetry(&sp->value, "setprop_obj");
-        if (rgb_qr_prop_id && sp->prop_id == rgb_qr_prop_id)
-            override_rgb_qr(&sp->value, "setprop_obj");
-        if (dovi_meta_prop_id && sp->prop_id == dovi_meta_prop_id && dv_status == 0) {
-            if (sp->value != 0 && !is_dovi_off_blob(sp->value)) {
-                write_log("DRM_OVERRIDE: blocking DOVI blob (dv_status=0, setprop_obj)\n");
-                sp->value = 0;
-            }
-        }
-        if (dovi_meta_prop_id && sp->prop_id == dovi_meta_prop_id
-            && dv_status == 1 && dovi_blob_id && sp->value != dovi_blob_id) {
-            sp->value = dovi_blob_id;
-        }
     }
 
     return raw_ioctl(fd, request, arg);

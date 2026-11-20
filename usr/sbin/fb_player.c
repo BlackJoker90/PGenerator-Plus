@@ -24,6 +24,7 @@
 #include <fcntl.h>
 #include <sys/ioctl.h>
 #include <sys/mman.h>
+#include <errno.h>
 
 /* --- Inline framebuffer definitions (from linux/fb.h) --- */
 
@@ -165,9 +166,13 @@ int main(int argc, char *argv[]) {
   }
  }
 
- /* Re-read to get actual values */
- ioctl(fb_fd, FBIOGET_VSCREENINFO, &vinfo);
- ioctl(fb_fd, FBIOGET_FSCREENINFO, &finfo);
+ /* Re-read to get actual values; without them the stride and the size
+    of the mapping would be stack garbage. */
+ if (ioctl(fb_fd, FBIOGET_VSCREENINFO, &vinfo) < 0 ||
+     ioctl(fb_fd, FBIOGET_FSCREENINFO, &finfo) < 0) {
+  fprintf(stderr, "fb_player: cannot read the framebuffer geometry\n");
+  return 1;
+ }
 
  fprintf(stderr, "fb_player: fb0 %dx%d %dbpp stride=%d\n",
      vinfo.xres, vinfo.yres, vinfo.bits_per_pixel, finfo.line_length);
@@ -201,7 +206,10 @@ int main(int argc, char *argv[]) {
    nread = read(0, frame_buf + total, frame_size - total);
    if (nread <= 0) {
     if (nread == 0) goto done;  /* EOF */
-    continue;                    /* EINTR or other retry */
+    if (errno == EINTR || errno == EAGAIN) continue;
+    /* EIO, EBADF, ...: retrying would spin forever */
+    fprintf(stderr, "fb_player: reading stdin failed: %s\n", strerror(errno));
+    goto done;
    }
    total += (size_t)nread;
   }

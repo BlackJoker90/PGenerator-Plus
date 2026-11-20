@@ -21,6 +21,14 @@
  *     -o drm_player drm_player.c
  */
 
+/* A 64-bit off_t on 32-bit userland: the fake mmap offset that
+ * DRM_IOCTL_MODE_MAP_DUMB returns is a 64-bit value, which a 32-bit off_t
+ * would cut before mmap() sees it. Not in a test build that swaps open/mmap
+ * for fakes by macro (t/data/pg_*_runtime.c): glibc would rename them to
+ * open64/mmap64 and bind the fakes to the libc symbols. */
+#if !defined(_FILE_OFFSET_BITS) && !defined(open) && !defined(mmap)
+#define _FILE_OFFSET_BITS 64
+#endif
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -511,7 +519,10 @@ int main(int argc, char *argv[]) {
    nread = read(0, frame_buf + total, frame_size - total);
    if (nread <= 0) {
     if (nread == 0) goto done;
-    continue;
+    if (errno == EINTR || errno == EAGAIN) continue;
+    /* EIO, EBADF, ...: retrying would spin forever */
+    fprintf(stderr, "drm_player: reading stdin failed: %s\n", strerror(errno));
+    goto done;
    }
    total += (size_t)nread;
   }

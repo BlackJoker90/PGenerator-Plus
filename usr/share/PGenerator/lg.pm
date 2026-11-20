@@ -153,7 +153,10 @@ sub lg_save_clients (@) {
  # open/print/rename error: this store carries the held-calibration-session
  # flag, and lg_prepare_held_calibration_mode's fail-closed gate is dead
  # code if a full or read-only filesystem can "succeed" silently here.
- my $tmp="$file.tmp";
+ # One temp file per writer: the WebUI workers are threads of one process,
+ # and a shared name let one writer's rename publish another's half-written
+ # file or fail outright.
+ my $tmp="$file.tmp.$$.".(eval { threads->tid() } // 0);
  my $fh;
  return 0 if(!open($fh,">",$tmp));
  my $written=(print $fh &lg_encode_json($clients));
@@ -314,6 +317,11 @@ sub lg_primary_client (@) {
  if((($clients->{"client_key"}||"") ne "") || (($clients->{"ip"}||"") ne "") || (($clients->{"model_name"}||"") ne "") || (($clients->{"name"}||"") ne "")) {
   return $clients;
  }
+ # No active set (it was forgotten). Requests then go to manual_ip
+ # (lg_target_ip), so a saved set last seen at another IP must not lend its
+ # key: that would send one TV's key to another TV.
+ my $manual_ip=$clients->{"manual_ip"}||"";
+ $manual_ip="" if(!&lg_valid_ipv4($manual_ip));
  foreach my $key ("devices","clients") {
   next if(ref($clients->{$key}) ne "ARRAY");
   foreach my $entry (@{$clients->{$key}}) {
@@ -321,6 +329,8 @@ sub lg_primary_client (@) {
    my $client_key=$entry->{"client_key"}||$entry->{"client-key"}||"";
    my $ip=$entry->{"ip"}||"";
    next if($client_key eq "" && $ip eq "");
+   my $entry_ip=$entry->{"last_ip"}||$ip;
+   next if($manual_ip ne "" && $entry_ip ne "" && $entry_ip ne $manual_ip);
    return $entry;
   }
  }
@@ -2414,13 +2424,13 @@ sub webui_meter_lg_dv_profile_mark_cancelled (@) {
  my $json="";
  if(open(my $fh,"<",$_meter_lg_dv_profile_file)) { local $/; $json=<$fh>; close($fh); }
  return if($json eq "");
- if($json=~/"status"\s*:\s*"[^"]*"/) {
-  $json=~s/"status"\s*:\s*"[^"]*"/"status":"cancelled"/;
+ if($json=~/"status"\s*:\s*"(?:\\.|[^"\\])*"/) {
+  $json=~s/"status"\s*:\s*"(?:\\.|[^"\\])*"/"status":"cancelled"/;
  } else {
   $json=~s/\}\s*\z/,"status":"cancelled"}/;
  }
- if($json=~/"message"\s*:\s*"[^"]*"/) {
-  $json=~s/"message"\s*:\s*"[^"]*"/"message":"Dolby Vision profile measurement stopped"/;
+ if($json=~/"message"\s*:\s*"(?:\\.|[^"\\])*"/) {
+  $json=~s/"message"\s*:\s*"(?:\\.|[^"\\])*"/"message":"Dolby Vision profile measurement stopped"/;
  } else {
   $json=~s/\}\s*\z/,"message":"Dolby Vision profile measurement stopped"}/;
  }
@@ -2535,8 +2545,8 @@ sub webui_meter_lg_dv_profile_status (@) {
  # to need that extra bookkeeping.
  if($json=~/"status"\s*:\s*"running"/ && !&webui_meter_lg_dv_profile_running()) {
   $json=~s/"status"\s*:\s*"running"/"status":"error"/;
-  if($json=~/"message"\s*:\s*"[^"]*"/) {
-   $json=~s/"message"\s*:\s*"[^"]*"/"message":"Dolby Vision profile measurement process ended unexpectedly"/;
+  if($json=~/"message"\s*:\s*"(?:\\.|[^"\\])*"/) {
+   $json=~s/"message"\s*:\s*"(?:\\.|[^"\\])*"/"message":"Dolby Vision profile measurement process ended unexpectedly"/;
   } else {
    $json=~s/\}\s*\z/,"message":"Dolby Vision profile measurement process ended unexpectedly"}/;
   }
@@ -3231,7 +3241,13 @@ sub webui_lg_calibration_history_reupload (@) {
   my $run=$1;
   my $meas;
   my $meas_path="$_lg_cal_hist_runs/$run/dv-profile-measurements.json";
-  $meas=_lg_cal_hist_read_json_file($meas_path) if(-f $meas_path);
+  # _lg_cal_hist_archive_dv writes { measurements => {...}, ... }; unwrap
+  # it as the history list does (a flat file is taken as it is).
+  if(-f $meas_path) {
+   my $wrap=_lg_cal_hist_read_json_file($meas_path) || {};
+   $meas=$wrap->{"measurements"} if(ref($wrap) eq "HASH" && ref($wrap->{"measurements"}) eq "HASH");
+   $meas=$wrap if(!$meas && ref($wrap) eq "HASH" && defined($wrap->{"white_luminance"}));
+  }
   if(ref($meas) ne "HASH") {
    my $state=_lg_cal_hist_read_json_file("$_lg_cal_hist_runs/$run/grey-state.json") || {};
    my $state3=_lg_cal_hist_read_json_file("$_lg_cal_hist_runs/$run/3d-state.json") || {};
@@ -3376,8 +3392,16 @@ sub webui_lg_autocal_run_begin (@) {
    my $clients = &lg_load_clients();
    my $ip = $payload->{"ip"} || "";
    my $tv = {};
-   if(ref($clients) eq "HASH" && ref($clients->{$ip}) eq "HASH") {
-    my $c = $clients->{$ip};
+   # The store is not keyed by IP: the active set is the flat fields, other
+   # paired sets are keyring entries with their last_ip.
+   my $c;
+   if(ref($clients) eq "HASH" && $ip ne "") {
+    $c = $clients if(($clients->{"ip"}||"") eq $ip);
+    if(!$c && ref($clients->{"devices"}) eq "ARRAY") {
+     ($c) = grep { ref($_) eq "HASH" && ($_->{"last_ip"}||"") eq $ip } @{$clients->{"devices"}};
+    }
+   }
+   if(ref($c) eq "HASH") {
     $tv = {
      model_name       => $c->{"model_name"} || "",
      software_version => $c->{"software_version"} || "",

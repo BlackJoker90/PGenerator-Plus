@@ -61,6 +61,10 @@ class BackupError(Exception):
     pass
 
 
+class NothingToBackUp(BackupError):
+    pass
+
+
 def utc_stamp():
     return datetime.datetime.utcnow().strftime("%Y%m%d-%H%M%S")
 
@@ -133,7 +137,7 @@ def collect_backup_files():
 def create_archive(output_path, software_version):
     files, components, total_bytes = collect_backup_files()
     if not files:
-        raise BackupError("No rampecho settings or profile data were found")
+        raise NothingToBackUp("No rampecho settings or profile data were found")
     manifest = {
         "format": FORMAT,
         "schema_version": SCHEMA_VERSION,
@@ -150,17 +154,26 @@ def create_archive(output_path, software_version):
     temp_path = output_path + ".tmp"
     if os.path.exists(temp_path):
         os.unlink(temp_path)
-    with tarfile.open(temp_path, "w:gz", dereference=True) as archive:
-        raw = json.dumps(manifest, sort_keys=True, indent=2).encode("utf-8")
-        info = tarfile.TarInfo("manifest.json")
-        info.size = len(raw)
-        info.mode = 0o644
-        info.mtime = int(time.time())
-        archive.addfile(info, io.BytesIO(raw))
-        for source, item in files:
-            archive.add(source, arcname=item["path"], recursive=False)
-    os.chmod(temp_path, 0o644)
-    os.rename(temp_path, output_path)
+    try:
+        with tarfile.open(temp_path, "w:gz", dereference=True) as archive:
+            raw = json.dumps(manifest, sort_keys=True, indent=2).encode("utf-8")
+            info = tarfile.TarInfo("manifest.json")
+            info.size = len(raw)
+            info.mode = 0o644
+            info.mtime = int(time.time())
+            archive.addfile(info, io.BytesIO(raw))
+            for source, item in files:
+                archive.add(source, arcname=item["path"], recursive=False)
+        os.chmod(temp_path, 0o644)
+        os.rename(temp_path, output_path)
+    except Exception:
+        # A partial archive (disk full, unreadable file) must not stay
+        # behind: each export uses a new name, so nothing else removes it.
+        try:
+            os.unlink(temp_path)
+        except OSError:
+            pass
+        raise
     return manifest
 
 
@@ -377,7 +390,12 @@ def create_rollback_snapshot(software_version):
     if not os.path.isdir(directory):
         os.makedirs(directory)
     path = os.path.join(directory, "pre-import-%s.pgbackup" % utc_stamp())
-    create_archive(path, software_version)
+    try:
+        create_archive(path, software_version)
+    except NothingToBackUp:
+        # Nothing on this system to roll back to (the import is what
+        # brings the settings back).
+        return ""
     backups = sorted(
         [os.path.join(directory, name) for name in os.listdir(directory) if name.startswith("pre-import-") and name.endswith(".pgbackup")],
         key=lambda item: os.path.getmtime(item),

@@ -1350,7 +1350,11 @@ while read -t "$IDLE_TIMEOUT" -u 4 line; do
        fi
        if colorimeter_dark_cal_prompt "$READ_OUTPUT"; then
         if ! perform_colorimeter_dark_calibration "read"; then
-         write_state '{"status":"error","message":"Meter dark calibration did not complete"}'
+         # Published by the failure branch below, which then retires the
+         # child: its calibration state is unknown, as after a failed
+         # averaging sample.
+         READ_FAILURE_MESSAGE="Meter dark calibration did not complete; meter session closed for clean retry"
+         READ_SESSION_FATAL=1
          break
         fi
         READ_START=$SECONDS
@@ -1371,7 +1375,8 @@ while read -t "$IDLE_TIMEOUT" -u 4 line; do
         if [[ -n "$PROMPT_REASON" ]]; then
          log "manual prompt during read: reason=$PROMPT_REASON name=$NAME"
          if ! perform_spectro_white_calibration "read"; then
-         write_state '{"status":"error","message":"Meter white-tile calibration did not complete"}'
+          READ_FAILURE_MESSAGE="Meter white-tile calibration did not complete; meter session closed for clean retry"
+          READ_SESSION_FATAL=1
           break
          fi
          READ_START=$SECONDS

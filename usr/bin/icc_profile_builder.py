@@ -2243,7 +2243,13 @@ def shadow_chroma_lut_delta(center_xyz, center_code, jacobian, source_code,
         return None
     d65 = (0.3127 / 0.3290, 1.0,
            (1.0 - 0.3127 - 0.3290) / 0.3290)
-    delta = mat_vec_mul(mat_inv(jacobian), [
+    try:
+        inverse = mat_inv(jacobian)
+    except ValueError:
+        # Dependent probe columns: no solve here, as for any other
+        # inapplicable probe group (None).
+        return None
+    delta = mat_vec_mul(inverse, [
         center_y * d65[axis] - center_xyz[axis] for axis in range(3)
     ])
     if not all(math.isfinite(value) for value in delta):
@@ -2471,7 +2477,12 @@ def apply_mhc2_active_shadow_feedback(luts, rows, neutral_gains,
             continue
         jacobian = [[columns[column][axis] for column in range(3)]
                     for axis in range(3)]
-        inverse = mat_inv(jacobian)
+        try:
+            inverse = mat_inv(jacobian)
+        except ValueError:
+            # Fully dependent columns: skipped like the ill-conditioned
+            # case below.
+            continue
         norm = max(sum(abs(jacobian[row][column]) for row in range(3))
                    for column in range(3))
         inverse_norm = max(sum(abs(inverse[row][column]) for row in range(3))
@@ -3782,7 +3793,11 @@ def apply_mhc2_upper_neutral_jacobians(luts, rows, neutral_gains,
         if built is None:
             continue
         target_y = pq_to_nits(source_code)
-        delta = mat_vec_mul(mat_inv(built["jacobian"]), [
+        try:
+            inverse = mat_inv(built["jacobian"])
+        except ValueError:
+            continue
+        delta = mat_vec_mul(inverse, [
             target_y * d65[axis] - built["center_xyz"][axis]
             for axis in range(3)
         ])
@@ -3847,7 +3862,11 @@ def windows_hdr_b2a_with_peak_drive(profile, rows, plateau_start=0.77):
         if built is None:
             continue
         target_y = pq_to_nits(code / 1023.0)
-        delta = mat_vec_mul(mat_inv(built["jacobian"]), [
+        try:
+            inverse = mat_inv(built["jacobian"])
+        except ValueError:
+            continue
+        delta = mat_vec_mul(inverse, [
             target_y * d65[axis] - built["center_xyz"][axis]
             for axis in range(3)
         ])
@@ -6934,8 +6953,9 @@ def build(payload, output_dir):
                         stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
                         universal_newlines=True, timeout=600, env=repair_env)
                     if completed.returncode != 0 or not os.path.isfile(repaired_path):
-                        fail("BToA corridor repair failed: "
-                             + (completed.stdout or "").strip().splitlines()[-1][:200])
+                        detail = (completed.stdout or "").strip().splitlines()
+                        fail("BToA corridor repair failed"
+                             + (": " + detail[-1][:200] if detail else ""))
                     shutil.move(repaired_path, output_path)
                 finally:
                     shutil.rmtree(repair_dir, ignore_errors=True)
@@ -7309,7 +7329,8 @@ def main():
             result = build(payload, output_dir)
         print(json.dumps(result, separators=(",", ":")))
         return 0
-    except (ValueError, OSError, IOError, subprocess.CalledProcessError) as error:
+    except (ValueError, OSError, IOError, subprocess.CalledProcessError,
+            subprocess.TimeoutExpired) as error:
         print(json.dumps({"status": "error", "message": str(error)}, separators=(",", ":")))
         return 1
 

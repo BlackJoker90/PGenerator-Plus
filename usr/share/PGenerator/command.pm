@@ -2745,10 +2745,13 @@ sub clean_files(@) {
  # Meter settings are durable user preferences (meter ports, custom series,
  # grey profiles). The blanket $var_dir wipe below deleted the persist copy on
  # EVERY daemon restart, so settings only survived when an open browser tab
- # happened to re-save them. Carry the file across the wipe.
- my $keep_meter_settings="";
- if(open(my $ms,"<","$var_dir/meter_settings.json")) { local $/; $keep_meter_settings=<$ms>; close($ms); }
- &remove_files("$var_dir",".*");
+ # happened to re-save them. Leave the file out of the wipe: a copy read
+ # before it and written back after it put back an older copy over a save
+ # the WebUI made in between. The temp file of a save in progress in this
+ # process too (webui.pm _webui_meter_settings_write_json:
+ # <file>.<pid>.<tid>.tmp), or it loses its rename; one left by an earlier
+ # process is wiped.
+ &remove_files("$var_dir",'^(?!meter_settings\.json(?:\.'.$$.'\.\d+\.tmp)?$)');
  &remove_files("$var_dir/frames/",".*");
  # A pending WebUI notice (daemon.pm webui_notice) is often written just
  # before the renderer restarts, e.g. Calman's next CONF_LEVEL; keep it.
@@ -2756,7 +2759,6 @@ sub clean_files(@) {
  my $keep_notice_mtime=(stat($webui_notice_file))[9];
  if(open(my $nf,"<",$webui_notice_file)) { local $/; $keep_notice=<$nf>; close($nf); }
  &remove_files("$var_dir/running/",".*");
- if($keep_meter_settings ne "" && open(my $ms,">","$var_dir/meter_settings.json")) { print $ms $keep_meter_settings; close($ms); }
  if(defined($keep_notice) && $keep_notice ne "" && open(my $nf,">",$webui_notice_file)) {
   print $nf $keep_notice;
   close($nf);
@@ -2905,6 +2907,9 @@ sub pgenerator_cmd (@) {
   &remove_files("$info_dir","GET_IP\-.*\.info\$");
  }
  if($cmd =~/(SET_MODE|SET_CEA_DMT):(.*)/) {
+  # Without KMS the mode goes into a double-quoted shell argument: refuse
+  # the characters that end or expand it (a client's value).
+  return "$error_response:Refused: invalid mode" if(!$is_kms && $tvservice_is_working && ($2=~tr/"$`\\//));
   if(!$is_kms && $tvservice_is_working) {
    open(CMD_TVSERVICE,"timeout 3 $tvservice -e \"$2\" 2>/dev/null|");
    $response=<CMD_TVSERVICE>;
@@ -2945,6 +2950,7 @@ sub pgenerator_cmd (@) {
   }
  }
  if($cmd =~/SET_REFRESH:(.*)/) {
+  return "$error_response:Refused: invalid mode" if(!$is_kms && $tvservice_is_working && ($1=~tr/"$`\\//));
   if(!$is_kms && $tvservice_is_working) {
    open(CMD_TVSERVICE,"timeout 3 $tvservice -e \"CEA $1\" 2>/dev/null|");
    $response=<CMD_TVSERVICE>;
@@ -3086,7 +3092,7 @@ sub get_mac (@) {
      return $row_response[1];
    }
   }
-  close(CMD);
+  close(CMD_BT);
   return $none;
  }
  open(CMD_IP,"timeout 3 $ip addr show dev $interface|");
@@ -3272,11 +3278,17 @@ sub get_cmd_generic(@) {
  if($cmd eq "GET_BOOT_MEMORY") {
   my $gpu="128";
   my $cma="default";
+  my $kms_line=0;
   if(open(my $fh,"<",$bootloader_file)) {
    while(<$fh>) {
     chomp;
     $gpu=$1 if(/^gpu_mem=(\d+)/);
-    $cma=$1 if(/dtoverlay=vc4-kms-v3d,cma-(\d+)/);
+    # The line SET_BOOT_MEMORY writes (cma_rewrite_boot_config): the first
+    # uncommented vc4-kms-v3d overlay line, its cma- among other parameters.
+    if(!$kms_line && /^dtoverlay=vc4-kms-v3d(,.*)?$/) {
+     $kms_line=1;
+     for my $param (split(/,/,defined($1) ? $1 : "")) { $cma=$1 if($param=~/^cma-(\d+)/); }
+    }
    }
    close($fh);
   }

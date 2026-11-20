@@ -578,6 +578,16 @@ class Runner:
         except Exception:
             returncode = self.child.poll() if self.child else 1
         if self.cancel_requested:
+            # A run given up from inside (no selectable target port) has
+            # not stopped ccxxmake: it would keep the meter open after
+            # this helper exits.
+            if self.child and self.child.poll() is None:
+                try:
+                    self.child.terminate()
+                    if self._wait_for_exit(2.0) is None:
+                        self.child.kill()
+                except Exception:
+                    pass
             return 1
         if returncode == 0 and os.path.isfile(self.args.output_path):
             self.write_state("complete", "%s profile created and selected" % self.profile_type(), filename=os.path.basename(self.args.output_path))

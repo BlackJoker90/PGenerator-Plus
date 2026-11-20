@@ -2079,12 +2079,12 @@ function lgRenderCalHistoryInto(el){
     +'<div class="lg-cal-hist-meta"><strong>'+lgCalHistoryTypeLabel(it.type)+'</strong> '
     +String(it.label||it.id||'').replace(/</g,'&lt;')
     +'<small>'+lgCalHistoryFormatTime(it.mtime)
-    +(it.signal_mode?(' · '+it.signal_mode):'')
-    +(it.picture_mode?(' · '+it.picture_mode):'')
+    +(it.signal_mode?(' · '+lgEscapeHtml(it.signal_mode)):'')
+    +(it.picture_mode?(' · '+lgEscapeHtml(it.picture_mode)):'')
     +de+'</small>'+note+'</div>'
     +'<div class="lg-cal-hist-actions">'
-    +(canUp?('<button type="button" class="btn btn-sm btn-secondary" onclick="lgCalHistoryReupload(\''+String(it.id).replace(/'/g,"\\'")+'\')">Reupload</button>'):'')
-    +((it.download||it.type==='1d'||(it.type==='3d'&&it.has_cube))?('<button type="button" class="btn btn-sm btn-secondary" onclick="lgCalHistoryDownload(\''+String(it.id).replace(/'/g,"\\'")+'\')">Download</button>'):'')
+    +(canUp?('<button type="button" class="btn btn-sm btn-secondary" onclick="lgCalHistoryReupload('+lgEscapeHtml(JSON.stringify(String(it.id)))+')">Reupload</button>'):'')
+    +((it.download||it.type==='1d'||(it.type==='3d'&&it.has_cube))?('<button type="button" class="btn btn-sm btn-secondary" onclick="lgCalHistoryDownload('+lgEscapeHtml(JSON.stringify(String(it.id)))+')">Download</button>'):'')
     +'</div></div>';
   });
   html+='</div></div>';

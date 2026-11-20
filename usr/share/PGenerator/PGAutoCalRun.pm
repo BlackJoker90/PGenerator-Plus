@@ -14,6 +14,7 @@ our $KEEP     = 10;
 
 my $JSON = JSON::PP->new->utf8->canonical;
 my $SEQ  = 0;
+my $TMP_SEQ = 0;
 
 sub _now_ms { return int(time() * 1000); }
 
@@ -33,12 +34,17 @@ sub _ensure_dir {
 
 sub _write_text_atomic {
  my ($path, $text) = @_;
- my $tmp = "$path.tmp.$$";
+ # Unique per thread and call: the daemon's worker threads share $$, and two
+ # writers of one temp file could rename a mix of both.
+ my $tid = eval { threads->tid() } || 0;
+ my $tmp = "$path.tmp.$$.$tid." . (++$TMP_SEQ);
  open(my $fh, '>', $tmp) or return 0;
  binmode($fh);
- print $fh $text;
- close($fh) or return 0;
- return rename($tmp, $path) ? 1 : 0;
+ my $ok = (print $fh $text) ? 1 : 0;
+ $ok = 0 if(!close($fh));
+ $ok = 0 if($ok && !rename($tmp, $path));
+ unlink($tmp) if(!$ok);
+ return $ok;
 }
 
 sub _write_json_atomic {

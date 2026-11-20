@@ -61,11 +61,20 @@ sub discovery_lightspace (@) {
                                               Broadcast=>1,
                                               Proto=>'udp'
  );
+ if(!$socket_server) {
+  &log("LightSpace discovery: bind failed on port $port_discovery_lightspace: $!");
+  return;
+ }
  $socket_server->setsockopt(SOL_SOCKET, SO_RCVTIMEO, pack('l!l!', 5, 0)) if($socket_server);
  while (1) {
   $socket_server->recv($message, 1024);
   next if(!$message || $message eq "");
   my ($all_ip,$ls_port)=$message=~/(.*):(.*)/;
+  # The port reaches a root shell command (OPEN_IPTABLES_FOR_LS): a TCP
+  # port number or nothing.
+  $ls_port="" if(!defined($ls_port));
+  $ls_port=~s/^[\s\0]+|[\s\0]+$//g;
+  $ls_port="" if($ls_port!~/\A\d{1,5}\z/ || $ls_port<1 || $ls_port>65535);
   if(!-f $discoverable_disabled_file && $message=~/LS:/ && $ls_port ne "") {
    my $ip_ls=$socket_server->peerhost;
    $socket_server->close();
@@ -78,7 +87,8 @@ sub discovery_lightspace (@) {
    $calibration_client_ip="";
    $calibration_client_software="";
    &create_pattern_file("RECTANGLE","$w_s,$h_s",100,"$bg_default","","","","",1,"lightspace"); # when LS disconnects a black pattern is displayed
-   &discovery_lightspace();
+   # Listen again in this frame: a call would nest one level per session.
+   goto &discovery_lightspace;
   }
  }
 }

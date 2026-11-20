@@ -4343,8 +4343,9 @@ sub hdr20_postcal_target5_for_step {
  # step carries input_max and pattern_signal_range so we can be precise.
  my $input_max=(defined($step->{"input_max"}) && $step->{"input_max"}+0 > 0) ? ($step->{"input_max"}+0) : 1023;
  my $signal_range=(defined($step->{"pattern_signal_range"}) && $step->{"pattern_signal_range"} eq "2") ? "full" : "limited";
- my $black=($signal_range eq "limited") ? 64 : 0;
- my $span=($signal_range eq "limited") ? 876 : 1023;
+ # Limited black/span at the step's own depth: 16/219 at 8 bits, 64/876 at 10.
+ my $black=($signal_range eq "limited") ? 16*($input_max+1)/256 : 0;
+ my $span=($signal_range eq "limited") ? 219*($input_max+1)/256 : 1023;
  my $code=$r; # grey: r=g=b, just use r
  my $norm=$input_max > 0 ? ($code/$input_max) : 0;
  my $fraction=($signal_range eq "limited") ? (($code-$black)/$span) : $norm;

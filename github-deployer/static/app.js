@@ -298,6 +298,8 @@ els.form.addEventListener("submit", async (event) => {
     els.connection.className = "connection-state offline";
     els.connection.innerHTML = "<span></span><strong>Scan failed</strong>";
     state.busy = null;
+    // The selection was cleared above; redraw so no row still shows a tick.
+    if (state.files.length) renderRows();
     toast(error.message, "error", 9000);
   } finally {
     state.scanning = false;

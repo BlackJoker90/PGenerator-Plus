@@ -99,7 +99,8 @@ def run_spotread(args, count=1, timeout_per_read=30):
                     data = os.read(fd, 4096)
                     if not data:
                         break
-                    buf += data
+                    # os.read returns bytes on Python 3 (str on Python 2).
+                    buf += data.decode("utf-8", "replace")
                 except OSError:
                     pass
 
@@ -107,7 +108,7 @@ def run_spotread(args, count=1, timeout_per_read=30):
                 if "any other key to take a reading:" in buf or "to take a reading:" in buf:
                     sys.stderr.write("Got prompt, sending space\n")
                     time.sleep(0.5)
-                    proc.stdin.write(" ")
+                    proc.stdin.write(b" ")
                     proc.stdin.flush()
                     buf = ""
                     state = STATE_WAIT_RESULT
@@ -154,12 +155,23 @@ def run_spotread(args, count=1, timeout_per_read=30):
         sys.stderr.write("Error: %s\n" % str(e))
     finally:
         try:
-            proc.stdin.write("q")
+            proc.stdin.write(b"q")
             proc.stdin.flush()
         except:
             pass
         try:
-            proc.wait()
+            proc.stdin.close()
+        except:
+            pass
+        # Bounded: a wedged spotread must not hang the caller. Popen.wait()
+        # has no timeout on Python 2, so poll.
+        try:
+            deadline = time.time() + 5
+            while proc.poll() is None and time.time() < deadline:
+                time.sleep(0.1)
+            if proc.poll() is None:
+                proc.kill()
+                proc.wait()
         except:
             pass
 

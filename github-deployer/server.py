@@ -294,7 +294,10 @@ def upload_remote_file(
             client.close()
         return
     args, env = ssh_base(connection, "scp")
-    args.extend(["-p", str(local_path), f"{connection['user']}@{connection['host']}:{remote_path}"])
+    # scp splits user@host:path at the first colon, so an IPv6 address needs
+    # its brackets (ssh takes it bare).
+    host = f"[{connection['host']}]" if ":" in connection["host"] else connection["host"]
+    args.extend(["-p", str(local_path), f"{connection['user']}@{host}:{remote_path}"])
     run(args, env=env, timeout=timeout)
 
 
@@ -435,7 +438,9 @@ def create_snapshot(source: dict[str, str]) -> dict[str, Any]:
                     if relative.parts[0] not in DEPLOY_ROOTS or len(relative.parts) < 2:
                         continue
                     rel = relative.as_posix()
-                    if any(character in rel for character in ("\n", "\r", "\t", "\0")):
+                    # A backslash is a separator to Windows paths: "usr/..\..\x"
+                    # passes the ".." check above and then lands outside root.
+                    if any(character in rel for character in ("\n", "\r", "\t", "\0", "\\")):
                         continue
                     extracted_size += member.size
                     if extracted_size > MAX_EXTRACTED:
@@ -764,11 +769,17 @@ printf '%s\\n' "$backup"
 
 
 def restart_renderer(connection: dict[str, str]) -> dict[str, Any]:
+    # The daemon answers /api/restart before it stops the old renderer, so a
+    # renderer that is merely still running proves nothing: wait for one whose
+    # PID was not there before the request.
     command = r"""
+renderer_pids() { ps -e w 2>/dev/null | grep -E '[P]Generatord(\.dv)?([[:space:]]|$)' | awk '{print $1}'; }
+before=$(renderer_pids)
 response=$(wget -q -O - --post-data= http://127.0.0.1/api/restart 2>/dev/null || true)
 i=0
 while [ "$i" -lt 20 ]; do
-  if ps -e w 2>/dev/null | grep -Eq '[P]Generatord(\.dv)?([[:space:]]|$)'; then
+  now=$(renderer_pids)
+  if [ -n "$now" ] && [ "$now" != "$before" ]; then
     printf '%s\n' "$response"
     exit 0
   fi
@@ -860,8 +871,30 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(content)
 
+    def request_is_local(self) -> bool:
+        # Any web page open in the same browser can POST here: a text/plain
+        # body needs no CORS preflight, and DNS rebinding makes another site
+        # same-origin. Accept only what this console's own page sends: JSON
+        # (which a cross-site page cannot send without a preflight this server
+        # never answers), addressed to the loopback name and port it serves
+        # on, and from that origin when the browser names one.
+        port = self.server.server_address[1]
+        hosts = {f"127.0.0.1:{port}", f"localhost:{port}"}
+        if port == 80:
+            # Browsers leave the default port out of Host and Origin.
+            hosts |= {"127.0.0.1", "localhost"}
+        if self.headers.get("Host", "").strip().lower() not in hosts:
+            return False
+        origin = self.headers.get("Origin")
+        if origin is not None and origin.strip().lower() not in {f"http://{host}" for host in hosts}:
+            return False
+        content_type = self.headers.get("Content-Type", "").split(";", 1)[0].strip().lower()
+        return content_type == "application/json"
+
     def do_POST(self) -> None:
         try:
+            if not self.request_is_local():
+                raise AppError("Request refused: not sent by this console's own page.", HTTPStatus.FORBIDDEN)
             payload = self.read_json()
             connection = connection_from(payload)
             if self.path == "/api/scan":

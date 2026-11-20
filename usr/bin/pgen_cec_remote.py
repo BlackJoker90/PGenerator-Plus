@@ -349,18 +349,24 @@ def serve():
             # The daemon answers once the new picture is up. Keys that came in
             # meanwhile are dropped, so a held key stops on release instead of
             # working off a queue; releases and TV requests still count.
-            while True:
-                msg = receive(fd, 1)
-                if not msg or len(msg) < 2:
-                    break
-                if answer(fd, la, msg):
-                    continue
-                if msg[1] == OP_USER_CONTROL_RELEASED:
-                    released = True
-                elif msg[1] == OP_USER_CONTROL_PRESSED and len(msg) >= 3:
-                    released = False
-                    if msg[2] == last_key:
-                        last_at = time.time()
+            try:
+                while True:
+                    msg = receive(fd, 1)
+                    if not msg or len(msg) < 2:
+                        break
+                    if answer(fd, la, msg):
+                        continue
+                    if msg[1] == OP_USER_CONTROL_RELEASED:
+                        released = True
+                    elif msg[1] == OP_USER_CONTROL_PRESSED and len(msg) >= 3:
+                        released = False
+                        if msg[2] == last_key:
+                            last_at = time.time()
+            except OSError as exc:
+                # As for the read above: give the adapter up and ask again.
+                write_status(listening=False, message="HDMI-CEC read failed: %s." % exc.strerror)
+                result = RETRY
+                break
     os.close(fd)
     # Keep a reason written above (idle limit, read error); clear the rest.
     if status.get("message") == "Listening for the TV remote.":

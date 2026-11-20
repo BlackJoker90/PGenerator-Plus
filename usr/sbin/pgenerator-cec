@@ -256,7 +256,8 @@ def query_power_status(fd, src, timeout_ms=500):
     if rx_status & 0x01:  # CEC_RX_STATUS_OK
         # Reply received — re-read len and msg content
         rx_len = struct.unpack_from('<I', msg, 16)[0]
-        if rx_len >= 2 and msg[33] == CEC_MSG_REPORT_POWER_STATUS:
+        # header, opcode and the one power-status operand
+        if rx_len >= 3 and msg[33] == CEC_MSG_REPORT_POWER_STATUS:
             ps = msg[34]
             return POWER_NAMES.get(ps, 'unknown(%d)' % ps)
     return None

@@ -49,17 +49,29 @@ sub resolve_connection_thread (@) {
   # (and the connect modal's poll) do not flip to connected while still dialing
   # an unreachable IP, which would slam the modal shut before the operator can
   # Cancel a mistyped address.
+  # Set by resolve_connect once the socket is established (this thread's
+  # copy, not shared).
+  $resolve_session_up=0;
   eval { &resolve_connect($ip,$port); };
   &log("Resolve: session error: $@") if($@);
-  &log("Resolve: disconnected from $ip:$port");
-  $calibration_client_ip="";
-  $calibration_client_software="";
-  eval {
-   lock($resolve_last_pattern);
-   $resolve_last_pattern="";
-  };
-  # Show black pattern when disconnected
-  eval { &create_pattern_file("RECTANGLE","$w_s,$h_s",100,"$bg_default","","","","",1,"resolve"); };
+  # A connect that failed never had the output: another client's status
+  # and patch stay. After a session the status line is cleared only while
+  # it still names Resolve, and black only goes over an output no other
+  # client has (the status line names the newest session).
+  if($resolve_session_up) {
+   &log("Resolve: disconnected from $ip:$port");
+   my $owner=$calibration_client_software;
+   if($owner eq "Resolve") {
+    $calibration_client_ip="";
+    $calibration_client_software="";
+   }
+   eval {
+    lock($resolve_last_pattern);
+    $resolve_last_pattern="";
+   };
+   # Show black pattern when disconnected
+   eval { &create_pattern_file("RECTANGLE","$w_s,$h_s",100,"$bg_default","","","","",1,"resolve"); } if($owner eq "Resolve" || $owner eq "");
+  }
   };
   if($@) {
    &log("Resolve: connection thread recovered from: $@");
@@ -146,6 +158,7 @@ sub resolve_connect (@) {
  # Publish "connected" now that the socket is truly ESTABLISHED (verified via
  # ->connected above). Until this point status reports disconnected/connecting,
  # so the WebUI keeps the connect modal (with Cancel) up while dialing.
+ $resolve_session_up=1;
  $calibration_client_ip=$ip;
  $calibration_client_software="Resolve";
  # Arm SO_LINGER so any close path (requested or peer EOF) issues TCP RST.

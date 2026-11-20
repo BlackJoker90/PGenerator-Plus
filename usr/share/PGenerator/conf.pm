@@ -173,8 +173,9 @@ sub set_conf_pattern (@) {
  }
  # Start Patch for HCFR
  if($pattern eq "HCFR") {
-  $val=~/(.*)(DRAW=.*)(DRAW=.*)/s;
-  $val="$1$3\n$2";
+  # Only a template with two DRAW blocks is reordered: without a match the
+  # captures are another match's (or undef) and the template was lost.
+  $val="$1$3\n$2" if(defined($val) && $val=~/(.*)(DRAW=.*)(DRAW=.*)/s);
   $val=~s/BG=-1,-1,-1/BG=DYNAMIC/;
   $val=~s/(BG=DYNAMIC.*)BG=DYNAMIC/\1BG=-1,-1,-1/s;
   chomp($val);

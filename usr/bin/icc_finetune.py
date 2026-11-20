@@ -67,6 +67,7 @@ D65_Y = 0.3290
 
 SESSION_RE = re.compile(r"^[A-Za-z0-9_-]{8,64}$")
 OUTPUT_RE = re.compile(r"^[A-Za-z0-9._()-]{1,80}$")
+OUTPUT_NAME_RE = re.compile(r"^[A-Za-z0-9._()-]+$")
 
 
 def write_atomic(path, content, mode=0o644):
@@ -710,6 +711,19 @@ def regularize_mhc2_neutral_samples(samples, damping):
 
 def finetune(payload, output_dir):
     parent_path = payload["parent_path"]
+    # The request is client JSON behind the daemon's validated keys, and a
+    # repeated key wins: the parent must be a profile in output_dir and the
+    # output name a plain file name there (OUTPUT_RE without its 80-character
+    # cap: the daemon derives longer names from long profile names), checked
+    # before any work.
+    if (os.path.dirname(os.path.realpath(str(parent_path)))
+            != os.path.realpath(output_dir)):
+        raise ValueError("Invalid ICC profile path")
+    if payload.get("name"):
+        output = str(payload.get("name"))
+        if (not OUTPUT_NAME_RE.match(output) or output.endswith(".icc")
+                or ".." in output):
+            raise ValueError("Invalid fine-tune output name")
     damping = float(payload.get("damping", 0.5))
     damping = max(0.1, min(1.0, damping))
     data, tags = read_profile(parent_path)
@@ -1702,7 +1716,7 @@ def main():
             result = finetune(payload, sys.argv[2])
         print(json.dumps(result, separators=(",", ":")))
         return 0
-    except (ValueError, OSError, IOError, KeyError) as error:
+    except (ValueError, OSError, IOError, KeyError, TypeError) as error:
         print(json.dumps({"status": "error", "message": str(error)},
                          separators=(",", ":")))
         return 1

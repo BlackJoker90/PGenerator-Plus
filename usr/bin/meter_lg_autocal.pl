@@ -15826,7 +15826,8 @@ sub lg_autocal_26_run_hdr20_dpg_greyscale {
 				#
 				# The re-upload above is still required: the revert only restored
 				# $current_dpg in memory, so without it the TV keeps the overshoot.
-				my $_tl_restore=$is_white ? luminance($last_reading) : target_luminance_for_step($white_ref,$rs,"2.2","hdr10",undef);
+				# White targets its own Y: the reading charted below ($best_reading).
+				my $_tl_restore=$is_white ? luminance(ref($best_reading) eq "HASH" ? $best_reading : $last_reading) : target_luminance_for_step($white_ref,$rs,"2.2","hdr10",undef);
 				$_tl_restore=$white_ref if(!(defined($_tl_restore) && $_tl_restore+0 > 0));
 				my $_restored_de=$best_de+0;
 				my $_restored_ok=0;
@@ -16416,8 +16417,7 @@ sub lg_autocal_26_run_sdr_1d_dpg_greyscale_inner {
  # (panel's gamma > 2.2 due to gamma-2.2 EOTF + ABL).
  # The same EMA blend + [1.5, 3.0] clamp logic as HDR, with the 2.2
  # target_gamma as the seed value (vs HDR's ST.2084/PQ seed).
- my $gamma_effective=2.2;
- $gamma_effective=defined($config->{"lg_autocal_sdr26_dpg_initial_gamma"}) ? ($config->{"lg_autocal_sdr26_dpg_initial_gamma"}+0) : 2.2 if(!defined($gamma_effective));
+ my $gamma_effective=defined($config->{"lg_autocal_sdr26_dpg_initial_gamma"}) ? ($config->{"lg_autocal_sdr26_dpg_initial_gamma"}+0) : 2.2;
  $gamma_effective=1.5 if($gamma_effective+0 < 1.5);
  $gamma_effective=3.0 if($gamma_effective+0 > 3.0);
  # DPG Y/dpg_*_prev: per-iter tracking for the log-log slope. Saved AFTER
@@ -17216,14 +17216,17 @@ sub lg_autocal_26_run_sdr_1d_dpg_greyscale_inner {
    # uses its own measured Y; body uses the 2.2 curve via white_ref + black_y).
    my $_is_legal_peak_restore=lg_autocal_sdr26_dpg_is_peak_ire($_anchor_ire) ? 1 : 0;
    my $_sdr26_tg_restore=defined($config->{"target_gamma"}) ? $config->{"target_gamma"} : "bt1886";
+   # Peak targets its own Y: the reading charted below ($best_reading), not
+   # the discarded last one.
    my $_tl_restore=$_is_legal_peak_restore
-    ? luminance($last_reading)
+    ? luminance(ref($best_reading) eq "HASH" ? $best_reading : $last_reading)
     : lg_autocal_26_sdr26_dpg_compute_target($white_ref,$rs,$black_y,$_sdr26_tg_restore);
    $_tl_restore=$white_ref if(!(defined($_tl_restore) && $_tl_restore+0 > 0));
    my $_restored_de=$best_de+0;
    my $_restored_ok=0;
    if(ref($best_reading) eq "HASH") {
     my $arr={ %{$best_reading} };
+    $last_reading=$arr;
     annotate_reading_target($arr,($_is_legal_peak_restore ? $_tl_restore : $white_ref),$_tl_restore,$target_x,$target_y);
     $state->{"readings"}=merge_reading($state->{"readings"},$arr) if(ref($state) eq "HASH");
     $_restored_ok=1;
@@ -17420,7 +17423,7 @@ sub lg_autocal_26_run_sdr_1d_dpg_greyscale {
    if($sdr26_rgb_limited && $sdr26_bits >= 10) {
     $idx=lg_autocal_sdr26_dpg_sample_index_for_limited_code($code,$sdr26_dpg_max_idx);
    } elsif($sdr26_rgb_limited) {
-    my $code10=int(64+($code+0)*(940-64)/(235-16)+0.5);
+    my $code10=int(64+($code-16)*(940-64)/(235-16)+0.5);
     $code10=940 if($code10 > 940);
     $idx=lg_autocal_sdr26_dpg_sample_index_for_limited_code($code10,$sdr26_dpg_max_idx);
    } else {
@@ -20940,7 +20943,7 @@ sub committed_state_polish {
   my $best_reading=clone_picture($reading);
   my $best_de=$de;
   my $best_lum_pct=$lum_pct;
-  my $best_pair_reading=clone_picture($committed_pair_reading) if(ref($committed_pair_reading) eq "HASH");
+  my $best_pair_reading=(ref($committed_pair_reading) eq "HASH") ? clone_picture($committed_pair_reading) : undef;
   my $best_pair_de=$committed_pair_de;
   my $best_pair_lum_pct=$committed_pair_lum_pct;
   my $best_pair_target_step_y=$committed_pair_target_step_y;
@@ -26860,11 +26863,19 @@ eval {
 } or do {
  my $err=$@ || "Auto Cal failed";
  $err=~s/[\r\n]+/ /g;
- log_line("autocal eval die caught: err=\"".$err."\" calibration_mode_active_before=".($calibration_mode_active?1:0)." cancelled=".cancelled()?1:0);
+ log_line("autocal eval die caught: err=\"".$err."\" calibration_mode_active_before=".($calibration_mode_active?1:0)." cancelled=".(cancelled()?1:0));
  if($calibration_mode_active && !lg_calibration_end_retry_forbidden($state)) {
-  end_calibration_mode($active_picture_mode_for_cleanup);
-  $calibration_mode_active=0;
-  set_state_calibration_mode($state,0,"");
+  # Same rule as the normal end path: only a confirmed CAL_END clears the
+  # held session.
+  my $end_result=end_calibration_mode($active_picture_mode_for_cleanup);
+  if(ref($end_result) eq "HASH" && ($end_result->{"status"}||"") ne "error") {
+   $calibration_mode_active=0;
+   set_state_calibration_mode($state,0,"");
+  } else {
+   $state->{"calibration_mode_end_unconfirmed"}=JSON::PP::true;
+   $state->{"calibration_end_retry_forbidden"}=JSON::PP::true if(lg_calibration_end_unconfirmed_response($end_result));
+   set_state_calibration_mode($state,1,$active_picture_mode_for_cleanup || ($state->{"calibration_picture_mode"}||""));
+  }
  } elsif($calibration_mode_active) {
   set_state_calibration_mode($state,1,$active_picture_mode_for_cleanup || ($state->{"calibration_picture_mode"}||""));
  }

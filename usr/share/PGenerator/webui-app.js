@@ -1025,13 +1025,14 @@ async function syncRemoteConfig(){
   if(!remoteConfig)return;
   const remoteSnapshot=JSON.stringify(remoteConfig);
   if(!window._remoteConfigSnapshot||remoteSnapshot!==window._remoteConfigSnapshot){
+   // Read before applyConfigState, which stores the new conf as the snapshot.
+   const prev=window._remoteConfigSnapshot?JSON.parse(window._remoteConfigSnapshot):null;
    applyConfigState(remoteConfig);
    // When the config changes (e.g. reference switches signal mode,
    // resolution, or color format), also refresh /api/info so the
    // info-grid resolution display updates within the same poll
    // cycle. Without this the resolution field would only refresh
    // on the 30s loadInfo interval and would lag the config change.
-   const prev=window._remoteConfigSnapshot?JSON.parse(window._remoteConfigSnapshot):null;
    const modeChanged=prev && (
     prev.mode_idx!==remoteConfig.mode_idx ||
     prev.signal_mode!==remoteConfig.signal_mode ||
@@ -18847,7 +18848,7 @@ function meterApplySingleReadResult(result,requestedStep){
     meterBuildPatchThumbs(sortedSteps,completedIres,null);
    }
     updateLiveReading(rd);
-   toast('Reading: '+meterNearBlackLuminanceText(rd.luminance,2)+' cd/m\\u00B2');
+   toast('Reading: '+meterNearBlackLuminanceText(rd.luminance,2)+' cd/m\u00B2');
   }
  } else {
   toast(pgFailMsg('Measurement failed',result,'Check that the meter is connected and placed on the screen, then read again.'),true);

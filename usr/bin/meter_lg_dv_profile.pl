@@ -34,10 +34,15 @@ sub read_file {
 
 sub write_state {
  my (%state)=@_;
- open(my $fh,'>',$state_file) or return;
- print $fh $json->encode(\%state);
- close($fh);
- chmod(0666,$state_file);
+ # Atomic (tmp + rename) like the other LG workers' write_file: the WebUI
+ # reads this file while the worker runs.
+ my $tmp="$state_file.tmp";
+ open(my $fh,'>',$tmp) or return;
+ my $ok=print $fh $json->encode(\%state);
+ $ok=0 if(!close($fh));
+ if(!$ok) { unlink($tmp); return; }
+ chmod(0666,$tmp);
+ rename($tmp,$state_file) or unlink($tmp);
 }
 
 sub cancelled { return -e $stop_file; }

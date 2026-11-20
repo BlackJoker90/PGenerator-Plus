@@ -141,7 +141,8 @@ int copy_fb() {
    Memory Mapping Buffer
  */
  fbp = (char*) mmap(0, finfo.smem_len, PROT_READ | PROT_WRITE, MAP_SHARED, fbfd, 0);
- if (fbp <= 0) {
+ /* mmap reports failure as MAP_FAILED ((void *)-1), never as NULL */
+ if ((void *)fbp == MAP_FAILED) {
   printf("Unable to create memory mapping\n");
   close(fbfd);
   ret = vc_dispmanx_resource_delete(screen_resource_d);
@@ -171,10 +172,23 @@ int copy_fb() {
   /* Snapshot Image */
   vc_dispmanx_snapshot(display, screen_resource_i, 0);
   vc_dispmanx_resource_read_data(screen_resource_i, &rect_i, image, display_info.width*3);
+  /* A snapshot that cannot be written whole (directory missing, disk
+     full) is skipped: no NULL stream, no truncated image renamed in. */
   FILE *fp = fopen(FILE_IMAGE_TMP, "wb");
-  fprintf(fp, "P6\n%d %d\n255\n", display_info.width, display_info.height);
-  fwrite(image, display_info.width*3*display_info.height, 1, fp);
-  fclose(fp);
+  if (!fp) {
+   usleep(SLEEP * 1000);
+   continue;
+  }
+  int write_ok = fprintf(fp, "P6\n%d %d\n255\n", display_info.width, display_info.height) > 0;
+  if (fwrite(image, display_info.width*3*display_info.height, 1, fp) != 1)
+   write_ok = 0;
+  if (fclose(fp) != 0)
+   write_ok = 0;
+  if (!write_ok) {
+   unlink(FILE_IMAGE_TMP);
+   usleep(SLEEP * 1000);
+   continue;
+  }
   rename(FILE_IMAGE_TMP,FILE_IMAGE);
   sprintf(command,"convert %s png:%s.png.tmp",FILE_IMAGE,FILE_PNG);
   system(command);

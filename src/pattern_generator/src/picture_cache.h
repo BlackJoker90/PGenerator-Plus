@@ -61,6 +61,16 @@ struct PictureCache {
   loads=0;
  }
 
+ /* The 8-bit image's pixels and texture were replaced by something else
+    (ofApp::grabFrameForSave grabs the screen into it for a saved frame):
+    an 8-bit picture held there is gone, its next draw reads the file once
+    (loads stays, so not twice). A float picture lives in its own image and
+    stays held. */
+ void eightBitImageReplaced() {
+  if(!float_texture)
+   held=false;
+ }
+
  /* Once per draw of a picture: what this draw has to do before it.
     fresh: the pattern was read since the last draw of a picture.
     awaited: the daemon waits for the flip of this draw. */

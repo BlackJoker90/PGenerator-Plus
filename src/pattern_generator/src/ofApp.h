@@ -51,7 +51,10 @@ class ofApp : public ofBaseApp{
   ofFbo fbo8;
   ofFbo fbo10;
   ofFbo fbo_dovi;
-  int bits;
+  /* BITS of the pattern: 8 or 10 (the update() parse loop takes no other).
+     8 until a pattern says otherwise: 0 made the YCbCr shifts
+     (128 << (bits - 8), rgb2ycbcr.h) undefined. */
+  int bits=8;
   int source_max=255;
   int source_range=0;
   int dv_source_red=0;
@@ -69,7 +72,7 @@ class ofApp : public ofBaseApp{
   std::string save_checked_name;
   uint64_t save_checked_at=0;
   string movie_name;
-  int sleep_time;
+  int sleep_time=0;
   int first_done=0;
   std::string draw_type;
   std::string p_name;
@@ -78,32 +81,32 @@ class ofApp : public ofBaseApp{
   std::string text_to_write;
   std::string img_file;
   int save_images=0;
-  int position_x;
+  int position_x=0;
   int img_rotate=0;
-  int entered;
+  int entered=0;
   int open_file=1;
-  int i;
+  int i=0;
   int def_r=0;
   int def_g=0;
   int def_b=0;
-  int n_frame;
-  unsigned long long last_frame_time;
-  int to_draw;
-  int position_y;
-  int dim1;
-  int dim2;
-  int width;
-  int height;
-  int resolution;
-  int red;
-  int green;
-  int blue;
-  int redb;
-  int greenb;
-  int blueb;
-  int duration;
-  int frame;
-  int frame_to_draw;
+  int n_frame=0;
+  unsigned long long last_frame_time=0;
+  int to_draw=0;
+  int position_y=0;
+  int dim1=0;
+  int dim2=0;
+  int width=0;
+  int height=0;
+  int resolution=0;
+  int red=0;
+  int green=0;
+  int blue=0;
+  int redb=0;
+  int greenb=0;
+  int blueb=0;
+  int duration=0;
+  int frame=0;
+  int frame_to_draw=0;
   /* A parsed pattern: frames of draw commands, sized to what the file
      holds and capped at max_frames x max_draws. */
   struct DrawOp {
@@ -151,6 +154,7 @@ class ofApp : public ofBaseApp{
   void shader_begin(int is_image);
   void shader_end(int is_image);
   void YCbCr2RGB();
+  void grabFrameForSave();
   static int dv_map_mode;
   static int dv_minpq;
   static int dv_maxpq;

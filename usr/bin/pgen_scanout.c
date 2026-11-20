@@ -18,6 +18,12 @@
  *   -mfloat-abi=hard -marm -O2 -I/work/sysroot/usr/include/libdrm
  *   -o pgen_scanout pgen_scanout.c -ldrm
  */
+/* A 64-bit off_t on 32-bit userland: the fake mmap offset that
+ * DRM_IOCTL_MODE_MAP_DUMB returns is a 64-bit value, which a 32-bit off_t
+ * would cut before mmap() sees it. */
+#ifndef _FILE_OFFSET_BITS
+#define _FILE_OFFSET_BITS 64
+#endif
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdint.h>

@@ -131,10 +131,11 @@ static int load_assets(const char *path)
 		p += 5;
 		/* 0 alpha8 (tinted), 1 rgb565, 2 rgb565 + alpha8 */
 		if (s->kind > 2) return -1;
-		long bytes = (long)s->w * s->h * (s->kind + 1);
-		if (p + bytes > size) return -1;
+		/* 64-bit: w * h * 3 overflows a 32-bit long (the Pi's) */
+		uint64_t bytes = (uint64_t)s->w * (uint64_t)s->h * (uint64_t)(s->kind + 1);
+		if (bytes > (uint64_t)(size - p)) return -1;
 		s->data = buf + p;
-		p += bytes;
+		p += (long)bytes;
 		nsprites++;
 	}
 	return nsprites > 0 ? 0 : -1;
@@ -777,6 +778,11 @@ int main(int argc, char **argv)
 		int mode = !strcmp(argv[3], "reboot") ? MODE_REBOOT : MODE_BOOT;
 		int step = atoi(argv[4]);
 		double t = atof(argv[5]);
+		/* the bar's step table has no index below 0 (boot_target) */
+		if (step < 0) {
+			usage();
+			return 2;
+		}
 		W = 1920;
 		H = 1080;
 		if (load_assets(getenv("PGEN_BOOTSCREEN_ASSETS") ? getenv("PGEN_BOOTSCREEN_ASSETS") : ASSETS) < 0) {

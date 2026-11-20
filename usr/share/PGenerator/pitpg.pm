@@ -465,9 +465,11 @@ sub pitpg_session (@) {
  &calibration_session_open($connection,$name=~/ColourSpace/i ? "ColourSpace" : ($name ne "" ? "ColourSpace ($name)" : "ColourSpace"));
 }
 
+# 1 when written (pgenerator_cmd answers ERR for a write the helper did not
+# confirm, and the conf keeps its value).
 sub pitpg_conf_set (@) {
  my ($k,$v)=@_;
- &pgenerator_cmd("SET_PGENERATOR_CONF_".uc($k).":$v");
+ return ((&pgenerator_cmd("SET_PGENERATOR_CONF_".uc($k).":$v") // "")=~/^\Q$error_response\E/) ? 0 : 1;
 }
 
 # The value a setting has for a client: what it set, else the conf.
@@ -597,7 +599,7 @@ sub pitpg_set_setting (@) {
   $pitpg_mode_error="";
   $pitpg_settings{mode}=$v;
   if($v eq "") {
-   &pitpg_conf_set("mode_idx","");
+   return "Setting mode could not be written." if(!&pitpg_conf_set("mode_idx",""));
    &invalidate_hdmi_info_cache();
    return "";
   }
@@ -609,7 +611,7 @@ sub pitpg_set_setting (@) {
    $pitpg_mode_error="The display does not offer $v (the chosen resolution and refresh rate); choose one of its modes.";
    return "";
   }
-  &pitpg_conf_set("mode_idx",$idx);
+  return "Setting mode could not be written." if(!&pitpg_conf_set("mode_idx",$idx));
   &invalidate_hdmi_info_cache();
   return "";
  }
@@ -629,7 +631,7 @@ sub pitpg_set_setting (@) {
  &pitpg_session_keep($k);
  # pitpgd labels rgb_quant_range 3 as full (output_decide: 1 limited,
  # 0 default, else full); PGenerator+ has 0, 1 and 2.
- &pitpg_conf_set($k,($k eq "rgb_quant_range" && $v eq "3") ? "2" : $v);
+ return "Setting $k could not be written." if(!&pitpg_conf_set($k,($k eq "rgb_quant_range" && $v eq "3") ? "2" : $v));
  return "";
 }
 
@@ -900,15 +902,26 @@ sub pitpg_apply_output (@) {
 our %pitpg_live_waiting=();
 sub pitpg_apply_live (@) {
  my $keys=shift;
+ # HDR metadata and primaries the client sent are its own, applied now or
+ # waiting (SDR, Low-Latency DV, a refusal in place, a gate that refuses):
+ # a refusal's put-back (signal_restore_conf) must not take them back to the
+ # snapshot's values while the session still reports the client's (review:
+ # max_luma 1000 went back to 500, primaries BT.2020 to P3-D65). They go into
+ # the snapshot first; the other signal keys stay as applied.
+ my @live=grep { $PGPiTPG::LIVE_KEY{$_} } @$keys;
+ &signal_applied_snapshot_set(map { ($_,$pgenerator_conf{$_} // "") } @live) if(@live);
  return if(int($pgenerator_conf{"is_hdr"} || 0) != 1 || int($pgenerator_conf{"is_ll_dovi"} || 0) == 1);
  if(&signal_patches_refused() ne "") {
   $pitpg_live_waiting{$_}=1 foreach(@$keys);
   return;
  }
  if(!$is_kms || &signal_gate_conf(&signal_source_label("ColourSpace"))) {
-  my %changed=map { ($_ => 1) } grep { $PGPiTPG::LIVE_KEY{$_} } @$keys;
+  my %changed=map { ($_ => 1) } @live;
   &pattern_generator_restart_unless_current("PiTPG HDR metadata") if(!&renderer_reconfigure_in_place(\%changed));
   &log("PiTPG: HDR metadata updated");
+ } else {
+  # Refused now: the metadata waits as during any refusal.
+  $pitpg_live_waiting{$_}=1 foreach(@$keys);
  }
 }
 

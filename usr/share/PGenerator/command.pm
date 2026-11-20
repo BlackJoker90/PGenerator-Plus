@@ -2851,8 +2851,22 @@ sub pgenerator_cmd (@) {
    my $held=(ref($file_conf) eq "HASH") ? $file_conf : \%pgenerator_conf;
    &forget_pre_dv_format_depth("a port 85 client") if(!grep { int($held->{$_} || 0) } qw(dv_status is_ll_dovi is_std_dovi));
   }
+  my $written=1;
   if(!(ref($file_conf) eq "HASH" && exists($file_conf->{$conf_key}) && $file_conf->{$conf_key} eq "$conf_value")) {
-   &sudo("SET_PGENERATOR_CONF",$conf_key,$conf_value);
+   # The renderer reads the file: a write the helper does not confirm is
+   # not taken as done, unless the file reads back as written.
+   if((&sudo("SET_PGENERATOR_CONF",$conf_key,$conf_value) // "")!~/^\Q$ok_response\E/) {
+    my $file=&renderer_conf_read();
+    $written=0 if(!(ref($file) eq "HASH" && ($file->{$conf_key} // "") eq "$conf_value"));
+   }
+  }
+  if(!$written) {
+   &log("Signal: $conf_key could not be written; the conf keeps its value") if(defined &log);
+   # As a refused command: port 85 answers it with the error alone.
+   $response="$error_response:Refused: $conf_key could not be written";
+   unlink("$info_dir/GET_PGENERATOR_CONF_".uc($conf_key).".info");
+   unlink("$info_dir/GET_PGENERATOR_CONF_ALL.info");
+   return "$response";
   }
   $pgenerator_conf{$conf_key}=$conf_value;
   if($conf_key eq "dv_metadata") {
@@ -2876,7 +2890,8 @@ sub pgenerator_cmd (@) {
      ($conf_key=~/^(max_bpc|color_format|rgb_quant_range|dv_interface|dv_transport)$/ && int($pgenerator_conf{"dv_status"} || 0) == 1)) {
    &normalize_dv_transport_conf();
   }
-  unlink("$info_dir/GET_PGENERATOR_CONF_".uc($1).".info");
+  # $conf_key, not $1: the dv_status match above has no group and resets $1.
+  unlink("$info_dir/GET_PGENERATOR_CONF_".uc($conf_key).".info");
   unlink("$info_dir/GET_PGENERATOR_CONF_ALL.info");
  }
  if($cmd =~/SET_HOSTNAME:(.*)/) {
@@ -2927,9 +2942,17 @@ sub pgenerator_cmd (@) {
    my $mode_idx="$2";
    my $file_conf=&renderer_conf_read();
    if(!(ref($file_conf) eq "HASH" && exists($file_conf->{"mode_idx"}) && $file_conf->{"mode_idx"} eq $mode_idx)) {
-    &sudo("SET_PGENERATOR_CONF","mode_idx",$mode_idx);
+    # As SET_PGENERATOR_CONF_*: a write the helper does not confirm (and the
+    # file does not read back) is refused; the renderer reads the file.
+    if((&sudo("SET_PGENERATOR_CONF","mode_idx",$mode_idx) // "")!~/^\Q$ok_response\E/) {
+     my $file=&renderer_conf_read();
+     if(!(ref($file) eq "HASH" && ($file->{"mode_idx"} // "") eq $mode_idx)) {
+      &log("Signal: mode_idx could not be written; the conf keeps its value") if(defined &log);
+      return "$error_response:Refused: mode_idx could not be written";
+     }
+    }
    }
-   $pgenerator_conf{"mode_idx"}=$2;
+   $pgenerator_conf{"mode_idx"}=$mode_idx;
    unlink("$info_dir/GET_MODES_AVAILABLE.info");
    unlink("$info_dir/GET_MODE.info");
    unlink("$info_dir/GET_HDMI_INFO.info");

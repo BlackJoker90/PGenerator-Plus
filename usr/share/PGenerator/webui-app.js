@@ -17197,7 +17197,15 @@ async function meterCheckStatus(background){
   if(!meterActiveSeriesKey){
    try{ restoredLocal=!!meterRestoreLatestPersistedSeries(); }catch(e){}
   }
+  const seriesWasRunning=meterSeriesRunning;
+  const seriesIdBefore=meterSharedSeriesId;
+  const activeKeyBefore=meterActiveSeriesKey;
   const s=await fetchJSON('/api/meter/series/status',{_quiet:true,_timeoutMs:5000});
+  if(background===true){
+   await pgScrollIdle();
+   if(seq<meterCheckStatusApplied||meterBusyNow()||meterAutoCalStatusActive()||!meterSeriesCacheBootId) return;
+   if(meterSeriesRunning!==seriesWasRunning||meterSharedSeriesId!==seriesIdBefore||meterActiveSeriesKey!==activeKeyBefore) return;
+  }
   if(s){
    // Trust the server as the source of truth: if it says the series is
    // not running, clear the local flag and hide the stop button. This
